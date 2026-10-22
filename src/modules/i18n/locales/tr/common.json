@@ -33,7 +33,9 @@
     "failed": "Başarısız",
     "pending": "Beklemede",
     "completed": "Tamamlandı",
-    "inProgress": "Sürüyor"
+    "inProgress": "Sürüyor",
+    "reconnecting": "Yeniden bağlanıyor...",
+    "chatConnectionLost": "Sohbet bağlantısı koptu. Yeniden bağlanıyor..."
   },
   "messages": {
     "savedSuccessfully": "Başarıyla kaydedildi",
@@ -264,7 +266,8 @@
       "showSidebar": "Kenar çubuğunu göster",
       "settings": "Ayarlar",
       "updateAvailable": "Güncelleme mevcut",
-      "closeSidebar": "Kenar çubuğunu kapat"
+      "closeSidebar": "Kenar çubuğunu kapat",
+      "resizeSidebar": "Kenar çubuğunu yeniden boyutlandır"
     }
   }
 }

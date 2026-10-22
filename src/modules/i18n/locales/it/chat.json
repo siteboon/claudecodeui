@@ -51,6 +51,28 @@
     "viewFullOutput": "Vedi output completo ({{count}} caratteri)",
     "contentDisplayed": "Il contenuto del file è visualizzato nella vista differenze sopra"
   },
+  "bashEditDiff": {
+    "created": "Creato",
+    "updated": "Aggiornato",
+    "deleted": "Eliminato",
+    "emptyFile": "File vuoto",
+    "moreLines_one": "… {{count}} altra riga",
+    "moreLines_other": "… altre {{count}} righe",
+    "moreFiles_one": "… {{count}} altro file modificato",
+    "moreFiles_other": "… altri {{count}} file modificati",
+    "filesNotShown_one": "{{count}} file modificato (binario, solo modalità o troppo grande da mostrare)",
+    "filesNotShown_other": "{{count}} file modificati (binari, solo modalità o troppo grandi da mostrare)",
+    "filesUnavailable_one": "{{count}} file modificato (diff non disponibile)",
+    "filesUnavailable_other": "{{count}} file modificati (diff non disponibile)",
+    "filesChanged_one": "{{count}} file modificato",
+    "filesChanged_other": "{{count}} file modificati",
+    "morePaths_one": "+{{count}} altro",
+    "morePaths_other": "+{{count}} altri",
+    "diffUnavailable": "(diff dei file non disponibile per questo comando)",
+    "partUnavailable": "(parte del diff non è disponibile)",
+    "skipped": "(diff dei file saltato per questo comando git)",
+    "shared": "(un altro comando è stato eseguito contemporaneamente in questo repository; una modifica fatta da uno dei due può comparire sotto entrambi i risultati)"
+  },
   "thinking": {
     "title": "Sto pensando...",
     "emoji": "💭 Sto pensando..."
@@ -81,14 +103,14 @@
     "permissionMode": "Modalità permessi",
     "modes": {
       "default": "Modalità predefinita",
-      "auto": "Auto Mode",
+      "auto": "Modalità automatica",
       "acceptEdits": "Accetta modifiche",
       "bypassPermissions": "Ignora permessi",
       "plan": "Modalità piano"
     },
     "descriptions": {
       "default": "Solo i comandi attendibili (ls, cat, grep, git status, ecc.) vengono eseguiti automaticamente. Gli altri comandi vengono saltati. Può scrivere nell'area di lavoro.",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "Un classificatore basato su un modello decide a ogni chiamata di uno strumento se approvarla o negarla. Senza interventi, ma più sicura di Ignora permessi: i rifiuti possono comunque capitare.",
       "acceptEdits": "Tutti i comandi vengono eseguiti automaticamente nell'area di lavoro. Modalità completamente automatica con esecuzione sandboxed.",
       "bypassPermissions": "Accesso completo al sistema senza restrizioni. Tutti i comandi vengono eseguiti automaticamente con accesso completo a disco e rete. Usa con cautela.",
       "plan": "Modalità pianificazione - nessun comando viene eseguito"
@@ -105,12 +127,17 @@
     "stop": "Ferma",
     "hintText": {
       "ctrlEnter": "Ctrl+Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi",
-      "enter": "Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi"
+      "enter": "Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi",
+      "appendQueued": "Invio per aggiungere al messaggio in coda"
     },
     "clickToChangeMode": "Clicca per cambiare modalità permessi (o premi Tab nell'input)",
     "showAllCommands": "Mostra tutti i comandi",
     "clearInput": "Cancella input",
-    "scrollToBottom": "Scorri in basso"
+    "scrollToBottom": "Scorri in basso",
+    "queue": {
+      "append": "Aggiungi al messaggio in coda",
+      "notCombinable": "Impossibile mettere in coda il messaggio: un comando con / viene eseguito da solo, quindi non può essere unito al messaggio in coda. Invialo dopo che il messaggio in coda è stato inviato."
+    }
   },
   "providerSelection": {
     "title": "Scegli il tuo assistente AI",
@@ -128,7 +155,8 @@
       "codex": "Pronto a usare Codex con {{model}}. Inizia a digitare il tuo messaggio qui sotto.",
       "default": "Seleziona un provider sopra per iniziare"
     },
-    "pressToSearch": "Premi <kbd>{{shortcut}}</kbd> per cercare sessioni, file e commit"
+    "pressToSearch": "Premi <kbd>{{shortcut}}</kbd> per cercare sessioni, file e commit",
+    "chooseModelDescriptionCustomOnly": "Per {{providers, list}} sono elencati solo i tuoi modelli"
   },
   "session": {
     "continue": {
@@ -158,7 +186,8 @@
     "status": {
       "newSession": "Nuova sessione",
       "initializing": "Inizializzazione...",
-      "restarting": "Riavvio..."
+      "restarting": "Riavvio...",
+      "themeRestartHint": "Riavvia per applicare il nuovo tema a Claude Code"
     },
     "actions": {
       "disconnect": "Disconnetti",
@@ -214,9 +243,13 @@
   },
   "message": {
     "editAndResend": "Modifica e reinvia",
-    "forkFromHere": "Dirama da qui"
+    "forkFromHere": "Dirama da qui",
+    "answeredBy": "Risposto da {{model}}"
   },
   "composer": {
+    "permissionHeading": "Come approvare le azioni di {{provider}}?",
+    "permissionCycleHint": "Premi Tab nel campo di testo per cambiare modalità",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Sostituzione di un messaggio precedente",
       "filesNotReverted": "i file già modificati non vengono ripristinati",
@@ -253,6 +286,16 @@
     },
     "pending": "Programmato per {{when}}",
     "failed": "Non inviato — {{reason}}",
-    "cancel": "Annulla messaggio programmato"
+    "cancel": "Annulla messaggio programmato",
+    "dismiss": "Ignora l'avviso di errore"
+  },
+  "modelLibrary": {
+    "effortLevels": "Livelli di ragionamento",
+    "effortLevelsHint": "Seleziona i livelli di sforzo di ragionamento accettati da questo modello. Senza selezione, nel composer non si potrà scegliere alcun livello per questo modello.",
+    "effortSummary": "Ragionamento: {{levels}}",
+    "customModelsOnly": "Usa solo i miei modelli",
+    "customModelsOnlyHint": "Nasconde i modelli integrati di {{provider}} in tutti i selettori di modello e rende predefinito il tuo primo modello. I modelli integrati restano visibili finché non aggiungi un modello.",
+    "builtInModelsHidden": "Nascosti nei selettori di modello finché «Usa solo i miei modelli» è attivo.",
+    "customModelsOnlyFailed": "Impossibile modificare questa impostazione."
   }
 }

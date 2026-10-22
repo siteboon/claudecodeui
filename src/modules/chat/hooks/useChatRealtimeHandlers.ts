@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
+import { collectRunningBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -36,6 +38,9 @@ type UseChatRealtimeHandlersArgs = {
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
   onSessionProcessing?: MarkSessionProcessing;
   onSessionIdle?: MarkSessionIdle;
+  /** Reports the tasks a session still runs once its turn ends, so it reads as background work rather than idle. */
+  onSessionBackground?: MarkSessionBackground;
+  getSessionActivity?: GetSessionActivity;
   onWebSocketReconnect?: () => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
   sessionStore: SessionStore;
@@ -69,6 +74,8 @@ export function useChatRealtimeHandlers({
   statusCheckSentAtRef,
   onSessionProcessing,
   onSessionIdle,
+  onSessionBackground,
+  getSessionActivity,
   onWebSocketReconnect,
   requestLatestMessages,
   sessionStore,
@@ -92,6 +99,14 @@ export function useChatRealtimeHandlers({
   }, [pendingPermissionRequests]);
 
   useEffect(() => {
+    // What a session that has finished responding is left with: the tasks it
+    // launched that are still running, or nothing, which marks it idle. The
+    // store's records are what the transcript's cards fold their live status
+    // from, so this reads the same answer they draw.
+    const reportRemainingBackgroundWork = (sid: string) => {
+      onSessionBackground?.(sid, collectRunningBackgroundTasks(normalizedToChatMessages(sessionStore.getMessages(sid))));
+    };
+
     const handleEvent = (msg: ServerEvent) => {
       if (!msg.kind) {
         return;
@@ -159,7 +174,12 @@ export function useChatRealtimeHandlers({
           if (sid) {
             // Surface the failure in the conversation and stop the spinner —
             // the run never started (or was rejected), so no `complete` follows.
-            onSessionIdle?.(sid);
+            // A refused stop request is not about the run: the task had
+            // already settled, and idling here would drop a response in
+            // flight on that session.
+            if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED') {
+              onSessionIdle?.(sid);
+            }
             sessionStore.appendRealtime(sid, {
               id: `protocol_error_${Date.now()}`,
               sessionId: sid,
@@ -248,9 +268,16 @@ export function useChatRealtimeHandlers({
 
           // `complete` is the unified terminal event — every provider run ends
           // with exactly one, regardless of success, failure, or abort. The
-          // indicator derives from the processing map, so deleting the entry
-          // hides it immediately and atomically.
-          onSessionIdle?.(sid);
+          // indicator derives from the processing map, so the entry changes
+          // immediately and atomically: a turn that ended with tasks still
+          // running leaves the session as background work — the CLI is held
+          // open for them — and any other leaves it idle. An abort releases
+          // the CLI and takes that work down with it.
+          if (sid && !msg.aborted) {
+            reportRemainingBackgroundWork(sid);
+          } else {
+            onSessionIdle?.(sid);
+          }
           if (sid === activeViewSessionId) {
             pendingPermissionRequestsRef.current = [];
             setPendingPermissionRequests([]);
@@ -342,6 +369,28 @@ export function useChatRealtimeHandlers({
           break;
         }
 
+        case 'task_status': {
+          // A task's notification, or the patch that killed it, can leave a
+          // session that was only doing background work with nothing left
+          // to do. A turn in flight is left alone: its `complete` reports.
+          if (
+            sid
+            && (msg.event === 'notification' || msg.event === 'updated')
+            && getSessionActivity?.(sid)?.background
+          ) {
+            reportRemainingBackgroundWork(sid);
+          }
+          // The notification carries only a summary; the task's actual result
+          // is folded onto its card by the history reader, so a card that
+          // just settled live shows it only after a sync — the same sync a
+          // turn's `complete` triggers. Without it the result waited for a
+          // manual reload.
+          if (sid && sid === activeViewSessionId && msg.event === 'notification') {
+            void requestLatestMessages(sid, isActiveRef.current);
+          }
+          break;
+        }
+
         // text, tool_use, tool_result, thinking, task_notification
         // → already routed to store above, no UI side effects needed
         default:
@@ -364,6 +413,8 @@ export function useChatRealtimeHandlers({
     statusCheckSentAtRef,
     onSessionProcessing,
     onSessionIdle,
+    onSessionBackground,
+    getSessionActivity,
     onWebSocketReconnect,
     requestLatestMessages,
     sessionStore,

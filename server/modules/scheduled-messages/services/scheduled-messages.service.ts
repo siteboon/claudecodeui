@@ -109,6 +109,7 @@ export const scheduledMessagesService = {
     return scheduledMessagesDb.listPendingForUser(userId).map(toScheduledMessage);
   },
 
+  /** Cancels a pending message, or dismisses a failed one. */
   cancel(userId: number, id: string): void {
     if (!scheduledMessagesDb.cancel(userId, id)) {
       throw new AppError('That message has already been sent or cancelled.', {

@@ -1,28 +1,29 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Download, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type { ConfirmActionType, ConfirmationRequest } from '@/shared/types';
 
 const CONFIRMATION_TITLES: Record<ConfirmActionType, string> = {
-  discard: 'Discard Changes',
-  delete: 'Delete File',
-  commit: 'Confirm Action',
-  pull: 'Confirm Pull',
-  push: 'Confirm Push',
-  publish: 'Publish Branch',
-  revertLocalCommit: 'Revert Local Commit',
-  deleteBranch: 'Delete Branch',
+  discard: 'git:confirm.title.discard',
+  delete: 'git:confirm.title.delete',
+  commit: 'git:confirm.title.commit',
+  pull: 'git:confirm.title.pull',
+  push: 'git:confirm.title.push',
+  publish: 'git:confirm.title.publish',
+  revertLocalCommit: 'git:confirm.title.revertLocalCommit',
+  deleteBranch: 'git:confirm.title.deleteBranch',
 };
 
 const CONFIRMATION_ACTION_LABELS: Record<ConfirmActionType, string> = {
-  discard: 'Discard',
-  delete: 'Delete',
-  commit: 'Confirm',
-  pull: 'Pull',
-  push: 'Push',
-  publish: 'Publish',
-  revertLocalCommit: 'Revert Commit',
-  deleteBranch: 'Delete',
+  discard: 'git:confirm.action.discard',
+  delete: 'git:confirm.action.delete',
+  commit: 'git:confirm.action.commit',
+  pull: 'git:confirm.action.pull',
+  push: 'git:confirm.action.push',
+  publish: 'git:confirm.action.publish',
+  revertLocalCommit: 'git:confirm.action.revertLocalCommit',
+  deleteBranch: 'git:confirm.action.deleteBranch',
 };
 
 const CONFIRMATION_BUTTON_CLASSES: Record<ConfirmActionType, string> = {
@@ -75,6 +76,7 @@ function renderConfirmActionIcon(actionType: ConfirmationRequest['type']) {
 
 /** Rendered by GitPanel to confirm destructive or remote git actions before they run. */
 export default function ConfirmActionModal({ action, onCancel, onConfirm }: ConfirmActionModalProps) {
+  const { t } = useTranslation();
   const [useAlternateConfirmation, setUseAlternateConfirmation] = useState(false);
   const titleId = action ? `confirmation-title-${action.type}` : undefined;
 
@@ -130,7 +132,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
             {renderConfirmActionIcon(action.type)}
           </div>
           <h3 id={titleId} className="text-lg font-semibold text-foreground">
-            {CONFIRMATION_TITLES[action.type]}
+            {t(CONFIRMATION_TITLES[action.type])}
           </h3>
         </div>
 
@@ -168,7 +170,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
             onClick={handleCancel}
             className="rounded-lg px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            Cancel
+            {t('git:confirm.cancel')}
           </button>
           <button
             onClick={handleConfirm}
@@ -178,7 +180,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
             <span>
               {useAlternateConfirmation && action.alternateConfirmation
                 ? action.alternateConfirmation.actionLabel
-                : CONFIRMATION_ACTION_LABELS[action.type]}
+                : t(CONFIRMATION_ACTION_LABELS[action.type])}
             </span>
           </button>
         </div>

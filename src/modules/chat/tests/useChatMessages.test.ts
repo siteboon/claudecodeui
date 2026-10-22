@@ -130,3 +130,144 @@ test('preserves both UI objects produced by an unchanged task notification', () 
   assert.equal(updated[0]?.isTaskNotification, true);
   assert.equal(updated[1]?.content, 'Detailed result');
 });
+
+test('folds the live task events of a background launch onto the tool row that launched it', () => {
+  // The four `system` task subtypes the SDK emits for a running workflow,
+  // normalized to `task_status` by the server. `updated` names only the task
+  // id, so the row has to be found through the start event that paired it
+  // with its tool call.
+  const workflowCall = message('workflow-call', {
+    kind: 'tool_use',
+    toolId: 'toolu_workflow_1',
+    toolName: 'Workflow',
+    toolInput: { script: "export const meta = { name: 'audit' }", description: 'Audit the frontend' },
+  });
+  const started = message('task-started', {
+    kind: 'task_status',
+    event: 'started',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    taskType: 'local_workflow',
+    workflowName: 'audit',
+    description: 'Audit the frontend',
+  });
+  const progress = message('task-progress', {
+    kind: 'task_status',
+    event: 'progress',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    summary: 'Verify 3/6',
+    usage: { totalTokens: 1_000, toolUses: 12, durationMs: 65_000 },
+  });
+
+  const running = normalizedToChatMessages([workflowCall, started, progress]);
+  assert.equal(running.length, 1, 'task events are folded, never rendered on their own');
+  assert.deepEqual(running[0]?.taskStatus, {
+    status: 'running',
+    taskId: 'wxkj4kcvd',
+    taskType: 'local_workflow',
+    workflowName: 'audit',
+    description: 'Audit the frontend',
+    summary: 'Verify 3/6',
+    usage: { totalTokens: 1_000, toolUses: 12, durationMs: 65_000 },
+  });
+
+  // A newer event must rebuild the row's cached projection, or the card keeps
+  // drawing the state it had when the row was first converted.
+  const stopped = message('task-updated', {
+    kind: 'task_status',
+    event: 'updated',
+    taskId: 'wxkj4kcvd',
+    status: 'stopped',
+  });
+  const afterStop = normalizedToChatMessages([workflowCall, started, progress, stopped]);
+  assert.notStrictEqual(afterStop[0], running[0]);
+  assert.equal(afterStop[0]?.taskStatus?.status, 'stopped');
+  assert.equal(afterStop[0]?.taskStatus?.summary, 'Verify 3/6', 'what earlier events said is kept');
+
+  const finished = message('task-notification-live', {
+    kind: 'task_status',
+    event: 'notification',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    status: 'completed',
+    summary: 'Dynamic workflow "audit" completed',
+  });
+  const afterFinish = normalizedToChatMessages([workflowCall, started, progress, finished]);
+  assert.equal(afterFinish[0]?.taskStatus?.status, 'completed');
+  assert.equal(afterFinish[0]?.taskStatus?.summary, 'Dynamic workflow "audit" completed');
+
+  // Unchanged events leave the row's identity alone, like any other source.
+  assert.strictEqual(normalizedToChatMessages([workflowCall, started, progress, finished])[0], afterFinish[0]);
+});
+
+test('keeps the last agent list a workflow\'s progress named through events that name none', () => {
+  // A run's progress events report on its agents only once it has spawned
+  // some, and later ones can carry an empty list; the card must keep drawing
+  // the last list it was given rather than blanking between events.
+  //
+  // A fresh row per scenario: the projection cache keys a launch row on the
+  // newest event folded onto it, which both scenarios below end on.
+  const workflowCall = () => message('workflow-call', {
+    kind: 'tool_use',
+    toolId: 'toolu_workflow_1',
+    toolName: 'Workflow',
+    toolInput: { script: "export const meta = { name: 'audit' }" },
+  });
+  const agents = [
+    { index: 0, label: 'audit:chat', agentId: 'aa1e064cf8bd159d6', state: 'done' as const },
+    { index: 1, label: 'audit:sidebar', agentId: 'a9cfe29aa8f2afcbf', state: 'running' as const, lastToolName: 'Grep' },
+  ];
+  const withAgents = message('task-progress-1', {
+    kind: 'task_status',
+    event: 'progress',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    usage: { totalTokens: 1_000, toolUses: 12, durationMs: 65_000 },
+    agents,
+  });
+  const withoutAgents = message('task-progress-2', {
+    kind: 'task_status',
+    event: 'progress',
+    taskId: 'wxkj4kcvd',
+    toolUseId: 'toolu_workflow_1',
+    usage: { totalTokens: 1_200, toolUses: 14, durationMs: 70_000 },
+    agents: [],
+  });
+
+  // Before any event names agents, the row carries none at all.
+  const [early] = normalizedToChatMessages([workflowCall(), withoutAgents]);
+  assert.equal('agents' in (early?.taskStatus ?? {}), false);
+
+  const [row] = normalizedToChatMessages([workflowCall(), withAgents, withoutAgents]);
+  assert.deepEqual(row?.taskStatus?.agents, agents);
+  assert.equal(row?.taskStatus?.usage?.toolUses, 14, 'the rest of the newer event still lands');
+});
+
+test('an updated event finds a call launched before this page loaded through its acknowledgement', () => {
+  // After a reload mid-run the `started` event that pairs task and call is
+  // gone; the launch acknowledgement in history names the task, and a
+  // `task_updated` — the only event that says a task was killed — names
+  // nothing else.
+  const workflowCall = message('workflow-call', {
+    kind: 'tool_use',
+    toolId: 'toolu_workflow_1',
+    toolName: 'Workflow',
+    toolInput: { script: "export const meta = { name: 'audit' }" },
+  });
+  const launchAck = message('workflow-ack', {
+    kind: 'tool_result',
+    toolId: 'toolu_workflow_1',
+    content: 'Workflow launched in background. Task ID: wxkj4kcvd',
+    toolUseResult: { status: 'async_launched', taskId: 'wxkj4kcvd', taskType: 'local_workflow', workflowName: 'audit' },
+  });
+  const killed = message('task-updated', {
+    kind: 'task_status',
+    event: 'updated',
+    taskId: 'wxkj4kcvd',
+    status: 'stopped',
+  });
+
+  const [row] = normalizedToChatMessages([workflowCall, launchAck, killed]);
+  assert.equal(row?.taskStatus?.status, 'stopped');
+});

@@ -6,7 +6,7 @@ import spawn from 'cross-spawn';
 
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
-import type { ProviderAuthStatus } from '@/shared/types.js';
+import type { ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types.js';
 import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
 
 type ClaudeCredentialsStatus = {
@@ -14,6 +14,16 @@ type ClaudeCredentialsStatus = {
   email: string | null;
   method: string | null;
   error?: string;
+  subscriptionOverride?: ProviderAuthSubscriptionOverride;
+};
+
+/**
+ * An API-key style credential found in the env or settings.json, plus the
+ * user-facing label the settings UI has always shown for it. The labels are
+ * kept verbatim so existing consumers of `email` see no change.
+ */
+type ClaudeApiKeyCredential = Pick<ProviderAuthSubscriptionOverride, 'variable' | 'source'> & {
+  label: string;
 };
 
 const hasErrorCode = (error: unknown, code: string): boolean => (
@@ -62,6 +72,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
       email: credentials.authenticated ? credentials.email || 'Authenticated' : credentials.email,
       method: credentials.method,
       error: credentials.authenticated ? undefined : credentials.error || 'Not authenticated',
+      ...(credentials.subscriptionOverride ? { subscriptionOverride: credentials.subscriptionOverride } : {}),
     };
   }
 
@@ -80,26 +91,54 @@ export class ClaudeProviderAuth implements IProviderAuth {
   }
 
   /**
-   * Checks Claude credentials in the same priority order used by Claude Code.
+   * Finds an API-key style credential in the same order Claude Code checks them:
+   * process env first (auth token, then API key), then the settings.json env block.
    */
-  private async checkCredentials(): Promise<ClaudeCredentialsStatus> {
-    const missingCredentialsError = 'Claude CLI is not authenticated. Run claude /login or configure ANTHROPIC_API_KEY.';
-
+  private findApiKeyCredential(settingsEnv: Record<string, unknown>): ClaudeApiKeyCredential | null {
     if (process.env.ANTHROPIC_AUTH_TOKEN?.trim()) {
-      return { authenticated: true, email: 'Auth Token', method: 'api_key' };
+      return { variable: 'ANTHROPIC_AUTH_TOKEN', source: 'process_env', label: 'Auth Token' };
     }
 
     if (process.env.ANTHROPIC_API_KEY?.trim()) {
-      return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
+      return { variable: 'ANTHROPIC_API_KEY', source: 'process_env', label: 'API Key Auth' };
     }
 
-    const settingsEnv = await this.loadSettingsEnv();
     if (readOptionalString(settingsEnv.ANTHROPIC_API_KEY)) {
-      return { authenticated: true, email: 'API Key Auth', method: 'api_key' };
+      return { variable: 'ANTHROPIC_API_KEY', source: 'settings_file', label: 'API Key Auth' };
     }
 
     if (readOptionalString(settingsEnv.ANTHROPIC_AUTH_TOKEN)) {
-      return { authenticated: true, email: 'Configured via settings.json', method: 'api_key' };
+      return { variable: 'ANTHROPIC_AUTH_TOKEN', source: 'settings_file', label: 'Configured via settings.json' };
+    }
+
+    return null;
+  }
+
+  /**
+   * Checks Claude credentials in the same priority order used by Claude Code.
+   */
+  private async checkCredentials(): Promise<ClaudeCredentialsStatus> {
+    const settingsEnv = await this.loadSettingsEnv();
+
+    const apiKey = this.findApiKeyCredential(settingsEnv);
+    if (apiKey) {
+      const status: ClaudeCredentialsStatus = { authenticated: true, email: apiKey.label, method: 'api_key' };
+
+      // The key wins, but Claude Code says nothing when it does so while a
+      // `claude /login` subscription is also signed in — every request is then
+      // billed pay-as-you-go to the key (issue #568). Surface the bypassed
+      // login so the settings page can warn about it; an expired or missing
+      // login is not being bypassed, so it stays silent.
+      const subscription = await this.readCredentialsFile();
+      if (subscription.authenticated) {
+        status.subscriptionOverride = {
+          variable: apiKey.variable,
+          source: apiKey.source,
+          subscriptionEmail: subscription.email,
+        };
+      }
+
+      return status;
     }
 
     if (process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim()) {
@@ -109,6 +148,17 @@ export class ClaudeProviderAuth implements IProviderAuth {
     if (readOptionalString(settingsEnv.CLAUDE_CODE_OAUTH_TOKEN)) {
       return { authenticated: true, email: 'OAuth Token (long-lived)', method: 'environment' };
     }
+
+    return this.readCredentialsFile();
+  }
+
+  /**
+   * Reads the `claude /login` OAuth session from ~/.claude/.credentials.json and
+   * reports whether it is still usable. Shared by the fallback path (when no
+   * env credential exists) and by the API-key path (to detect a bypassed login).
+   */
+  private async readCredentialsFile(): Promise<ClaudeCredentialsStatus> {
+    const missingCredentialsError = 'Claude CLI is not authenticated. Run claude /login or configure ANTHROPIC_API_KEY.';
 
     try {
       const credPath = path.join(os.homedir(), '.claude', '.credentials.json');

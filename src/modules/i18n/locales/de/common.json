@@ -33,7 +33,9 @@
     "failed": "Fehlgeschlagen",
     "pending": "Ausstehend",
     "completed": "Abgeschlossen",
-    "inProgress": "In Bearbeitung"
+    "inProgress": "In Bearbeitung",
+    "reconnecting": "Wird neu verbunden...",
+    "chatConnectionLost": "Chat-Verbindung unterbrochen. Wird neu verbunden..."
   },
   "messages": {
     "savedSuccessfully": "Erfolgreich gespeichert",
@@ -234,7 +236,8 @@
       "showSidebar": "Seitenleiste anzeigen",
       "settings": "Einstellungen",
       "updateAvailable": "Update verfügbar",
-      "closeSidebar": "Seitenleiste schließen"
+      "closeSidebar": "Seitenleiste schließen",
+      "resizeSidebar": "Seitenleistenbreite ändern"
     }
   }
 }

@@ -3,7 +3,7 @@
  * Converts NormalizedMessage[] from the session store into ChatMessage[] for the UI.
  */
 
-import type { ChatMessage,NormalizedMessage,SubagentActivity } from '@/shared/types';
+import type { ChatMessage, LiveTaskStatus, NormalizedMessage, SubagentActivity } from '@/shared/types';
 import { formatUsageLimitText } from '@/modules/chat/utils/chatFormatting';
 
 function formatToolResultContent(content: unknown): string {
@@ -25,6 +25,8 @@ type CachedMessageProjection = {
   toolResultSource: ToolResultSource;
   /** A live subagent container also depends on the newest row folded into its timeline. */
   subagentActivitySource: NormalizedMessage | null;
+  /** A background launch also depends on the newest `task_status` event folded onto it. */
+  taskStatusSource: NormalizedMessage | null;
   messages: ChatMessage[];
 };
 
@@ -78,6 +80,156 @@ function parseTaskNotification(content: string): ParsedTaskNotification | null {
  * transcript artifacts such as local slash commands and compact summaries are
  * intentionally preserved and annotated so they can render like normal chat.
  */
+/** The CLI acknowledges a compaction in the stream with the bare word. */
+const COMPACTION_NOTICE = /^Compacted\.?$/;
+
+/**
+ * Draws a compaction as one row, whichever order its parts arrive in.
+ *
+ * A compaction reaches the client as three separate rows: the boundary (which
+ * carries the numbers), the summary it produced (flagged `isCompactSummary`),
+ * and the CLI's own one-word acknowledgement. On disk the boundary comes first;
+ * live, the summary does. Either way the reader wants one row — the numbers,
+ * with the summary folded into it.
+ *
+ * Returns true when the row was handled here and the caller should move on.
+ */
+function appendCompactionRow(
+  msg: NormalizedMessage,
+  converted: ChatMessage[],
+  sharedMetadata: Partial<ChatMessage>,
+  state: { hasCompactionRow: boolean; foldedSummaries: Set<string> },
+): boolean {
+  const content = msg.content || '';
+  const text = content.trim();
+
+  // The second copy of a summary already folded into a row above.
+  if (text && state.foldedSummaries.has(text)) {
+    return true;
+  }
+
+  // The acknowledgement, but only where a real compaction row exists to replace
+  // it: against a server that reports none it is the only trace there is.
+  if (
+    state.hasCompactionRow
+    && msg.kind === 'text'
+    && msg.role === 'assistant'
+    && COMPACTION_NOTICE.test(text)
+  ) {
+    return true;
+  }
+
+  if (msg.isCompactSummary) {
+    state.foldedSummaries.add(text);
+
+    // The unflagged copy is wherever the stream put it, not necessarily the row
+    // directly above, so it is searched for — newest first, ordinary rows only.
+    for (let index = converted.length - 1; index >= 0; index -= 1) {
+      const row = converted[index];
+      // Assistant rows only: a user who pastes the same text is not a duplicate.
+      if (row.type === 'assistant' && !row.compact && (row.content || '').trim() === text) {
+        converted.splice(index, 1);
+        break;
+      }
+    }
+
+    const previous = converted[converted.length - 1];
+    if (previous?.compact && !previous.compactSummary) {
+      // Replaced rather than mutated: that row can be one the projection cache
+      // handed back, which is shared across renders, and a memoized row that
+      // keeps its identity while its content changes does not redraw.
+      converted[converted.length - 1] = { ...previous, compactSummary: content };
+      return true;
+    }
+
+    // A summary with no boundary of its own — a session compacted before the
+    // CLI recorded boundaries — still gets a row to fold into.
+    converted.push({
+      type: 'assistant',
+      content: '',
+      timestamp: msg.timestamp,
+      ...sharedMetadata,
+      compact: { phase: 'done' },
+      compactSummary: content,
+    });
+    return true;
+  }
+
+  if (!msg.compact) {
+    return false;
+  }
+
+  // This row supersedes the one directly above it in two cases, and only when it
+  // is directly above — a compaction further back belongs to itself:
+  //
+  //   - a `running` row, now that the compaction has finished or failed;
+  //   - the summary-only row a summary makes when it arrives before its
+  //     boundary, which is the live order. Its summary comes along, since this
+  //     row says what that one could not.
+  const previous = converted[converted.length - 1];
+  const supersedes = Boolean(previous?.compact)
+    && (previous.compact?.phase === 'running' || !previous.content);
+  const summary = supersedes ? previous.compactSummary : undefined;
+  if (supersedes) {
+    converted.pop();
+  }
+
+  converted.push({
+    type: 'assistant',
+    content,
+    timestamp: msg.timestamp,
+    ...sharedMetadata,
+    compactSummary: summary,
+  });
+  return true;
+}
+
+/**
+ * Merges one live `task_status` event into the task map.
+ *
+ * Events arrive in order, so each one overwrites what it knows and keeps the
+ * rest: a `progress` event carries usage but not the workflow name the
+ * `started` event announced. `updated` names only the task id, so the id is
+ * remembered from the first event that paired it with its tool call; an event
+ * that cannot be tied to a call — an ambient task — has no card and is dropped.
+ */
+function foldTaskStatus(
+  msg: NormalizedMessage,
+  liveTasksByToolUseId: Map<string, LiveTaskStatus>,
+  toolUseIdByTaskId: Map<string, string>,
+  lastTaskSourceByToolUseId: Map<string, NormalizedMessage>,
+): void {
+  if (msg.taskId && msg.toolUseId) {
+    toolUseIdByTaskId.set(msg.taskId, msg.toolUseId);
+  }
+  const toolUseId = msg.toolUseId ?? (msg.taskId ? toolUseIdByTaskId.get(msg.taskId) : undefined);
+  if (!toolUseId) {
+    return;
+  }
+
+  const previous = liveTasksByToolUseId.get(toolUseId);
+  const settled = msg.status === 'completed' || msg.status === 'failed' || msg.status === 'stopped'
+    ? msg.status
+    : null;
+  // A workflow's first progress events report on no agents yet; an empty list
+  // must not wipe the last one that named them.
+  const agents = msg.agents?.length ? msg.agents : previous?.agents;
+  liveTasksByToolUseId.set(toolUseId, {
+    // A settled status is final. Short of one, `started` and `progress` mean
+    // the task is running, while an `updated` patch that does not change the
+    // status (an end time, say) leaves it where it was.
+    status: settled ?? (msg.event === 'started' || msg.event === 'progress' ? 'running' : previous?.status ?? 'running'),
+    taskId: msg.taskId ?? previous?.taskId,
+    taskType: msg.taskType ?? previous?.taskType,
+    workflowName: msg.workflowName ?? previous?.workflowName,
+    description: msg.description ?? previous?.description,
+    summary: msg.summary ?? previous?.summary,
+    usage: msg.usage ?? previous?.usage,
+    ...(agents ? { agents } : {}),
+  });
+  lastTaskSourceByToolUseId.set(toolUseId, msg);
+}
+
 export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMessage[] {
   const converted: ChatMessage[] = [];
 
@@ -92,7 +244,21 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
   const liveSubagentToolsById = new Map<string, SubagentActivity>();
   /** Newest folded row per container, so its cached projection knows to rebuild. */
   const lastSubagentSourceByParent = new Map<string, NormalizedMessage>();
+  // The latest live word on each background task, keyed by the tool call that
+  // launched it. Built here, beside the subagent fold, because both answer the
+  // same question — what has this call's work done since it launched — from
+  // rows the store keeps at top level.
+  const liveTasksByToolUseId = new Map<string, LiveTaskStatus>();
+  /** `task_updated` names only the task; the start event says which call that is. */
+  const toolUseIdByTaskId = new Map<string, string>();
+  /** Newest event folded per launch, so its cached projection knows to rebuild. */
+  const lastTaskSourceByToolUseId = new Map<string, NormalizedMessage>();
   for (const msg of messages) {
+    if (msg.kind === 'task_status') {
+      foldTaskStatus(msg, liveTasksByToolUseId, toolUseIdByTaskId, lastTaskSourceByToolUseId);
+      continue;
+    }
+
     if (msg.parentToolUseId) {
       const parentId = msg.parentToolUseId;
       let activity = liveSubagentActivity.get(parentId);
@@ -155,8 +321,24 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
 
     if (msg.kind === 'tool_result' && msg.toolId) {
       toolResultMap.set(msg.toolId, msg);
+      // A launch acknowledgement names its task, so an `updated` event for a
+      // task launched before this page loaded — which carries no tool-use id
+      // and follows no `started` event here — still finds its call.
+      const launchedTaskId = (msg.toolUseResult as { taskId?: unknown } | undefined)?.taskId;
+      if (typeof launchedTaskId === 'string' && launchedTaskId) {
+        toolUseIdByTaskId.set(launchedTaskId, msg.toolId);
+      }
     }
   }
+
+  // Whether any row describes a compaction at all. Used only to suppress the
+  // CLI's own one-word acknowledgement, which says strictly less than the row
+  // beside it — but is all there is when no such row exists.
+  const hasCompactionRow = messages.some((msg) => msg.compact);
+  // Summary text already folded into a compaction row: the CLI writes the
+  // summary twice, once as the flagged row that carries it into the next turn
+  // and once into the live stream, and only one copy is flagged.
+  const foldedSummaries = new Set<string>();
 
   for (const msg of messages) {
     // Subagent rows were folded into their container's timeline above.
@@ -170,14 +352,19 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     const subagentActivitySource = msg.kind === 'tool_use' && msg.toolId
       ? lastSubagentSourceByParent.get(msg.toolId) ?? null
       : null;
+    const taskStatusSource = msg.kind === 'tool_use' && msg.toolId
+      ? lastTaskSourceByToolUseId.get(msg.toolId) ?? null
+      : null;
     const cachedProjection = projectionCache.get(msg);
 
     // A tool-use projection must be rebuilt when a matching result arrives,
     // even though the original tool-use record itself is unchanged. The same
-    // holds for a subagent container when its live timeline grows.
+    // holds for a subagent container when its live timeline grows, and for a
+    // background launch when a newer task event lands on it.
     if (
       cachedProjection?.toolResultSource === toolResultSource
       && cachedProjection.subagentActivitySource === subagentActivitySource
+      && cachedProjection.taskStatusSource === taskStatusSource
     ) {
       converted.push(...cachedProjection.messages);
       continue;
@@ -195,7 +382,18 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       // Carried through so a rendered user bubble can address its own
       // transcript row when the user edits or forks from it.
       transcriptAnchorId: msg.transcriptAnchorId,
+      compact: msg.compact,
+      // Set by the provider only on an assistant reply, and only when it knows
+      // which model produced it, so every other row simply carries undefined.
+      model: msg.model,
     };
+
+    if (appendCompactionRow(msg, converted, sharedMetadata, {
+      hasCompactionRow,
+      foldedSummaries,
+    })) {
+      continue;
+    }
 
     switch (msg.kind) {
       case 'text': {
@@ -213,7 +411,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
               content: taskNotif.summary,
               timestamp: msg.timestamp,
               isTaskNotification: true,
-              taskStatus: taskNotif.status,
+              taskNotificationStatus: taskNotif.status,
               ...sharedMetadata,
             });
             // Render the agent's result as a normal assistant message so its
@@ -263,7 +461,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           ? {
               content: formatToolResultContent(tr.content),
               isError: Boolean(tr.isError),
-              toolUseResult: (tr as any).toolUseResult,
+              toolUseResult: tr.toolUseResult,
             }
           : null;
 
@@ -290,6 +488,8 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           isSubagentContainer,
           subagent: msg.subagent,
           subagentActivity,
+          workflow: msg.workflow,
+          taskStatus: msg.toolId ? liveTasksByToolUseId.get(msg.toolId) : undefined,
           memoryCitations: msg.memoryCitations,
           ...sharedMetadata,
         });
@@ -323,7 +523,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
           content: msg.summary || 'Background task update',
           timestamp: msg.timestamp,
           isTaskNotification: true,
-          taskStatus: msg.status || 'completed',
+          taskNotificationStatus: msg.status || 'completed',
           ...sharedMetadata,
         });
         break;
@@ -350,6 +550,10 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       case 'permission_cancelled':
       case 'session_created':
         // Skip — these are handled by useChatRealtimeHandlers
+        break;
+
+      // Folded onto the launching tool call in the first pass.
+      case 'task_status':
         break;
 
       // tool_result is handled via attachment to tool_use above
@@ -389,6 +593,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     projectionCache.set(msg, {
       toolResultSource,
       subagentActivitySource,
+      taskStatusSource,
       // One source record can produce zero, one, or two UI messages (task
       // notifications with a result produce two), so cache the whole slice.
       messages: converted.slice(convertedStart),

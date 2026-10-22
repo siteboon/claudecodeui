@@ -151,6 +151,30 @@ const createOpenCodeDatabase = async (homeDir: string, workspacePath: string): P
       3,
       2,
     );
+    db.prepare(`
+      INSERT INTO session (
+        id, project_id, parent_id, slug, directory, title, version, time_created, time_updated,
+        time_archived, tokens_input, tokens_output, tokens_reasoning, tokens_cache_read,
+        tokens_cache_write
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'open-child-session-1',
+      'project-1',
+      'open-session-1',
+      'open-child-session-1',
+      workspacePath,
+      'OpenCode child session',
+      '0.0.0',
+      1_700_000_002_000,
+      1_700_000_005_000,
+      null,
+      5,
+      10,
+      2,
+      1,
+      1,
+    );
 
     const userMessageData = JSON.stringify({
       role: 'user',
@@ -255,16 +279,29 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
   try {
     await createOpenCodeDatabase(tempRoot, workspacePath);
     await withIsolatedDatabase(() => {
+      sessionsDb.createAppSession('app-child-session-1', 'opencode', workspacePath);
+      sessionsDb.assignProviderSessionId('app-child-session-1', 'open-child-session-1');
+
       const synchronizer = new OpenCodeSessionSynchronizer();
       const processed = synchronizer.synchronize();
 
-      return Promise.resolve(processed).then((count) => {
+      return Promise.resolve(processed).then(async (count) => {
         assert.equal(count, 1);
         const indexed = sessionsDb.getSessionById('open-session-1');
         assert.equal(indexed?.provider, 'opencode');
         assert.equal(indexed?.project_path, workspacePath);
         assert.equal(indexed?.custom_name, 'OpenCode indexed title');
         assert.equal(indexed?.jsonl_path, null);
+        assert.equal(sessionsDb.getSessionById('app-child-session-1'), null);
+        assert.equal(sessionsDb.getSessionByProviderSessionId('open-child-session-1'), null);
+
+        sessionsDb.createAppSession('app-child-session-2', 'opencode', workspacePath);
+        sessionsDb.assignProviderSessionId('app-child-session-2', 'open-child-session-1');
+        await synchronizer.synchronize(new Date(1_700_000_004_500));
+        assert.equal(
+          sessionsDb.getSessionById('app-child-session-2')?.provider_session_id,
+          'open-child-session-1',
+        );
       });
     });
   } finally {
@@ -290,6 +327,7 @@ test('OpenCode session synchronizer returns the app session id once provider map
         assert.equal(sessionId, 'app-session-1');
         assert.equal(sessionsDb.getAllSessions().length, 1);
         assert.equal(sessionsDb.getSessionById('app-session-1')?.provider_session_id, 'open-session-1');
+        assert.equal(sessionsDb.getSessionById('open-child-session-1'), null);
       });
     });
   } finally {
@@ -379,6 +417,129 @@ test('OpenCode sessions provider normalizes quoted live text and skips user echo
   assert.deepEqual(userEcho, []);
 });
 
+// `opencode run --format json` (1.18) nests each event payload under `part`.
+const normalizeLiveEvent = (event: Record<string, unknown>) =>
+  new OpenCodeSessionsProvider().normalizeMessage(event, 'app-session');
+
+test('OpenCode sessions provider shows live text nested in part as an assistant row', () => {
+  const [message] = normalizeLiveEvent({
+    type: 'text',
+    sessionID: 'ses_1',
+    part: { type: 'text', text: 'ok', messageID: 'msg_1' },
+  });
+
+  assert.equal(message?.kind, 'text');
+  assert.equal(message?.role, 'assistant');
+  assert.equal(message?.content, 'ok');
+});
+
+test('OpenCode sessions provider keeps two text parts of one step as separate rows', () => {
+  const textPart = (id: string, text: string) => normalizeLiveEvent({
+    type: 'text',
+    part: { id, messageID: 'msg_1', sessionID: 'ses_1', type: 'text', text },
+  });
+  const [first] = textPart('prt_1', 'Checking.');
+  const [second] = textPart('prt_2', 'Done.');
+
+  assert.deepEqual(
+    [first, second].map((message) => [message?.kind, message?.id, message?.content]),
+    [['text', 'msg_1_prt_1', 'Checking.'], ['text', 'msg_1_prt_2', 'Done.']],
+  );
+});
+
+test('OpenCode sessions provider shows live reasoning nested in part as thinking', () => {
+  const [message] = normalizeLiveEvent({
+    type: 'reasoning',
+    sessionID: 'ses_1',
+    part: { type: 'reasoning', text: 'multiplying first' },
+  });
+
+  assert.equal(message?.kind, 'thinking');
+  assert.equal(message?.content, 'multiplying first');
+});
+
+test('OpenCode sessions provider gives a finished live tool its name, input and output', () => {
+  const [message] = normalizeLiveEvent({
+    type: 'tool_use',
+    sessionID: 'ses_1',
+    part: {
+      type: 'tool',
+      tool: 'bash',
+      callID: 'call_1',
+      state: { status: 'completed', input: { command: 'echo hi' }, output: 'hi\n' },
+    },
+  });
+
+  assert.equal(message?.kind, 'tool_use');
+  assert.equal(message?.toolName, 'bash');
+  assert.equal(message?.toolId, 'call_1');
+  assert.deepEqual(message?.toolInput, { command: 'echo hi' });
+  assert.deepEqual(message?.toolResult, { content: 'hi\n', isError: false });
+});
+
+test('OpenCode sessions provider reports a failed live tool as an error result', () => {
+  const [message] = normalizeLiveEvent({
+    type: 'tool_use',
+    sessionID: 'ses_1',
+    part: {
+      type: 'tool',
+      tool: 'read',
+      callID: 'call_2',
+      state: { status: 'error', input: { filePath: '/tmp/x' }, error: 'File not found: /tmp/x' },
+    },
+  });
+
+  assert.equal(message?.toolName, 'read');
+  assert.deepEqual(message?.toolResult, { content: 'File not found: /tmp/x', isError: true });
+});
+
+test('OpenCode sessions provider shows the message of an error event object', () => {
+  const [message] = normalizeLiveEvent({
+    type: 'error',
+    sessionID: 'ses_1',
+    error: { name: 'UnknownError', data: { message: 'Unexpected server error.', ref: 'err_1' } },
+  });
+
+  assert.equal(message?.kind, 'error');
+  assert.equal(message?.content, 'Unexpected server error.');
+});
+
+test('OpenCode sessions provider falls back to the name of an error event without a message', () => {
+  const [byName] = normalizeLiveEvent({ type: 'error', error: { name: 'ProviderAuthError' } });
+  const [byModel] = normalizeLiveEvent({
+    type: 'error',
+    error: { name: 'ProviderModelNotFoundError', data: { providerID: 'openai', modelID: 'gpt-old' } },
+  });
+  const [byData] = normalizeLiveEvent({ type: 'error', error: { name: 'APIError', data: { statusCode: 429 } } });
+
+  assert.equal(byName?.content, 'ProviderAuthError');
+  assert.equal(byModel?.content, 'ProviderModelNotFoundError: openai/gpt-old');
+  assert.equal(byData?.content, 'APIError: {"statusCode":429}');
+});
+
+test('OpenCode sessions provider gives live parts the id the history reader gives them', () => {
+  const part = { id: 'prt_1', messageID: 'msg_1', sessionID: 'ses_1' };
+  const [text] = normalizeLiveEvent({ type: 'text', part: { ...part, type: 'text', text: 'ok' } });
+  const [reasoning] = normalizeLiveEvent({ type: 'reasoning', part: { ...part, type: 'reasoning', text: 'hmm' } });
+  const [tool] = normalizeLiveEvent({
+    type: 'tool_use',
+    part: { ...part, type: 'tool', tool: 'bash', callID: 'call_1', state: { status: 'completed', output: '' } },
+  });
+
+  assert.equal(text?.id, 'msg_1_prt_1');
+  assert.equal(reasoning?.id, 'msg_1_prt_1');
+  assert.equal(tool?.id, 'msg_1_prt_1');
+});
+
+test('OpenCode sessions provider keeps reading flat live events', () => {
+  const [text] = normalizeLiveEvent({ type: 'text', text: 'flat' });
+  const [error] = normalizeLiveEvent({ type: 'error', error: 'flat error' });
+
+  assert.equal(text?.kind, 'stream_delta');
+  assert.equal(text?.content, 'flat');
+  assert.equal(error?.content, 'flat error');
+});
+
 test('OpenCode sessions provider reads sqlite history and token usage', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-history-'));
   const workspacePath = path.join(tempRoot, 'workspace');
@@ -438,6 +599,7 @@ const seedOpenCodeSession = async (
       CREATE TABLE session (
         id TEXT PRIMARY KEY,
         project_id TEXT,
+        parent_id TEXT,
         directory TEXT,
         title TEXT,
         time_created INTEGER,

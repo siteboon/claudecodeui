@@ -67,6 +67,27 @@
       "openPanel": "開啟設定面板",
       "draggingStatus": "正在拖曳...",
       "toggleAndMove": "點擊切換，拖曳移動"
+    },
+    "tabs": {
+      "settings": "設定",
+      "commands": "指令"
+    },
+    "pin": "固定面板",
+    "unpin": "取消固定面板",
+    "close": "關閉面板",
+    "commands": {
+      "searchPlaceholder": "搜尋指令…",
+      "noProject": "選擇一個專案以檢視其指令。",
+      "loading": "正在載入指令…",
+      "empty": "此專案沒有可用的指令。",
+      "noMatches": "沒有符合搜尋的指令。",
+      "loadError": "無法載入指令。",
+      "groups": {
+        "builtIn": "內建",
+        "custom": "自訂",
+        "skills": "技能"
+      },
+      "insertTitle": "將 {{command}} 插入聊天"
     }
   },
   "terminalShortcuts": {
@@ -125,6 +146,13 @@
     "darkMode": {
       "label": "深色模式",
       "description": "切換淺色和深色佈景主題"
+    },
+    "theme": {
+      "label": "佈景主題",
+      "description": "選擇淺色或深色外觀，或跟隨作業系統設定",
+      "light": "淺色",
+      "dark": "深色",
+      "system": "跟隨系統外觀"
     },
     "projectSorting": {
       "label": "專案排序",
@@ -356,6 +384,25 @@
       "placeholder": "例如：\"Bash(rm:*)\"",
       "empty": "未設定停用的工具"
     },
+    "settingsFiles": {
+      "title": "來自 Claude 設定檔的規則",
+      "description": "Claude CLI 會在上方清單之外一併套用這些規則。拒絕規則無論設定在哪裡都優先，但對於「允許的工具」中已允許的工具，詢問規則不會再要求確認。這裡僅供檢視；請在檔案中編輯。",
+      "sources": {
+        "user": "您的設定",
+        "managed": "受管理設定（管理員）"
+      },
+      "groups": {
+        "allow": "允許",
+        "ask": "詢問",
+        "deny": "拒絕"
+      },
+      "missing": "找不到檔案，因此不會新增任何規則。",
+      "invalid": "無法讀取此檔案。請確認它是有效的 JSON。",
+      "empty": "此檔案中沒有權限規則。",
+      "loading": "正在載入規則…",
+      "loadFailed": "無法載入 Claude 設定檔中的規則。",
+      "projectNote": "專案本身的 .claude/settings.json 與 .claude/settings.local.json 也會套用於該專案中的聊天。在該資料夾受信任之前，Claude CLI 會忽略 .claude/settings.json 中的允許規則：請在該資料夾中以互動模式執行一次 Claude Code，並接受信任對話框。"
+    },
     "allowedCommands": {
       "title": "允許的 Shell 指令",
       "description": "無需權限提示即可自動執行的 Shell 指令",
@@ -389,7 +436,7 @@
       "modes": {
         "default": {
           "title": "預設",
-          "description": "只有受信任的指令（ls、cat、grep、git status 等）會自動執行。其他指令將被略過。可以寫入工作區。"
+          "description": "在工作區沙箱內執行指令。Codex 決定何時需要核准；此非互動式整合無法核准請求。"
         },
         "acceptEdits": {
           "title": "接受編輯",
@@ -402,7 +449,7 @@
       },
       "technicalDetails": "技術詳情",
       "technicalInfo": {
-        "default": "sandboxMode=workspace-write, approvalPolicy=untrusted。受信任的指令：cat、cd、grep、head、ls、pwd、tail、git status/log/diff/show、find（不帶 -exec）等。",
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. 在工作區沙箱內執行指令。Codex 決定何時需要核准；此非互動式整合無法核准請求。",
         "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。所有指令在專案目錄內自動執行。",
         "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全系統存取權限，僅在可信環境中使用。",
         "overrideNote": "您可以使用聊天介面中的模式按鈕按工作階段覆蓋此設定。"

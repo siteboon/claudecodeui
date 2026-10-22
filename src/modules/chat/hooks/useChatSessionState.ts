@@ -78,6 +78,17 @@ function findRenderedMessageElement(
 /** Stable empty list so `chatMessages` keeps its identity while no session is selected. */
 const NO_MESSAGES: NormalizedMessage[] = [];
 
+/**
+ * The visible-window size that shows the row at `index` of `total` rows, with
+ * a page of context above it; the current size when the row already shows.
+ * The window is a tail slice, so a row is visible when at most `count` rows
+ * follow it, itself included.
+ */
+export function visibleCountToReveal(total: number, index: number, current: number): number {
+  const needed = total - index;
+  return needed <= current ? current : needed + SESSION_MESSAGES_PAGE_SIZE;
+}
+
 type UseChatSessionStateArgs = {
   isActive: boolean;
   selectedProject: Project | null;
@@ -148,11 +159,11 @@ function chatMessageToNormalized(
   if (msg.isThinking) {
     return { ...base, kind: 'thinking', content: msg.content || '' } as NormalizedMessage;
   }
-  if ((msg as any).isTaskNotification) {
+  if (msg.isTaskNotification) {
     return {
       ...base,
       kind: 'task_notification',
-      status: (msg as any).taskStatus || 'completed',
+      status: msg.taskNotificationStatus || 'completed',
       summary: msg.content || '',
     } as NormalizedMessage;
   }
@@ -311,9 +322,10 @@ export function useChatSessionState({
   // The activity indicator always reflects the latest status of the session
   // being viewed — never stale local UI state from the last time it was
   // open. Session ids are concrete before any send, so no pending
-  // placeholder entry exists anymore.
+  // placeholder entry exists anymore. Background-only work shows in the
+  // indicator but is not a response in flight: the composer can send.
   const sessionActivity = (activeSessionId && processingSessions?.get(activeSessionId)) || null;
-  const isProcessing = sessionActivity !== null;
+  const isProcessing = sessionActivity !== null && !sessionActivity.background;
   const canAbortSession = isProcessing && sessionActivity.canInterrupt;
 
   // Ref mirror so effects can read the latest map without re-running on
@@ -687,8 +699,12 @@ export function useChatSessionState({
     if (!selectedSession || !selectedProject) {
       // A freshly created session can be mid-run before the router has a
       // canonical selectedSession (the URL effect synthesizes one on the
-      // next render). Keep the active view intact instead of wiping it.
-      if (currentSessionId && processingSessionsRef.current?.has(currentSessionId)) {
+      // next render). Keep the active view intact instead of wiping it — but
+      // only for a response in flight: a session whose turn has ended with
+      // background work still running has a canonical id, so a missing
+      // selection there is a real navigation away.
+      const activity = currentSessionId ? processingSessionsRef.current?.get(currentSessionId) : undefined;
+      if (activity && !activity.background) {
         return;
       }
 
@@ -1098,6 +1114,35 @@ export function useChatSessionState({
     setVisibleMessageCount((prev) => prev + 100);
   }, []);
 
+  // Brings one row into view even when it is outside the visible window or
+  // sits in a lazy row that has not mounted: widen the window to include it,
+  // then scroll to the row's wrapper, which is in the DOM as soon as the row
+  // is inside the window, mounted or not.
+  const revealMessage = useCallback((message: ChatMessage) => {
+    const index = chatMessages.indexOf(message);
+    if (index >= 0) {
+      setVisibleMessageCount((prev) => visibleCountToReveal(chatMessages.length, index, prev));
+    }
+
+    const attempt = (remaining: number) => {
+      const container = scrollContainerRef.current;
+      // The widened window commits after this frame, so the row can be absent
+      // on the first attempts; only the last one may settle for the nearest
+      // row (a hit collapsed inside a tool group carries the group's
+      // timestamp), or the first attempt scrolls to an unrelated row and the
+      // retries never run.
+      const element = container ? findRenderedMessageElement(container, message.timestamp, remaining === 0) : null;
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      if (remaining > 0) {
+        requestAnimationFrame(() => attempt(remaining - 1));
+      }
+    };
+    requestAnimationFrame(() => attempt(10));
+  }, [chatMessages]);
+
   return {
     chatMessages,
     addMessage,
@@ -1117,6 +1162,7 @@ export function useChatSessionState({
     visibleMessageCount,
     visibleMessages,
     loadEarlierMessages,
+    revealMessage,
     loadAllMessages,
     loadFullTranscript,
     allMessagesLoaded,

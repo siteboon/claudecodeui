@@ -51,6 +51,28 @@
     "viewFullOutput": "Tam çıktıyı göster ({{count}} karakter)",
     "contentDisplayed": "Dosya içeriği yukarıdaki diff görünümünde gösteriliyor"
   },
+  "bashEditDiff": {
+    "created": "Oluşturuldu",
+    "updated": "Güncellendi",
+    "deleted": "Silindi",
+    "emptyFile": "Boş dosya",
+    "moreLines_one": "… {{count}} satır daha",
+    "moreLines_other": "… {{count}} satır daha",
+    "moreFiles_one": "… {{count}} dosya daha değişti",
+    "moreFiles_other": "… {{count}} dosya daha değişti",
+    "filesNotShown_one": "{{count}} dosya değişti (ikili, yalnızca mod veya gösterilemeyecek kadar büyük)",
+    "filesNotShown_other": "{{count}} dosya değişti (ikili, yalnızca mod veya gösterilemeyecek kadar büyük)",
+    "filesUnavailable_one": "{{count}} dosya değişti (diff kullanılamıyor)",
+    "filesUnavailable_other": "{{count}} dosya değişti (diff kullanılamıyor)",
+    "filesChanged_one": "{{count}} dosya değişti",
+    "filesChanged_other": "{{count}} dosya değişti",
+    "morePaths_one": "+{{count}} daha",
+    "morePaths_other": "+{{count}} daha",
+    "diffUnavailable": "(bu komut için dosya diff'i kullanılamıyor)",
+    "partUnavailable": "(diff'in bir kısmı kullanılamıyor)",
+    "skipped": "(bu git komutu için dosya diff'i atlandı)",
+    "shared": "(bu depoda aynı anda başka bir komut çalıştı; ikisinden birinin yaptığı bir değişiklik her iki sonuçta da görünebilir)"
+  },
   "thinking": {
     "title": "Düşünüyor...",
     "emoji": "💭 Düşünüyor..."
@@ -81,14 +103,14 @@
     "permissionMode": "İzin Modu",
     "modes": {
       "default": "Varsayılan Mod",
-      "auto": "Auto Mode",
+      "auto": "Otomatik Mod",
       "acceptEdits": "Düzenlemeleri Kabul Et",
       "bypassPermissions": "İzinleri Atla",
       "plan": "Plan Modu"
     },
     "descriptions": {
       "default": "Sadece güvenilir komutlar (ls, cat, grep, git status, vb.) otomatik çalışır. Diğer komutlar atlanır. Çalışma alanına yazabilir.",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "Bir model sınıflandırıcı her araç çağrısında onaylamaya veya reddetmeye karar verir. Müdahale gerektirmez ama İzinleri Atla'dan daha güvenlidir; reddetmeler yine de olur.",
       "acceptEdits": "Tüm komutlar çalışma alanı içinde otomatik çalışır. Sandbox'lu çalıştırma ile tam otomatik mod.",
       "bypassPermissions": "Kısıtlama olmadan tam sistem erişimi. Tüm komutlar tam disk ve ağ erişimiyle otomatik çalışır. Dikkatli kullan.",
       "plan": "Planlama modu — hiçbir komut çalıştırılmaz"
@@ -105,12 +127,17 @@
     "stop": "Durdur",
     "hintText": {
       "ctrlEnter": "Göndermek için Ctrl+Enter • Yeni satır için Shift+Enter • Mod değiştirmek için Tab • Slash komutları için /",
-      "enter": "Göndermek için Enter • Yeni satır için Shift+Enter • Mod değiştirmek için Tab • Slash komutları için /"
+      "enter": "Göndermek için Enter • Yeni satır için Shift+Enter • Mod değiştirmek için Tab • Slash komutları için /",
+      "appendQueued": "Sıradaki mesaja eklemek için Enter"
     },
     "clickToChangeMode": "İzin modunu değiştirmek için tıkla (veya girdide Tab tuşuna bas)",
     "showAllCommands": "Tüm komutları göster",
     "clearInput": "Girdiyi temizle",
-    "scrollToBottom": "En alta git"
+    "scrollToBottom": "En alta git",
+    "queue": {
+      "append": "Sıradaki mesaja ekle",
+      "notCombinable": "Mesaj sıraya eklenemedi: Slash komutu tek başına çalışır, bu yüzden sıradaki mesajla birleştirilemez. Sıradaki mesaj gönderildikten sonra gönderin."
+    }
   },
   "providerSelection": {
     "title": "AI Asistanını Seç",
@@ -128,7 +155,8 @@
       "codex": "Codex'i {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "default": "Başlamak için yukarıdan bir sağlayıcı seç"
     },
-    "pressToSearch": "Oturumlarda, dosyalarda ve commit'lerde arama yapmak için <kbd>{{shortcut}}</kbd> tuşlarına bas"
+    "pressToSearch": "Oturumlarda, dosyalarda ve commit'lerde arama yapmak için <kbd>{{shortcut}}</kbd> tuşlarına bas",
+    "chooseModelDescriptionCustomOnly": "{{providers, list}} için yalnızca kendi modelleriniz listelenir"
   },
   "session": {
     "continue": {
@@ -158,7 +186,8 @@
     "status": {
       "newSession": "Yeni Oturum",
       "initializing": "Başlatılıyor...",
-      "restarting": "Yeniden başlatılıyor..."
+      "restarting": "Yeniden başlatılıyor...",
+      "themeRestartHint": "Yeni temayı Claude Code'a uygulamak için yeniden başlatın"
     },
     "actions": {
       "disconnect": "Bağlantıyı Kes",
@@ -214,9 +243,13 @@
   },
   "message": {
     "editAndResend": "Düzenle ve yeniden gönder",
-    "forkFromHere": "Buradan çatalla"
+    "forkFromHere": "Buradan çatalla",
+    "answeredBy": "{{model}} tarafından yanıtlandı"
   },
   "composer": {
+    "permissionHeading": "{{provider}} eylemleri nasıl onaylansın?",
+    "permissionCycleHint": "Modu değiştirmek için giriş alanında Tab tuşuna bas",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Önceki bir mesaj değiştiriliyor",
       "filesNotReverted": "zaten değiştirilen dosyalar geri alınmaz",
@@ -253,6 +286,16 @@
     },
     "pending": "{{when}} için zamanlandı",
     "failed": "Gönderilmedi — {{reason}}",
-    "cancel": "Zamanlanmış mesajı iptal et"
+    "cancel": "Zamanlanmış mesajı iptal et",
+    "dismiss": "Hata bildirimini kapat"
+  },
+  "modelLibrary": {
+    "effortLevels": "Akıl yürütme seviyeleri",
+    "effortLevelsHint": "Bu modelin kabul ettiği akıl yürütme çabası seviyelerini seçin. Hiçbiri seçilmezse, yazma alanında bu model için seviye seçilemez.",
+    "effortSummary": "Akıl yürütme: {{levels}}",
+    "customModelsOnly": "Yalnızca kendi modellerimi kullan",
+    "customModelsOnlyHint": "Yerleşik {{provider}} modellerini tüm model seçicilerde gizler ve ilk modelinizi varsayılan yapar. Bir model ekleyene kadar yerleşik modeller listede kalır.",
+    "builtInModelsHidden": "“Yalnızca kendi modellerimi kullan” açıkken model seçicilerde gizlenir.",
+    "customModelsOnlyFailed": "Bu ayar değiştirilemedi."
   }
 }

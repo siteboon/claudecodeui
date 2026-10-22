@@ -5,6 +5,7 @@ import readline from 'node:readline';
 import { spawn } from 'cross-spawn';
 import { rgPath } from '@vscode/ripgrep';
 
+import { isClaudeNonTurnMessageRow, stripAnsiSequences } from '@/shared/utils.js';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 
 type AnyRecord = Record<string, any>;
@@ -409,10 +410,6 @@ function buildClaudeLocalCommandDisplayText(payload: ClaudeLocalCommandPayload):
   return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
 }
 
-function stripAnsiFormatting(text: string): string {
-  return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
-}
-
 type ClaudeSearchableMessage = {
   text: string;
   role: 'user' | 'assistant';
@@ -424,7 +421,7 @@ type ClaudeSearchableMessage = {
  * of those rows rather than the raw wrapper syntax.
  */
 function extractClaudeSearchableMessage(entry: AnyRecord): ClaudeSearchableMessage | null {
-  if (!entry.message?.content || entry.isApiErrorMessage) {
+  if (!entry.message?.content || entry.isApiErrorMessage || isClaudeNonTurnMessageRow(entry)) {
     return null;
   }
 
@@ -456,7 +453,7 @@ function extractClaudeSearchableMessage(entry: AnyRecord): ClaudeSearchableMessa
 
     const localCommandStdout = extractTaggedContent(content, 'local-command-stdout');
     if (localCommandStdout !== null) {
-      const stdoutText = stripAnsiFormatting(localCommandStdout).trim();
+      const stdoutText = stripAnsiSequences(localCommandStdout).trim();
       return stdoutText
         ? {
             text: stdoutText,

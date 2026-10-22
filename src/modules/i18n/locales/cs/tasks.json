@@ -1,0 +1,161 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI není nastaven",
+    "description": "TaskMaster s pomocí AI rozděluje složité projekty na zvládnutelné úkoly",
+    "whatIsTitle": "🎯 Co je TaskMaster?",
+    "features": {
+      "aiPowered": "Správa úkolů s pomocí AI: Rozdělte složité projekty na zvládnutelné dílčí úkoly",
+      "prdTemplates": "Šablony PRD: Generujte úkoly z dokumentů s požadavky na produkt",
+      "dependencyTracking": "Sledování závislostí: Mějte přehled o vztazích mezi úkoly a pořadí jejich provádění",
+      "progressVisualization": "Vizualizace postupu: Kanbanové tabule a podrobná analytika úkolů",
+      "cliIntegration": "Integrace s CLI: Používejte příkazy taskmaster pro pokročilé pracovní postupy"
+    },
+    "initializeButton": "Inicializovat TaskMaster AI"
+  },
+  "gettingStarted": {
+    "title": "Jak začít s nástrojem TaskMaster",
+    "subtitle": "TaskMaster je inicializován. Postupujte takto:",
+    "steps": {
+      "createPRD": {
+        "title": "Vytvořte dokument s požadavky na produkt (PRD)",
+        "description": "Proberte nápad na projekt a vytvořte PRD, který popisuje, co chcete vytvořit.",
+        "addButton": "Přidat PRD",
+        "existingPRDs": "Existující PRD:"
+      },
+      "generateTasks": {
+        "title": "Vygenerujte úkoly z PRD",
+        "description": "Až budete mít PRD, požádejte AI asistenta, aby ho zpracoval, a TaskMaster ho automaticky rozdělí na zvládnutelné úkoly s podrobnostmi k implementaci."
+      },
+      "analyzeTasks": {
+        "title": "Analyzujte a rozložte úkoly",
+        "description": "Požádejte AI asistenta, aby analyzoval složitost úkolů a rozložil je na podrobné dílčí úkoly pro snazší implementaci."
+      },
+      "startBuilding": {
+        "title": "Začněte vyvíjet",
+        "description": "Požádejte AI asistenta, aby začal pracovat na úkolech, aktualizoval jejich stav a přidával nové úkoly, jak se projekt vyvíjí."
+      }
+    },
+    "tip": "💡 Tip: Začněte s PRD a vytěžte maximum z generování úkolů pomocí AI v nástroji TaskMaster"
+  },
+  "setupModal": {
+    "title": "Nastavení nástroje TaskMaster",
+    "subtitle": "Interaktivní CLI pro projekt {{projectName}}",
+    "willStart": "Inicializace nástroje TaskMaster se spustí automaticky",
+    "completed": "Nastavení nástroje TaskMaster je dokončeno. Nyní můžete toto okno zavřít.",
+    "closeButton": "Zavřít",
+    "closeContinueButton": "Zavřít a pokračovat"
+  },
+  "helpGuide": {
+    "title": "Jak začít s nástrojem TaskMaster",
+    "subtitle": "Průvodce produktivní správou úkolů",
+    "examples": {
+      "parsePRD": "💬 Příklad:\n„Mám nový projekt inicializovaný pomocí Claude Task Master. PRD je v .taskmaster/docs/prd.txt. Můžete mi pomoci ho zpracovat a nastavit počáteční úkoly?“",
+      "expandTask": "💬 Příklad:\n„Úkol 5 vypadá složitě. Můžete ho rozložit na dílčí úkoly?“",
+      "addTask": "💬 Příklad:\n„Přidejte prosím nový úkol na implementaci nahrávání profilových obrázků uživatelů přes Cloudinary a prozkoumejte nejlepší postup.“"
+    },
+    "moreExamples": "Zobrazit další příklady a vzory použití →",
+    "proTips": {
+      "title": "💡 Tipy pro pokročilé",
+      "search": "Pomocí vyhledávacího pole rychle najdete konkrétní úkoly",
+      "views": "Přepínači zobrazení můžete přepínat mezi zobrazením Kanban, seznamem a mřížkou",
+      "filters": "Pomocí filtrů se zaměřte na konkrétní stavy nebo priority úkolů",
+      "details": "Kliknutím na úkol zobrazíte podrobnosti a můžete spravovat dílčí úkoly"
+    },
+    "learnMore": {
+      "title": "📚 Další informace",
+      "description": "TaskMaster AI je pokročilý systém pro správu úkolů určený vývojářům. Najdete zde dokumentaci a příklady a můžete do projektu přispět.",
+      "githubButton": "Zobrazit na GitHubu"
+    }
+  },
+  "search": {
+    "placeholder": "Hledat úkoly..."
+  },
+  "filters": {
+    "button": "Filtry",
+    "status": "Stav",
+    "priority": "Priorita",
+    "sortBy": "Řadit podle",
+    "allStatuses": "Všechny stavy",
+    "allPriorities": "Všechny priority",
+    "showing": "Zobrazené úkoly: {{filtered}} z {{total}}",
+    "clearFilters": "Vymazat filtry"
+  },
+  "sort": {
+    "id": "ID",
+    "status": "Stav",
+    "priority": "Priorita",
+    "idAsc": "ID (vzestupně)",
+    "idDesc": "ID (sestupně)",
+    "titleAsc": "Název (A-Z)",
+    "titleDesc": "Název (Z-A)",
+    "statusAsc": "Stav (nejdřív čekající)",
+    "statusDesc": "Stav (nejdřív hotové)",
+    "priorityAsc": "Priorita (nejdřív vysoká)",
+    "priorityDesc": "Priorita (nejdřív nízká)"
+  },
+  "views": {
+    "kanban": "Zobrazení Kanban",
+    "list": "Zobrazení seznamu",
+    "grid": "Zobrazení mřížky"
+  },
+  "kanban": {
+    "pending": "📋 K provedení",
+    "inProgress": "🚀 Probíhá",
+    "done": "✅ Hotovo",
+    "blocked": "🚫 Blokováno",
+    "deferred": "⏳ Odloženo",
+    "cancelled": "❌ Zrušeno",
+    "noTasksYet": "Zatím žádné úkoly",
+    "tasksWillAppear": "Zde se zobrazí úkoly",
+    "moveTasksHere": "Sem přesuňte úkoly po zahájení",
+    "completedTasksHere": "Zde se zobrazují dokončené úkoly",
+    "statusTasksHere": "Zde se zobrazí úkoly s tímto stavem"
+  },
+  "buttons": {
+    "help": "Úvodní průvodce nástrojem TaskMaster",
+    "prds": "PRD",
+    "addPRD": "Přidat PRD",
+    "addTask": "Přidat úkol",
+    "createNewPRD": "Vytvořit nový PRD",
+    "prdsAvailable_one": "K dispozici je {{count}} PRD",
+    "prdsAvailable_few": "K dispozici jsou {{count}} PRD",
+    "prdsAvailable_many": "K dispozici je {{count}} PRD",
+    "prdsAvailable_other": "K dispozici je {{count}} PRD"
+  },
+  "prd": {
+    "modified": "Upraveno: {{date}}"
+  },
+  "statuses": {
+    "pending": "Čeká",
+    "in-progress": "Probíhá",
+    "done": "Hotovo",
+    "blocked": "Blokováno",
+    "deferred": "Odloženo",
+    "cancelled": "Zrušeno"
+  },
+  "priorities": {
+    "high": "Vysoká",
+    "medium": "Střední",
+    "low": "Nízká",
+    "highTitle": "Vysoká priorita",
+    "mediumTitle": "Střední priorita",
+    "lowTitle": "Nízká priorita"
+  },
+  "noMatchingTasks": {
+    "title": "Filtrům neodpovídají žádné úkoly",
+    "description": "Zkuste upravit hledání nebo kritéria filtru."
+  },
+  "banner": {
+    "initialize": "Inicializovat",
+    "hideDetails": "Skrýt podrobnosti",
+    "whatIsTaskmaster": "Co je TaskMaster?",
+    "detailAiPowered": "- Správa úkolů s pomocí AI, se závislostmi a dílčími úkoly.",
+    "detailPrdDriven": "- Generování úkolů z PRD pro rychlejší rozjezd projektu.",
+    "detailKanbanList": "- Zobrazení Kanban a seznam pro každodenní práci.",
+    "startTask": "Zahájit úkol",
+    "viewTaskDetails": "Zobrazit podrobnosti úkolu",
+    "viewAllTasks": "Zobrazit všechny úkoly",
+    "allComplete": "Všechny úkoly dokončeny",
+    "noPending": "Žádné čekající úkoly"
+  }
+}

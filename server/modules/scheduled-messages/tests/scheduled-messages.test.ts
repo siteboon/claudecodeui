@@ -37,14 +37,24 @@ async function withIsolatedDatabase(runTest: (userId: number) => void | Promise<
 
 type RunCall = { provider: string; command: string; options: Record<string, unknown> };
 
-function createRuntime(runs: RunCall[], behaviour: 'ok' | 'throw' = 'ok') {
+function createRuntime(
+  runs: RunCall[],
+  behaviour: 'ok' | 'throw' = 'ok',
+  aborts: string[] = [],
+  hasBackgroundWork: (sessionId: string) => boolean = () => false,
+) {
   return {
     hasRuntime: () => true,
+    hasBackgroundWork,
     run: async (provider: string, command: string, options: Record<string, unknown>) => {
       if (behaviour === 'throw') {
         throw new Error('provider exploded');
       }
       runs.push({ provider, command, options });
+    },
+    abort: async (_provider: string, sessionId: string) => {
+      aborts.push(sessionId);
+      return true;
     },
   } as never;
 }
@@ -110,6 +120,103 @@ test('a queued message stays pending while its session is busy', async () => {
     assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
       content: 'send after this run',
     });
+  });
+});
+
+test('a queued message waits for background work its session\'s last turn left running', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: { content: 'send after the background job' },
+    });
+    // Turn A ended, so its run is completed, but it backgrounded a command
+    // that is still running under A's CLI process.
+    const runA = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId,
+    });
+    runA!.writer.sendComplete({ exitCode: 0 });
+    assert.equal(chatRunRegistry.isProcessing(SESSION_ID), false);
+
+    let backgroundWork = true;
+    const runs: RunCall[] = [];
+    const runtime = createRuntime(runs, 'ok', [], (sessionId) => sessionId === SESSION_ID && backgroundWork);
+
+    // Starting B now would replace that process and stop the command.
+    assert.equal(await dispatchQueuedMessages(runtime), 0);
+    assert.equal(runs.length, 0);
+    assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
+      content: 'send after the background job',
+    });
+
+    // Once the work has reported back, B goes on the next pass.
+    backgroundWork = false;
+    assert.equal(await dispatchQueuedMessages(runtime), 1);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'send after the background job');
+    assert.equal(sessionDraftsDb.getDrafts(userId).length, 0);
+  });
+});
+
+test('follow-ups queued during one turn are all sent, once, in order, as the next turn', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    for (const content of ['follow-up A', 'follow-up B', 'follow-up C']) {
+      sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content, options: { model: 'opus' }, attachments: [] });
+    }
+
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0, 'nothing is left to send');
+
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'follow-up A\n\nfollow-up B\n\nfollow-up C');
+    assert.equal(runs[0].options.model, 'opus');
+    assert.equal(sessionDraftsDb.getDrafts(userId).length, 0);
+  });
+});
+
+test('a draft-text save after the queued message was sent does not send it again', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'send me once', attachments: [] });
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+
+    // The composer keeps saving its text while the user types the next
+    // follow-up; its copy of the queue still holds the message just sent.
+    sessionDraftsDb.saveDraftText(userId, SESSION_ID, 'typing the next one');
+
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0);
+    assert.deepEqual(runs.map((run) => run.command), ['send me once']);
+  });
+});
+
+test('a due message interrupts a run in progress instead of failing', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'the schedule wins',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId,
+    });
+
+    const runs: RunCall[] = [];
+    const aborts: string[] = [];
+    assert.equal(await dispatchDueScheduledMessages(createRuntime(runs, 'ok', aborts)), 1);
+
+    assert.deepEqual(aborts, [SESSION_ID]);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'the schedule wins');
+    assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'sent');
   });
 });
 
@@ -197,6 +304,23 @@ test('a cancelled message never fires', async () => {
     const runs: RunCall[] = [];
     assert.equal(await dispatchDueScheduledMessages(createRuntime(runs)), 0);
     assert.equal(runs.length, 0);
+  });
+});
+
+test('a failed message can be dismissed, and stays dismissed', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const scheduled = scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'will fail',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    await dispatchDueScheduledMessages(createRuntime([], 'throw'));
+    assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'failed');
+
+    scheduledMessagesService.cancel(userId, scheduled.id);
+
+    assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'cancelled');
   });
 });
 

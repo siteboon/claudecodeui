@@ -41,16 +41,39 @@ jobs:
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
+      # Trusted publishing (OIDC) requires npm >= 11.5.1; Node 22 ships npm 10.x.
+      - name: Use an npm that supports trusted publishing
+        run: npm install -g npm@^11.5.1
+
       - run: npm ci
 
       - name: Release
+        id: release
         run: |
-          ARGS="--ci --increment=${{ inputs.increment }}"
-          if [ -n "${{ inputs.release_name }}" ]; then
-            ARGS="$ARGS --github.releaseName=\"${{ inputs.release_name }}\""
+          # Stream subprocess output so publishing errors are visible immediately.
+          ARGS=(--ci --verbose --verbose "--increment=$RELEASE_INCREMENT")
+          if [ -n "$RELEASE_NAME" ]; then
+            ARGS+=("--github.releaseName=$RELEASE_NAME")
           fi
-          npx release-it $ARGS
+          npx release-it "${ARGS[@]}"
         env:
+          RELEASE_INCREMENT: ${{ inputs.increment }}
+          RELEASE_NAME: ${{ inputs.release_name }}
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_LOGS_DIR: ${{ runner.temp }}/release-npm-logs
+
+      - name: Show npm failure details
+        if: failure() && steps.release.outcome == 'failure'
+        env:
+          NPM_CONFIG_LOGS_DIR: ${{ runner.temp }}/release-npm-logs
+        run: |
+          # Read npm's on-disk errors even if release-it truncates its console output.
+          shopt -s nullglob
+          LOGS=("$NPM_CONFIG_LOGS_DIR"/*debug*.log)
+          if [ ${#LOGS[@]} -eq 0 ]; then
+            echo "No npm debug logs were created by the release step."
+          fi
+          for LOG in "${LOGS[@]}"; do
+            echo "npm diagnostics: $(basename "$LOG")"
+            grep -E '^[0-9]+ (error|verbose (stack|exit|code))([[:space:]]|$)' "$LOG" || true
+          done

@@ -158,12 +158,15 @@ export class ClaudeSkillsProvider extends SkillsProvider {
             continue;
           }
 
+          // A plugin may ship commands, skills, or both, and the CLI offers
+          // both halves. Reading only the first folder found hid every skill
+          // that sits beside a commands folder -- and hid the whole plugin when
+          // its commands are in a format this reader does not take.
           const commandsPath = path.join(pluginFolder, 'commands');
           if (await pathExistsAsDirectory(commandsPath)) {
             skills.push(
               ...(await this.listPluginCommandSkills(commandsPath, pluginId, pluginName)),
             );
-            continue;
           }
 
           const skillsPath = path.join(pluginFolder, 'skills');

@@ -55,6 +55,11 @@
     ],
     "boundaries/elements": [
       {
+        "type": "backend-shared-barrel",
+        "pattern": "server/shared/index.ts",
+        "mode": "file"
+      },
+      {
         "type": "backend-shared-type-contract",
         "pattern": ["server/shared/types.{js,ts}", "server/shared/interfaces.{js,ts}"],
         "mode": "file"

@@ -52,6 +52,35 @@
     "viewFullOutput": "View full output ({{count}} chars)",
     "contentDisplayed": "The file content is displayed in the diff view above"
   },
+  "bashEditDiff": {
+    "created": "Created",
+    "updated": "Updated",
+    "deleted": "Deleted",
+    "emptyFile": "Empty file",
+    "moreLines_one": "… {{count}} more line",
+    "moreLines_other": "… {{count}} more lines",
+    "moreFiles_one": "… {{count}} more file changed",
+    "moreFiles_other": "… {{count}} more files changed",
+    "filesNotShown_one": "{{count}} file changed (binary, mode only or too large to show)",
+    "filesNotShown_other": "{{count}} files changed (binary, mode only or too large to show)",
+    "filesUnavailable_one": "{{count}} file changed (diff unavailable)",
+    "filesUnavailable_other": "{{count}} files changed (diff unavailable)",
+    "filesChanged_one": "{{count}} file changed",
+    "filesChanged_other": "{{count}} files changed",
+    "morePaths_one": "+{{count}} more",
+    "morePaths_other": "+{{count}} more",
+    "diffUnavailable": "(file diff unavailable for this command)",
+    "partUnavailable": "(part of the diff is unavailable)",
+    "skipped": "(file diff skipped for this git command)",
+    "shared": "(another command ran in this repository at the same time; a change made by either may show under either result)"
+  },
+  "interactive": {
+    "title": "Interactive Prompt",
+    "waiting": "Waiting for your response in the CLI",
+    "instruction": "Please select an option in your terminal where Claude is running.",
+    "selectedOption": "✓ Claude selected option {{number}}",
+    "instructionDetail": "In the CLI, you would select this option interactively using arrow keys or by typing the number."
+  },
   "thinking": {
     "title": "Thinking...",
     "emoji": "💭 Thinking..."
@@ -116,7 +145,7 @@
       "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "queue": "Enter to queue your next message",
-      "updateQueued": "Enter to update queued message"
+      "appendQueued": "Enter to add to the queued message"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
@@ -124,7 +153,8 @@
     "scrollToBottom": "Scroll to bottom",
     "queue": {
       "sendNext": "Queue next message",
-      "update": "Update queued message",
+      "append": "Add to queued message",
+      "notCombinable": "Failed to queue message: A slash command runs as a turn of its own, so it cannot be combined with the queued message. Send it after the queued message has gone.",
       "label": "Queued",
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
@@ -138,6 +168,8 @@
     "loadingModels": "Loading models…",
     "modelMenu": "Select model and reasoning effort",
     "permissionHeading": "How should {{provider}} actions be approved?",
+    "permissionCycleHint": "Press Tab in the message box to switch modes",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Replacing an earlier message",
       "filesNotReverted": "files the agent already changed are not reverted",
@@ -161,7 +193,16 @@
       "opencode": "Ready to use OpenCode with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
     },
-    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits"
+    "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",
+    "chooseModel": "Choose a model",
+    "chooseModelDescription": "Built-in and custom models in one list",
+    "chooseModelDescriptionCustomOnly": "Only your models are listed for {{providers, list}}",
+    "addModel": "Add model",
+    "searchModels": "Search models...",
+    "manageModels": "Manage models",
+    "noModelsFound": "No models found.",
+    "loadingModels": "Loading models…",
+    "clickToChange": "Click to change model"
   },
   "session": {
     "continue": {
@@ -191,7 +232,8 @@
     "status": {
       "newSession": "New Session",
       "initializing": "Initializing...",
-      "restarting": "Restarting..."
+      "restarting": "Restarting...",
+      "themeRestartHint": "Restart to apply the new theme to Claude Code"
     },
     "actions": {
       "disconnect": "Disconnect",
@@ -232,6 +274,20 @@
       "startingNow": "Starting now"
     },
     "stop": "Stop",
+    "backgroundWork": "Background work",
+    "backgroundTask": {
+      "workflow": "Workflow {{name}}",
+      "agent": "Agent {{description}}",
+      "command": "Command {{description}}",
+      "count": "{{count}} tasks",
+      "prompt": {
+        "title": "This session still has background work running",
+        "description": "A new message starts a new turn, which stops that work; anything it has not reported yet is lost. Queue the message to send it when the work finishes.",
+        "cancel": "Cancel",
+        "queue": "Queue",
+        "sendAnyway": "Send anyway"
+      }
+    },
     "controls": {
       "stopGeneration": "Stop Generation",
       "pressEscToStop": "Press Esc anytime to stop"
@@ -248,7 +304,8 @@
   },
   "message": {
     "editAndResend": "Edit and resend",
-    "forkFromHere": "Fork from here"
+    "forkFromHere": "Fork from here",
+    "answeredBy": "Answered by {{model}}"
   },
   "export": {
     "trigger": "Export conversation",
@@ -280,6 +337,74 @@
     },
     "pending": "Scheduled for {{when}}",
     "failed": "Not sent — {{reason}}",
-    "cancel": "Cancel scheduled message"
+    "cancel": "Cancel scheduled message",
+    "dismiss": "Dismiss failure notice"
+  },
+  "misc": {
+    "copyToClipboard": "Copy to clipboard",
+    "copyCommand": "Copy command",
+    "runningTask": "Running task",
+    "userAskedRevise": "User asked to revise the plan",
+    "typeAnswer": "Type your answer...",
+    "skipOne": "Skip",
+    "skipAll": "Skip all",
+    "exportChat": "Export chat",
+    "closeImagePreview": "Close image preview",
+    "availableCommands": "Available commands",
+    "filterCommands": "Filter commands...",
+    "closeModal": "Close command result modal",
+    "noDescription": "No description available.",
+    "modelChangeFailed": "Unable to change the model right now.",
+    "choiceSavedHint": "Your choice is saved for this session and becomes the default for new chats.",
+    "docsSearchSubtitle": "Search built-ins, syntax patterns, and command usage without leaving the chat.",
+    "enterModelInfo": "Enter both a model name and model ID.",
+    "modelSaveFailed": "Unable to save this model.",
+    "modelDeleteFailed": "Unable to delete this model.",
+    "cancelEditing": "Cancel editing",
+    "userDeniedTool": "User denied tool use",
+    "showTokenUsage": "Show token usage",
+    "fallbackCommands": {
+      "models": "Browse available models for the active provider.",
+      "cost": "Review token usage for the active session.",
+      "status": "Inspect runtime, version, provider, and environment status.",
+      "memory": "Open the project CLAUDE.md memory file.",
+      "config": "Open settings and configuration.",
+      "help": "Show command documentation and syntax."
+    },
+    "modalMeta": {
+      "helpEyebrow": "Command center",
+      "helpTitle": "Help & Shortcuts",
+      "helpSubtitle": "Search built-ins, syntax patterns, and command usage without leaving the chat.",
+      "modelsEyebrow": "Model selection",
+      "modelsTitle": "Choose a Model",
+      "modelsSubtitle": "Pick the model this provider should use.",
+      "costEyebrow": "Session telemetry",
+      "costTitle": "Token Usage",
+      "costSubtitle": "Input, output, and total token counts for this session.",
+      "statusEyebrow": "Runtime health",
+      "statusTitle": "System Status",
+      "statusSubtitle": "Version, provider, runtime, and environment details in one place.",
+      "commandResult": "Command Result"
+    },
+    "choiceSavedSession": "Your choice is saved for this session and becomes the default for new chats.",
+    "choiceSavedDefault": "Your choice becomes the default model for new chats.",
+    "tokensUsed_one": "{{count}} token used",
+    "tokensUsed_other": "{{count}} tokens used",
+    "compacted": "Compacted",
+    "compactionSummary": "full summary",
+    "expandImage": "Expand {{name}}",
+    "tokensLabel_one": "token",
+    "tokensLabel_other": "tokens",
+    "escClosesModal": "Esc closes the modal.",
+    "close": "Close"
+  },
+  "modelLibrary": {
+    "effortLevels": "Reasoning levels",
+    "effortLevelsHint": "Select the reasoning-effort levels this model accepts. If none are selected, no effort level can be chosen for this model in the composer.",
+    "effortSummary": "Reasoning: {{levels}}",
+    "customModelsOnly": "Use only my models",
+    "customModelsOnlyHint": "Hide the built-in {{provider}} models from every model picker and make your first model the default. Built-in models stay listed until you add a model.",
+    "builtInModelsHidden": "Hidden from model pickers while “Use only my models” is on.",
+    "customModelsOnlyFailed": "Unable to change this setting."
   }
 }

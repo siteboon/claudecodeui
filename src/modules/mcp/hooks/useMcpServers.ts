@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
 import { MCP_GLOBAL_SUPPORTED_TRANSPORTS, MCP_PROVIDER_NAMES, MCP_SUPPORTED_SCOPES } from '@/shared/constants';
@@ -228,9 +229,9 @@ const getCacheKey = (provider: McpProvider, projects: ProjectTarget[]): string =
   return `${provider}:${projectKey}`;
 };
 
-const formatGlobalAddFailures = (failures: GlobalMcpServerResult[]): string => (
+const formatGlobalAddFailures = (failures: GlobalMcpServerResult[], t: (key: string) => string): string => (
   failures
-    .map((failure) => `${MCP_PROVIDER_NAMES[failure.provider]}: ${failure.error || 'Unknown error'}`)
+    .map((failure) => `${MCP_PROVIDER_NAMES[failure.provider]}: ${failure.error || t('mcpServersAddErrors.unknownError')}`)
     .join('; ')
 );
 
@@ -300,6 +301,7 @@ type McpServerFormState =
   | null;
 
 export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServersArgs) {
+  const { t } = useTranslation('settings');
   const [servers, setServers] = useState<ProviderMcpServer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -429,7 +431,7 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
     async (formData: McpFormState, serverBeingEdited: ProviderMcpServer | null) => {
       const payload = createMcpPayloadFromForm(selectedProvider, formData);
       if (payload.scope !== 'user' && !payload.workspacePath) {
-        throw new Error('Select a project for project-scoped MCP servers');
+        throw new Error(t('mcpServersAddErrors.selectProjectRequired'));
       }
 
       await saveProviderServer(selectedProvider, payload);
@@ -443,7 +445,7 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
       setSaveStatus('success');
       closeForm();
     },
-    [cacheKey, closeForm, refreshServers, selectedProvider],
+    [cacheKey, closeForm, refreshServers, selectedProvider, t],
   );
 
   const submitGlobalForm = useCallback(
@@ -453,15 +455,15 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
         supportsWorkingDirectory: false,
         includeProviderSpecificFields: false,
         unsupportedTransportMessage: (transport) =>
-          `Add MCP Server supports only stdio and http across all providers, not ${transport}.`,
+          t('mcpForm.unsupportedTransport', { transport }),
       });
 
       if (payload.scope === 'local') {
-        throw new Error('Add MCP Server supports only user or project scope across all providers.');
+        throw new Error(t('mcpServersAddErrors.globalScopeUnsupported'));
       }
 
       if (payload.scope !== 'user' && !payload.workspacePath) {
-        throw new Error('Select a project for project-scoped MCP servers');
+        throw new Error(t('mcpServersAddErrors.selectProjectRequired'));
       }
 
       // The global endpoint updates every provider, so clear every provider
@@ -473,18 +475,18 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
       const failures = results.filter((result) => !result.created);
       if (failures.length > 0) {
         setSaveStatus('error');
-        throw new Error(`Failed to add MCP server to all providers. ${formatGlobalAddFailures(failures)}`);
+        throw new Error(t('mcpServersAddErrors.globalAddFailed', { details: formatGlobalAddFailures(failures, t) }));
       }
 
       setSaveStatus('success');
       closeForm();
     },
-    [closeForm, refreshServers, selectedProvider],
+    [closeForm, refreshServers, selectedProvider, t],
   );
 
   const deleteServer = useCallback(
     async (server: ProviderMcpServer) => {
-      if (!window.confirm('Are you sure you want to delete this MCP server?')) {
+      if (!window.confirm(t('mcpServersAddErrors.deleteConfirm'))) {
         return;
       }
 
@@ -499,7 +501,7 @@ export function useMcpServers({ selectedProvider, currentProjects }: UseMcpServe
         setSaveStatus('error');
       }
     },
-    [cacheKey, refreshServers, selectedProvider],
+    [cacheKey, refreshServers, selectedProvider, t],
   );
 
   useEffect(() => {

@@ -141,3 +141,25 @@ test('the oldest entries are evicted over budget, but the newest survives alone'
     await rm(tempDirectory, { recursive: true, force: true });
   }
 });
+
+test('invalidating a session re-parses its unchanged transcript on the next read', async () => {
+  await withTranscriptFile(async (transcriptPath) => {
+    const cache = createSessionHistoryCache();
+    let loads = 0;
+    const loadFull = async () => {
+      loads += 1;
+      return historyResult(`load-${loads}`);
+    };
+
+    // Claude's history reader decides a background agent's status from whether
+    // the session's CLI process is up — nothing the file's stat can reflect —
+    // so the runtime drops the entry when that process starts or ends.
+    const first = await cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull });
+    cache.invalidate('s1');
+    const second = await cache.getFullHistory({ sessionId: 's1', transcriptPath, loadFull });
+
+    assert.equal(loads, 2);
+    assert.notEqual(second, first);
+    assert.equal(second?.messages[0]?.content, 'load-2');
+  });
+});

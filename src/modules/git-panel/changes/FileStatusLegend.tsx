@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { getStatusBadgeClass } from '@/modules/git-panel/utils/gitPanelUtils';
 
@@ -8,14 +9,15 @@ type FileStatusLegendProps = {
 };
 
 const LEGEND_ITEMS = [
-  { status: 'M', label: 'Modified' },
-  { status: 'A', label: 'Added' },
-  { status: 'D', label: 'Deleted' },
-  { status: 'U', label: 'Untracked' },
+  { status: 'M', label: 'git:status.modified' },
+  { status: 'A', label: 'git:status.added' },
+  { status: 'D', label: 'git:status.deleted' },
+  { status: 'U', label: 'git:status.untracked' },
 ] as const;
 
 /** Rendered by ChangesView to explain the M/A/D/U status badges used in the change list. */
 export default function FileStatusLegend({ isMobile }: FileStatusLegendProps) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
 
   if (isMobile) {
@@ -29,7 +31,7 @@ export default function FileStatusLegend({ isMobile }: FileStatusLegendProps) {
         className="flex w-full items-center justify-center gap-1 bg-muted/30 px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50"
       >
         <Info className="h-3 w-3" />
-        <span>File Status Guide</span>
+        <span>{t('git:legend.title')}</span>
         {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
 
@@ -43,7 +45,7 @@ export default function FileStatusLegend({ isMobile }: FileStatusLegendProps) {
                 >
                   {item.status}
                 </span>
-                <span className="italic text-muted-foreground">{item.label}</span>
+                <span className="italic text-muted-foreground">{t(item.label)}</span>
               </span>
             ))}
           </div>

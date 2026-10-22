@@ -322,7 +322,7 @@ function truncateOutput(value: string): string {
  * only a single oversized string — a file body or an encoded image — is ever
  * the thing making it large.
  */
-function truncateNestedOutput(value: unknown): unknown {
+export function truncateNestedOutput(value: unknown): unknown {
   if (typeof value === 'string') {
     return truncateOutput(value);
   }

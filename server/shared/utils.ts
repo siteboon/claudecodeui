@@ -27,6 +27,7 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderSkillSource,
+  QueuedChatMessage,
   SubagentActivity,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
@@ -90,6 +91,40 @@ export function asyncHandler(
 }
 
 // ---------------------------
+//----------------- QUEUED CHAT MESSAGE UTILITIES ------------
+/**
+ * Reads a stored queued chat message (the parsed JSON of
+ * `session_drafts.queued_message`), or returns null when it has nothing to
+ * send: no text and no attachments.
+ *
+ * Used by the Database module's drafts repository, which appends a follow-up
+ * to the waiting message, and by the Scheduled Messages dispatcher, which sends
+ * it. Both must read a stored message the same way, or a merge could keep what
+ * the dispatcher then ignores. Rows from before attachments existed hold
+ * image-only descriptors in `images`; they are read as `attachments`.
+ * `options` is kept only when it is a plain object.
+ */
+export function readQueuedChatMessage(value: unknown): QueuedChatMessage | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const content = typeof record.content === 'string' ? record.content : '';
+  const attachments = Array.isArray(record.attachments)
+    ? record.attachments
+    : Array.isArray(record.images)
+      ? record.images
+      : [];
+  if (!content.trim() && attachments.length === 0) {
+    return null;
+  }
+  const options = record.options && typeof record.options === 'object' && !Array.isArray(record.options)
+    ? record.options as Record<string, unknown>
+    : undefined;
+  return { content, ...(options ? { options } : {}), attachments };
+}
+
+// ---------------------------
 //----------------- SHARED ERROR UTILITIES ------------
 /**
  * Shared application error with HTTP status and machine-readable code metadata.
@@ -109,6 +144,20 @@ export class AppError extends Error {
     this.statusCode = options.statusCode ?? 500;
     this.details = options.details;
   }
+}
+
+/**
+ * Flattens a failed `git` invocation into one searchable string: the error
+ * message followed by whatever stderr/stdout the process runner attached.
+ *
+ * Used by the Git routes and the branch compare service to classify git
+ * failures (e.g. "not a git repository", "unknown revision") and to surface
+ * git's own explanation as error `details`. Accepts any thrown value; missing
+ * fields contribute nothing, so the result may be empty.
+ */
+export function getGitErrorDetails(error: unknown): string {
+  const details = error as { message?: string; stderr?: string; stdout?: string } | null;
+  return `${details?.message ?? ''} ${details?.stderr ?? ''} ${details?.stdout ?? ''}`.trim();
 }
 
 // ---------------------------
@@ -153,6 +202,83 @@ export const FORBIDDEN_WORKSPACE_PATHS = [
   'C:\\System Volume Information',
   'C:\\$Recycle.Bin',
 ];
+
+/**
+ * Roots the file browser and viewer may read from even though they are outside
+ * every project.
+ *
+ * Claude writes a background agent's output file and a background command's log
+ * under the system temp directory, and a transcript quotes those paths
+ * verbatim, so the file browser and the file viewer have to be able to follow
+ * them. `/tmp` is listed literally as well as via `os.tmpdir()` because the two
+ * differ on macOS, where the temp directory is under `/var/folders`.
+ *
+ * A background agent's `.output` file is only a symlink to the agent's
+ * transcript, `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`.
+ * Symlinks are resolved before the root comparison, so following it needs the
+ * Claude projects directory to be a root as well. Those are the user's own
+ * transcripts, which the sessions API already serves; the directory is located
+ * the same way the session watcher and synchronizer locate it.
+ *
+ * Being a read-only root grants reads only: the file-tree write paths resolve
+ * against the project root alone, so nothing under these can be changed
+ * through the file API. Whether one may become a workspace is decided
+ * separately by `validateWorkspacePath` — the temp directories are on
+ * `FORBIDDEN_WORKSPACE_PATHS`; the Claude projects directory is not, it is
+ * simply wherever `WORKSPACES_ROOT` puts it.
+ */
+const READ_ONLY_ROOTS = [...new Set([
+  '/tmp',
+  os.tmpdir(),
+  path.join(os.homedir(), '.claude', 'projects'),
+])];
+
+/**
+ * Resolves `targetPath` when it lives under one of `roots`, or `null` when it
+ * does not.
+ *
+ * Symlinks are resolved before the comparison, so a link planted under a root
+ * cannot be used to read somewhere else through it. Each root is resolved on
+ * its own, so one that does not exist on this machine — `/tmp` on Windows — is
+ * skipped and the roots after it are still checked.
+ */
+export async function resolvePathUnderRoots(targetPath: string, roots: string[]): Promise<string | null> {
+  const normalizedTarget = normalizeProjectPath(targetPath);
+  if (!normalizedTarget || !path.isAbsolute(normalizedTarget)) {
+    return null;
+  }
+
+  let resolvedPath: string;
+  try {
+    resolvedPath = normalizeProjectPath(await realpath(path.resolve(normalizedTarget)));
+  } catch {
+    // A path that cannot be resolved is not readable through here either.
+    return null;
+  }
+
+  for (const root of roots) {
+    let resolvedRoot: string;
+    try {
+      resolvedRoot = normalizeProjectPath(await realpath(root));
+    } catch {
+      continue;
+    }
+
+    if (resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+      return resolvedPath;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolves a path that is readable because it lives under a read-only root,
+ * or `null` when it does not.
+ */
+export function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
+  return resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
+}
 
 function stripWindowsLongPathPrefix(inputPath: string): string {
   if (inputPath.startsWith('\\\\?\\UNC\\')) {
@@ -561,6 +687,22 @@ export function buildDefaultProviderCurrentActiveModel(
   return {
     model: models.DEFAULT,
   };
+}
+
+/**
+ * True for a model name a provider fabricated rather than actually ran.
+ *
+ * Claude Code stamps locally-synthesized transcript rows (API-error notices,
+ * usage-limit messages) with `model: "<synthetic>"`. Angle-bracketed values are
+ * placeholders, never real model ids, so neither the active-model lookup nor
+ * the per-message model a reply is labelled with may adopt one.
+ *
+ * Used by the Claude models provider (which walks the transcript backwards for
+ * the session's model) and by the Claude sessions provider (which stamps each
+ * assistant message with the model that answered it).
+ */
+export function isPlaceholderProviderModel(model: string): boolean {
+  return model.startsWith('<') && model.endsWith('>');
 }
 
 // ---------------------------
@@ -1105,6 +1247,25 @@ export async function extractFirstValidJsonlData<T>(
 }
 
 // ---------------------------
+//----------------- CLAUDE TRANSCRIPT ROW UTILITIES ------------
+/**
+ * True for a Claude session JSONL row that holds a `message` without being a
+ * conversation turn.
+ *
+ * Only `user` and `assistant` rows are turns. The Claude CLI also logs the
+ * requests it sends to the API as `api-request-blob` rows, and each one holds a
+ * copy of a prompt, tool call or system block that is already recorded as its
+ * own turn. Those copies have no timestamp. A reader that recognizes a turn by
+ * `message.role` alone shows each copy a second time, stamped with the time the
+ * transcript was read. Use this check to skip such rows before reading
+ * `message`. A row with no `message` returns false, so callers keep their
+ * other records, such as `queue-operation`, `system` and `last-prompt`.
+ */
+export function isClaudeNonTurnMessageRow(row: AnyRecord): boolean {
+  return row.message != null && row.type !== 'user' && row.type !== 'assistant';
+}
+
+// ---------------------------
 //----------------- CLI PROMPT ARGUMENT UTILITIES ------------
 /**
  * Makes a prompt safe to pass as one CLI argument to `.cmd`-shimmed tools on
@@ -1127,6 +1288,35 @@ export function flattenPromptForWindowsShell(prompt: string): string {
 
 // ---------------------------
 //----------------- TERMINAL OUTPUT UTILITIES ------------
+/**
+ * Matches the escape sequences a CLI emits when it believes it is writing to a
+ * terminal, in the three shapes those tools actually produce:
+ * - OSC (`ESC ]` … terminated by BEL or ST), used for titles and hyperlinks.
+ * - CSI (`ESC [`, or the 8-bit `\u009B` introducer that stands in for both
+ *   bytes), used for SGR colors and cursor control.
+ * - any other ECMA-48 escape sequence: `ESC`, optional intermediate bytes
+ *   (`0x20`-`0x2F`), one final byte (`0x30`-`0x7E`), such as `ESC ( B`.
+ *
+ * OSC and CSI are listed first so their terminators are consumed by the
+ * specific alternative rather than by the generic one.
+ */
+const ANSI_ESCAPE_SEQUENCE_REGEX =
+  /\u001B\][^\u0007\u001B]*(?:\u0007|\u001B\\)|(?:\u001B\[|\u009B)[0-?]*[ -/]*[@-~]|\u001B[ -/]*[0-~]/g;
+
+/**
+ * Removes ANSI escape sequences from text captured off a CLI's stdout or
+ * stderr. Provider runtimes, session readers, and the shell WebSocket share
+ * this because every one of them forwards captured process output to a web
+ * client that renders plain text: left in, the escapes show up verbatim
+ * (`[93m[1m!`) instead of as styling.
+ *
+ * The result can be empty when the input was styling only, so callers that
+ * forward the text should re-check for emptiness after cleaning.
+ */
+export function stripAnsiSequences(value: string): string {
+  return value.replace(ANSI_ESCAPE_SEQUENCE_REGEX, '');
+}
+
 const ANSI_TERMINAL_STYLES = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',

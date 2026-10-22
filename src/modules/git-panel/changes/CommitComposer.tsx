@@ -1,5 +1,6 @@
 import { Check, ChevronDown, GitCommit } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ConfirmationRequest } from '@/shared/types';
 
@@ -24,6 +25,7 @@ export default function CommitComposer({
   onCommit,
   onRequestConfirmation,
 }: CommitComposerProps) {
+  const { t } = useTranslation();
   const [commitMessage, setCommitMessageRaw] = useState(() => commitMessageCache.get(projectPath) ?? '');
 
   const setCommitMessage = (msg: string) => {
@@ -64,7 +66,7 @@ export default function CommitComposer({
 
     onRequestConfirmation({
       type: 'commit',
-      message: `Commit ${selectedFileCount} file${selectedFileCount !== 1 ? 's' : ''} with message: "${trimmedMessage}"?`,
+      message: t('git:composer.confirmCommit', { count: selectedFileCount, message: trimmedMessage }),
       onConfirm: async () => {
         await handleCommit(trimmedMessage);
       },
@@ -84,7 +86,7 @@ export default function CommitComposer({
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <GitCommit className="h-4 w-4" />
-            <span>Commit {selectedFileCount} file{selectedFileCount !== 1 ? 's' : ''}</span>
+            <span>{t('git:composer.commitFiles', { count: selectedFileCount })}</span>
             <ChevronDown className="h-3 w-3" />
           </button>
         </div>
@@ -92,7 +94,7 @@ export default function CommitComposer({
         <div className="border-b border-border/60 px-4 py-3">
           {isMobile && (
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium text-foreground">Commit Changes</span>
+              <span className="text-sm font-medium text-foreground">{t('git:composer.title')}</span>
               <button
                 onClick={() => setIsCollapsed(true)}
                 className="rounded-lg p-1 transition-colors hover:bg-accent"
@@ -105,7 +107,7 @@ export default function CommitComposer({
           <textarea
             value={commitMessage}
             onChange={(event) => setCommitMessage(event.target.value)}
-            placeholder="Message (Ctrl+Enter to commit)"
+            placeholder={t('git:composer.placeholder')}
             className="w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/30 focus:outline-none focus:ring-2 focus:ring-primary/20"
             rows={3}
             onKeyDown={(event) => {
@@ -118,7 +120,7 @@ export default function CommitComposer({
 
           <div className="mt-2 flex items-center justify-between">
             <span className="text-sm text-muted-foreground">
-              {selectedFileCount} file{selectedFileCount !== 1 ? 's' : ''} selected
+              {t('git:composer.filesSelected', { count: selectedFileCount })}
             </span>
             <button
               onClick={requestCommitConfirmation}
@@ -126,7 +128,7 @@ export default function CommitComposer({
               className="flex items-center space-x-1 rounded-lg bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Check className="h-3 w-3" />
-              <span>{isCommitting ? 'Committing...' : 'Commit'}</span>
+              <span>{isCommitting ? t('git:composer.committing') : t('git:composer.commit')}</span>
             </button>
           </div>
         </div>
