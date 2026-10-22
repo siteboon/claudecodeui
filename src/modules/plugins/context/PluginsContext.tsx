@@ -86,6 +86,9 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
       const res = await api.plugins.uninstall(name);
       const data = await res.json();
       if (res.ok) {
+        // Applied before the refetch, so a failed list request cannot leave the
+        // removed plugin's global scripts and styles running.
+        setPlugins((current) => current.filter((plugin) => plugin.name !== name));
         await refreshPlugins();
         return { success: true };
       }
@@ -124,6 +127,8 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
         }
         return { success: false, error: errorMessage };
       }
+      // Applied before the refetch, for the same reason as in uninstallPlugin.
+      setPlugins((current) => current.map((plugin) => (plugin.name === name ? { ...plugin, enabled } : plugin)));
       await refreshPlugins();
       return { success: true, error: null };
     } catch (err) {

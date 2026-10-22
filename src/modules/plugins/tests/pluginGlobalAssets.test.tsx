@@ -40,11 +40,16 @@ const globalPlugin: Plugin = {
 };
 
 let listedPlugins: Plugin[] = [];
+let listFails = false;
 
 function stubFetch() {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === '/api/plugins') {
+      if (listFails) return new Response('{}', { status: 500 });
       return new Response(JSON.stringify({ plugins: listedPlugins }), { status: 200 });
+    }
+    if (url === '/api/plugins/global-demo/enable' || url === '/api/plugins/global-demo') {
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
     }
     if (url === '/api/plugins/global-demo/update') {
       return new Response(JSON.stringify({ success: true }), { status: 200 });
@@ -59,16 +64,18 @@ function stubFetch() {
 const pluginStyles = () => document.head.querySelectorAll('style[data-plugin="global-demo"]');
 
 // Lets a test refresh or update plugins the way the settings tab would.
-const captured: Pick<ReturnType<typeof usePlugins>, 'refreshPlugins' | 'updatePlugin'> = {
+type CapturedActions = 'refreshPlugins' | 'updatePlugin' | 'togglePlugin' | 'uninstallPlugin';
+const captured: Pick<ReturnType<typeof usePlugins>, CapturedActions> = {
   refreshPlugins: async () => undefined,
   updatePlugin: async () => ({ success: false }),
+  togglePlugin: async () => ({ success: false, error: null }),
+  uninstallPlugin: async () => ({ success: false }),
 };
 function CaptureRefresh() {
-  const { refreshPlugins, updatePlugin } = usePlugins();
+  const { refreshPlugins, updatePlugin, togglePlugin, uninstallPlugin } = usePlugins();
   useEffect(() => {
-    captured.refreshPlugins = refreshPlugins;
-    captured.updatePlugin = updatePlugin;
-  }, [refreshPlugins, updatePlugin]);
+    Object.assign(captured, { refreshPlugins, updatePlugin, togglePlugin, uninstallPlugin });
+  }, [refreshPlugins, updatePlugin, togglePlugin, uninstallPlugin]);
   return null;
 }
 const refreshPlugins = () => captured.refreshPlugins();
@@ -85,6 +92,7 @@ function renderLoader() {
 describe('PluginGlobalAssets loads manifest-declared scripts and styles on every page', () => {
   beforeEach(() => {
     listedPlugins = [globalPlugin];
+    listFails = false;
     pluginModule.start.mockReset().mockReturnValue(pluginModule.cleanup);
     pluginModule.cleanup.mockReset();
     stubFetch();
@@ -123,6 +131,26 @@ describe('PluginGlobalAssets loads manifest-declared scripts and styles on every
 
     expect(pluginModule.cleanup).toHaveBeenCalledTimes(1);
     expect(pluginStyles()).toHaveLength(0);
+  });
+
+  it('unloads a plugin on a confirmed disable or uninstall even when the list refetch fails', async () => {
+    for (const confirm of [
+      () => captured.togglePlugin('global-demo', false),
+      () => captured.uninstallPlugin('global-demo'),
+    ]) {
+      listFails = false;
+      pluginModule.start.mockClear();
+      pluginModule.cleanup.mockClear();
+      const { unmount } = renderLoader();
+      await waitFor(() => expect(pluginModule.start).toHaveBeenCalledTimes(1));
+
+      listFails = true;
+      await act(async () => { await confirm(); });
+
+      expect(pluginModule.cleanup).toHaveBeenCalledTimes(1);
+      expect(pluginStyles()).toHaveLength(0);
+      unmount();
+    }
   });
 
   it('reloads a plugin after an update that left its manifest unchanged', async () => {
