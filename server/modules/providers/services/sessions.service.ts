@@ -481,6 +481,19 @@ export const sessionsService = {
     }
 
     const previousProjectPath = session.project_path;
+    // A failed restore is logged, never thrown: the error worth reporting is
+    // the one that made the move roll back.
+    const restoreRow = (restoreTranscriptPath: boolean) => {
+      try {
+        sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
+        // The watcher may have pointed the row at the moved copy meanwhile.
+        if (restoreTranscriptPath && session.jsonl_path) {
+          sessionsDb.updateSessionTranscriptPath(sessionId, session.jsonl_path);
+        }
+      } catch (restoreError) {
+        console.warn(`[sessions] Could not restore the row of ${sessionId}:`, restoreError);
+      }
+    };
     // Row before transcript, as a project relocation does: the watcher may
     // index the moved transcript (whose cwd names the new folder) mid-move.
     sessionsDb.updateSessionProjectPath(sessionId, target.project_path);
@@ -494,15 +507,14 @@ export const sessionsService = {
         });
       } catch (error) {
         // The provider undid its file changes; put the row back to match.
-        sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
-        sessionsDb.updateSessionTranscriptPath(sessionId, session.jsonl_path);
+        restoreRow(true);
         throw error;
       }
 
       if (relocated.length === 0) {
         // Skipped (not where the provider expects it, or a path it cannot
         // encode): nothing moved on disk, so neither may the row.
-        sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
+        restoreRow(false);
         throw new AppError('This session\'s transcript could not be moved to the target project.', {
           code: 'SESSION_MOVE_NOT_SUPPORTED',
           statusCode: 409,
@@ -530,14 +542,7 @@ export const sessionsService = {
           );
           throw error;
         }
-        try {
-          sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
-          // The watcher may have pointed the row at the moved copy meanwhile.
-          sessionsDb.updateSessionTranscriptPath(sessionId, session.jsonl_path);
-        } catch (restoreError) {
-          // Likely the same failure; the original error is the one to report.
-          console.warn(`[sessions] Could not restore the row of ${sessionId}:`, restoreError);
-        }
+        restoreRow(true);
         throw error;
       }
     }
