@@ -793,8 +793,18 @@ export function useProjectsState({
         markSessionAttention(upsert.sessionId);
       }
 
-      setProjects((previousProjects) => {
+      setProjects((currentProjects) => {
         const targetProjectId = upsert.project?.projectId;
+        // A session that now names another project was moved there: drop it
+        // from wherever this client still lists it.
+        const withoutMovedRow = targetProjectId
+          ? currentProjects.map((project) => (
+            project.projectId === targetProjectId ? project : removeSessionFromProject(project, upsert.sessionId)
+          ))
+          : currentProjects;
+        const previousProjects = withoutMovedRow.some((project, index) => project !== currentProjects[index])
+          ? withoutMovedRow
+          : currentProjects;
         const existingProject = previousProjects.find((project) =>
           targetProjectId ? project.projectId === targetProjectId : getProjectSessions(project).some((session) => session.id === upsert.sessionId),
         );
@@ -837,10 +847,25 @@ export function useProjectsState({
           return previousProject;
         }
         if (previousProject.projectId !== upsert.project.projectId) {
-          return previousProject;
+          // The open session was moved to another project: the workspace (and
+          // the cwd the chat sends) has to follow it.
+          if (currentSelectedSession?.id !== upsert.sessionId) {
+            return previousProject;
+          }
+          const knownTarget = projectsRef.current.find((project) => project.projectId === upsert.project?.projectId);
+          return knownTarget
+            ? mergeProjectSelectionMetadata(knownTarget, upsert.project)
+            : projectFromRegistration({ ...upsert.project, sessions: [] } as Project);
         }
         return mergeProjectSelectionMetadata(previousProject, upsert.project);
       });
+      if (currentSelectedSession?.id === upsert.sessionId && upsert.project
+        && currentSelectedSession.__projectId !== upsert.project.projectId) {
+        const movedToProjectId = upsert.project.projectId;
+        setSelectedSession((previousSession) => (
+          previousSession?.id === upsert.sessionId ? { ...previousSession, __projectId: movedToProjectId } : previousSession
+        ));
+      }
 
       const aliasedSelectedSessionId =
         typeof upsert.providerSessionId === 'string' && upsert.providerSessionId !== upsert.sessionId

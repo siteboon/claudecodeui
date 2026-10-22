@@ -75,7 +75,7 @@ const MOVE_SESSION_ERROR_KEYS: Record<string, string> = {
 export function useSidebarController({
   projects,
   selectedProject,
-  selectedSession,
+  selectedSession: _selectedSession,
   activeSessions,
   backgroundSessionIds,
   isLoading,
@@ -1314,22 +1314,17 @@ export function useSidebarController({
         return;
       }
 
-      // The session has moved from here on. Follow it right away: the open chat
-      // sends its project's folder as cwd, and until it is reselected the next
-      // turn would resume from where the transcript was. The project selection
-      // catches up once the refreshed lists hold the session under its new one.
-      if (selectedSession?.id === session.id) {
-        onSessionSelect({ ...session, __projectId: projectId });
-      }
-      // Reports its own failures (handleSidebarRefresh), so nothing to catch here.
-      await onRefresh();
+      // The server broadcasts the moved row as a `session_upserted`; the
+      // projects state moves it between projects and, if it is open, points
+      // the workspace (and the chat's cwd) at the new project. Nothing is
+      // refetched here, as with a fork. The recent list is fetched separately.
       reloadRecentConversations();
       if (payload?.data?.warning === 'SESSION_MOVE_TRANSCRIPT_PENDING') {
         // Moved, but its transcript path is not saved yet; history follows once indexed.
         alert(t('messages.moveSessionTranscriptPending'));
       }
     },
-    [onRefresh, onSessionSelect, pendingMove, reloadRecentConversations, selectedSession, t],
+    [pendingMove, reloadRecentConversations, t],
   );
 
   const collapseSidebar = useCallback(() => {
