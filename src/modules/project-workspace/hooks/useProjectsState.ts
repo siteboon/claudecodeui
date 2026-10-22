@@ -785,7 +785,7 @@ export function useProjectsState({
       const currentSelectedSession = selectedSessionRef.current;
       // The open session may still be selected under its provider-native id.
       const aliasIds = getSessionAliasIds(upsert);
-      const isViewedSession = Boolean(currentSelectedSession) && aliasIds.has(String(currentSelectedSession?.id));
+      const isViewedSession = currentSelectedSession != null && aliasIds.has(String(currentSelectedSession.id));
       if (isViewedSession) {
         // A run may be tracked under either id; never reload over a live stream.
         if (![...aliasIds].some((id) => isSessionProcessing(id))) {
@@ -855,7 +855,7 @@ export function useProjectsState({
         if (previousProject.projectId !== upsert.project.projectId) {
           // The open session was moved to another project: the workspace (and
           // the cwd the chat sends) has to follow it.
-          if (!currentSelectedSession || !aliasIds.has(String(currentSelectedSession.id))) {
+          if (!isViewedSession) {
             return previousProject;
           }
           const knownTarget = projectsRef.current.find((project) => project.projectId === upsert.project?.projectId);
@@ -865,8 +865,7 @@ export function useProjectsState({
         }
         return mergeProjectSelectionMetadata(previousProject, upsert.project);
       });
-      if (currentSelectedSession && aliasIds.has(String(currentSelectedSession.id)) && upsert.project
-        && currentSelectedSession.__projectId !== upsert.project.projectId) {
+      if (isViewedSession && upsert.project && currentSelectedSession.__projectId !== upsert.project.projectId) {
         const movedToProjectId = upsert.project.projectId;
         setSelectedSession((previousSession) => (
           previousSession && aliasIds.has(String(previousSession.id))
