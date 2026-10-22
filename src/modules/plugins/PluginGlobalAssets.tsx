@@ -11,9 +11,9 @@ type PluginGlobalAssetsLoaderProps = {
 
 /**
  * Loads one plugin's global styles and scripts, and takes them back out on
- * unmount. The parent keys this component by everything it loads, so a
- * disable, an uninstall or an update unmounts it and the cleanup below is
- * the whole of "unload" — no reload of the page.
+ * unmount. The parent keys this component by everything it loads plus the
+ * plugin's update count, so a disable, an uninstall or an update unmounts it
+ * and the cleanup below is the whole of "unload" — no reload of the page.
  */
 function PluginGlobalAssetsLoader({ pluginName, scripts, styles }: PluginGlobalAssetsLoaderProps) {
   useEffect(() => {
@@ -83,7 +83,7 @@ function PluginGlobalAssetsLoader({ pluginName, scripts, styles }: PluginGlobalA
  * manifest, independently of whether the plugin's tab is ever opened.
  */
 export default function PluginGlobalAssets() {
-  const { plugins, pluginsError, refreshPlugins } = usePlugins();
+  const { plugins, pluginsError, refreshPlugins, pluginUpdateRevisions } = usePlugins();
 
   // PluginsProvider sits outside the auth gate and fetches once on mount; on a
   // fresh login that fetch was refused, so the list is fetched again here.
@@ -99,7 +99,13 @@ export default function PluginGlobalAssets() {
         .filter((plugin) => plugin.enabled && (plugin.scripts?.length || plugin.styles?.length))
         .map((plugin) => (
           <PluginGlobalAssetsLoader
-            key={JSON.stringify([plugin.name, plugin.version, plugin.scripts, plugin.styles])}
+            key={JSON.stringify([
+              plugin.name,
+              plugin.version,
+              plugin.scripts,
+              plugin.styles,
+              pluginUpdateRevisions[plugin.name] ?? 0,
+            ])}
             pluginName={plugin.name}
             scripts={plugin.scripts ?? []}
             styles={plugin.styles ?? []}

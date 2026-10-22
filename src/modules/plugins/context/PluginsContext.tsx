@@ -13,6 +13,7 @@ type PluginsContextValue = {
   installPlugin: (url: string) => Promise<{ success: boolean; error?: string }>;
   uninstallPlugin: (name: string) => Promise<{ success: boolean; error?: string }>;
   updatePlugin: (name: string) => Promise<{ success: boolean; error?: string }>;
+  pluginUpdateRevisions: Record<string, number>;
   togglePlugin: (name: string, enabled: boolean) => Promise<{ success: boolean; error: string | null }>;
 };
 
@@ -31,6 +32,10 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [loading, setLoading] = useState(true);
   const [pluginsError, setPluginsError] = useState<string | null>(null);
+  // Counts successful updates per plugin. A pull can change a plugin's files
+  // without touching its manifest, so this is the only signal that already
+  // loaded code (the global assets) is stale and has to be loaded again.
+  const [pluginUpdateRevisions, setPluginUpdateRevisions] = useState<Record<string, number>>({});
 
   const refreshPlugins = useCallback(async () => {
     try {
@@ -95,6 +100,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
       const res = await api.plugins.update(name);
       const data = await res.json();
       if (res.ok) {
+        setPluginUpdateRevisions((revisions) => ({ ...revisions, [name]: (revisions[name] ?? 0) + 1 }));
         await refreshPlugins();
         return { success: true };
       }
@@ -128,8 +134,14 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
   // Built once per change: an inline object would re-render every consumer on
   // any render of this provider.
   const value = useMemo(
-    () => ({ plugins, loading, pluginsError, refreshPlugins, installPlugin, uninstallPlugin, updatePlugin, togglePlugin }),
-    [installPlugin, loading, plugins, pluginsError, refreshPlugins, togglePlugin, uninstallPlugin, updatePlugin],
+    () => ({
+      plugins, loading, pluginsError, refreshPlugins, installPlugin, uninstallPlugin, updatePlugin, togglePlugin,
+      pluginUpdateRevisions,
+    }),
+    [
+      installPlugin, loading, pluginUpdateRevisions, plugins, pluginsError, refreshPlugins, togglePlugin,
+      uninstallPlugin, updatePlugin,
+    ],
   );
 
   return (

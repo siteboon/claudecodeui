@@ -46,6 +46,9 @@ function stubFetch() {
     if (url === '/api/plugins') {
       return new Response(JSON.stringify({ plugins: listedPlugins }), { status: 200 });
     }
+    if (url === '/api/plugins/global-demo/update') {
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    }
     if (url === '/api/plugins/global-demo/assets/theme.css') {
       return new Response('body { --demo: 1; }', { status: 200 });
     }
@@ -55,11 +58,17 @@ function stubFetch() {
 
 const pluginStyles = () => document.head.querySelectorAll('style[data-plugin="global-demo"]');
 
-// Lets a test refresh the plugin list the way the settings tab would.
-const captured = { refreshPlugins: async () => undefined as void };
+// Lets a test refresh or update plugins the way the settings tab would.
+const captured: Pick<ReturnType<typeof usePlugins>, 'refreshPlugins' | 'updatePlugin'> = {
+  refreshPlugins: async () => undefined,
+  updatePlugin: async () => ({ success: false }),
+};
 function CaptureRefresh() {
-  const { refreshPlugins } = usePlugins();
-  useEffect(() => { captured.refreshPlugins = refreshPlugins; }, [refreshPlugins]);
+  const { refreshPlugins, updatePlugin } = usePlugins();
+  useEffect(() => {
+    captured.refreshPlugins = refreshPlugins;
+    captured.updatePlugin = updatePlugin;
+  }, [refreshPlugins, updatePlugin]);
   return null;
 }
 const refreshPlugins = () => captured.refreshPlugins();
@@ -114,6 +123,17 @@ describe('PluginGlobalAssets loads manifest-declared scripts and styles on every
 
     expect(pluginModule.cleanup).toHaveBeenCalledTimes(1);
     expect(pluginStyles()).toHaveLength(0);
+  });
+
+  it('reloads a plugin after an update that left its manifest unchanged', async () => {
+    renderLoader();
+    await waitFor(() => expect(pluginModule.start).toHaveBeenCalledTimes(1));
+
+    await act(async () => { await captured.updatePlugin('global-demo'); });
+
+    await waitFor(() => expect(pluginModule.start).toHaveBeenCalledTimes(2));
+    expect(pluginModule.cleanup).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(pluginStyles()).toHaveLength(1));
   });
 
   it('does not reload a plugin when the list is refreshed unchanged', async () => {
