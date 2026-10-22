@@ -229,12 +229,13 @@ test('a Claude move whose transcript path cannot be saved puts the file back in 
     const realUpdate = sessionsDb.updateSessionTranscriptPath;
     let failed = false;
     sessionsDb.updateSessionTranscriptPath = (...args) => {
-      // Only the forward write fails; the restore must still be able to write.
+      // The forward write lands and then reports failure, as if the watcher had
+      // already repointed the row at the moved copy; the restore must undo it.
+      realUpdate(...args);
       if (!failed) {
         failed = true;
         throw new Error('disk full');
       }
-      return realUpdate(...args);
     };
     try {
       await assert.rejects(() => sessionsService.moveSessionToProject('claude-rb', targetId), /disk full/);
@@ -248,5 +249,52 @@ test('a Claude move whose transcript path cannot be saved puts the file back in 
     const row = sessionsDb.getSessionById('claude-rb');
     assert.equal(row?.project_path, source);
     assert.equal(row?.jsonl_path, transcript);
+  });
+});
+
+test('a Claude move that cannot be undone leaves the row on the moved copy', async () => {
+  await withDatabase(async (directory) => {
+    const source = path.join(directory, 'source');
+    const target = path.join(directory, 'target');
+    await mkdir(source);
+    await mkdir(target);
+    const projectsRoot = path.join(directory, 'claude', 'projects');
+    const sourceFolder = path.join(projectsRoot, source.replace(/[^a-zA-Z0-9]/g, '-'));
+    const transcript = path.join(sourceFolder, 'claude-stuck.jsonl');
+    await mkdir(sourceFolder, { recursive: true });
+    await writeFile(transcript, `${JSON.stringify({ type: 'user', sessionId: 'claude-stuck', cwd: source })}\n`);
+    const now = new Date().toISOString();
+    sessionsDb.createSession('claude-stuck', 'claude', source, 'Claude stuck', now, now, transcript);
+    const targetId = createTargetProject(target);
+
+    const facet = providerRegistry.resolveProvider('claude').transcriptRelocation!;
+    assert.equal(Object.hasOwn(facet, 'relocateTranscripts'), false);
+    const realRelocate = facet.relocateTranscripts.bind(facet);
+    let relocateCalls = 0;
+    facet.relocateTranscripts = async (input) => {
+      relocateCalls += 1;
+      if (relocateCalls > 1) throw new Error('cannot move back');
+      return realRelocate(input);
+    };
+    const realUpdate = sessionsDb.updateSessionTranscriptPath;
+    let updateCalls = 0;
+    sessionsDb.updateSessionTranscriptPath = (...args) => {
+      updateCalls += 1;
+      // Only the first (forward) write fails: the retry after a failed move-back gets through.
+      if (updateCalls === 1) throw new Error('database busy');
+      return realUpdate(...args);
+    };
+    try {
+      await assert.rejects(() => sessionsService.moveSessionToProject('claude-stuck', targetId), /database busy/);
+    } finally {
+      sessionsDb.updateSessionTranscriptPath = realUpdate;
+      delete (facet as { relocateTranscripts?: unknown }).relocateTranscripts;
+    }
+
+    const movedCopy = path.join(projectsRoot, target.replace(/[^a-zA-Z0-9]/g, '-'), 'claude-stuck.jsonl');
+    assert.equal(await exists(movedCopy), true);
+    const row = sessionsDb.getSessionById('claude-stuck');
+    assert.equal(row?.project_path, target);
+    assert.equal(row?.jsonl_path, movedCopy, 'the row must not name the deleted source file');
   });
 });
