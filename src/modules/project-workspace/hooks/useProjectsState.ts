@@ -785,9 +785,11 @@ export function useProjectsState({
       // no run is active here (e.g. edited from another client or the CLI):
       // signal the chat view to reload its messages.
       const currentSelectedSession = selectedSessionRef.current;
+      // The open session may still be selected under its provider-native id.
+      const aliasIds = getSessionAliasIds(upsert);
       if (
         currentSelectedSession
-        && upsert.sessionId === currentSelectedSession.id
+        && aliasIds.has(String(currentSelectedSession.id))
         && !isSessionProcessing(upsert.sessionId)
       ) {
         setExternalMessageUpdate((prev) => prev + 1);
@@ -795,7 +797,6 @@ export function useProjectsState({
         markSessionAttention(upsert.sessionId);
       }
 
-      const aliasIds = getSessionAliasIds(upsert);
       setProjects((currentProjects) => {
         const targetProjectId = upsert.project?.projectId;
         // A session that now names another project was moved there: drop it
