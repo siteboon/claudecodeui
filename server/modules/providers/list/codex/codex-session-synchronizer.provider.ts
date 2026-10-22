@@ -6,7 +6,7 @@ import { sessionsDb } from '@/modules/database/index.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
-  findFilesRecursivelyCreatedAfter,
+  findFilesRecursivelyCreatedOrModifiedAfter,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
@@ -27,10 +27,14 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
 
   /**
    * Scans ~/.codex/sessions and upserts discovered sessions into DB.
+   *
+   * An incremental scan (`since` set) skips transcripts already indexed at
+   * their current mtime: re-upserting one would re-activate an archived
+   * project for nothing.
    */
   async synchronize(since?: Date): Promise<number> {
     const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
-    const files = await findFilesRecursivelyCreatedAfter(
+    const files = await findFilesRecursivelyCreatedOrModifiedAfter(
       path.join(this.codexHome, 'sessions'),
       '.jsonl',
       since ?? null
@@ -38,6 +42,17 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let processed = 0;
     for (const filePath of files) {
+      // Stat before parsing so `updated_at` never covers writes this pass did
+      // not read; the skip below relies on that.
+      const timestamps = await readFileTimestamps(filePath);
+      if (
+        since
+        && timestamps.updatedAt
+        && sessionsDb.isTranscriptUnchangedSinceIndexed(filePath, timestamps.updatedAt)
+      ) {
+        continue;
+      }
+
       const parsed = await this.processSessionFile(filePath, nameMap);
       if (!parsed) {
         continue;
@@ -52,7 +67,6 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
         }
       }
 
-      const timestamps = await readFileTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
@@ -77,12 +91,13 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    // Stat before parsing, as in `synchronize()`.
+    const timestamps = await readFileTimestamps(filePath);
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;
     }
 
-    const timestamps = await readFileTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
