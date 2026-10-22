@@ -785,13 +785,12 @@ export function useProjectsState({
       const currentSelectedSession = selectedSessionRef.current;
       // The open session may still be selected under its provider-native id.
       const aliasIds = getSessionAliasIds(upsert);
-      if (
-        currentSelectedSession
-        && aliasIds.has(String(currentSelectedSession.id))
+      const isViewedSession = Boolean(currentSelectedSession) && aliasIds.has(String(currentSelectedSession?.id));
+      if (isViewedSession) {
         // A run may be tracked under either id; never reload over a live stream.
-        && ![...aliasIds].some((id) => isSessionProcessing(id))
-      ) {
-        setExternalMessageUpdate((prev) => prev + 1);
+        if (![...aliasIds].some((id) => isSessionProcessing(id))) {
+          setExternalMessageUpdate((prev) => prev + 1);
+        }
       } else {
         markSessionAttention(upsert.sessionId);
       }
