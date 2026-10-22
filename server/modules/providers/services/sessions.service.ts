@@ -508,7 +508,27 @@ export const sessionsService = {
           statusCode: 409,
         });
       }
-      sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
+      try {
+        sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
+      } catch (error) {
+        // The file has moved but the row cannot say so: move it back to where
+        // the old row points, then restore the row.
+        await transcriptRelocation.relocateTranscripts({
+          sessions: relocated,
+          oldProjectPath: target.project_path,
+          newProjectPath: previousProjectPath ?? '',
+        }).catch((rollbackError) => {
+          console.warn(`[sessions] Could not move the transcript of ${sessionId} back:`, rollbackError);
+        });
+        sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
+        // The watcher may have pointed the row at the moved copy meanwhile.
+        try {
+          sessionsDb.updateSessionTranscriptPath(sessionId, session.jsonl_path);
+        } catch {
+          // Same write that just failed; the original error is the one to report.
+        }
+        throw error;
+      }
     }
 
     sessionHistoryCache.invalidate(sessionId);

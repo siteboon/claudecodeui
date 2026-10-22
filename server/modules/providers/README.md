@@ -45,11 +45,12 @@ consuming service checks for them and degrades instead of failing:
 - `fork` (`IProviderFork`): branch a conversation into a new session. Consumed by
   `sessionsService.forkSessionById`; without it forking is unavailable.
 - `transcriptRelocation` (`IProviderTranscriptRelocation`): keep transcripts
-  resumable when a project folder is renamed or moved. Consumed by
-  `sessionsService.relocateProjectTranscripts`; without it the provider's
-  artifacts stay where they are.
+  resumable when a project folder is renamed or moved, or when one session is
+  moved to another project. Consumed by `sessionsService.relocateProjectTranscripts`
+  and `sessionsService.moveSessionToProject`; without it the provider's artifacts
+  stay where they are, and sessions that already have a transcript cannot be moved.
 
-Claude and Codex implement `fork`; only Claude implements `transcriptRelocation`.
+Claude and Codex implement both `fork` and `transcriptRelocation`.
 
 Current provider ids in this repo are:
 
