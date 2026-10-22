@@ -148,105 +148,104 @@ test('a Codex rollout that cannot be rewritten leaves the session where it was',
   });
 });
 
-test('a failed transcript-path write moves the rollout back and restores the row', async () => {
+test('a Codex move does not depend on the transcript-path write, which has nothing to change', async () => {
   await withDatabase(async (directory) => {
     const source = path.join(directory, 'source');
     const target = path.join(directory, 'target');
-    const transcript = path.join(directory, 'rollout-rollback.jsonl');
-    await writeFile(transcript, JSON.stringify({ type: 'session_meta', payload: { id: 'codex-rb', cwd: source } }));
+    const transcript = path.join(directory, 'rollout-same-path.jsonl');
+    await writeFile(transcript, JSON.stringify({ type: 'session_meta', payload: { id: 'codex-same', cwd: source } }));
     const now = new Date().toISOString();
-    sessionsDb.createSession('codex-rb', 'codex', source, 'Rollback', now, now, transcript);
+    sessionsDb.createSession('codex-same', 'codex', source, 'Same path', now, now, transcript);
     const targetId = createTargetProject(target);
 
     const realUpdate = sessionsDb.updateSessionTranscriptPath;
     sessionsDb.updateSessionTranscriptPath = () => {
-      throw new Error('disk full');
+      throw new Error('must not be called');
     };
     try {
-      await assert.rejects(() => sessionsService.moveSessionToProject('codex-rb', targetId), /disk full/);
+      await sessionsService.moveSessionToProject('codex-same', targetId);
     } finally {
       sessionsDb.updateSessionTranscriptPath = realUpdate;
-    }
-
-    assert.equal(JSON.parse(await readFile(transcript, 'utf8')).payload.cwd, source);
-    assert.equal(sessionsDb.getSessionById('codex-rb')?.project_path, source);
-    assert.equal(sessionsDb.getSessionById('codex-rb')?.jsonl_path, transcript);
-  });
-});
-
-test('when a Codex rollout cannot be moved back either, the move completes in the target project', async () => {
-  await withDatabase(async (directory) => {
-    const source = path.join(directory, 'source');
-    const target = path.join(directory, 'target');
-    const transcript = path.join(directory, 'rollout-stuck.jsonl');
-    await writeFile(transcript, JSON.stringify({ type: 'session_meta', payload: { id: 'codex-stuck', cwd: source } }));
-    const now = new Date().toISOString();
-    sessionsDb.createSession('codex-stuck', 'codex', source, 'Stuck', now, now, transcript);
-    const targetId = createTargetProject(target);
-
-    const facet = providerRegistry.resolveProvider('codex').transcriptRelocation!;
-    const realRelocate = facet.relocateTranscripts.bind(facet);
-    assert.equal(Object.hasOwn(facet, 'relocateTranscripts'), false);
-    let calls = 0;
-    facet.relocateTranscripts = async (input) => {
-      calls += 1;
-      if (calls > 1) throw new Error('cannot move back');
-      return realRelocate(input);
-    };
-    const realUpdate = sessionsDb.updateSessionTranscriptPath;
-    sessionsDb.updateSessionTranscriptPath = () => {
-      throw new Error('disk full');
-    };
-    try {
-      // The rollout is rewritten in place, so the row already matches it.
-      await sessionsService.moveSessionToProject('codex-stuck', targetId);
-    } finally {
-      sessionsDb.updateSessionTranscriptPath = realUpdate;
-      // Drop the own-property override so the class method shows through again.
-      delete (facet as { relocateTranscripts?: unknown }).relocateTranscripts;
     }
 
     assert.equal(JSON.parse(await readFile(transcript, 'utf8')).payload.cwd, target);
-    assert.equal(sessionsDb.getSessionById('codex-stuck')?.project_path, target, 'the row follows the file, not the plan');
-    assert.equal(calls, 2, 'the move-back was attempted');
-    assert.equal(sessionsDb.getSessionById('codex-stuck')?.jsonl_path, transcript);
+    const row = sessionsDb.getSessionById('codex-same');
+    assert.equal(row?.project_path, target);
+    assert.equal(row?.jsonl_path, transcript);
   });
 });
 
-test('a Claude move whose transcript path cannot be saved puts the file back in the source folder', async () => {
-  await withDatabase(async (directory) => {
-    const source = path.join(directory, 'source');
-    const target = path.join(directory, 'target');
-    await mkdir(source);
-    await mkdir(target);
-    const projectsRoot = path.join(directory, 'claude', 'projects');
-    const sourceFolder = path.join(projectsRoot, source.replace(/[^a-zA-Z0-9]/g, '-'));
-    const transcript = path.join(sourceFolder, 'claude-rb.jsonl');
-    await mkdir(sourceFolder, { recursive: true });
-    await writeFile(transcript, `${JSON.stringify({ type: 'user', sessionId: 'claude-rb', cwd: source })}\n`);
-    const now = new Date().toISOString();
-    sessionsDb.createSession('claude-rb', 'claude', source, 'Claude rollback', now, now, transcript);
-    const targetId = createTargetProject(target);
+async function seedClaudeSession(directory: string, id: string) {
+  const source = path.join(directory, 'source');
+  const target = path.join(directory, 'target');
+  await mkdir(source, { recursive: true });
+  await mkdir(target, { recursive: true });
+  const projectsRoot = path.join(directory, 'claude', 'projects');
+  const sourceFolder = path.join(projectsRoot, source.replace(/[^a-zA-Z0-9]/g, '-'));
+  const transcript = path.join(sourceFolder, `${id}.jsonl`);
+  await mkdir(sourceFolder, { recursive: true });
+  await writeFile(transcript, `${JSON.stringify({ type: 'user', sessionId: id, cwd: source })}\n`);
+  const now = new Date().toISOString();
+  sessionsDb.createSession(id, 'claude', source, 'Claude session', now, now, transcript);
+  return {
+    source,
+    target,
+    transcript,
+    movedCopy: path.join(projectsRoot, target.replace(/[^a-zA-Z0-9]/g, '-'), `${id}.jsonl`),
+    targetId: createTargetProject(target),
+  };
+}
 
-    const realUpdate = sessionsDb.updateSessionTranscriptPath;
-    let failed = false;
-    sessionsDb.updateSessionTranscriptPath = (...args) => {
-      // The forward write lands and then reports failure, as if the watcher had
-      // already repointed the row at the moved copy; the restore must undo it.
-      realUpdate(...args);
-      if (!failed) {
-        failed = true;
-        throw new Error('disk full');
-      }
-    };
-    try {
-      await assert.rejects(() => sessionsService.moveSessionToProject('claude-rb', targetId), /disk full/);
-    } finally {
+/** Fails the first `failures` transcript-path writes; `landFirst` persists each one before throwing, as if the watcher had repointed the row. */
+function failTranscriptPathWrites(failures: number, landFirst = false) {
+  const realUpdate = sessionsDb.updateSessionTranscriptPath;
+  let calls = 0;
+  sessionsDb.updateSessionTranscriptPath = (...args) => {
+    calls += 1;
+    if (calls <= failures) {
+      if (landFirst) realUpdate(...args);
+      throw new Error('database busy');
+    }
+    return realUpdate(...args);
+  };
+  return {
+    calls: () => calls,
+    restore: () => {
       sessionsDb.updateSessionTranscriptPath = realUpdate;
+    },
+  };
+}
+
+test('a transient transcript-path failure is retried before anything is moved back', async () => {
+  await withDatabase(async (directory) => {
+    const { target, transcript, movedCopy, targetId } = await seedClaudeSession(directory, 'claude-retry');
+    const writes = failTranscriptPathWrites(1);
+    try {
+      await sessionsService.moveSessionToProject('claude-retry', targetId);
+    } finally {
+      writes.restore();
     }
 
-    const targetCopy = path.join(projectsRoot, target.replace(/[^a-zA-Z0-9]/g, '-'), 'claude-rb.jsonl');
-    assert.equal(await exists(targetCopy), false);
+    assert.equal(writes.calls(), 2, 'the write was retried');
+    assert.equal(await exists(transcript), false);
+    const row = sessionsDb.getSessionById('claude-retry');
+    assert.equal(row?.project_path, target);
+    assert.equal(row?.jsonl_path, movedCopy);
+  });
+});
+
+test('a Claude move whose transcript path cannot be saved puts the file back and restores the row', async () => {
+  await withDatabase(async (directory) => {
+    const { source, transcript, movedCopy, targetId } = await seedClaudeSession(directory, 'claude-rb');
+    // Both forward attempts land and then fail, so the restore has to undo them.
+    const writes = failTranscriptPathWrites(2, true);
+    try {
+      await assert.rejects(() => sessionsService.moveSessionToProject('claude-rb', targetId), /database busy/);
+    } finally {
+      writes.restore();
+    }
+
+    assert.equal(await exists(movedCopy), false);
     assert.equal(JSON.parse((await readFile(transcript, 'utf8')).split('\n')[0]).cwd, source);
     const row = sessionsDb.getSessionById('claude-rb');
     assert.equal(row?.project_path, source);
@@ -254,52 +253,28 @@ test('a Claude move whose transcript path cannot be saved puts the file back in 
   });
 });
 
-test('a Claude move that cannot be undone leaves the row on the moved copy', async () => {
+test('a Claude move that can neither be saved nor undone keeps the session in the target and reports the error', async () => {
   await withDatabase(async (directory) => {
-    const source = path.join(directory, 'source');
-    const target = path.join(directory, 'target');
-    await mkdir(source);
-    await mkdir(target);
-    const projectsRoot = path.join(directory, 'claude', 'projects');
-    const sourceFolder = path.join(projectsRoot, source.replace(/[^a-zA-Z0-9]/g, '-'));
-    const transcript = path.join(sourceFolder, 'claude-stuck.jsonl');
-    await mkdir(sourceFolder, { recursive: true });
-    await writeFile(transcript, `${JSON.stringify({ type: 'user', sessionId: 'claude-stuck', cwd: source })}\n`);
-    const now = new Date().toISOString();
-    sessionsDb.createSession('claude-stuck', 'claude', source, 'Claude stuck', now, now, transcript);
-    const targetId = createTargetProject(target);
-
+    const { target, movedCopy, targetId } = await seedClaudeSession(directory, 'claude-stuck');
     const facet = providerRegistry.resolveProvider('claude').transcriptRelocation!;
     assert.equal(Object.hasOwn(facet, 'relocateTranscripts'), false);
     const realRelocate = facet.relocateTranscripts.bind(facet);
     let relocateCalls = 0;
+    // The real facet reports a transcript it cannot place by leaving it out, not by throwing.
     facet.relocateTranscripts = async (input) => {
       relocateCalls += 1;
-      if (relocateCalls > 1) throw new Error('cannot move back');
-      return realRelocate(input);
+      return relocateCalls > 1 ? [] : realRelocate(input);
     };
-    const realUpdate = sessionsDb.updateSessionTranscriptPath;
-    let updateCalls = 0;
-    sessionsDb.updateSessionTranscriptPath = (...args) => {
-      updateCalls += 1;
-      // Only the first (forward) write fails: the retry after a failed move-back gets through.
-      if (updateCalls === 1) throw new Error('database busy');
-      return realUpdate(...args);
-    };
+    const writes = failTranscriptPathWrites(Number.POSITIVE_INFINITY);
     try {
-      // The retried write gets through, so the row matches the moved copy and the move completes.
-      await sessionsService.moveSessionToProject('claude-stuck', targetId);
+      await assert.rejects(() => sessionsService.moveSessionToProject('claude-stuck', targetId), /database busy/);
     } finally {
-      sessionsDb.updateSessionTranscriptPath = realUpdate;
+      writes.restore();
       delete (facet as { relocateTranscripts?: unknown }).relocateTranscripts;
     }
 
-    const movedCopy = path.join(projectsRoot, target.replace(/[^a-zA-Z0-9]/g, '-'), 'claude-stuck.jsonl');
-    assert.equal(await exists(movedCopy), true);
-    const row = sessionsDb.getSessionById('claude-stuck');
-    assert.equal(row?.project_path, target);
-    assert.equal(row?.jsonl_path, movedCopy, 'the row must not name the deleted source file');
     assert.equal(relocateCalls, 2, 'the move-back was attempted');
-    assert.equal(updateCalls, 2, 'the transcript path write was retried');
+    assert.equal(await exists(movedCopy), true);
+    assert.equal(sessionsDb.getSessionById('claude-stuck')?.project_path, target, 'the row stays where the file is');
   });
 });

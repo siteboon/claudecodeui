@@ -10,7 +10,7 @@ import { rewriteJsonlCwd } from '@/shared/utils.js';
  *
  * Codex rollouts are filed by date, not by directory, and a thread is resumed
  * by id, so the files stay where they are. Only the `cwd` they record changes,
- * on every row that names the old folder exactly. The synchronizer files a
+ * on every row whose cwd is the old folder (compared after path normalization). The synchronizer files a
  * session under `session_meta.cwd`, which left stale would move the session
  * back to the old folder on its next pass; `turn_context` rows are rewritten so
  * the rollout agrees with itself.
