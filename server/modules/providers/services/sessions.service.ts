@@ -430,7 +430,7 @@ export const sessionsService = {
   async moveSessionToProject(
     sessionId: string,
     projectId: string,
-  ): Promise<{ sessionId: string; projectId: string; projectPath: string }> {
+  ): Promise<{ sessionId: string; projectId: string; projectPath: string; warning?: string }> {
     const session = sessionsDb.getSessionById(sessionId);
     if (!session) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
@@ -494,6 +494,8 @@ export const sessionsService = {
         console.warn(`[sessions] Could not restore the row of ${sessionId}:`, restoreError);
       }
     };
+    // Set when the move took effect but its transcript path could not be saved.
+    let warning: string | undefined;
     // Row before transcript, as a project relocation does: the watcher may
     // index the moved transcript (whose cwd names the new folder) mid-move.
     sessionsDb.updateSessionProjectPath(sessionId, target.project_path);
@@ -555,18 +557,18 @@ export const sessionsService = {
             }
             if (movedBack) {
               restoreRow(true);
-              throw writeError;
+              throw new AppError('The session could not be moved; it stays in its project.', {
+                code: 'SESSION_MOVE_FAILED',
+                statusCode: 503,
+              });
             }
-            // The row keeps the target project, where the file now is; the
-            // watcher repoints jsonl_path once it indexes the moved file.
+            // The session is in the target project, where its file now is, so
+            // the caller must treat it as moved (refresh, follow the open chat).
+            // The watcher repoints jsonl_path once it indexes the moved file.
             console.warn(
               `[sessions] Session ${sessionId} is in ${target.project_path} but its row still names ${session.jsonl_path}; the transcript is at ${movedPath}.`,
             );
-            throw new AppError('The session was moved, but saving where its transcript now lives failed.', {
-              code: 'SESSION_MOVE_INCOMPLETE',
-              statusCode: 500,
-              details: writeError instanceof Error ? writeError.message : String(writeError),
-            });
+            warning = 'The session was moved, but its history may take a moment to show up.';
           }
         }
       }
@@ -579,7 +581,7 @@ export const sessionsService = {
       });
     }
 
-    return { sessionId, projectId: target.project_id, projectPath: target.project_path };
+    return { sessionId, projectId: target.project_id, projectPath: target.project_path, ...(warning ? { warning } : {}) };
   },
 
   /**
