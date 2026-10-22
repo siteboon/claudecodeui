@@ -146,3 +146,28 @@ test('a Codex rollout that cannot be rewritten leaves the session where it was',
     assert.equal(sessionsDb.getSessionById('codex-gone')?.project_path, source);
   });
 });
+
+test('a failed transcript-path write moves the rollout back and restores the row', async () => {
+  await withDatabase(async (directory) => {
+    const source = path.join(directory, 'source');
+    const target = path.join(directory, 'target');
+    const transcript = path.join(directory, 'rollout-rollback.jsonl');
+    await writeFile(transcript, JSON.stringify({ type: 'session_meta', payload: { id: 'codex-rb', cwd: source } }));
+    const now = new Date().toISOString();
+    sessionsDb.createSession('codex-rb', 'codex', source, 'Rollback', now, now, transcript);
+    const targetId = createTargetProject(target);
+
+    const realUpdate = sessionsDb.updateSessionTranscriptPath;
+    sessionsDb.updateSessionTranscriptPath = () => {
+      throw new Error('disk full');
+    };
+    try {
+      await assert.rejects(() => sessionsService.moveSessionToProject('codex-rb', targetId), /disk full/);
+    } finally {
+      sessionsDb.updateSessionTranscriptPath = realUpdate;
+    }
+
+    assert.equal(JSON.parse(await readFile(transcript, 'utf8')).payload.cwd, source);
+    assert.equal(sessionsDb.getSessionById('codex-rb')?.project_path, source);
+  });
+});
