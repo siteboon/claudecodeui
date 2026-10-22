@@ -14,8 +14,12 @@ import { rewriteJsonlCwd } from '@/shared/utils.js';
  * under that cwd, and left stale it would move the session back to the old
  * folder on its next pass.
  *
- * All or nothing, like the Claude facet: every rewrite is staged beside its
- * rollout first and swapped in only once all of them are written.
+ * Never throws for one rollout: a project relocation runs this after the
+ * Claude facet has already committed its moves, and a throw here would make
+ * the caller restore rows that point at files Claude has since removed. A
+ * rollout that is missing, unreadable or records no matching cwd is skipped
+ * and left out of the result, as the Claude facet does with files it cannot
+ * place.
  */
 export class CodexTranscriptRelocationProvider implements IProviderTranscriptRelocation {
   async relocateTranscripts(input: {
@@ -23,9 +27,11 @@ export class CodexTranscriptRelocationProvider implements IProviderTranscriptRel
     oldProjectPath: string;
     newProjectPath: string;
   }): Promise<SessionTranscriptRelocation[]> {
-    const staged: Array<{ temporaryPath: string; session: SessionTranscriptRelocation }> = [];
-    try {
-      for (const session of input.sessions) {
+    const relocated: SessionTranscriptRelocation[] = [];
+    for (const session of input.sessions) {
+      // The `.tmp` suffix keeps the session watcher from indexing it.
+      const temporaryPath = `${session.jsonlPath}.${randomUUID()}.tmp`;
+      try {
         const content = await readFile(session.jsonlPath, 'utf8');
         const rewritten = rewriteJsonlCwd(
           content,
@@ -33,25 +39,16 @@ export class CodexTranscriptRelocationProvider implements IProviderTranscriptRel
           input.newProjectPath,
           (row) => (row.payload && typeof row.payload === 'object' ? row.payload : null),
         );
-        // The `.tmp` suffix keeps the session watcher from indexing it.
-        const temporaryPath = `${session.jsonlPath}.${randomUUID()}.tmp`;
+        // Nothing named the old folder, so nothing would keep the session there.
+        if (rewritten === content) {
+          continue;
+        }
         await writeFile(temporaryPath, rewritten, { flag: 'wx' });
-        staged.push({ temporaryPath, session });
-      }
-    } catch (error) {
-      await Promise.all(staged.map(({ temporaryPath }) => unlink(temporaryPath).catch(() => undefined)));
-      throw error;
-    }
-
-    // A rename over the original is atomic: a reader sees the old rollout or
-    // the rewritten one, never a half-written file.
-    const relocated: SessionTranscriptRelocation[] = [];
-    for (const { temporaryPath, session } of staged) {
-      try {
+        // Atomic: a reader sees the old rollout or the rewritten one.
         await rename(temporaryPath, session.jsonlPath);
         relocated.push(session);
       } catch (error) {
-        console.warn(`[codex-transcript-relocation] Failed to rewrite ${session.jsonlPath}:`, (error as Error).message);
+        console.warn(`[codex-transcript-relocation] Skipped ${session.jsonlPath}:`, (error as Error).message);
         await unlink(temporaryPath).catch(() => undefined);
       }
     }

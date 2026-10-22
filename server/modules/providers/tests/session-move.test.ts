@@ -131,3 +131,18 @@ test('a session that has not run moves for any provider; one with a transcript n
     );
   });
 });
+
+test('a Codex rollout that cannot be rewritten leaves the session where it was', async () => {
+  await withDatabase(async (directory) => {
+    const source = path.join(directory, 'source');
+    const targetId = createTargetProject(path.join(directory, 'target'));
+    const now = new Date().toISOString();
+    sessionsDb.createSession('codex-gone', 'codex', source, 'Gone', now, now, path.join(directory, 'missing.jsonl'));
+
+    await assert.rejects(
+      () => sessionsService.moveSessionToProject('codex-gone', targetId),
+      (error: { code?: string }) => error.code === 'SESSION_MOVE_NOT_SUPPORTED',
+    );
+    assert.equal(sessionsDb.getSessionById('codex-gone')?.project_path, source);
+  });
+});
