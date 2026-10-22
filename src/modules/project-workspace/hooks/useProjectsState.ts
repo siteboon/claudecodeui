@@ -302,7 +302,8 @@ const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent)
 
   const next: Project = { ...project, sessions: nextSessions };
   if (inserted) {
-    const total = Number(project.sessionMeta?.total ?? 0) + 1;
+    const wasAncestor = sessions.some((session) => session.forkAncestors?.some((ancestor) => aliasIds.has(ancestor.id)));
+    const total = Number(project.sessionMeta?.total ?? 0) + (wasAncestor ? 0 : 1);
     next.sessionMeta = {
       ...project.sessionMeta,
       total,
@@ -326,10 +327,18 @@ const projectFromRegistration = (project: Project): Project => ({
 
 const removeSessionFromProject = (project: Project, sessionIdToDelete: string): Project => {
   const sessions = project.sessions ?? [];
-  const nextSessions = sessions.filter((session) => session.id !== sessionIdToDelete);
-  if (nextSessions.length === sessions.length) {
-    return project;
-  }
+  let changed = false;
+  const nextSessions = sessions.filter((session) => {
+    if (session.id !== sessionIdToDelete) return true;
+    changed = true;
+    return false;
+  }).map((session) => {
+    const ancestors = session.forkAncestors;
+    if (!ancestors?.some((ancestor) => ancestor.id === sessionIdToDelete)) return session;
+    changed = true;
+    return { ...session, forkAncestors: ancestors.filter((ancestor) => ancestor.id !== sessionIdToDelete) };
+  });
+  if (!changed) return project;
 
   const updatedProject: Project = {
     ...project,
@@ -351,14 +360,21 @@ const removeSessionFromProject = (project: Project, sessionIdToDelete: string): 
 // the sidebar list does not re-render for projects the rename did not touch.
 const renameSessionInProject = (project: Project, sessionIdToRename: string, summary: string): Project => {
   const sessions = project.sessions ?? [];
-  const existingIndex = sessions.findIndex((session) => session.id === sessionIdToRename);
-  if (existingIndex < 0 || sessions[existingIndex].summary === summary) {
-    return project;
-  }
-
-  const nextSessions = [...sessions];
-  nextSessions[existingIndex] = { ...sessions[existingIndex], summary };
-  return { ...project, sessions: nextSessions };
+  let changed = false;
+  const nextSessions = sessions.map((session) => {
+    let next = session;
+    if (session.id === sessionIdToRename && session.summary !== summary) {
+      next = { ...next, summary };
+    }
+    if (session.forkAncestors?.some((ancestor) => ancestor.id === sessionIdToRename && ancestor.summary !== summary)) {
+      next = { ...next, forkAncestors: session.forkAncestors.map((ancestor) => (
+        ancestor.id === sessionIdToRename ? { ...ancestor, summary } : ancestor
+      )) };
+    }
+    if (next !== session) changed = true;
+    return next;
+  });
+  return changed ? { ...project, sessions: nextSessions } : project;
 };
 
 const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'browser']);

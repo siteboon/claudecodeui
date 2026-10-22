@@ -285,9 +285,27 @@ export type SessionUpsertedEvent = {
     summary: string;
     messageCount: number;
     lastActivity: string;
+    /** App-facing parent id; null for a session without a recorded fork source. */
+    forkedFromSessionId?: string | null;
+    /** Active ancestors outside the current page, for the Projects tree only. */
+    forkAncestors?: SessionForkAncestor[];
   };
   project: SessionUpsertedProject | null;
   timestamp: string;
+};
+
+/**
+ * Minimal ancestor context for the Projects sidebar, shared by the database,
+ * projects and WebSocket modules. IDs are canonical app IDs. Only active
+ * ancestors in the same project and provider are included. These rows do not
+ * belong to the paginated session slice and must not advance its offset.
+ */
+export type SessionForkAncestor = {
+  id: string;
+  provider: LLMProvider;
+  summary: string;
+  lastActivity: string;
+  forkedFromSessionId: string | null;
 };
 
 /**

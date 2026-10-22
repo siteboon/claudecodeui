@@ -96,6 +96,10 @@ export type ProjectSession = {
   updated_at?: string;
   lastActivity?: string;
   messageCount?: number;
+  /** Canonical app id of the fork source; absent/null for unrelated sessions. */
+  forkedFromSessionId?: string | null;
+  /** Ancestor context for Projects only; excluded from pagination and the Conversations feed. */
+  forkAncestors?: ProjectSession[];
   provider?: LLMProvider;
   __provider?: LLMProvider;
   // Tags the session with the owning project's DB `projectId` so UI handlers
