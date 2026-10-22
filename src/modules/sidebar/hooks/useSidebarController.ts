@@ -1347,8 +1347,9 @@ export function useSidebarController({
   );
 
   /**
-   * Files the pending session under another project. Both lists are refetched
-   * because the session leaves one project's page and joins another's.
+   * Files the pending session under another project. The project lists follow
+   * through the broadcast `session_upserted` (see useProjectsState); only the
+   * separately fetched recent list is reloaded here.
    */
   const confirmMoveSession = useCallback(
     async (projectId: string) => {

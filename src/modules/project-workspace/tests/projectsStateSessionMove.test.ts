@@ -100,3 +100,38 @@ test('an upsert that names another project moves the row and the open workspace 
   assert.equal(result.current.selectedSession?.__projectId, 'project-b');
   assert.deepEqual(navigate.mock.calls, [], 'moving the open session does not navigate');
 });
+
+test('a move also drops the old project row listed under the provider-native id', async () => {
+  projectsResponse.mockResolvedValue({
+    ok: true,
+    json: async () => [
+      buildProject('project-a', '/a', [{ id: 'native-1', summary: 'indexed' } as ProjectSession]),
+      buildProject('project-b', '/b', []),
+    ],
+  });
+  const { useProjectsState } = await import('@/modules/project-workspace/hooks/useProjectsState');
+  const { result } = renderHook(() =>
+    useProjectsState({
+      sessionId: 'native-1',
+      navigate: vi.fn() as never,
+      subscribe: (listener: ServerEventListener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      isMobile: false,
+      isSessionProcessing: () => false,
+    }),
+  );
+
+  await waitFor(() => {
+    assert.equal(result.current.selectedProject?.projectId, 'project-a');
+  });
+
+  await act(async () => {
+    emit({ ...movedUpsert, providerSessionId: 'native-1' });
+  });
+
+  const projectA = result.current.projects.find((project) => project.projectId === 'project-a');
+  assert.deepEqual((projectA?.sessions ?? []).map((session) => session.id), []);
+  assert.equal(result.current.selectedProject?.projectId, 'project-b', 'the workspace follows the session it shows');
+});

@@ -795,17 +795,22 @@ export function useProjectsState({
         markSessionAttention(upsert.sessionId);
       }
 
+      const aliasIds = getSessionAliasIds(upsert);
       setProjects((currentProjects) => {
         const targetProjectId = upsert.project?.projectId;
         // A session that now names another project was moved there: drop it
-        // from wherever this client still lists it.
-        const withoutMovedRow = targetProjectId
+        // (under any of its ids) from wherever this client still lists it.
+        // Checked first so the common, non-move upsert stays a single scan.
+        const listedElsewhere = Boolean(targetProjectId) && currentProjects.some((project) => (
+          project.projectId !== targetProjectId
+          && getProjectSessions(project).some((session) => aliasIds.has(String(session.id)))
+        ));
+        const previousProjects = listedElsewhere
           ? currentProjects.map((project) => (
-            project.projectId === targetProjectId ? project : removeSessionFromProject(project, upsert.sessionId)
+            project.projectId === targetProjectId
+              ? project
+              : [...aliasIds].reduce(removeSessionFromProject, project)
           ))
-          : currentProjects;
-        const previousProjects = withoutMovedRow.some((project, index) => project !== currentProjects[index])
-          ? withoutMovedRow
           : currentProjects;
         const existingProject = previousProjects.find((project) =>
           targetProjectId ? project.projectId === targetProjectId : getProjectSessions(project).some((session) => session.id === upsert.sessionId),
@@ -851,7 +856,7 @@ export function useProjectsState({
         if (previousProject.projectId !== upsert.project.projectId) {
           // The open session was moved to another project: the workspace (and
           // the cwd the chat sends) has to follow it.
-          if (currentSelectedSession?.id !== upsert.sessionId) {
+          if (!currentSelectedSession || !aliasIds.has(String(currentSelectedSession.id))) {
             return previousProject;
           }
           const knownTarget = projectsRef.current.find((project) => project.projectId === upsert.project?.projectId);
@@ -861,11 +866,13 @@ export function useProjectsState({
         }
         return mergeProjectSelectionMetadata(previousProject, upsert.project);
       });
-      if (currentSelectedSession?.id === upsert.sessionId && upsert.project
+      if (currentSelectedSession && aliasIds.has(String(currentSelectedSession.id)) && upsert.project
         && currentSelectedSession.__projectId !== upsert.project.projectId) {
         const movedToProjectId = upsert.project.projectId;
         setSelectedSession((previousSession) => (
-          previousSession?.id === upsert.sessionId ? { ...previousSession, __projectId: movedToProjectId } : previousSession
+          previousSession && aliasIds.has(String(previousSession.id))
+            ? { ...previousSession, __projectId: movedToProjectId }
+            : previousSession
         ));
       }
 
