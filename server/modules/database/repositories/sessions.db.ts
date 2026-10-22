@@ -325,9 +325,10 @@ export const sessionsDb = {
    * Files one session under another project. Its transcript path is updated
    * separately (`updateSessionTranscriptPath`) once the file has moved.
    */
-  updateSessionProjectPath(sessionId: string, projectPath: string): void {
+  updateSessionProjectPath(sessionId: string, projectPath: string | null): void {
     const db = getConnection();
-    const normalizedProjectPath = normalizeProjectPath(projectPath);
+    // NULL stays NULL: it is how a rollback restores a row that had no project.
+    const normalizedProjectPath = projectPath === null ? null : normalizeProjectPath(projectPath);
     db.prepare(
       `UPDATE sessions
        SET project_path = ?

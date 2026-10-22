@@ -458,7 +458,7 @@ export const sessionsService = {
     // and so does an idle Claude CLI that still has the session open.
     // shortcut: an idle `codex resume` in a terminal is not detectable here; would need a Codex process registry.
     const running = await this.listRunningSessions();
-    const openInClaudeCli = session.provider_session_id
+    const openInClaudeCli = session.provider === 'claude' && session.provider_session_id
       ? (await listBusyClaudeCliSessions({ includeIdle: true }))
         .some((live) => live.providerSessionId === session.provider_session_id)
       : false;
@@ -480,7 +480,7 @@ export const sessionsService = {
       });
     }
 
-    const previousProjectPath = session.project_path ?? '';
+    const previousProjectPath = session.project_path;
     // Row before transcript, as a project relocation does: the watcher may
     // index the moved transcript (whose cwd names the new folder) mid-move.
     sessionsDb.updateSessionProjectPath(sessionId, target.project_path);
@@ -489,7 +489,7 @@ export const sessionsService = {
       try {
         relocated = await transcriptRelocation.relocateTranscripts({
           sessions: [{ sessionId, jsonlPath: session.jsonl_path }],
-          oldProjectPath: previousProjectPath,
+          oldProjectPath: previousProjectPath ?? '',
           newProjectPath: target.project_path,
         });
       } catch (error) {

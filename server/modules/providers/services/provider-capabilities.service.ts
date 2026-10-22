@@ -43,8 +43,9 @@ type ProviderCapabilities = {
    */
   supportsSessionForking: boolean;
   /**
-   * Whether a session's transcript can be rewritten so it resumes from another
-   * project's directory (the provider has a `move` facet).
+   * Whether a session's transcript can be moved so it resumes from another
+   * project's directory. Mirrors the provider having a `transcriptRelocation`
+   * facet; keep the two in step.
    */
   supportsSessionMoving: boolean;
 };

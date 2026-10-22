@@ -1271,8 +1271,8 @@ export async function extractFirstValidJsonlData<T>(
  * Rewrites the working directory a JSONL transcript records, for moving a
  * session to another project.
  *
- * `holder` picks the object carrying `cwd` on one row (the row itself for
- * Claude, its `payload` for Codex). Rows whose `cwd` is one of `fromPaths`, or
+ * Used by the Codex relocation facet; `holder` picks the object carrying `cwd`
+ * on one row (its `payload`). Claude's facet has its own exact-match rewrite. Rows whose `cwd` is one of `fromPaths`, or
  * a directory inside one, are re-serialized onto `toPath`; every other line,
  * including ones that do not parse, is kept byte for byte.
  */
@@ -1287,7 +1287,9 @@ export function rewriteJsonlCwd(
     const normalized = normalizeProjectPath(cwd);
     for (const from of froms) {
       if (normalized === from) return toPath;
-      const prefix = from.endsWith(path.sep) ? from : `${from}${path.sep}`;
+      // A project at the filesystem root would otherwise claim every path.
+      if (from === path.parse(from).root) continue;
+      const prefix = `${from}${path.sep}`;
       if (normalized.startsWith(prefix)) return path.join(toPath, normalized.slice(prefix.length));
     }
     return null;
