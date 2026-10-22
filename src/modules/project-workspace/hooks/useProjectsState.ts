@@ -790,7 +790,8 @@ export function useProjectsState({
       if (
         currentSelectedSession
         && aliasIds.has(String(currentSelectedSession.id))
-        && !isSessionProcessing(upsert.sessionId)
+        // A run may be tracked under either id; never reload over a live stream.
+        && ![...aliasIds].some((id) => isSessionProcessing(id))
       ) {
         setExternalMessageUpdate((prev) => prev + 1);
       } else {
