@@ -1269,31 +1269,22 @@ export async function extractFirstValidJsonlData<T>(
 
 /**
  * Rewrites the working directory a JSONL transcript records, for moving a
- * session to another project.
+ * session to another project. Used by the Codex relocation facet.
  *
- * Used by the Codex relocation facet; `holder` picks the object carrying `cwd`
- * on one row (its `payload`). Claude's facet has its own exact-match rewrite. Rows whose `cwd` is one of `fromPaths`, or
- * a directory inside one, are re-serialized onto `toPath`; every other line,
- * including ones that do not parse, is kept byte for byte.
+ * `holder` picks the object carrying `cwd` on one row (Codex: its `payload`).
+ * Only rows whose `cwd` is exactly `fromPath` change, as in Claude's facet: a
+ * subdirectory of the old project has no counterpart in an unrelated target,
+ * and an exact swap is what a rollback can undo. Every other line, including
+ * ones that do not parse, is kept byte for byte.
  */
 export function rewriteJsonlCwd(
   content: string,
-  fromPaths: string[],
+  fromPath: string,
   toPath: string,
   holder: (row: AnyRecord) => AnyRecord | null | undefined,
 ): string {
-  const froms = [...new Set(fromPaths.map(normalizeProjectPath).filter(Boolean))];
-  const relocate = (cwd: string): string | null => {
-    const normalized = normalizeProjectPath(cwd);
-    for (const from of froms) {
-      if (normalized === from) return toPath;
-      // A project at the filesystem root would otherwise claim every path.
-      if (from === path.parse(from).root) continue;
-      const prefix = `${from}${path.sep}`;
-      if (normalized.startsWith(prefix)) return path.join(toPath, normalized.slice(prefix.length));
-    }
-    return null;
-  };
+  const from = normalizeProjectPath(fromPath);
+  if (!from) return content;
   return content
     .split('\n')
     .map((line) => {
@@ -1301,11 +1292,10 @@ export function rewriteJsonlCwd(
       try {
         const row = JSON.parse(line) as AnyRecord;
         const target = holder(row);
-        const relocated = target && typeof target.cwd === 'string' ? relocate(target.cwd) : null;
-        if (!target || relocated === null) {
+        if (!target || typeof target.cwd !== 'string' || normalizeProjectPath(target.cwd) !== from) {
           return line;
         }
-        target.cwd = relocated;
+        target.cwd = toPath;
         return JSON.stringify(row);
       } catch {
         return line;

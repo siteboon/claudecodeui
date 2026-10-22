@@ -497,58 +497,69 @@ export const sessionsService = {
     // Row before transcript, as a project relocation does: the watcher may
     // index the moved transcript (whose cwd names the new folder) mid-move.
     sessionsDb.updateSessionProjectPath(sessionId, target.project_path);
-    if (transcriptRelocation && session.jsonl_path) {
-      let relocated;
-      try {
-        relocated = await transcriptRelocation.relocateTranscripts({
-          sessions: [{ sessionId, jsonlPath: session.jsonl_path }],
-          oldProjectPath: previousProjectPath ?? '',
-          newProjectPath: target.project_path,
-        });
-      } catch (error) {
-        // The provider undid its file changes; put the row back to match.
-        restoreRow(true);
-        throw error;
-      }
-
-      if (relocated.length === 0) {
-        // Skipped (not where the provider expects it, or a path it cannot
-        // encode): nothing moved on disk, so neither may the row.
-        restoreRow(false);
-        throw new AppError('This session\'s transcript could not be moved to the target project.', {
-          code: 'SESSION_MOVE_NOT_SUPPORTED',
-          statusCode: 409,
-        });
-      }
-      try {
-        sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
-      } catch (error) {
-        // The file has moved but the row cannot say so: move it back to where
-        // the old row points, then restore the row. If the file cannot go back,
-        // the row keeps the target project, which is where the file now is.
-        let movedBack = false;
+    try {
+      if (transcriptRelocation && session.jsonl_path) {
+        let relocated;
         try {
-          movedBack = (await transcriptRelocation.relocateTranscripts({
-            sessions: relocated,
-            oldProjectPath: target.project_path,
-            newProjectPath: previousProjectPath ?? '',
-          })).length > 0;
-        } catch (rollbackError) {
-          console.warn(`[sessions] Could not move the transcript of ${sessionId} back:`, rollbackError);
-        }
-        if (!movedBack) {
-          console.warn(
-            `[sessions] Session ${sessionId} stays in ${target.project_path}; its transcript is at ${relocated[0].jsonlPath}.`,
-          );
+          relocated = await transcriptRelocation.relocateTranscripts({
+            sessions: [{ sessionId, jsonlPath: session.jsonl_path }],
+            oldProjectPath: previousProjectPath ?? '',
+            newProjectPath: target.project_path,
+          });
+        } catch (error) {
+          // The provider undid its file changes; put the row back to match.
+          restoreRow(true);
           throw error;
         }
-        restoreRow(true);
-        throw error;
-      }
-    }
 
-    sessionHistoryCache.invalidate(sessionId);
-    await broadcastSessionUpserted(sessionId);
+        if (relocated.length === 0) {
+          // Skipped (not where the provider expects it, or a path it cannot
+          // encode): nothing moved on disk, so neither may the row.
+          restoreRow(false);
+          throw new AppError('This session\'s transcript could not be moved to the target project.', {
+            code: 'SESSION_MOVE_NOT_SUPPORTED',
+            statusCode: 409,
+          });
+        }
+        try {
+          sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
+        } catch (error) {
+          // The file has moved but the row cannot say so: move it back to where
+          // the old row points, then restore the row. If the file cannot go
+          // back, the row keeps the target project, which is where it now is.
+          let movedBack = false;
+          try {
+            movedBack = (await transcriptRelocation.relocateTranscripts({
+              sessions: relocated,
+              oldProjectPath: target.project_path,
+              newProjectPath: previousProjectPath ?? '',
+            })).length > 0;
+          } catch (rollbackError) {
+            console.warn(`[sessions] Could not move the transcript of ${sessionId} back:`, rollbackError);
+          }
+          if (movedBack) {
+            restoreRow(true);
+          } else {
+            console.warn(
+              `[sessions] Session ${sessionId} stays in ${target.project_path}; its transcript is at ${relocated[0].jsonlPath}.`,
+            );
+            try {
+              sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
+            } catch {
+              // Same write that just failed; the watcher repoints it once it indexes the file.
+            }
+          }
+          throw error;
+        }
+      }
+    } finally {
+      // On every exit: the watcher may already have broadcast the moved copy,
+      // so clients must hear where the session ended up, moved or rolled back.
+      sessionHistoryCache.invalidate(sessionId);
+      await broadcastSessionUpserted(sessionId).catch((broadcastError) => {
+        console.warn(`[sessions] Could not broadcast session ${sessionId}:`, broadcastError);
+      });
+    }
 
     return { sessionId, projectId: target.project_id, projectPath: target.project_path };
   },
