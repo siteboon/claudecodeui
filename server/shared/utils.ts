@@ -1253,7 +1253,7 @@ export async function extractFirstValidJsonlData<T>(
  * `holder` picks the object carrying `cwd` on one row (Codex: its `payload`).
  * Only rows whose `cwd` is exactly `fromPath` change, as in Claude's facet: a
  * subdirectory of the old project has no counterpart in an unrelated target,
- * and an exact swap is what a rollback can undo. Every other line, including
+ * and nothing routes a session by a subdirectory cwd. Every other line, including
  * ones that do not parse, is kept byte for byte.
  */
 export function rewriteJsonlCwd(
