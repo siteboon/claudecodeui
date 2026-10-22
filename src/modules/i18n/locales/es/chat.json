@@ -9,7 +9,9 @@
     "copied": "Mensaje copiado",
     "selectFormat": "Selecciona el formato de copia",
     "copyAsMarkdown": "Copiar como markdown",
-    "copyAsText": "Copiar como texto"
+    "copyAsText": "Copiar como texto",
+    "markdownShort": "MD",
+    "textShort": "TXT"
   },
   "messageTypes": {
     "user": "U",
@@ -50,6 +52,9 @@
     "newFile": "Archivo nuevo",
     "viewContent": "Ver contenido del archivo",
     "viewFullOutput": "Ver salida completa ({{count}} caracteres)",
+    "viewFullOutput_one": "Ver salida completa ({{count}} carácter)",
+    "viewFullOutput_other": "Ver salida completa ({{count}} caracteres)",
+    "viewFullOutput_many": "Ver salida completa ({{count}} caracteres)",
     "contentDisplayed": "El contenido del archivo se muestra en la vista de diff de arriba"
   },
   "bashEditDiff": {
@@ -59,20 +64,33 @@
     "emptyFile": "Archivo vacío",
     "moreLines_one": "… {{count}} línea más",
     "moreLines_other": "… {{count}} líneas más",
+    "moreLines_many": "… {{count}} líneas más",
     "moreFiles_one": "… {{count}} archivo más modificado",
     "moreFiles_other": "… {{count}} archivos más modificados",
+    "moreFiles_many": "… {{count}} archivos más modificados",
     "filesNotShown_one": "{{count}} archivo modificado (binario, solo de modo o demasiado grande para mostrar)",
     "filesNotShown_other": "{{count}} archivos modificados (binarios, solo de modo o demasiado grandes para mostrar)",
+    "filesNotShown_many": "{{count}} archivos modificados (binarios, solo de modo o demasiado grandes para mostrar)",
     "filesUnavailable_one": "{{count}} archivo modificado (diff no disponible)",
     "filesUnavailable_other": "{{count}} archivos modificados (diff no disponible)",
+    "filesUnavailable_many": "{{count}} archivos modificados (diff no disponible)",
     "filesChanged_one": "{{count}} archivo modificado",
     "filesChanged_other": "{{count}} archivos modificados",
+    "filesChanged_many": "{{count}} archivos modificados",
     "morePaths_one": "+{{count}} más",
     "morePaths_other": "+{{count}} más",
+    "morePaths_many": "+{{count}} más",
     "diffUnavailable": "(diff de archivos no disponible para este comando)",
     "partUnavailable": "(parte del diff no está disponible)",
     "skipped": "(diff de archivos omitido para este comando de git)",
     "shared": "(otro comando se ejecutó en este repositorio al mismo tiempo; un cambio hecho por cualquiera de los dos puede aparecer en cualquiera de los resultados)"
+  },
+  "interactive": {
+    "title": "Prompt interactivo",
+    "waiting": "Esperando tu respuesta en la CLI",
+    "instruction": "Elige una opción en la terminal donde se está ejecutando Claude.",
+    "selectedOption": "✓ Claude eligió la opción {{number}}",
+    "instructionDetail": "En la CLI, elegirías esta opción de forma interactiva con las flechas o escribiendo el número."
   },
   "thinking": {
     "title": "Pensando...",
@@ -187,7 +205,15 @@
       "default": "Selecciona un proveedor arriba para empezar"
     },
     "pressToSearch": "Pulsa <kbd>{{shortcut}}</kbd> para buscar sesiones, archivos y commits",
-    "chooseModelDescriptionCustomOnly": "Para {{providers, list}} solo se muestran tus modelos"
+    "chooseModel": "Elige un modelo",
+    "chooseModelDescription": "Modelos integrados y personalizados en una sola lista",
+    "chooseModelDescriptionCustomOnly": "Para {{providers, list}} solo se muestran tus modelos",
+    "addModel": "Añadir modelo",
+    "searchModels": "Buscar modelos...",
+    "manageModels": "Gestionar modelos",
+    "noModelsFound": "No se encontraron modelos.",
+    "loadingModels": "Cargando modelos…",
+    "clickToChange": "Clic para cambiar de modelo"
   },
   "session": {
     "continue": {
@@ -202,6 +228,9 @@
       "showingOf": "Mostrando {{shown}} de {{total}} mensajes",
       "scrollToLoad": "Desplázate hacia arriba para cargar más",
       "showingLast": "Mostrando los últimos {{count}} mensajes ({{total}} en total)",
+      "showingLast_one": "Mostrando el último mensaje ({{count}} de {{total}})",
+      "showingLast_other": "Mostrando los últimos {{count}} mensajes ({{total}} en total)",
+      "showingLast_many": "Mostrando los últimos {{count}} mensajes ({{total}} en total)",
       "loadEarlier": "Cargar mensajes anteriores",
       "loadAll": "Cargar todos los mensajes",
       "loadingAll": "Cargando todos los mensajes...",
@@ -259,6 +288,23 @@
       "startingNow": "Empezando ahora"
     },
     "stop": "Detener",
+    "backgroundWork": "Trabajo en segundo plano",
+    "backgroundTask": {
+      "workflow": "Flujo {{name}}",
+      "agent": "Agente {{description}}",
+      "command": "Comando {{description}}",
+      "count": "{{count}} tareas",
+      "count_one": "{{count}} tarea",
+      "count_other": "{{count}} tareas",
+      "count_many": "{{count}} tareas",
+      "prompt": {
+        "title": "Esta sesión aún tiene trabajo en segundo plano",
+        "description": "Un mensaje nuevo inicia un turno nuevo y detiene ese trabajo; lo que aún no haya informado se pierde. Pon el mensaje en cola para enviarlo cuando termine.",
+        "cancel": "Cancelar",
+        "queue": "Encolar",
+        "sendAnyway": "Enviar igualmente"
+      }
+    },
     "controls": {
       "stopGeneration": "Detener generación",
       "pressEscToStop": "Pulsa Esc en cualquier momento para detener"
@@ -310,6 +356,66 @@
     "failed": "No enviado — {{reason}}",
     "cancel": "Cancelar mensaje programado",
     "dismiss": "Descartar el aviso de fallo"
+  },
+  "misc": {
+    "copyToClipboard": "Copiar al portapapeles",
+    "copyCommand": "Copiar comando",
+    "runningTask": "Tarea en curso",
+    "userAskedRevise": "El usuario pidió revisar el plan",
+    "typeAnswer": "Escribe tu respuesta...",
+    "skipOne": "Omitir",
+    "skipAll": "Omitir todo",
+    "exportChat": "Exportar chat",
+    "closeImagePreview": "Cerrar la vista previa de la imagen",
+    "availableCommands": "Comandos disponibles",
+    "filterCommands": "Filtrar comandos...",
+    "closeModal": "Cerrar el resultado del comando",
+    "noDescription": "No hay descripción disponible.",
+    "modelChangeFailed": "No se puede cambiar el modelo ahora.",
+    "choiceSavedHint": "Tu elección se guarda en esta sesión y pasa a ser la predeterminada en los chats nuevos.",
+    "docsSearchSubtitle": "Busca comandos integrados, patrones de sintaxis y su uso sin salir del chat.",
+    "enterModelInfo": "Escribe el nombre y el ID del modelo.",
+    "modelSaveFailed": "No se pudo guardar este modelo.",
+    "modelDeleteFailed": "No se pudo eliminar este modelo.",
+    "cancelEditing": "Cancelar la edición",
+    "userDeniedTool": "El usuario denegó el uso de la herramienta",
+    "showTokenUsage": "Mostrar el uso de tokens",
+    "fallbackCommands": {
+      "models": "Ver los modelos disponibles del proveedor activo.",
+      "cost": "Revisar el uso de tokens de la sesión activa.",
+      "status": "Inspeccionar el runtime, la versión, el proveedor y el estado del entorno.",
+      "memory": "Abrir el archivo de memoria CLAUDE.md del proyecto.",
+      "config": "Abrir ajustes y configuración.",
+      "help": "Mostrar la documentación y la sintaxis de los comandos."
+    },
+    "modalMeta": {
+      "helpEyebrow": "Centro de comandos",
+      "helpTitle": "Ayuda y atajos",
+      "helpSubtitle": "Busca comandos integrados, patrones de sintaxis y su uso sin salir del chat.",
+      "modelsEyebrow": "Selección de modelo",
+      "modelsTitle": "Elige un modelo",
+      "modelsSubtitle": "Elige el modelo que debe usar este proveedor.",
+      "costEyebrow": "Telemetría de la sesión",
+      "costTitle": "Uso de tokens",
+      "costSubtitle": "Recuento de tokens de entrada, de salida y total de esta sesión.",
+      "statusEyebrow": "Estado del runtime",
+      "statusTitle": "Estado del sistema",
+      "statusSubtitle": "Versión, proveedor, runtime y detalles del entorno en un solo lugar.",
+      "commandResult": "Resultado del comando"
+    },
+    "choiceSavedSession": "Tu elección se guarda en esta sesión y pasa a ser la predeterminada en los chats nuevos.",
+    "choiceSavedDefault": "Tu elección pasa a ser el modelo predeterminado de los chats nuevos.",
+    "tokensUsed_one": "{{count}} token usado",
+    "tokensUsed_other": "{{count}} tokens usados",
+    "tokensUsed_many": "{{count}} tokens usados",
+    "compacted": "Compactado",
+    "compactionSummary": "resumen completo",
+    "expandImage": "Ampliar {{name}}",
+    "tokensLabel_one": "token",
+    "tokensLabel_other": "tokens",
+    "tokensLabel_many": "tokens",
+    "escClosesModal": "Esc cierra el modal.",
+    "close": "Cerrar"
   },
   "modelLibrary": {
     "effortLevels": "Niveles de razonamiento",
