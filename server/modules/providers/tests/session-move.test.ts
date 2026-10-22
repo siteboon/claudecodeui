@@ -247,8 +247,9 @@ test('a Claude move whose transcript path cannot be saved puts the file back and
     } finally {
       writes.restore();
     }
-    // The injected write failure (both attempts) is what rolled the move back.
-    assert.ok(writes.calls() >= 2, 'the path write failed (and was retried) before the rollback');
+    // The injected write failure is what rolled the move back; the jsonl_path
+    // check below is what proves the restore ran (the failed writes landed first).
+    assert.ok(writes.calls() >= 2, 'the path write failed and was retried before the rollback');
 
     assert.equal(await exists(movedCopy), false);
     assert.equal(JSON.parse((await readFile(transcript, 'utf8')).split('\n')[0]).cwd, source);

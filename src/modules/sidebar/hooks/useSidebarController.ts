@@ -68,6 +68,8 @@ const MOVE_SESSION_ERROR_KEYS: Record<string, string> = {
   SESSION_MOVE_NOT_SUPPORTED: 'messages.moveSessionNotSupported',
   SESSION_ALREADY_IN_PROJECT: 'messages.moveSessionAlreadyInProject',
   SESSION_MOVE_FAILED: 'messages.moveSessionFailed',
+  SESSION_NOT_FOUND: 'messages.moveSessionNotFound',
+  PROJECT_NOT_FOUND: 'messages.moveSessionProjectNotFound',
 };
 
 export function useSidebarController({
@@ -1296,12 +1298,12 @@ export function useSidebarController({
       }
       setPendingMove(null);
 
-      let payload;
+      let payload: { data?: { warning?: string }; error?: { code?: string } } | null = null;
       try {
         const response = await api.moveSession(session.id, projectId);
         payload = await response.json().catch(() => null);
         if (!response.ok) {
-          const reasonKey = MOVE_SESSION_ERROR_KEYS[payload?.error?.code as string];
+          const reasonKey = MOVE_SESSION_ERROR_KEYS[payload?.error?.code ?? ''];
           console.error('[Sidebar] Error moving session:', payload?.error ?? response.status);
           alert(reasonKey ? t(reasonKey) : t('messages.moveSessionError'));
           return;
@@ -1312,21 +1314,26 @@ export function useSidebarController({
         return;
       }
 
-      // The session has moved from here on, whatever the refresh does.
+      // The session has moved from here on. Refresh first, so the open chat is
+      // reselected against lists that already hold it under its new project.
+      let refreshed = true;
+      try {
+        await onRefresh();
+        reloadRecentConversations();
+      } catch (error) {
+        refreshed = false;
+        console.error('[Sidebar] Session moved, but the lists could not be refreshed:', error);
+      }
       // The open chat sends its project's folder as cwd; keep it on the old
       // one and the next turn would resume from where the transcript was.
       if (selectedSession?.id === session.id) {
         onSessionSelect({ ...session, __projectId: projectId });
       }
-      // Moved, but its transcript path is not saved yet; history follows once indexed.
-      if (payload?.data?.warning === 'SESSION_MOVE_TRANSCRIPT_PENDING') {
+      if (!refreshed) {
+        alert(t('messages.moveSessionRefreshFailed'));
+      } else if (payload?.data?.warning === 'SESSION_MOVE_TRANSCRIPT_PENDING') {
+        // Moved, but its transcript path is not saved yet; history follows once indexed.
         alert(t('messages.moveSessionTranscriptPending'));
-      }
-      try {
-        await onRefresh();
-        reloadRecentConversations();
-      } catch (error) {
-        console.error('[Sidebar] Session moved, but the lists could not be refreshed:', error);
       }
     },
     [onRefresh, onSessionSelect, pendingMove, reloadRecentConversations, selectedSession, t],
