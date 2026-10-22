@@ -16,7 +16,7 @@ import type {
   SessionTranscriptRelocation,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
-import { AppError, sliceTailPage } from '@/shared/utils.js';
+import { AppError, normalizeProjectPath, sliceTailPage } from '@/shared/utils.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -415,6 +415,106 @@ export const sessionsService = {
     }
 
     return relocated;
+  },
+
+  /**
+   * Files a session under another project, so it lists there and its next run
+   * works in that project's directory.
+   *
+   * A session that has run has a transcript recording where it ran; the
+   * provider's `transcriptRelocation` facet (the one a relocated project folder
+   * uses) moves or rewrites it for the new directory, otherwise the indexer
+   * would file it back and the provider would not find it when resuming.
+   * Providers without that facet can only move sessions that have not run yet.
+   */
+  async moveSessionToProject(
+    sessionId: string,
+    projectId: string,
+  ): Promise<{ sessionId: string; projectId: string; projectPath: string }> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const target = projectsDb.getProjectById(projectId);
+    if (!target) {
+      throw new AppError(`Project "${projectId}" was not found.`, {
+        code: 'PROJECT_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    if (normalizeProjectPath(session.project_path ?? '') === normalizeProjectPath(target.project_path)) {
+      throw new AppError('The session already belongs to this project.', {
+        code: 'SESSION_ALREADY_IN_PROJECT',
+        statusCode: 409,
+      });
+    }
+
+    // A live turn keeps writing to the old transcript with the old directory,
+    // and so does an idle Claude CLI that still has the session open.
+    // shortcut: an idle `codex resume` in a terminal is not detectable here; would need a Codex process registry.
+    const running = await this.listRunningSessions();
+    const openInClaudeCli = session.provider_session_id
+      ? (await listBusyClaudeCliSessions({ includeIdle: true }))
+        .some((live) => live.providerSessionId === session.provider_session_id)
+      : false;
+    if (openInClaudeCli || running.some((entry) => entry.sessionId === sessionId)) {
+      throw new AppError('Stop the session before moving it to another project.', {
+        code: 'SESSION_MOVE_RUNNING',
+        statusCode: 409,
+      });
+    }
+
+    const transcriptRelocation = providerRegistry.resolveProvider(session.provider as LLMProvider)
+      .transcriptRelocation;
+    // OpenCode keeps no per-session file (`jsonl_path` is NULL) and Cursor
+    // files transcripts by a directory hash; neither can be moved here.
+    if (session.provider_session_id && (!transcriptRelocation || !session.jsonl_path)) {
+      throw new AppError(`Sessions cannot be moved for provider "${session.provider}".`, {
+        code: 'SESSION_MOVE_NOT_SUPPORTED',
+        statusCode: 409,
+      });
+    }
+
+    const previousProjectPath = session.project_path ?? '';
+    // Row before transcript, as a project relocation does: the watcher may
+    // index the moved transcript (whose cwd names the new folder) mid-move.
+    sessionsDb.updateSessionProjectPath(sessionId, target.project_path);
+    if (transcriptRelocation && session.jsonl_path) {
+      let relocated;
+      try {
+        relocated = await transcriptRelocation.relocateTranscripts({
+          sessions: [{ sessionId, jsonlPath: session.jsonl_path }],
+          oldProjectPath: previousProjectPath,
+          newProjectPath: target.project_path,
+        });
+      } catch (error) {
+        // The provider undid its file changes; put the row back to match.
+        sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
+        sessionsDb.updateSessionTranscriptPath(sessionId, session.jsonl_path);
+        throw error;
+      }
+
+      if (relocated.length === 0) {
+        // Skipped (not where the provider expects it, or a path it cannot
+        // encode): nothing moved on disk, so neither may the row.
+        sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
+        throw new AppError('This session\'s transcript could not be moved to the target project.', {
+          code: 'SESSION_MOVE_NOT_SUPPORTED',
+          statusCode: 409,
+        });
+      }
+      sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
+    }
+
+    sessionHistoryCache.invalidate(sessionId);
+    await broadcastSessionUpserted(sessionId);
+
+    return { sessionId, projectId: target.project_id, projectPath: target.project_path };
   },
 
   /**

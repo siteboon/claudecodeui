@@ -322,6 +322,20 @@ export const sessionsDb = {
   },
 
   /**
+   * Files one session under another project. Its transcript path is updated
+   * separately (`updateSessionTranscriptPath`) once the file has moved.
+   */
+  updateSessionProjectPath(sessionId: string, projectPath: string): void {
+    const db = getConnection();
+    const normalizedProjectPath = normalizeProjectPath(projectPath);
+    db.prepare(
+      `UPDATE sessions
+       SET project_path = ?
+       WHERE session_id = ?`
+    ).run(normalizedProjectPath, sessionId);
+  },
+
+  /**
    * Detaches a session from its provider session so the next run starts a new
    * one.
    *

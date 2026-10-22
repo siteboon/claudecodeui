@@ -1546,6 +1546,8 @@ export type SessionRowActions = {
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Branches a session into an independent one. Rows hide it for providers that cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
+  /** Opens the move-to-project picker. Rows hide it for providers that cannot. */
+  onMoveSession?: (session: SessionWithProvider) => void;
 };
 
 export type SidebarProjectListProps = SessionRowActions & {

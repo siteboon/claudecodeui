@@ -78,7 +78,8 @@
     "rename": "Umbenennen",
     "joinCommunity": "Community beitreten",
     "reportIssue": "Problem melden",
-    "starOnGithub": "Stern auf GitHub"
+    "starOnGithub": "Stern auf GitHub",
+    "moveSession": "In Projekt verschieben"
   },
   "branding": {
     "openSource": "Open Source"
@@ -125,7 +126,8 @@
     "restoreSessionError": "Fehler beim Wiederherstellen der Sitzung. Bitte erneut versuchen.",
     "forkSessionError": "Diese Sitzung konnte nicht verzweigt werden. Bitte erneut versuchen.",
     "deleteSessionsPartialFailure_one": "{{count}} Sitzung von {{total}} konnte nicht gelöscht werden. Bitte erneut versuchen.",
-    "deleteSessionsPartialFailure_other": "{{count}} von {{total}} Sitzungen konnten nicht gelöscht werden. Bitte erneut versuchen."
+    "deleteSessionsPartialFailure_other": "{{count}} von {{total}} Sitzungen konnten nicht gelöscht werden. Bitte erneut versuchen.",
+    "moveSessionError": "Diese Sitzung konnte nicht verschoben werden."
   },
   "version": {
     "updateAvailable": "Update verfügbar",
@@ -170,5 +172,10 @@
     "archiveSessions_other": "{{count}} Sitzungen archivieren",
     "archiveSessionsNotice_one": "Beim Archivieren verschwindet die Sitzung aus der aktiven Liste, ihr Verlauf bleibt erhalten.",
     "archiveSessionsNotice_other": "Beim Archivieren verschwinden die Sitzungen aus der aktiven Liste, ihr Verlauf bleibt erhalten."
+  },
+  "moveSession": {
+    "title": "Sitzung in Projekt verschieben",
+    "description": "Die Unterhaltung läuft im Ordner des gewählten Projekts weiter.",
+    "noProjects": "Es gibt kein anderes Projekt, in das diese Sitzung verschoben werden kann."
   }
 }

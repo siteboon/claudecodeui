@@ -81,7 +81,7 @@ type UseSidebarControllerArgs = {
 export function useSidebarController({
   projects,
   selectedProject,
-  selectedSession: _selectedSession,
+  selectedSession,
   activeSessions,
   backgroundSessionIds,
   isLoading,
@@ -160,6 +160,8 @@ export function useSidebarController({
   // same rows (still on screen until the first settles) from sending them again.
   const sessionIdsBeingDeletedRef = useRef<Set<string>>(new Set());
   const [showVersionModal, setShowVersionModal] = useState(false);
+  // The session whose move-to-project picker is open.
+  const [pendingMove, setPendingMove] = useState<SessionWithProvider | null>(null);
   const [searchMode, setSearchMode] = useState<SidebarSearchMode>('projects');
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -1334,6 +1336,39 @@ export function useSidebarController({
     [onSessionSelect, t],
   );
 
+  /**
+   * Files the pending session under another project. Both lists are refetched
+   * because the session leaves one project's page and joins another's.
+   */
+  const confirmMoveSession = useCallback(
+    async (projectId: string) => {
+      const session = pendingMove;
+      if (!session) {
+        return;
+      }
+      setPendingMove(null);
+
+      try {
+        const response = await api.moveSession(session.id, projectId);
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          throw new Error(payload?.error?.message || `HTTP ${response.status}`);
+        }
+        await onRefresh();
+        reloadRecentConversations();
+        // The open chat sends its project's folder as cwd; keep it on the old
+        // one and the next turn would resume from where the transcript was.
+        if (selectedSession?.id === session.id) {
+          onSessionSelect({ ...session, __projectId: projectId });
+        }
+      } catch (error) {
+        console.error('[Sidebar] Error moving session:', error);
+        alert(`${t('messages.moveSessionError')}\n${error instanceof Error ? error.message : ''}`);
+      }
+    },
+    [onRefresh, onSessionSelect, pendingMove, reloadRecentConversations, selectedSession, t],
+  );
+
   const collapseSidebar = useCallback(() => {
     setSidebarVisible(false);
   }, [setSidebarVisible]);
@@ -1379,6 +1414,9 @@ export function useSidebarController({
     toggleProject,
     handleSessionClick,
     forkSession,
+    pendingMove,
+    setPendingMove,
+    confirmMoveSession,
     toggleStarProject,
     isProjectStarred,
     getProjectSessions,
