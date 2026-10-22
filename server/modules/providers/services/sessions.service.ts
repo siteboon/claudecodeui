@@ -541,10 +541,16 @@ export const sessionsService = {
           if (movedBack) {
             restoreRow(true);
           } else {
-            // The watcher repoints jsonl_path once it indexes the moved file.
             console.warn(
               `[sessions] Session ${sessionId} stays in ${target.project_path}; its transcript is at ${relocated[0].jsonlPath}.`,
             );
+            // Claude's copy lives in another folder now, so the row must name it;
+            // a transient failure may let this one through.
+            try {
+              sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
+            } catch {
+              // Still failing; the watcher repoints it if it indexes the moved file.
+            }
           }
           throw error;
         }

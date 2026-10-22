@@ -1272,9 +1272,11 @@ export async function extractFirstValidJsonlData<T>(
  * session to another project. Used by the Codex relocation facet.
  *
  * `holder` picks the object carrying `cwd` on one row (Codex: its `payload`).
- * Only rows whose `cwd` is exactly `fromPath` change, as in Claude's facet: a
- * subdirectory of the old project has no counterpart in an unrelated target,
- * and nothing routes a session by a subdirectory cwd. Every other line, including
+ * Only rows whose `cwd` is `fromPath` (compared after `normalizeProjectPath`)
+ * change; Claude's facet also swaps only the exact folder. A subdirectory of
+ * the old project has no counterpart in an unrelated target, and the Codex
+ * synchronizer files a session by `session_meta`, not by a later
+ * `turn_context`. Every other line, including
  * ones that do not parse, is kept byte for byte.
  */
 export function rewriteJsonlCwd(
