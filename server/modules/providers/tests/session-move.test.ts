@@ -242,11 +242,13 @@ test('a Claude move whose transcript path cannot be saved puts the file back and
     try {
       await assert.rejects(
         () => sessionsService.moveSessionToProject('claude-rb', targetId),
-        (error: { code?: string; statusCode?: number }) => error.code === 'SESSION_MOVE_FAILED' && error.statusCode === 503,
+        (error: { code?: string; statusCode?: number }) => error.code === 'SESSION_MOVE_FAILED' && error.statusCode === 500,
       );
     } finally {
       writes.restore();
     }
+    // The injected write failure (both attempts) is what rolled the move back.
+    assert.equal(writes.calls(), 3, 'two failed path writes, then the restore');
 
     assert.equal(await exists(movedCopy), false);
     assert.equal(JSON.parse((await readFile(transcript, 'utf8')).split('\n')[0]).cwd, source);
@@ -271,7 +273,7 @@ for (const failure of ['skips the file', 'throws'] as const) test(`a Claude move
       return [];
     };
     const writes = failTranscriptPathWrites(Number.POSITIVE_INFINITY);
-    let result;
+    let result: Awaited<ReturnType<typeof sessionsService.moveSessionToProject>> | undefined;
     try {
       // The session did move, so the client must treat it as moved.
       result = await sessionsService.moveSessionToProject('claude-stuck', targetId);
@@ -282,8 +284,8 @@ for (const failure of ['skips the file', 'throws'] as const) test(`a Claude move
 
     assert.equal(relocateCalls, 2, 'the move-back was attempted');
     assert.equal(await exists(movedCopy), true);
-    assert.equal(result.projectId, targetId);
-    assert.ok(result.warning);
+    assert.equal(result?.projectId, targetId);
+    assert.equal(result?.warning, 'SESSION_MOVE_TRANSCRIPT_PENDING');
     assert.equal(await exists(transcript), false);
     const row = sessionsDb.getSessionById('claude-stuck');
     assert.equal(row?.project_path, target, 'the row stays where the file is');

@@ -128,7 +128,8 @@
     "forkSessionError": "Could not fork this session. Please try again.",
     "deleteSessionsPartialFailure_one": "{{count}} session out of {{total}} could not be deleted. Please try again.",
     "deleteSessionsPartialFailure_other": "{{count}} of {{total}} sessions could not be deleted. Please try again.",
-    "moveSessionError": "Could not move this session."
+    "moveSessionError": "Could not move this session.",
+    "moveSessionTranscriptPending": "The session was moved, but its history may take a moment to show up."
   },
   "version": {
     "updateAvailable": "Update available",

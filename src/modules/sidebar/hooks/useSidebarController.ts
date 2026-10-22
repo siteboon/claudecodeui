@@ -1350,8 +1350,8 @@ export function useSidebarController({
 
       try {
         const response = await api.moveSession(session.id, projectId);
+        const payload = await response.json().catch(() => null);
         if (!response.ok) {
-          const payload = await response.json().catch(() => null);
           throw new Error(payload?.error?.message || `HTTP ${response.status}`);
         }
         await onRefresh();
@@ -1360,6 +1360,10 @@ export function useSidebarController({
         // one and the next turn would resume from where the transcript was.
         if (selectedSession?.id === session.id) {
           onSessionSelect({ ...session, __projectId: projectId });
+        }
+        // Moved, but its transcript path is not saved yet; history follows once indexed.
+        if (payload?.data?.warning === 'SESSION_MOVE_TRANSCRIPT_PENDING') {
+          alert(t('messages.moveSessionTranscriptPending'));
         }
       } catch (error) {
         console.error('[Sidebar] Error moving session:', error);
