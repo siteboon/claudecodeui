@@ -525,16 +525,21 @@ export const sessionsService = {
         // Codex rewrites in place, so the row already names the file. Claude
         // moves it to another folder, and the row has to follow.
         if (movedPath !== session.jsonl_path) {
-          try {
+          // A busy database usually clears quickly, and moving the file back is
+          // the expensive way out, so the cheap write gets a second try.
+          let writeError: unknown = null;
+          for (const attempt of [1, 2]) {
             try {
               sessionsDb.updateSessionTranscriptPath(sessionId, movedPath);
-            } catch {
-              // A busy database usually clears quickly; moving the file back
-              // is the expensive way out, so try the cheap write once more.
-              await new Promise((resolve) => setTimeout(resolve, 100));
-              sessionsDb.updateSessionTranscriptPath(sessionId, movedPath);
+              writeError = null;
+              break;
+            } catch (error) {
+              writeError = error;
+              console.warn(`[sessions] Could not save the moved transcript path of ${sessionId} (attempt ${attempt}):`, error);
+              if (attempt === 1) await new Promise((resolve) => setTimeout(resolve, 100));
             }
-          } catch (error) {
+          }
+          if (writeError) {
             // The file has moved but the row cannot say so: move it back to
             // where the old row points, then restore the row.
             // shortcut: the move-back swaps target -> old, so a row that already named the target before the move is changed too; keep the original bytes if that ever matters.
@@ -550,14 +555,18 @@ export const sessionsService = {
             }
             if (movedBack) {
               restoreRow(true);
-            } else {
-              // The row keeps the target project, where the file now is; the
-              // watcher repoints jsonl_path once it indexes the moved file.
-              console.warn(
-                `[sessions] Session ${sessionId} is in ${target.project_path} but its row still names ${session.jsonl_path}; the transcript is at ${movedPath}.`,
-              );
+              throw writeError;
             }
-            throw error;
+            // The row keeps the target project, where the file now is; the
+            // watcher repoints jsonl_path once it indexes the moved file.
+            console.warn(
+              `[sessions] Session ${sessionId} is in ${target.project_path} but its row still names ${session.jsonl_path}; the transcript is at ${movedPath}.`,
+            );
+            throw new AppError('The session was moved, but saving where its transcript now lives failed.', {
+              code: 'SESSION_MOVE_INCOMPLETE',
+              statusCode: 500,
+              details: writeError instanceof Error ? writeError.message : String(writeError),
+            });
           }
         }
       }

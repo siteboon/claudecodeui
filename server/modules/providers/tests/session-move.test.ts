@@ -253,7 +253,7 @@ test('a Claude move whose transcript path cannot be saved puts the file back and
   });
 });
 
-test('a Claude move that can neither be saved nor undone keeps the session in the target and reports the error', async () => {
+for (const failure of ['skips the file', 'throws'] as const) test(`a Claude move that can neither be saved nor undone (move-back ${failure}) keeps the session in the target and says so`, async () => {
   await withDatabase(async (directory) => {
     const { target, movedCopy, targetId } = await seedClaudeSession(directory, 'claude-stuck');
     const facet = providerRegistry.resolveProvider('claude').transcriptRelocation!;
@@ -263,11 +263,16 @@ test('a Claude move that can neither be saved nor undone keeps the session in th
     // The real facet reports a transcript it cannot place by leaving it out, not by throwing.
     facet.relocateTranscripts = async (input) => {
       relocateCalls += 1;
-      return relocateCalls > 1 ? [] : realRelocate(input);
+      if (relocateCalls === 1) return realRelocate(input);
+      if (failure === 'throws') throw new Error('cannot move back');
+      return [];
     };
     const writes = failTranscriptPathWrites(Number.POSITIVE_INFINITY);
     try {
-      await assert.rejects(() => sessionsService.moveSessionToProject('claude-stuck', targetId), /database busy/);
+      await assert.rejects(
+        () => sessionsService.moveSessionToProject('claude-stuck', targetId),
+        (error: { code?: string }) => error.code === 'SESSION_MOVE_INCOMPLETE',
+      );
     } finally {
       writes.restore();
       delete (facet as { relocateTranscripts?: unknown }).relocateTranscripts;
