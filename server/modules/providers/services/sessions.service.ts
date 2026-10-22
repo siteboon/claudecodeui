@@ -512,20 +512,31 @@ export const sessionsService = {
         sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
       } catch (error) {
         // The file has moved but the row cannot say so: move it back to where
-        // the old row points, then restore the row.
-        await transcriptRelocation.relocateTranscripts({
-          sessions: relocated,
-          oldProjectPath: target.project_path,
-          newProjectPath: previousProjectPath ?? '',
-        }).catch((rollbackError) => {
-          console.warn(`[sessions] Could not move the transcript of ${sessionId} back:`, rollbackError);
-        });
-        sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
-        // The watcher may have pointed the row at the moved copy meanwhile.
+        // the old row points, then restore the row. If the file cannot go back,
+        // the row keeps the target project, which is where the file now is.
+        let movedBack = false;
         try {
+          movedBack = (await transcriptRelocation.relocateTranscripts({
+            sessions: relocated,
+            oldProjectPath: target.project_path,
+            newProjectPath: previousProjectPath ?? '',
+          })).length > 0;
+        } catch (rollbackError) {
+          console.warn(`[sessions] Could not move the transcript of ${sessionId} back:`, rollbackError);
+        }
+        if (!movedBack) {
+          console.warn(
+            `[sessions] Session ${sessionId} stays in ${target.project_path}; its transcript is at ${relocated[0].jsonlPath}.`,
+          );
+          throw error;
+        }
+        try {
+          sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
+          // The watcher may have pointed the row at the moved copy meanwhile.
           sessionsDb.updateSessionTranscriptPath(sessionId, session.jsonl_path);
-        } catch {
-          // Same write that just failed; the original error is the one to report.
+        } catch (restoreError) {
+          // Likely the same failure; the original error is the one to report.
+          console.warn(`[sessions] Could not restore the row of ${sessionId}:`, restoreError);
         }
         throw error;
       }

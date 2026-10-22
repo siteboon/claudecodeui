@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 
 async function withDatabase(runTest: (directory: string) => Promise<void>): Promise<void> {
@@ -169,5 +170,39 @@ test('a failed transcript-path write moves the rollout back and restores the row
 
     assert.equal(JSON.parse(await readFile(transcript, 'utf8')).payload.cwd, source);
     assert.equal(sessionsDb.getSessionById('codex-rb')?.project_path, source);
+  });
+});
+
+test('when the rollout cannot be moved back either, the row stays with the file in the target project', async () => {
+  await withDatabase(async (directory) => {
+    const source = path.join(directory, 'source');
+    const target = path.join(directory, 'target');
+    const transcript = path.join(directory, 'rollout-stuck.jsonl');
+    await writeFile(transcript, JSON.stringify({ type: 'session_meta', payload: { id: 'codex-stuck', cwd: source } }));
+    const now = new Date().toISOString();
+    sessionsDb.createSession('codex-stuck', 'codex', source, 'Stuck', now, now, transcript);
+    const targetId = createTargetProject(target);
+
+    const facet = providerRegistry.resolveProvider('codex').transcriptRelocation!;
+    const realRelocate = facet.relocateTranscripts.bind(facet);
+    let calls = 0;
+    facet.relocateTranscripts = async (input) => {
+      calls += 1;
+      if (calls > 1) throw new Error('cannot move back');
+      return realRelocate(input);
+    };
+    const realUpdate = sessionsDb.updateSessionTranscriptPath;
+    sessionsDb.updateSessionTranscriptPath = () => {
+      throw new Error('disk full');
+    };
+    try {
+      await assert.rejects(() => sessionsService.moveSessionToProject('codex-stuck', targetId), /disk full/);
+    } finally {
+      sessionsDb.updateSessionTranscriptPath = realUpdate;
+      facet.relocateTranscripts = realRelocate;
+    }
+
+    assert.equal(JSON.parse(await readFile(transcript, 'utf8')).payload.cwd, target);
+    assert.equal(sessionsDb.getSessionById('codex-stuck')?.project_path, target, 'the row follows the file, not the plan');
   });
 });
