@@ -240,7 +240,10 @@ test('a Claude move whose transcript path cannot be saved puts the file back and
     // Both forward attempts land and then fail, so the restore has to undo them.
     const writes = failTranscriptPathWrites(2, true);
     try {
-      await assert.rejects(() => sessionsService.moveSessionToProject('claude-rb', targetId), /database busy/);
+      await assert.rejects(
+        () => sessionsService.moveSessionToProject('claude-rb', targetId),
+        (error: { code?: string; statusCode?: number }) => error.code === 'SESSION_MOVE_FAILED' && error.statusCode === 503,
+      );
     } finally {
       writes.restore();
     }
@@ -253,9 +256,9 @@ test('a Claude move whose transcript path cannot be saved puts the file back and
   });
 });
 
-for (const failure of ['skips the file', 'throws'] as const) test(`a Claude move that can neither be saved nor undone (move-back ${failure}) keeps the session in the target and says so`, async () => {
+for (const failure of ['skips the file', 'throws'] as const) test(`a Claude move that can neither be saved nor undone (move-back ${failure}) reports it as moved, with a warning`, async () => {
   await withDatabase(async (directory) => {
-    const { target, movedCopy, targetId } = await seedClaudeSession(directory, 'claude-stuck');
+    const { target, transcript, movedCopy, targetId } = await seedClaudeSession(directory, 'claude-stuck');
     const facet = providerRegistry.resolveProvider('claude').transcriptRelocation!;
     assert.equal(Object.hasOwn(facet, 'relocateTranscripts'), false);
     const realRelocate = facet.relocateTranscripts.bind(facet);
@@ -268,11 +271,10 @@ for (const failure of ['skips the file', 'throws'] as const) test(`a Claude move
       return [];
     };
     const writes = failTranscriptPathWrites(Number.POSITIVE_INFINITY);
+    let result;
     try {
-      await assert.rejects(
-        () => sessionsService.moveSessionToProject('claude-stuck', targetId),
-        (error: { code?: string }) => error.code === 'SESSION_MOVE_INCOMPLETE',
-      );
+      // The session did move, so the client must treat it as moved.
+      result = await sessionsService.moveSessionToProject('claude-stuck', targetId);
     } finally {
       writes.restore();
       delete (facet as { relocateTranscripts?: unknown }).relocateTranscripts;
@@ -280,6 +282,12 @@ for (const failure of ['skips the file', 'throws'] as const) test(`a Claude move
 
     assert.equal(relocateCalls, 2, 'the move-back was attempted');
     assert.equal(await exists(movedCopy), true);
-    assert.equal(sessionsDb.getSessionById('claude-stuck')?.project_path, target, 'the row stays where the file is');
+    assert.equal(result.projectId, targetId);
+    assert.ok(result.warning);
+    assert.equal(await exists(transcript), false);
+    const row = sessionsDb.getSessionById('claude-stuck');
+    assert.equal(row?.project_path, target, 'the row stays where the file is');
+    // Not saved yet; the watcher repoints it once it indexes the moved copy.
+    assert.equal(row?.jsonl_path, transcript);
   });
 });
