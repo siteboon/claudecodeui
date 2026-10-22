@@ -133,7 +133,6 @@
     "moveSessionNotSupported": "Diese Sitzung kann nicht in ein anderes Projekt verschoben werden.",
     "moveSessionAlreadyInProject": "Die Sitzung gehört bereits zu diesem Projekt.",
     "moveSessionFailed": "Die Sitzung konnte nicht verschoben werden; sie bleibt in ihrem Projekt.",
-    "moveSessionRefreshFailed": "Die Sitzung wurde verschoben, aber die Listen konnten nicht aktualisiert werden. Lade die Seite neu, um sie im neuen Projekt zu sehen.",
     "moveSessionNotFound": "Diese Sitzung existiert nicht mehr.",
     "moveSessionProjectNotFound": "Das Zielprojekt existiert nicht mehr."
   },

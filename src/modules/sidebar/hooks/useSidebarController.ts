@@ -1374,24 +1374,17 @@ export function useSidebarController({
         return;
       }
 
-      // The session has moved from here on. Refresh first, so the open chat is
-      // reselected against lists that already hold it under its new project.
-      let refreshed = true;
-      try {
-        await onRefresh();
-        reloadRecentConversations();
-      } catch (error) {
-        refreshed = false;
-        console.error('[Sidebar] Session moved, but the lists could not be refreshed:', error);
-      }
-      // The open chat sends its project's folder as cwd; keep it on the old
-      // one and the next turn would resume from where the transcript was.
+      // The session has moved from here on. Follow it right away: the open chat
+      // sends its project's folder as cwd, and until it is reselected the next
+      // turn would resume from where the transcript was. The project selection
+      // catches up once the refreshed lists hold the session under its new one.
       if (selectedSession?.id === session.id) {
         onSessionSelect({ ...session, __projectId: projectId });
       }
-      if (!refreshed) {
-        alert(t('messages.moveSessionRefreshFailed'));
-      } else if (payload?.data?.warning === 'SESSION_MOVE_TRANSCRIPT_PENDING') {
+      // Reports its own failures (handleSidebarRefresh), so nothing to catch here.
+      await onRefresh();
+      reloadRecentConversations();
+      if (payload?.data?.warning === 'SESSION_MOVE_TRANSCRIPT_PENDING') {
         // Moved, but its transcript path is not saved yet; history follows once indexed.
         alert(t('messages.moveSessionTranscriptPending'));
       }
