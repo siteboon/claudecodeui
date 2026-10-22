@@ -127,12 +127,17 @@
     "stop": "Stoppen",
     "hintText": {
       "ctrlEnter": "Strg+Enter zum Senden • Shift+Enter für neue Zeile • Tab zum Moduswechsel • / für Slash-Befehle",
-      "enter": "Enter zum Senden • Shift+Enter für neue Zeile • Tab zum Moduswechsel • / für Slash-Befehle"
+      "enter": "Enter zum Senden • Shift+Enter für neue Zeile • Tab zum Moduswechsel • / für Slash-Befehle",
+      "appendQueued": "Enter zum Anhängen an die Nachricht in der Warteschlange"
     },
     "clickToChangeMode": "Klicken, um den Berechtigungsmodus zu ändern (oder Tab in der Eingabe drücken)",
     "showAllCommands": "Alle Befehle anzeigen",
     "clearInput": "Eingabe leeren",
-    "scrollToBottom": "Nach unten scrollen"
+    "scrollToBottom": "Nach unten scrollen",
+    "queue": {
+      "append": "An Nachricht in der Warteschlange anhängen",
+      "notCombinable": "Nachricht konnte nicht in die Warteschlange gestellt werden: Ein Slash-Befehl läuft für sich allein und kann daher nicht mit der Nachricht in der Warteschlange kombiniert werden. Sende ihn, nachdem die Nachricht in der Warteschlange gesendet wurde."
+    }
   },
   "providerSelection": {
     "title": "KI-Assistent wählen",

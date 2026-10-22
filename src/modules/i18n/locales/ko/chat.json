@@ -132,7 +132,7 @@
       "ctrlEnter": "Ctrl+Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어",
       "enter": "Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어",
       "queue": "Enter로 다음 메시지 대기열에 추가",
-      "updateQueued": "Enter로 대기 중인 메시지 업데이트"
+      "appendQueued": "Enter로 대기 중인 메시지에 추가"
     },
     "clickToChangeMode": "클릭하여 권한 모드 변경 (또는 입력창에서 Tab)",
     "showAllCommands": "모든 명령어 보기",
@@ -140,7 +140,8 @@
     "scrollToBottom": "맨 아래로 스크롤",
     "queue": {
       "sendNext": "다음 메시지 대기열에 추가",
-      "update": "대기 중인 메시지 업데이트",
+      "append": "대기 중인 메시지에 추가",
+      "notCombinable": "메시지를 대기열에 추가하지 못했습니다: 슬래시 명령어는 단독으로 실행되므로 대기 중인 메시지와 합칠 수 없습니다. 대기 중인 메시지가 전송된 후에 보내세요.",
       "label": "대기 중",
       "willSend": "완료되면 전송됩니다",
       "edit": "대기 중인 메시지 편집",

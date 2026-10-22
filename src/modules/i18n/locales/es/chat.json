@@ -138,7 +138,7 @@
       "ctrlEnter": "Ctrl+Enter para enviar • Shift+Enter para nueva línea • Tab para cambiar de modo • / para comandos",
       "enter": "Enter para enviar • Shift+Enter para nueva línea • Tab para cambiar de modo • / para comandos",
       "queue": "Enter para poner en cola tu siguiente mensaje",
-      "updateQueued": "Enter para actualizar el mensaje en cola"
+      "appendQueued": "Enter para añadir al mensaje en cola"
     },
     "clickToChangeMode": "Haz clic para cambiar el modo de permisos (o pulsa Tab en el campo de texto)",
     "showAllCommands": "Mostrar todos los comandos",
@@ -146,7 +146,8 @@
     "scrollToBottom": "Ir al final",
     "queue": {
       "sendNext": "Poner en cola el siguiente mensaje",
-      "update": "Actualizar mensaje en cola",
+      "append": "Añadir al mensaje en cola",
+      "notCombinable": "No se pudo poner el mensaje en cola: un comando con / se ejecuta por separado, así que no se puede combinar con el mensaje en cola. Envíalo cuando se haya enviado el mensaje en cola.",
       "label": "En cola",
       "willSend": "Se enviará cuando esto termine",
       "edit": "Editar mensaje en cola",

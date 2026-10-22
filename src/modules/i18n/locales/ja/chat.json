@@ -121,10 +121,15 @@
     "stop": "停止",
     "hintText": {
       "ctrlEnter": "Ctrl+Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド",
-      "enter": "Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド"
+      "enter": "Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド",
+      "appendQueued": "Enterでキュー内のメッセージに追加"
     },
     "clickToChangeMode": "クリックで権限モードを変更（または入力欄でTab）",
-    "showAllCommands": "すべてのコマンドを表示"
+    "showAllCommands": "すべてのコマンドを表示",
+    "queue": {
+      "append": "キュー内のメッセージに追加",
+      "notCombinable": "メッセージをキューに追加できませんでした: スラッシュコマンドは単独で実行されるため、キュー内のメッセージと結合できません。キュー内のメッセージが送信された後に送信してください。"
+    }
   },
   "providerSelection": {
     "title": "AIアシスタントを選択",

@@ -132,7 +132,7 @@
       "ctrlEnter": "Ctrl+Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令",
       "enter": "Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令",
       "queue": "Enter 排队发送下一条消息",
-      "updateQueued": "Enter 更新排队消息"
+      "appendQueued": "Enter 添加到排队消息"
     },
     "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",
     "showAllCommands": "显示所有命令",
@@ -140,7 +140,8 @@
     "scrollToBottom": "滚动到底部",
     "queue": {
       "sendNext": "排队发送下一条消息",
-      "update": "更新排队消息",
+      "append": "添加到排队消息",
+      "notCombinable": "无法排队发送消息：斜杠命令会单独运行，因此不能与排队消息合并。请在排队消息发送后再发送。",
       "label": "已排队",
       "willSend": "将在当前完成后发送",
       "edit": "编辑排队消息",

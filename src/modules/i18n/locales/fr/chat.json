@@ -128,12 +128,17 @@
     "stop": "Arrêter",
     "hintText": {
       "ctrlEnter": "Ctrl+Entrée pour envoyer • Maj+Entrée pour nouvelle ligne • Tab pour changer de mode • / pour les commandes slash",
-      "enter": "Entrée pour envoyer • Maj+Entrée pour nouvelle ligne • Tab pour changer de mode • / pour les commandes slash"
+      "enter": "Entrée pour envoyer • Maj+Entrée pour nouvelle ligne • Tab pour changer de mode • / pour les commandes slash",
+      "appendQueued": "Entrée pour ajouter au message en file d'attente"
     },
     "clickToChangeMode": "Cliquez pour changer le mode de permission (ou appuyez sur Tab dans la saisie)",
     "showAllCommands": "Afficher toutes les commandes",
     "clearInput": "Effacer la saisie",
-    "scrollToBottom": "Défiler vers le bas"
+    "scrollToBottom": "Défiler vers le bas",
+    "queue": {
+      "append": "Ajouter au message en file d'attente",
+      "notCombinable": "Impossible de mettre le message en file d'attente : une commande slash s'exécute à part et ne peut donc pas être combinée avec le message en file d'attente. Envoyez-la une fois le message en file d'attente envoyé."
+    }
   },
   "providerSelection": {
     "title": "Choisissez votre assistant IA",

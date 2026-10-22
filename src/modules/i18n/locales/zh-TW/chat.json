@@ -121,12 +121,17 @@
     "stop": "停止",
     "hintText": {
       "ctrlEnter": "Ctrl+Enter 傳送 • Shift+Enter 換行 • Tab 切換模式 • / 斜線指令",
-      "enter": "Enter 傳送 • Shift+Enter 換行 • Tab 切換模式 • / 斜線指令"
+      "enter": "Enter 傳送 • Shift+Enter 換行 • Tab 切換模式 • / 斜線指令",
+      "appendQueued": "Enter 加入排隊訊息"
     },
     "clickToChangeMode": "點擊變更權限模式（或在輸入框中按 Tab）",
     "showAllCommands": "顯示所有指令",
     "clearInput": "清空輸入",
-    "scrollToBottom": "捲動到底部"
+    "scrollToBottom": "捲動到底部",
+    "queue": {
+      "append": "加入排隊訊息",
+      "notCombinable": "無法將訊息加入排隊：斜線指令會單獨執行，因此無法與排隊訊息合併。請在排隊訊息送出後再傳送。"
+    }
   },
   "thinkingMode": {
     "selector": {

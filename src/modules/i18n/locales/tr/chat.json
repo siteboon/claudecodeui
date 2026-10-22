@@ -127,12 +127,17 @@
     "stop": "Durdur",
     "hintText": {
       "ctrlEnter": "Göndermek için Ctrl+Enter • Yeni satır için Shift+Enter • Mod değiştirmek için Tab • Slash komutları için /",
-      "enter": "Göndermek için Enter • Yeni satır için Shift+Enter • Mod değiştirmek için Tab • Slash komutları için /"
+      "enter": "Göndermek için Enter • Yeni satır için Shift+Enter • Mod değiştirmek için Tab • Slash komutları için /",
+      "appendQueued": "Sıradaki mesaja eklemek için Enter"
     },
     "clickToChangeMode": "İzin modunu değiştirmek için tıkla (veya girdide Tab tuşuna bas)",
     "showAllCommands": "Tüm komutları göster",
     "clearInput": "Girdiyi temizle",
-    "scrollToBottom": "En alta git"
+    "scrollToBottom": "En alta git",
+    "queue": {
+      "append": "Sıradaki mesaja ekle",
+      "notCombinable": "Mesaj sıraya eklenemedi: Slash komutu tek başına çalışır, bu yüzden sıradaki mesajla birleştirilemez. Sıradaki mesaj gönderildikten sonra gönderin."
+    }
   },
   "providerSelection": {
     "title": "AI Asistanını Seç",

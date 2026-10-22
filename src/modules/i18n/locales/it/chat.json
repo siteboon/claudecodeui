@@ -127,12 +127,17 @@
     "stop": "Ferma",
     "hintText": {
       "ctrlEnter": "Ctrl+Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi",
-      "enter": "Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi"
+      "enter": "Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi",
+      "appendQueued": "Invio per aggiungere al messaggio in coda"
     },
     "clickToChangeMode": "Clicca per cambiare modalità permessi (o premi Tab nell'input)",
     "showAllCommands": "Mostra tutti i comandi",
     "clearInput": "Cancella input",
-    "scrollToBottom": "Scorri in basso"
+    "scrollToBottom": "Scorri in basso",
+    "queue": {
+      "append": "Aggiungi al messaggio in coda",
+      "notCombinable": "Impossibile mettere in coda il messaggio: un comando con / viene eseguito da solo, quindi non può essere unito al messaggio in coda. Invialo dopo che il messaggio in coda è stato inviato."
+    }
   },
   "providerSelection": {
     "title": "Scegli il tuo assistente AI",
