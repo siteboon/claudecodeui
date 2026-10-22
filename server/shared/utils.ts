@@ -27,6 +27,7 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderSkillSource,
+  QueuedChatMessage,
   SubagentActivity,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
@@ -87,6 +88,40 @@ export function asyncHandler(
   return (req, res, next) => {
     void Promise.resolve(handler(req, res, next)).catch(next);
   };
+}
+
+// ---------------------------
+//----------------- QUEUED CHAT MESSAGE UTILITIES ------------
+/**
+ * Reads a stored queued chat message (the parsed JSON of
+ * `session_drafts.queued_message`), or returns null when it has nothing to
+ * send: no text and no attachments.
+ *
+ * Used by the Database module's drafts repository, which appends a follow-up
+ * to the waiting message, and by the Scheduled Messages dispatcher, which sends
+ * it. Both must read a stored message the same way, or a merge could keep what
+ * the dispatcher then ignores. Rows from before attachments existed hold
+ * image-only descriptors in `images`; they are read as `attachments`.
+ * `options` is kept only when it is a plain object.
+ */
+export function readQueuedChatMessage(value: unknown): QueuedChatMessage | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const content = typeof record.content === 'string' ? record.content : '';
+  const attachments = Array.isArray(record.attachments)
+    ? record.attachments
+    : Array.isArray(record.images)
+      ? record.images
+      : [];
+  if (!content.trim() && attachments.length === 0) {
+    return null;
+  }
+  const options = record.options && typeof record.options === 'object' && !Array.isArray(record.options)
+    ? record.options as Record<string, unknown>
+    : undefined;
+  return { content, ...(options ? { options } : {}), attachments };
 }
 
 // ---------------------------

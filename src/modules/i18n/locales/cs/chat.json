@@ -165,7 +165,7 @@
       "ctrlEnter": "Ctrl+Enter pro odeslání • Shift+Enter pro nový řádek • Tab pro změnu režimu • / pro příkazy s lomítkem",
       "enter": "Enter pro odeslání • Shift+Enter pro nový řádek • Tab pro změnu režimu • / pro příkazy s lomítkem",
       "queue": "Enter pro zařazení další zprávy do fronty",
-      "updateQueued": "Enter pro aktualizaci zprávy ve frontě"
+      "appendQueued": "Enter pro přidání ke zprávě ve frontě"
     },
     "clickToChangeMode": "Kliknutím změníte režim oprávnění (nebo stiskněte Tab ve vstupním poli)",
     "showAllCommands": "Zobrazit všechny příkazy",
@@ -173,7 +173,8 @@
     "scrollToBottom": "Posunout na konec",
     "queue": {
       "sendNext": "Zařadit další zprávu do fronty",
-      "update": "Aktualizovat zprávu ve frontě",
+      "append": "Přidat ke zprávě ve frontě",
+      "notCombinable": "Zprávu se nepodařilo zařadit do fronty: Příkaz s lomítkem se spouští samostatně, takže ho nelze spojit se zprávou ve frontě. Odešlete ho, až bude zpráva ve frontě odeslána.",
       "label": "Ve frontě",
       "willSend": "Odešle se po dokončení",
       "edit": "Upravit zprávu ve frontě",
@@ -187,6 +188,8 @@
     "loadingModels": "Načítání modelů…",
     "modelMenu": "Vyberte model a úroveň uvažování",
     "permissionHeading": "Jak schvalovat akce, které provádí {{provider}}?",
+    "permissionCycleHint": "Režim přepnete klávesou Tab ve vstupním poli",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Nahrazení dřívější zprávy",
       "filesNotReverted": "soubory, které agent už změnil, se nevrátí do původního stavu",
