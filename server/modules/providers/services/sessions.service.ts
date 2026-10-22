@@ -540,19 +540,29 @@ export const sessionsService = {
           }
           if (movedBack) {
             restoreRow(true);
-          } else {
-            console.warn(
-              `[sessions] Session ${sessionId} stays in ${target.project_path}; its transcript is at ${relocated[0].jsonlPath}.`,
-            );
-            // Claude's copy lives in another folder now, so the row must name it;
-            // a transient failure may let this one through.
+            throw error;
+          }
+
+          // The session stays in the target, where its transcript now is. The
+          // row already says so unless the file changed path (Claude moves it
+          // to another folder; Codex rewrites in place), so retry that write.
+          // Once the row matches the file, the move is complete after all.
+          let rowMatchesFile = relocated[0].jsonlPath === session.jsonl_path;
+          if (!rowMatchesFile) {
             try {
               sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
-            } catch {
-              // Still failing; the watcher repoints it if it indexes the moved file.
+              rowMatchesFile = true;
+            } catch (retryError) {
+              console.warn(
+                `[sessions] Session ${sessionId} is in ${target.project_path} but its row still names ${session.jsonl_path}; the transcript is at ${relocated[0].jsonlPath}:`,
+                retryError,
+              );
             }
           }
-          throw error;
+          if (!rowMatchesFile) {
+            throw error;
+          }
+          console.warn(`[sessions] Moved session ${sessionId} after a failed rollback attempt:`, error);
         }
       }
     } finally {

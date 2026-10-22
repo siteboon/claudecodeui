@@ -174,7 +174,7 @@ test('a failed transcript-path write moves the rollout back and restores the row
   });
 });
 
-test('when the rollout cannot be moved back either, the row stays with the file in the target project', async () => {
+test('when a Codex rollout cannot be moved back either, the move completes in the target project', async () => {
   await withDatabase(async (directory) => {
     const source = path.join(directory, 'source');
     const target = path.join(directory, 'target');
@@ -198,7 +198,8 @@ test('when the rollout cannot be moved back either, the row stays with the file 
       throw new Error('disk full');
     };
     try {
-      await assert.rejects(() => sessionsService.moveSessionToProject('codex-stuck', targetId), /disk full/);
+      // The rollout is rewritten in place, so the row already matches it.
+      await sessionsService.moveSessionToProject('codex-stuck', targetId);
     } finally {
       sessionsDb.updateSessionTranscriptPath = realUpdate;
       // Drop the own-property override so the class method shows through again.
@@ -207,6 +208,7 @@ test('when the rollout cannot be moved back either, the row stays with the file 
 
     assert.equal(JSON.parse(await readFile(transcript, 'utf8')).payload.cwd, target);
     assert.equal(sessionsDb.getSessionById('codex-stuck')?.project_path, target, 'the row follows the file, not the plan');
+    assert.equal(calls, 2, 'the move-back was attempted');
     assert.equal(sessionsDb.getSessionById('codex-stuck')?.jsonl_path, transcript);
   });
 });
@@ -285,7 +287,8 @@ test('a Claude move that cannot be undone leaves the row on the moved copy', asy
       return realUpdate(...args);
     };
     try {
-      await assert.rejects(() => sessionsService.moveSessionToProject('claude-stuck', targetId), /database busy/);
+      // The retried write gets through, so the row matches the moved copy and the move completes.
+      await sessionsService.moveSessionToProject('claude-stuck', targetId);
     } finally {
       sessionsDb.updateSessionTranscriptPath = realUpdate;
       delete (facet as { relocateTranscripts?: unknown }).relocateTranscripts;
@@ -296,5 +299,7 @@ test('a Claude move that cannot be undone leaves the row on the moved copy', asy
     const row = sessionsDb.getSessionById('claude-stuck');
     assert.equal(row?.project_path, target);
     assert.equal(row?.jsonl_path, movedCopy, 'the row must not name the deleted source file');
+    assert.equal(relocateCalls, 2, 'the move-back was attempted');
+    assert.equal(updateCalls, 2, 'the transcript path write was retried');
   });
 });

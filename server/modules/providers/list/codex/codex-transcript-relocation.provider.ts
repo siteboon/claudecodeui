@@ -9,10 +9,11 @@ import { rewriteJsonlCwd } from '@/shared/utils.js';
  * Keeps Codex sessions with the project they were moved to.
  *
  * Codex rollouts are filed by date, not by directory, and a thread is resumed
- * by id, so the files stay where they are. Only the `cwd` they record changes
- * (`session_meta` and every `turn_context` that names the old folder): the synchronizer files a session
- * under that cwd, and left stale it would move the session back to the old
- * folder on its next pass.
+ * by id, so the files stay where they are. Only the `cwd` they record changes,
+ * on every row that names the old folder exactly. The synchronizer files a
+ * session under `session_meta.cwd`, which left stale would move the session
+ * back to the old folder on its next pass; `turn_context` rows are rewritten so
+ * the rollout agrees with itself.
  *
  * Never throws for one rollout: a project relocation runs this after the
  * Claude facet has already committed its moves, and a throw here would make
