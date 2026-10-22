@@ -128,7 +128,11 @@
     "deleteSessionsPartialFailure_one": "{{count}} Sitzung von {{total}} konnte nicht gelöscht werden. Bitte erneut versuchen.",
     "deleteSessionsPartialFailure_other": "{{count}} von {{total}} Sitzungen konnten nicht gelöscht werden. Bitte erneut versuchen.",
     "moveSessionError": "Diese Sitzung konnte nicht verschoben werden.",
-    "moveSessionTranscriptPending": "Die Sitzung wurde verschoben, ihr Verlauf erscheint aber eventuell erst nach einem Moment."
+    "moveSessionTranscriptPending": "Die Sitzung wurde verschoben, ihr Verlauf erscheint aber eventuell erst nach einem Moment.",
+    "moveSessionRunning": "Beende die Sitzung, bevor du sie in ein anderes Projekt verschiebst.",
+    "moveSessionNotSupported": "Diese Sitzung kann nicht in ein anderes Projekt verschoben werden.",
+    "moveSessionAlreadyInProject": "Die Sitzung gehört bereits zu diesem Projekt.",
+    "moveSessionFailed": "Die Sitzung konnte nicht verschoben werden; sie bleibt in ihrem Projekt."
   },
   "version": {
     "updateAvailable": "Update verfügbar",
