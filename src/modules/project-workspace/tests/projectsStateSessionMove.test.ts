@@ -110,10 +110,11 @@ test('a move also drops the old project row listed under the provider-native id'
     ],
   });
   const { useProjectsState } = await import('@/modules/project-workspace/hooks/useProjectsState');
+  const navigate = vi.fn();
   const { result } = renderHook(() =>
     useProjectsState({
       sessionId: 'native-1',
-      navigate: vi.fn() as never,
+      navigate: navigate as never,
       subscribe: (listener: ServerEventListener) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
@@ -132,6 +133,11 @@ test('a move also drops the old project row listed under the provider-native id'
   });
 
   const projectA = result.current.projects.find((project) => project.projectId === 'project-a');
+  const projectB = result.current.projects.find((project) => project.projectId === 'project-b');
   assert.deepEqual((projectA?.sessions ?? []).map((session) => session.id), []);
+  assert.deepEqual((projectB?.sessions ?? []).map((session) => session.id), [SESSION_ID]);
   assert.equal(result.current.selectedProject?.projectId, 'project-b', 'the workspace follows the session it shows');
+  assert.equal(result.current.selectedSession?.id, SESSION_ID);
+  assert.equal(result.current.selectedSession?.__projectId, 'project-b');
+  assert.deepEqual(navigate.mock.calls, [[`/session/${SESSION_ID}`]]);
 });
