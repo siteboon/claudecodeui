@@ -290,6 +290,10 @@ export const api = {
   // `upToAnchorId` (all of it when omitted). The source is left untouched.
   forkSession: (sessionId: string, body: { upToAnchorId?: string; title?: string } = {}) =>
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
+  // Files the session under another project; its next run works in that
+  // project's directory.
+  moveSession: (sessionId: string, projectId: string) =>
+    post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/move`, { projectId }),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
   // What one agent of a workflow run did, read from its transcript on demand

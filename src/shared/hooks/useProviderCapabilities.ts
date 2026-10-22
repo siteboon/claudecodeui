@@ -12,6 +12,7 @@ import type { LLMProvider } from '@/shared/types';
 type ProviderCapabilityRow = {
   provider: LLMProvider;
   supportsSessionForking?: boolean;
+  supportsSessionMoving?: boolean;
 };
 
 /**
@@ -55,12 +56,12 @@ async function loadCapabilities(): Promise<Partial<Record<LLMProvider, ProviderC
 }
 
 /**
- * Reports which providers can branch a session's transcript.
+ * Reports which providers have one capability flag set.
  *
  * Empty until the matrix loads, so an affordance is never offered and then
  * withdrawn.
  */
-export function useSessionForkingProviders(): Set<LLMProvider> {
+function useProvidersWith(capability: 'supportsSessionForking' | 'supportsSessionMoving'): Set<LLMProvider> {
   const [providers, setProviders] = useState<Set<LLMProvider>>(() => new Set());
 
   useEffect(() => {
@@ -68,19 +69,29 @@ export function useSessionForkingProviders(): Set<LLMProvider> {
 
     void loadCapabilities().then((capabilities) => {
       if (cancelled) return;
-      const forkable = new Set<LLMProvider>();
+      const supported = new Set<LLMProvider>();
       for (const row of Object.values(capabilities)) {
-        if (row?.supportsSessionForking) {
-          forkable.add(row.provider);
+        if (row?.[capability]) {
+          supported.add(row.provider);
         }
       }
-      setProviders(forkable);
+      setProviders(supported);
     });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [capability]);
 
   return providers;
+}
+
+/** Providers that can branch a session's transcript. */
+export function useSessionForkingProviders(): Set<LLMProvider> {
+  return useProvidersWith('supportsSessionForking');
+}
+
+/** Providers whose sessions can be moved to another project. */
+export function useSessionMovingProviders(): Set<LLMProvider> {
+  return useProvidersWith('supportsSessionMoving');
 }

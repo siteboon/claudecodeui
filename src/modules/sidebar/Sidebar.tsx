@@ -141,6 +141,9 @@ function Sidebar({
     refreshProjects,
     updateSessionSummary,
     forkSession,
+    pendingMove,
+    setPendingMove,
+    confirmMoveSession,
     collapseSidebar: handleCollapseSidebar,
     expandSidebar: handleExpandSidebar,
     setShowNewProject,
@@ -225,6 +228,7 @@ function Sidebar({
     onSessionSelect: handleSessionClick,
     onDeleteSession: showDeleteSessionConfirmation,
     onForkSession: forkSession,
+    onMoveSession: setPendingMove,
     onLoadMoreSessions: loadMoreSessionsForProject,
     onNewSession,
     onStartEditingSession: startEditingSession,
@@ -253,6 +257,11 @@ function Sidebar({
         onConfirmDeleteProject={confirmDeleteProject}
         onConfirmDeleteSession={confirmDeleteSession}
         onConfirmDeleteSessions={confirmDeleteSessions}
+        pendingMove={pendingMove}
+        onCancelMove={() => setPendingMove(null)}
+        onConfirmMove={(projectId) => {
+          void confirmMoveSession(projectId);
+        }}
         showVersionModal={showVersionModal}
         onCloseVersionModal={() => setShowVersionModal(false)}
         releaseInfo={releaseInfo}

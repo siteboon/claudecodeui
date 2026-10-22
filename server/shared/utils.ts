@@ -1246,6 +1246,51 @@ export async function extractFirstValidJsonlData<T>(
   return null;
 }
 
+/**
+ * Rewrites the working directory a JSONL transcript records, for moving a
+ * session to another project.
+ *
+ * `holder` picks the object carrying `cwd` on one row (the row itself for
+ * Claude, its `payload` for Codex). Rows whose `cwd` is one of `fromPaths`, or
+ * a directory inside one, are re-serialized onto `toPath`; every other line,
+ * including ones that do not parse, is kept byte for byte.
+ */
+export function rewriteJsonlCwd(
+  content: string,
+  fromPaths: string[],
+  toPath: string,
+  holder: (row: AnyRecord) => AnyRecord | null | undefined,
+): string {
+  const froms = [...new Set(fromPaths.map(normalizeProjectPath).filter(Boolean))];
+  const relocate = (cwd: string): string | null => {
+    const normalized = normalizeProjectPath(cwd);
+    for (const from of froms) {
+      if (normalized === from) return toPath;
+      const prefix = from.endsWith(path.sep) ? from : `${from}${path.sep}`;
+      if (normalized.startsWith(prefix)) return path.join(toPath, normalized.slice(prefix.length));
+    }
+    return null;
+  };
+  return content
+    .split('\n')
+    .map((line) => {
+      if (!line.includes('"cwd"')) return line;
+      try {
+        const row = JSON.parse(line) as AnyRecord;
+        const target = holder(row);
+        const relocated = target && typeof target.cwd === 'string' ? relocate(target.cwd) : null;
+        if (!target || relocated === null) {
+          return line;
+        }
+        target.cwd = relocated;
+        return JSON.stringify(row);
+      } catch {
+        return line;
+      }
+    })
+    .join('\n');
+}
+
 // ---------------------------
 //----------------- CLAUDE TRANSCRIPT ROW UTILITIES ------------
 /**

@@ -48,7 +48,7 @@ async function assertDirectoryExists(projectPath: string): Promise<void> {
  * the database keeps describing what is on disk.
  *
  * Known limitation: only providers with a `transcriptRelocation` facet (Claude
- * today) have their artifacts moved or rewritten. Codex, Cursor and OpenCode
+ * and Codex today) have their artifacts moved or rewritten. Cursor and OpenCode
  * record the cwd in their own artifacts, so while their rows move with the
  * project, the next synchronization of such a session (once it is used again,
  * or on a full scan) reads the old cwd back, re-creates the old folder as a

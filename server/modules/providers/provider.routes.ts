@@ -962,6 +962,22 @@ router.post(
   }),
 );
 
+router.post(
+  '/sessions/:sessionId/move',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const projectId = typeof req.body?.projectId === 'string' ? req.body.projectId.trim() : '';
+    if (!projectId) {
+      throw new AppError('projectId is required.', {
+        code: 'INVALID_PROJECT_ID',
+        statusCode: 400,
+      });
+    }
+    const result = await sessionsService.moveSessionToProject(sessionId, projectId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
 router.put(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {

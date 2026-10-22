@@ -79,7 +79,8 @@
     "rename": "Rename",
     "joinCommunity": "Join Community",
     "reportIssue": "Report Issue",
-    "starOnGithub": "Star on GitHub"
+    "starOnGithub": "Star on GitHub",
+    "moveSession": "Move to project"
   },
   "branding": {
     "openSource": "Open Source"
@@ -126,7 +127,8 @@
     "restoreSessionError": "Error restoring session. Please try again.",
     "forkSessionError": "Could not fork this session. Please try again.",
     "deleteSessionsPartialFailure_one": "{{count}} session out of {{total}} could not be deleted. Please try again.",
-    "deleteSessionsPartialFailure_other": "{{count}} of {{total}} sessions could not be deleted. Please try again."
+    "deleteSessionsPartialFailure_other": "{{count}} of {{total}} sessions could not be deleted. Please try again.",
+    "moveSessionError": "Could not move this session."
   },
   "version": {
     "updateAvailable": "Update available",
@@ -179,5 +181,10 @@
     "archiveSessions_other": "Archive {{count}} sessions",
     "archiveSessionsNotice_one": "Archive keeps the session out of the active list while preserving its history.",
     "archiveSessionsNotice_other": "Archive keeps the sessions out of the active list while preserving their history."
+  },
+  "moveSession": {
+    "title": "Move session to project",
+    "description": "The conversation continues in the selected project's folder.",
+    "noProjects": "There is no other project to move this session to."
   }
 }

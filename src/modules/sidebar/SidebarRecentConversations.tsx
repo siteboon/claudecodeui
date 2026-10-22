@@ -232,6 +232,14 @@ export default function SidebarRecentConversations({
                     __projectId: conversation.projectId ?? undefined,
                   })
                   : undefined}
+                onMove={sessionActions.onMoveSession
+                  ? () => sessionActions.onMoveSession?.({
+                    id: conversation.sessionId,
+                    summary: conversation.sessionTitle,
+                    __provider: conversation.provider,
+                    __projectId: conversation.projectId ?? undefined,
+                  })
+                  : undefined}
                 t={t}
               />
             </div>
