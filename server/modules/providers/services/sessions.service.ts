@@ -521,48 +521,44 @@ export const sessionsService = {
             statusCode: 409,
           });
         }
-        try {
-          sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
-        } catch (error) {
-          // The file has moved but the row cannot say so: move it back to where
-          // the old row points, then restore the row. If the file cannot go
-          // back, the row keeps the target project, which is where it now is.
-          // shortcut: the move-back swaps target -> old, so a row that already named the target before the move is changed too; keep the original bytes if that ever matters.
-          let movedBack = false;
+        const movedPath = relocated[0].jsonlPath;
+        // Codex rewrites in place, so the row already names the file. Claude
+        // moves it to another folder, and the row has to follow.
+        if (movedPath !== session.jsonl_path) {
           try {
-            movedBack = (await transcriptRelocation.relocateTranscripts({
-              sessions: relocated,
-              oldProjectPath: target.project_path,
-              newProjectPath: previousProjectPath ?? '',
-            })).length > 0;
-          } catch (rollbackError) {
-            console.warn(`[sessions] Could not move the transcript of ${sessionId} back:`, rollbackError);
-          }
-          if (movedBack) {
-            restoreRow(true);
-            throw error;
-          }
-
-          // The session stays in the target, where its transcript now is. The
-          // row already says so unless the file changed path (Claude moves it
-          // to another folder; Codex rewrites in place), so retry that write.
-          // Once the row matches the file, the move is complete after all.
-          let rowMatchesFile = relocated[0].jsonlPath === session.jsonl_path;
-          if (!rowMatchesFile) {
             try {
-              sessionsDb.updateSessionTranscriptPath(sessionId, relocated[0].jsonlPath);
-              rowMatchesFile = true;
-            } catch (retryError) {
+              sessionsDb.updateSessionTranscriptPath(sessionId, movedPath);
+            } catch {
+              // A busy database usually clears quickly; moving the file back
+              // is the expensive way out, so try the cheap write once more.
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              sessionsDb.updateSessionTranscriptPath(sessionId, movedPath);
+            }
+          } catch (error) {
+            // The file has moved but the row cannot say so: move it back to
+            // where the old row points, then restore the row.
+            // shortcut: the move-back swaps target -> old, so a row that already named the target before the move is changed too; keep the original bytes if that ever matters.
+            let movedBack = false;
+            try {
+              movedBack = (await transcriptRelocation.relocateTranscripts({
+                sessions: relocated,
+                oldProjectPath: target.project_path,
+                newProjectPath: previousProjectPath ?? '',
+              })).length > 0;
+            } catch (rollbackError) {
+              console.warn(`[sessions] Could not move the transcript of ${sessionId} back:`, rollbackError);
+            }
+            if (movedBack) {
+              restoreRow(true);
+            } else {
+              // The row keeps the target project, where the file now is; the
+              // watcher repoints jsonl_path once it indexes the moved file.
               console.warn(
-                `[sessions] Session ${sessionId} is in ${target.project_path} but its row still names ${session.jsonl_path}; the transcript is at ${relocated[0].jsonlPath}:`,
-                retryError,
+                `[sessions] Session ${sessionId} is in ${target.project_path} but its row still names ${session.jsonl_path}; the transcript is at ${movedPath}.`,
               );
             }
-          }
-          if (!rowMatchesFile) {
             throw error;
           }
-          console.warn(`[sessions] Moved session ${sessionId} after a failed rollback attempt:`, error);
         }
       }
     } finally {
