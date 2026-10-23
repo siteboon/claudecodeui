@@ -13,6 +13,12 @@
     "markdownShort": "MD",
     "textShort": "TXT"
   },
+  "agentPrompts": {
+    "alwaysAllow": "Permitir siempre",
+    "alwaysAllowsLabel": "Permite siempre:",
+    "dismissQuestion": "Descartar",
+    "needsYourInput": "{{agent}} necesita tu respuesta"
+  },
   "messageTypes": {
     "user": "U",
     "error": "Error",

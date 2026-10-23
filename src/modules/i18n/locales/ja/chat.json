@@ -11,6 +11,12 @@
     "copyAsMarkdown": "Markdownとしてコピー",
     "copyAsText": "テキストとしてコピー"
   },
+  "agentPrompts": {
+    "alwaysAllow": "常に許可",
+    "alwaysAllowsLabel": "常に許可する対象:",
+    "dismissQuestion": "却下",
+    "needsYourInput": "{{agent}} が回答を求めています"
+  },
   "messageTypes": {
     "user": "U",
     "error": "エラー",

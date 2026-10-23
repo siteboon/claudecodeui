@@ -16,6 +16,20 @@ import {
 } from '@/modules/chat/composer/Confirmation';
 
 registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
+// OpenCode's question tool asks the same kind of multiple-choice questions.
+registerPermissionPanel('question', AskUserQuestionPanel);
+
+/**
+ * The patterns an "always" answer approves, when the request carries them
+ * (OpenCode puts them in `context.always`); null for requests that use
+ * Claude's allowed-tools rules instead.
+ */
+function readAlwaysPatterns(context: unknown): string[] | null {
+  if (!context || typeof context !== 'object' || !Array.isArray((context as { always?: unknown }).always)) {
+    return null;
+  }
+  return ((context as { always: unknown[] }).always).filter((pattern): pattern is string => typeof pattern === 'string');
+}
 
 type PermissionRequestsBannerProps = {
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -60,10 +74,15 @@ export default function PermissionRequestsBanner({
         }
 
         const rawInput = formatToolInputForDisplay(request.input);
-        const permissionEntry = buildClaudeToolPermissionEntry(request.toolName, rawInput);
+        const alwaysPatterns = readAlwaysPatterns(request.context);
+        // With its own "always" patterns the request is remembered by the
+        // provider, not as a Claude allowed-tools rule.
+        const permissionEntry = alwaysPatterns ? null : buildClaudeToolPermissionEntry(request.toolName, rawInput);
         const settings = getClaudeSettings();
         const alreadyAllowed = permissionEntry ? settings.allowedTools.includes(permissionEntry) : false;
-        const rememberLabel = alreadyAllowed ? 'Allow (saved)' : 'Allow & remember';
+        const rememberLabel = alwaysPatterns
+          ? t('chat:agentPrompts.alwaysAllow')
+          : alreadyAllowed ? 'Allow (saved)' : 'Allow & remember';
         const matchingRequestIds = permissionEntry
           ? pendingPermissionRequests
               .filter(
@@ -87,6 +106,14 @@ export default function PermissionRequestsBanner({
                 {permissionEntry && (
                   <div className="mt-1 text-xs text-muted-foreground">
                     Allow rule: <code className="rounded bg-muted px-1 py-0.5 text-xs">{permissionEntry}</code>
+                  </div>
+                )}
+                {alwaysPatterns && alwaysPatterns.length > 0 && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                    <span>{t('chat:agentPrompts.alwaysAllowsLabel')}</span>
+                    {alwaysPatterns.map((pattern) => (
+                      <code key={pattern} className="break-all rounded bg-muted px-1 py-0.5 text-xs">{pattern}</code>
+                    ))}
                   </div>
                 )}
               </ConfirmationRequest>
@@ -113,12 +140,17 @@ export default function PermissionRequestsBanner({
               <ConfirmationAction
                 variant="outline"
                 onClick={() => {
+                  if (alwaysPatterns) {
+                    // The provider applies "always" to its other open requests itself.
+                    handlePermissionDecision(request.requestId, { allow: true, rememberEntry: alwaysPatterns.join(', ') });
+                    return;
+                  }
                   if (permissionEntry && !alreadyAllowed) {
                     handleGrantToolPermission({ entry: permissionEntry, toolName: request.toolName });
                   }
                   handlePermissionDecision(matchingRequestIds, { allow: true, rememberEntry: permissionEntry });
                 }}
-                disabled={!permissionEntry}
+                disabled={alwaysPatterns ? alwaysPatterns.length === 0 : !permissionEntry}
               >
                 {rememberLabel}
               </ConfirmationAction>

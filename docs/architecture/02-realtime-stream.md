@@ -155,7 +155,7 @@ reload can make the transcript look completely different from what streamed.
 | `tool_result` | yes, a separate frame | yes, a separate frame | history only | **never** — attached to the `tool_use` frame instead |
 | `error` | yes | yes | yes, from stderr and spawn failures | yes |
 | `status` with `text: 'token_budget'` | yes | yes | no | yes, once at process exit |
-| `permission_request` / `permission_resolved` / `permission_cancelled` | yes, the only provider | no | no | no |
+| `permission_request` / `permission_resolved` / `permission_cancelled` | yes | no | no | yes, over its private `opencode serve` (none on the `opencode run` fallback) |
 | `complete` | yes, exactly one | yes | yes | yes |
 
 Two entries deserve the emphasis:
@@ -362,15 +362,15 @@ pins both directions. The counter shows context-window occupancy, not the turn's
 feeding it a summed `result.usage` is what made it bounce before commit `ab13376d`.
 
 The other arm of the `status` branch — the one that writes `statusText` and `canInterrupt`
-into the activity map — **has no producer today.** All three `status` emitters
-(`claude-runtime.provider.js:968`, `codex-runtime.provider.js:406`,
-`opencode-runtime.provider.js:338`) send `text: 'token_budget'`. The arm is live code
+into the activity map — **has no producer today.** All four `status` emitters
+(`claude-runtime.provider.js:1276`, `codex-runtime.provider.ts:430`,
+`opencode-runtime.provider.js:378`, `opencode-serve.runtime.ts:1048`) send `text: 'token_budget'`. The arm is live code
 kept for a provider that reports progress text; do not delete it expecting nothing to
 change, and do not assume the status text you see in the UI came from it.
 
 ## Permission requests
 
-Claude is the only provider with interactive tool approvals. Its runtime's `canUseTool`
+Claude and OpenCode have interactive tool approvals. Claude's runtime's `canUseTool`
 callback emits `permission_request` with a `requestId` and blocks until the client answers
 with `chat.permission-response`. When an answer arrives it emits `permission_resolved`
 with the same id; if the run ends or the request times out it emits `permission_cancelled`
@@ -379,6 +379,27 @@ socket: without the outbound `permission_resolved`, the `permission_request` sit
 the replay buffer had nothing to retract it, so a mid-run page refresh resurrected an
 already-answered prompt — and a second tab kept it forever. `permissionPromptReplay.test.tsx`
 pins the replayed request-then-resolution netting out to nothing.
+
+OpenCode's `opencode run` answers every permission request itself, so each OpenCode turn
+runs on a private `opencode serve` instead (`opencode-serve.runtime.ts`, loopback only,
+random Basic-auth password). The server is stopped when its turn ends and, from the moment
+it is spawned, when CloudCLI exits (SIGTERM, SIGINT, SIGHUP, or a crash that runs `exit`
+hooks); a hard kill of CloudCLI (SIGKILL, OOM) leaves it running. Its `permission.asked` events
+become `permission_request` frames (`toolName` is OpenCode's permission, e.g. `bash` or
+`external_directory`; `context.always` holds what "Always allow" approves) and its
+`question.asked` events become requests for the `question` tool, rendered by the
+AskUserQuestion panel (`context.answerFormat: 'label-lists'`; its Dismiss rejects the
+question, which ends OpenCode's turn). bypassPermissions turns, which nobody answers, hide
+the question tool: new sessions are created with `question: deny` and a resumed session
+that shows it gets that rule appended. The same
+`permission_resolved` / `permission_cancelled` frames retract them, including when OpenCode
+settles a request on its own (the cascade after "Always allow" or Deny). Permission
+requests time out after `OPENCODE_TOOL_APPROVAL_TIMEOUT_MS` (55 s), questions after
+`OPENCODE_QUESTION_TIMEOUT_MS` (30 min). "Always allow" lives in OpenCode's server memory,
+which a per-turn server forgets, so the runtime remembers the approved patterns per chat
+session (in memory) and answers matching requests in later turns without a prompt. When
+the private server cannot start or lacks the API, the turn runs on `opencode run` as
+before, where `ask` rules are rejected.
 
 The client keeps the pending list in `ChatInterface` state, not in the store — permission
 kinds are among the five that are never persisted as rows. The rules:

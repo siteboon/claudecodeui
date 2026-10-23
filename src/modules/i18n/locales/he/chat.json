@@ -13,6 +13,12 @@
     "markdownShort": "MD",
     "textShort": "TXT"
   },
+  "agentPrompts": {
+    "alwaysAllow": "לאפשר תמיד",
+    "alwaysAllowsLabel": "מאפשר תמיד:",
+    "dismissQuestion": "דחייה",
+    "needsYourInput": "{{agent}} ממתין לתשובה"
+  },
   "messageTypes": {
     "user": "U",
     "error": "שגיאה",

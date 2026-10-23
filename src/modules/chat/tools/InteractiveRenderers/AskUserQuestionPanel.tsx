@@ -9,7 +9,8 @@ const NO_QUESTIONS: Question[] = [];
 
 /**
  * Registered by chat's PermissionRequestsBanner as the permission panel for
- * AskUserQuestion requests, so the user answers the model's questions inline.
+ * Claude's AskUserQuestion and OpenCode's question tool, so the user answers
+ * the agent's questions inline.
  */
 export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   request,
@@ -18,6 +19,12 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   const { t } = useTranslation();
   const input = request.input as { questions?: Question[] } | undefined;
   const questions: Question[] = input?.questions ?? NO_QUESTIONS;
+  const context = request.context as { answerFormat?: unknown; agentName?: unknown } | undefined;
+  // OpenCode takes one list of picked labels per question, in question order,
+  // and its "Dismiss" rejects the question, which ends OpenCode's turn; Claude
+  // takes a map of joined answers, and its "Skip" lets the agent carry on.
+  const answersAsLabelLists = context?.answerFormat === 'label-lists';
+  const agentName = typeof context?.agentName === 'string' && context.agentName ? context.agentName : 'Claude';
 
   const [currentStep, setCurrentStep] = useState(0);
   const [selections, setSelections] = useState<Map<number, Set<string>>>(() => new Map());
@@ -90,13 +97,29 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
     return answers;
   }, [questions, selections, otherActive, otherTexts]);
 
+  const buildLabelLists = useCallback(() => questions.map((q, idx) => {
+    const selected = selections.get(idx) || new Set<string>();
+    const labels = q.options.filter((option) => selected.has(option.label)).map((option) => option.label);
+    const otherText = (otherTexts.get(idx) || '').trim();
+    if (otherActive.get(idx) && otherText) labels.push(otherText);
+    return labels;
+  }), [questions, selections, otherActive, otherTexts]);
+
   const handleSubmit = useCallback(() => {
+    if (answersAsLabelLists) {
+      onDecision(request.requestId, { allow: true, updatedInput: { answers: buildLabelLists() } });
+      return;
+    }
     onDecision(request.requestId, { allow: true, updatedInput: { ...input, answers: buildAnswers() } });
-  }, [onDecision, request.requestId, input, buildAnswers]);
+  }, [onDecision, request.requestId, input, buildAnswers, answersAsLabelLists, buildLabelLists]);
 
   const handleSkip = useCallback(() => {
+    if (answersAsLabelLists) {
+      onDecision(request.requestId, { allow: false });
+      return;
+    }
     onDecision(request.requestId, { allow: true, updatedInput: { ...input, answers: {} } });
-  }, [onDecision, request.requestId, input]);
+  }, [onDecision, request.requestId, input, answersAsLabelLists]);
 
   // Keyboard handler for number keys and navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -117,7 +140,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
     }
 
     // 0 for "Other"
-    if (e.key === '0') {
+    if (e.key === '0' && q.custom !== false) {
       e.preventDefault();
       toggleOther(currentStep, multi);
       return;
@@ -147,7 +170,8 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   const q = questions[currentStep];
   const multi = q.multiSelect || false;
   const selected = selections.get(currentStep) || new Set<string>();
-  const isOtherOn = otherActive.get(currentStep) || false;
+  const allowsOther = q.custom !== false;
+  const isOtherOn = allowsOther && (otherActive.get(currentStep) || false);
   const isLast = currentStep === total - 1;
   const isFirst = currentStep === 0;
   const hasCurrentSelection = selected.size > 0 || (isOtherOn && (otherTexts.get(currentStep) || '').trim().length > 0);
@@ -180,7 +204,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
 
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                Claude needs your input
+                {t('chat:agentPrompts.needsYourInput', { agent: agentName })}
               </span>
               {q.header && (
                 <span className="inline-flex items-center rounded border border-blue-100 bg-blue-50 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wider text-blue-600 dark:border-blue-800/50 dark:bg-blue-900/30 dark:text-blue-400">
@@ -280,36 +304,38 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
               );
             })}
 
-            {/* "Other" option */}
-            <button
-              type="button"
-              onClick={() => toggleOther(currentStep, multi)}
-              className={`group flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-all duration-150 ${
-                isOtherOn
-                  ? 'border-blue-300 bg-blue-50/80 ring-1 ring-blue-200/50 dark:border-blue-600 dark:bg-blue-900/25 dark:ring-blue-700/30'
-                  : 'border-dashed border-gray-200 hover:border-gray-300 hover:bg-gray-50/60 dark:border-gray-700/60 dark:hover:border-gray-600 dark:hover:bg-gray-700/40'
-              }`}
-            >
-              <kbd className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded font-mono text-[10px] transition-all duration-150 ${
-                isOtherOn
-                  ? 'bg-blue-500 font-semibold text-white dark:bg-blue-500'
-                  : 'border border-gray-200 bg-gray-100 text-gray-400 group-hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:group-hover:border-gray-600'
-              }`}>
-                0
-              </kbd>
-              <span className={`text-[13px] leading-tight transition-colors ${
-                isOtherOn
-                  ? 'font-medium text-gray-900 dark:text-gray-100'
-                  : 'text-gray-500 dark:text-gray-400'
-              }`}>
-                Other...
-              </span>
-              {isOtherOn && (
-                <svg className="ml-auto h-4 w-4 flex-shrink-0 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                </svg>
-              )}
-            </button>
+            {/* "Other" option, unless the agent accepts only the listed options */}
+            {allowsOther && (
+              <button
+                type="button"
+                onClick={() => toggleOther(currentStep, multi)}
+                className={`group flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-all duration-150 ${
+                  isOtherOn
+                    ? 'border-blue-300 bg-blue-50/80 ring-1 ring-blue-200/50 dark:border-blue-600 dark:bg-blue-900/25 dark:ring-blue-700/30'
+                    : 'border-dashed border-gray-200 hover:border-gray-300 hover:bg-gray-50/60 dark:border-gray-700/60 dark:hover:border-gray-600 dark:hover:bg-gray-700/40'
+                }`}
+              >
+                <kbd className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded font-mono text-[10px] transition-all duration-150 ${
+                  isOtherOn
+                    ? 'bg-blue-500 font-semibold text-white dark:bg-blue-500'
+                    : 'border border-gray-200 bg-gray-100 text-gray-400 group-hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-500 dark:group-hover:border-gray-600'
+                }`}>
+                  0
+                </kbd>
+                <span className={`text-[13px] leading-tight transition-colors ${
+                  isOtherOn
+                    ? 'font-medium text-gray-900 dark:text-gray-100'
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}>
+                  Other...
+                </span>
+                {isOtherOn && (
+                  <svg className="ml-auto h-4 w-4 flex-shrink-0 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                )}
+              </button>
+            )}
 
             {/* Other text input — inline */}
             {isOtherOn && (
@@ -348,7 +374,9 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
             onClick={handleSkip}
             className="text-[11px] text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
           >
-            {isSingle ? t('chat:misc.skipOne') : t('chat:misc.skipAll')}
+            {answersAsLabelLists
+              ? t('chat:agentPrompts.dismissQuestion')
+              : isSingle ? t('chat:misc.skipOne') : t('chat:misc.skipAll')}
             <span className="ml-1 text-[9px] text-gray-300 dark:text-gray-600">Esc</span>
           </button>
 

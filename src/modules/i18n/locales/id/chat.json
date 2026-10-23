@@ -11,6 +11,12 @@
     "copyAsMarkdown": "Salin sebagai Markdown",
     "copyAsText": "Salin sebagai teks"
   },
+  "agentPrompts": {
+    "alwaysAllow": "Selalu izinkan",
+    "alwaysAllowsLabel": "Selalu mengizinkan:",
+    "dismissQuestion": "Tolak",
+    "needsYourInput": "{{agent}} membutuhkan jawaban Anda"
+  },
   "messageTypes": {
     "user": "P",
     "error": "Kesalahan",

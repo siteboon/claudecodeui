@@ -11,6 +11,12 @@
     "copyAsMarkdown": "複製為 Markdown",
     "copyAsText": "複製為純文字"
   },
+  "agentPrompts": {
+    "alwaysAllow": "一律允許",
+    "alwaysAllowsLabel": "一律允許：",
+    "dismissQuestion": "拒絕",
+    "needsYourInput": "{{agent}} 需要您的輸入"
+  },
   "messageTypes": {
     "user": "U",
     "error": "錯誤",

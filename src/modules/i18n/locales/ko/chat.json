@@ -11,6 +11,12 @@
     "copyAsMarkdown": "마크다운으로 복사",
     "copyAsText": "텍스트로 복사"
   },
+  "agentPrompts": {
+    "alwaysAllow": "항상 허용",
+    "alwaysAllowsLabel": "항상 허용 대상:",
+    "dismissQuestion": "거절",
+    "needsYourInput": "{{agent}}의 질문에 답해 주세요"
+  },
   "messageTypes": {
     "user": "U",
     "error": "오류",

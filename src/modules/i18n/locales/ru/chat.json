@@ -11,6 +11,12 @@
     "copyAsMarkdown": "Копировать как Markdown",
     "copyAsText": "Копировать как текст"
   },
+  "agentPrompts": {
+    "alwaysAllow": "Всегда разрешать",
+    "alwaysAllowsLabel": "Всегда разрешает:",
+    "dismissQuestion": "Отклонить",
+    "needsYourInput": "{{agent}} ждёт вашего ответа"
+  },
   "messageTypes": {
     "user": "П",
     "error": "Ошибка",

@@ -579,6 +579,109 @@ test('OpenCode sessions provider reads sqlite history and token usage', { concur
   }
 });
 
+const answeredQuestionState = {
+  status: 'completed',
+  input: {
+    questions: [
+      { question: 'Which color?', header: 'Color', options: [{ label: 'Red' }, { label: 'Blue' }] },
+      { question: 'Which sizes?', header: 'Sizes', multiple: true, options: [{ label: 'Small' }, { label: 'Large, wide' }] },
+    ],
+  },
+  output: 'User has answered your questions: "Which color?"="Red", "Which sizes?"="Small, Large, wide". You can now continue with the user\'s answers in mind.',
+  metadata: { answers: [['Red'], ['Small', 'Large, wide']] },
+};
+
+const answeredQuestionCard = {
+  questions: [
+    { question: 'Which color?', header: 'Color', options: [{ label: 'Red' }, { label: 'Blue' }], multiSelect: false },
+    {
+      question: 'Which sizes?',
+      header: 'Sizes',
+      multiple: true,
+      options: [{ label: 'Small' }, { label: 'Large, wide' }],
+      multiSelect: true,
+    },
+  ],
+  answers: { 'Which color?': 'Red', 'Which sizes?': 'Small, Large, wide' },
+};
+
+test('OpenCode sessions provider shows an answered question with the question card', () => {
+  const [message] = normalizeLiveEvent({
+    type: 'tool_use',
+    sessionID: 'ses_1',
+    part: { type: 'tool', tool: 'question', callID: 'call_q', state: answeredQuestionState },
+  });
+
+  // The chat's AskUserQuestion card, with the picked labels in the input.
+  assert.equal(message?.toolName, 'AskUserQuestion');
+  assert.deepEqual(message?.toolInput, answeredQuestionCard);
+  assert.equal(message?.toolResult?.isError, false);
+});
+
+test('OpenCode question card leaves out empty answers', () => {
+  // A question answered with an empty list (bypassPermissions answers every
+  // question that way) or with empty labels shows as unanswered.
+  const [message] = normalizeLiveEvent({
+    type: 'tool_use',
+    sessionID: 'ses_1',
+    part: {
+      type: 'tool',
+      tool: 'question',
+      callID: 'call_q_empty',
+      state: { ...answeredQuestionState, metadata: { answers: [['', 'Red'], ['']] } },
+    },
+  });
+
+  assert.equal(message?.toolName, 'AskUserQuestion');
+  assert.deepEqual((message?.toolInput as { answers?: unknown })?.answers, { 'Which color?': 'Red' });
+});
+
+/** Rewrites one row of the seeded database (createOpenCodeDatabase). */
+const updateSeededRow = (homeDir: string, table: 'message' | 'part', id: string, data: unknown): void => {
+  const db = new Database(path.join(homeDir, '.local', 'share', 'opencode', 'opencode.db'));
+  try {
+    db.prepare(`UPDATE ${table} SET data = ? WHERE id = ?`).run(JSON.stringify(data), id);
+  } finally {
+    db.close();
+  }
+};
+
+test('OpenCode history shows answered questions with the question card and no error for a Stop', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-question-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  const assistantMessage = { role: 'assistant', time: { created: 1_700_000_002_000 }, parentID: 'message-user' };
+
+  try {
+    await createOpenCodeDatabase(tempRoot, workspacePath);
+    updateSeededRow(tempRoot, 'part', 'part-tool', { type: 'tool', tool: 'question', callID: 'call_q', state: answeredQuestionState });
+    // What OpenCode stores on the assistant message when the user stops the turn.
+    updateSeededRow(tempRoot, 'message', 'message-assistant', {
+      ...assistantMessage,
+      error: { name: 'MessageAbortedError', data: { message: 'Aborted' } },
+    });
+
+    const provider = new OpenCodeSessionsProvider();
+    const stopped = await provider.fetchHistory('open-session-1');
+    assert.equal(stopped.messages.some((message) => message.kind === 'error'), false);
+    const question = stopped.messages.find((message) => message.kind === 'tool_use');
+    assert.equal(question?.toolName, 'AskUserQuestion');
+    assert.deepEqual(question?.toolInput, answeredQuestionCard);
+
+    // A real failure still shows.
+    updateSeededRow(tempRoot, 'message', 'message-assistant', {
+      ...assistantMessage,
+      error: { name: 'APIError', data: { message: 'Rate limited' } },
+    });
+    const failed = await provider.fetchHistory('open-session-1');
+    assert.equal(failed.messages.filter((message) => message.kind === 'error').length, 1);
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 /**
  * Seeds a single OpenCode session with a controllable stored title and first
  * user message. Uses a minimal schema (only the columns the synchronizer reads)

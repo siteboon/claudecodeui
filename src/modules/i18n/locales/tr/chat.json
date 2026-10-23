@@ -11,6 +11,12 @@
     "copyAsMarkdown": "Markdown olarak kopyala",
     "copyAsText": "Metin olarak kopyala"
   },
+  "agentPrompts": {
+    "alwaysAllow": "Her zaman izin ver",
+    "alwaysAllowsLabel": "Her zaman izin verir:",
+    "dismissQuestion": "Reddet",
+    "needsYourInput": "{{agent}} yanıtını bekliyor"
+  },
   "messageTypes": {
     "user": "S",
     "error": "Hata",
