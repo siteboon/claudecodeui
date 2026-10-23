@@ -2249,13 +2249,23 @@ test('extractFirstValidJsonlData skips a malformed line and returns a later vali
 
 test('extractFirstValidJsonlData closes the file stream on the no-match path', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jsonl-fd-'));
-  const openedStreams: import('node:fs').ReadStream[] = [];
+  // Assert the helper calls close() explicitly rather than checking `destroyed`:
+  // the no-match fixture reaches EOF and Node destroys the stream there anyway,
+  // so `destroyed` stays true even without the finally block. Counting close()
+  // calls is what actually fails if the cleanup is removed.
+  let closeCalls = 0;
+  let createdStreams = 0;
   const originalCreateReadStream = nodeFs.createReadStream;
   (nodeFs as { createReadStream: typeof nodeFs.createReadStream }).createReadStream = ((
     ...args: Parameters<typeof nodeFs.createReadStream>
   ) => {
     const stream = originalCreateReadStream(...args);
-    openedStreams.push(stream);
+    createdStreams += 1;
+    const originalClose = stream.close.bind(stream);
+    stream.close = ((...closeArgs: Parameters<typeof stream.close>) => {
+      closeCalls += 1;
+      return originalClose(...closeArgs);
+    }) as typeof stream.close;
     return stream;
   }) as typeof nodeFs.createReadStream;
 
@@ -2269,8 +2279,8 @@ test('extractFirstValidJsonlData closes the file stream on the no-match path', {
     const result = await extractFirstValidJsonlData(filePath, () => 'never');
 
     assert.equal(result, null);
-    assert.equal(openedStreams.length, 1);
-    assert.ok(openedStreams[0].destroyed, 'the read stream must be closed even when no row matches');
+    assert.equal(createdStreams, 1);
+    assert.equal(closeCalls, 1, 'the read stream must be closed even when no row matches');
   } finally {
     (nodeFs as { createReadStream: typeof nodeFs.createReadStream }).createReadStream = originalCreateReadStream;
     await rm(tempRoot, { recursive: true, force: true });
