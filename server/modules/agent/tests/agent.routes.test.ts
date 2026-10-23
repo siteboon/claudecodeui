@@ -51,6 +51,7 @@ function createDependencies(
     queryCursor: unexpectedProviderCall as AgentDependencies['queryCursor'],
     queryCodex: unexpectedProviderCall as AgentDependencies['queryCodex'],
     queryOpenCode: unexpectedProviderCall as AgentDependencies['queryOpenCode'],
+    queryKiro: unexpectedProviderCall as AgentDependencies['queryKiro'],
     GithubClient: class {} as unknown as AgentDependencies['GithubClient'],
     ...overrides,
   };
@@ -288,7 +289,7 @@ test('Agent route starts codex on the catalog default when the request names no 
  * model each provider runtime was started with, plus the catalogs read.
  */
 async function runWithoutModel(
-  provider: 'claude' | 'cursor',
+  provider: 'claude' | 'cursor' | 'kiro',
   catalogs: Record<string, { OPTIONS: { value: string; isCustom?: boolean }[]; DEFAULT: string; CUSTOM_MODELS_ONLY?: boolean }>,
   requestedModel?: string,
 ): Promise<{ models: (string | undefined)[]; catalogReads: string[] }> {
@@ -310,6 +311,7 @@ async function runWithoutModel(
     } as unknown as AgentDependencies['models'],
     queryClaude: recordModel,
     queryCursor: recordModel,
+    queryKiro: recordModel,
   }), async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/agent`, {
       method: 'POST',
@@ -327,6 +329,63 @@ async function runWithoutModel(
 
   return { models, catalogReads };
 }
+
+test('new Kiro API runs use the catalog default unless the request selects a model', async () => {
+  const catalogs = {
+    kiro: {
+      OPTIONS: [{ value: 'custom-kiro', isCustom: true }],
+      DEFAULT: 'custom-kiro',
+      CUSTOM_MODELS_ONLY: true,
+    },
+  };
+
+  assert.deepEqual(await runWithoutModel('kiro', catalogs), {
+    models: ['custom-kiro'],
+    catalogReads: ['kiro'],
+  });
+  assert.deepEqual((await runWithoutModel('kiro', catalogs, 'auto')).models, ['auto']);
+  assert.deepEqual((await runWithoutModel('kiro', {
+    kiro: { OPTIONS: [{ value: 'auto' }], DEFAULT: 'auto', CUSTOM_MODELS_ONLY: false },
+  })).models, ['auto']);
+});
+
+test('continued Kiro API runs leave model resolution to the runtime unless explicitly selected', async () => {
+  const models: (string | undefined)[] = [];
+  await withAgentServer(createDependencies({
+    fileSystem: { access: async () => undefined } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async () => ({
+        OPTIONS: [{ value: 'new-custom-default', isCustom: true }],
+        DEFAULT: 'new-custom-default',
+        CUSTOM_MODELS_ONLY: true,
+      }),
+    } as unknown as AgentDependencies['models'],
+    sessions: {
+      getSessionById: () => ({
+        session_id: 'app-kiro',
+        provider: 'kiro',
+        provider_session_id: 'native-kiro',
+        project_path: '/home/test/project',
+      }),
+      getSessionByProviderSessionId: () => null,
+      createAppSession: () => { throw new Error('must reuse the session'); },
+    },
+    queryKiro: async (_prompt, options) => { models.push(options.model); },
+  }), async (baseUrl) => {
+    for (const model of [undefined, 'explicit-kiro']) {
+      const response = await fetch(`${baseUrl}/api/agent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: '/home/test/project', message: 'Continue', sessionId: 'app-kiro',
+          stream: false, model,
+        }),
+      });
+      assert.equal(response.status, 200);
+    }
+  });
+  assert.deepEqual(models, [undefined, 'explicit-kiro']);
+});
 
 test('Agent route starts Claude and Cursor on the first custom model while only custom models are listed', async () => {
   // What the Providers service returns with "Use only my models" on.
@@ -420,4 +479,31 @@ test('Agent route reads no model catalog for a continued session of an unregiste
   });
 
   assert.deepEqual(catalogReads, []);
+});
+
+test('Agent route dispatches Kiro prompts through its injected runtime', async () => {
+  const calls: unknown[] = [];
+  await withAgentServer(createDependencies({
+    fileSystem: { access: async () => undefined } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'catalog-default' }),
+    } as unknown as AgentDependencies['models'],
+    queryKiro: async (prompt, options) => {
+      calls.push({ prompt, options });
+    },
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectPath: '/home/test/project', message: 'Run Kiro',
+        provider: 'kiro', model: 'auto', stream: false,
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+  assert.deepEqual(calls, [{
+    prompt: 'Run Kiro',
+    options: { projectPath: '/home/test/project', cwd: '/home/test/project', sessionId: 'app-session-1', model: 'auto' },
+  }]);
 });

@@ -308,6 +308,39 @@ test('custom models can be created, edited, and deleted', async () => {
   assert.equal(removed.models.OPTIONS.some((option) => option.recordId === recordId), false);
 });
 
+test('Kiro custom-only catalogs preserve recorded models and update deletion fallbacks', async () => {
+  const { service, catalog } = createTestService({
+    sessions: createSessionStore({ 'kiro-existing': 'kiro-default' }),
+  });
+  const empty = await service.setCustomModelsOnly('kiro', true);
+  assert.equal(empty.DEFAULT, 'kiro-default');
+  assert.ok(empty.OPTIONS.length > 0);
+
+  const first = await service.createCustomModel('kiro', { model: 'First Kiro', id: 'kiro-first' });
+  const second = await service.createCustomModel('kiro', { model: 'Second Kiro', id: 'kiro-second' });
+  assert.deepEqual(second.models.OPTIONS.map((option) => option.value), ['kiro-first', 'kiro-second']);
+  assert.equal(second.models.DEFAULT, 'kiro-first');
+  assert.equal(second.models.CUSTOM_MODELS_ONLY, true);
+  assert.deepEqual(second.models.EFFORT_LEVELS, []);
+  assert.equal((await service.resolveSessionModel('kiro')).model, 'kiro-first');
+  assert.equal((await service.resolveSessionModel('kiro', { sessionId: 'kiro-existing' })).model, 'kiro-default');
+  assert.equal(await service.resolveResumeModel('kiro', 'kiro-existing', 'kiro-first'), 'kiro-default');
+  assert.equal(await service.resolveResumeModel('kiro', undefined, 'kiro-explicit'), 'kiro-explicit');
+  assert.equal((await service.getProviderModels('claude')).CUSTOM_MODELS_ONLY, false);
+
+  const restored = await service.setCustomModelsOnly('kiro', false);
+  assert.equal(restored.DEFAULT, 'kiro-default');
+  assert.deepEqual(restored.OPTIONS.map((option) => option.value), ['kiro-default', 'kiro-first', 'kiro-second']);
+  await service.setCustomModelsOnly('kiro', true);
+
+  const removedFirst = await service.deleteCustomModel('kiro', first.model.recordId as number);
+  assert.equal(removedFirst.models.DEFAULT, 'kiro-second');
+  const removedLast = await service.deleteCustomModel('kiro', second.model.recordId as number);
+  assert.equal(removedLast.models.DEFAULT, 'kiro-default');
+  assert.ok(removedLast.models.OPTIONS.length > 0);
+  assert.deepEqual(catalog.deleteFallbacks, ['kiro-second', 'kiro-default']);
+});
+
 test('custom models carry declared effort levels into the merged catalog', async () => {
   const { service } = createTestService();
 
@@ -392,11 +425,39 @@ test('allowed effort levels come from the provider, not from the built-in models
     codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
     cursor: [],
     opencode: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
+    kiro: [],
   };
   for (const [provider, levels] of Object.entries(expectedLevels) as Array<[LLMProvider, string[]]>) {
     assert.deepEqual((await service.getProviderModels(provider)).EFFORT_LEVELS, levels, provider);
   }
   assert.deepEqual(created.models.EFFORT_LEVELS, expectedLevels.opencode);
+});
+
+test('Kiro custom models remain editable without reasoning effort and reject declared effort', async () => {
+  const { service } = createTestService();
+  const created = await service.createCustomModel('kiro', { model: 'My Kiro', id: 'kiro-custom' });
+  assert.deepEqual(created.models.EFFORT_LEVELS, []);
+  assert.equal('effort' in created.model, false);
+
+  const updated = await service.updateCustomModel('kiro', created.model.recordId as number, {
+    model: 'Renamed Kiro',
+    id: 'kiro-renamed',
+  });
+  assert.equal(updated.model.value, 'kiro-renamed');
+  await assert.rejects(
+    () => service.updateCustomModel('kiro', created.model.recordId as number, {
+      model: 'Kiro with effort',
+      id: 'kiro-renamed',
+      effort: { values: ['high'] },
+    }),
+    (error) => error instanceof AppError
+      && error.code === 'MODEL_EFFORT_NOT_SUPPORTED'
+      && error.statusCode === 400,
+  );
+
+  const removed = await service.deleteCustomModel('kiro', created.model.recordId as number);
+  assert.equal(removed.model.value, 'kiro-renamed');
+  assert.equal(removed.models.OPTIONS.some((option) => option.value === 'kiro-renamed'), false);
 });
 
 test('duplicate model ids are rejected within one provider', async () => {

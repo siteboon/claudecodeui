@@ -436,7 +436,7 @@ export function createProviderTokenUsageService(
 
       const providerSessionId = session.provider_session_id || sessionId;
 
-      if (session.provider === 'cursor') {
+      if (session.provider === 'cursor' || session.provider === 'kiro') {
         return {
           used: 0,
           total: 0,
@@ -444,7 +444,7 @@ export function createProviderTokenUsageService(
           outputTokens: 0,
           breakdown: { input: 0, output: 0 },
           unsupported: true,
-          message: 'Token usage tracking not available for Cursor sessions',
+          message: `Token usage tracking not available for ${session.provider === 'kiro' ? 'Kiro' : 'Cursor'} sessions`,
         };
       }
 

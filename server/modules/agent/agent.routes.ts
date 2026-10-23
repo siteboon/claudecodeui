@@ -3,12 +3,13 @@ import path from 'path';
 
 import express from 'express';
 
-import type { ProviderRunFunction } from '@/shared/types.js';
+import type { ProviderRunFunction } from '@/shared/index.js';
+import { normalizeProjectPath } from '@/shared/index.js';
 
-import { normalizeProjectPath } from '../../shared/utils.js';
+import { collectAssistantMessages } from './agent-response.service.js';
 
 /** The providers an Agent API run can start: the ones with a runtime and a model catalog. */
-const AGENT_RUN_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode'];
+const AGENT_RUN_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode', 'kiro'];
 
 /** What the route reads off a session row it continues: the row, not the request, says which provider and project a session belongs to. */
 type AgentSessionRow = {
@@ -41,6 +42,7 @@ type AgentRouterDependencies = {
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
   queryOpenCode: ProviderRunFunction;
+  queryKiro: ProviderRunFunction;
   GithubClient: typeof import('@octokit/rest').Octokit;
 };
 
@@ -65,6 +67,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
   const spawnCursor = dependencies.queryCursor;
   const queryCodex = dependencies.queryCodex;
   const spawnOpenCode = dependencies.queryOpenCode;
+  const spawnKiro = dependencies.queryKiro;
   const Octokit = dependencies.GithubClient;
   const router = express.Router();
 
@@ -571,7 +574,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
      * always empty.)
      */
     getAssistantMessages() {
-      return this.messages.filter((msg) => msg && msg.kind === 'text' && msg.role === 'assistant');
+      return collectAssistantMessages(this.messages);
     }
 
     /**
@@ -631,7 +634,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *                          - Source for auto-generated branch names (if createBranch=true and no branchName)
    *                          - Fallback for PR title if no commits are made
    *
-   * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'opencode'
+   * @param {string} provider - (Optional) AI provider to use. Options: 'claude' | 'cursor' | 'codex' | 'opencode' | 'kiro'
    *                           Default: 'claude'
    *
    * @param {boolean} stream - (Optional) Enable Server-Sent Events (SSE) streaming for real-time updates.
@@ -647,7 +650,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    * @param {string} model - (Optional) Model identifier for providers.
    *                        Omitted: the provider's catalog DEFAULT from GET /api/providers/:provider/models,
    *                        which is the first custom model while "Use only my models" is on. Cursor
-   *                        without that setting leaves the choice to its CLI.
+   *                        without that setting leaves the choice to its CLI. Continued Kiro
+   *                        sessions retain their recorded model or the native session's selection.
    *
    *                        Claude models: 'default', 'sonnet', 'opus', 'haiku', 'sonnet[1m]', 'opus[1m]', 'fable'
    *                        Cursor models: 'gpt-5' (default), 'gpt-5.2', 'gpt-5.2-high', 'sonnet-4.5', 'opus-4.5',
@@ -762,7 +766,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    * Input Validations (400 Bad Request):
    *   - Either githubUrl OR projectPath must be provided (not neither)
    *   - message must be non-empty string
-   *   - provider must be 'claude', 'cursor', 'codex', or 'opencode'
+   *   - provider must be 'claude', 'cursor', 'codex', 'opencode', or 'kiro'
    *   - createBranch/createPR requires githubUrl OR projectPath (not neither)
    *   - branchName must pass Git naming rules (if provided)
    *
@@ -893,7 +897,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     }
 
     if (requestedProvider !== null && !AGENT_RUN_PROVIDERS.includes(requestedProvider)) {
-      return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", or "opencode"' });
+      return res.status(400).json({ error: 'provider must be "claude", "cursor", "codex", "opencode", or "kiro"' });
     }
 
     // Validate GitHub branch/PR creation requirements
@@ -1025,7 +1029,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // A request without `model` runs on the catalog's DEFAULT, the value
       // /api/providers/:provider/models and the API docs advertise. It is the
       // first custom model while the provider lists only custom models.
-      // Only the four runnable providers have a catalog: a continued legacy
+      // Only the registered runnable providers have a catalog: a continued legacy
       // session whose provider is no longer registered must not fail here.
       const providerModels = AGENT_RUN_PROVIDERS.includes(provider)
         ? await providerModelsService.getProviderModels(provider)
@@ -1081,6 +1085,14 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           model: model || providerModels?.DEFAULT,
           effort,
           permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
+        }, run.writer);
+      } else if (provider === 'kiro') {
+        await spawnKiro(message.trim(), {
+          projectPath: finalProjectPath,
+          cwd: finalProjectPath,
+          sessionId: appSessionId,
+          // New runs follow the catalog; resumes let Kiro restore the session's model.
+          model: model || (sessionRow ? undefined : providerModels?.DEFAULT),
         }, run.writer);
       }
 
