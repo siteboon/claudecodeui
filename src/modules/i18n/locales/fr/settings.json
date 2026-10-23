@@ -181,6 +181,11 @@
         "label": "Taille de police",
         "description": "Taille de police de l'éditeur en pixels"
       }
+    },
+    "keepProjectsExpanded": {
+      "section": "Barre latérale",
+      "label": "Garder les projets dépliés",
+      "description": "Ouvrir plusieurs projets ensemble et les retrouver dépliés après rechargement."
     }
   },
   "mcpForm": {

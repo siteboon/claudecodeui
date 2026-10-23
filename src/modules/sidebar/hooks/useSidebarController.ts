@@ -17,6 +17,19 @@ import {
 } from '@/modules/sidebar/utils/sidebarStoredPreferences';
 
 
+const EXPANDED_PROJECTS_STORAGE_KEY = 'cloudcli-expanded-projects';
+
+function readExpandedProjects(): Set<string> | null {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(EXPANDED_PROJECTS_STORAGE_KEY) ?? 'null');
+    return Array.isArray(saved)
+      ? new Set(saved.filter((id): id is string => typeof id === 'string'))
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 type ArchivedSessionsApiPayload = {
   success?: boolean;
   data?: {
@@ -60,6 +73,7 @@ type UseSidebarControllerArgs = {
   setCurrentProject: (project: Project) => void;
   setSidebarVisible: (visible: boolean) => void;
   sidebarVisible: boolean;
+  keepProjectsExpanded?: boolean;
 };
 
 export function useSidebarController({
@@ -80,9 +94,38 @@ export function useSidebarController({
   setCurrentProject,
   setSidebarVisible,
   sidebarVisible,
+  keepProjectsExpanded = false,
 }: UseSidebarControllerArgs) {
   const paletteOps = usePaletteOps();
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  // Project expansion is browser-local; the opt-in preference follows the user.
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => (
+    keepProjectsExpanded ? readExpandedProjects() ?? new Set() : new Set()
+  ));
+  // Detect preference hydration as well as a live toggle without overwriting saved groups.
+  const previousKeepProjectsExpanded = useRef(keepProjectsExpanded);
+  useEffect(() => {
+    const wasEnabled = previousKeepProjectsExpanded.current;
+    previousKeepProjectsExpanded.current = keepProjectsExpanded;
+    if (!keepProjectsExpanded) {
+      if (wasEnabled && expandedProjects.size > 1) {
+        const retainedId = selectedProject?.projectId && expandedProjects.has(selectedProject.projectId)
+          ? selectedProject.projectId
+          : [...expandedProjects][0];
+        setExpandedProjects(new Set([retainedId]));
+      }
+      return;
+    }
+    if (!wasEnabled) {
+      const saved = readExpandedProjects();
+      if (saved) {
+        setExpandedProjects(saved);
+        return;
+      }
+    }
+    try {
+      localStorage.setItem(EXPANDED_PROJECTS_STORAGE_KEY, JSON.stringify([...expandedProjects]));
+    } catch { /* Keep navigation working when browser storage is unavailable. */ }
+  }, [expandedProjects, keepProjectsExpanded, selectedProject?.projectId]);
   // Running groups start expanded and remember manual collapses independently of Projects.
   const [collapsedRunningProjects, setCollapsedRunningProjects] = useState<Set<string>>(new Set());
   // The one rename the sidebar has open, as a single value so a project and a
@@ -557,14 +600,16 @@ export function useSidebarController({
       }
 
       setExpandedProjects((prev) => {
-        const next = new Set<string>();
-        if (!prev.has(projectId)) {
+        const next = keepProjectsExpanded ? new Set(prev) : new Set<string>();
+        if (prev.has(projectId)) {
+          next.delete(projectId);
+        } else {
           next.add(projectId);
         }
         return next;
       });
     },
-    [searchMode],
+    [searchMode, keepProjectsExpanded],
   );
 
   const isProjectExpanded = useCallback(
