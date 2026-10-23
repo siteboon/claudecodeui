@@ -333,6 +333,7 @@ test('the compact layout selects with the same rules and hides its options butto
 });
 
 type SessionActivity = {
+  selectedProject?: Project | null;
   keepProjectsExpanded?: boolean;
   activeSessions: ReadonlySet<string>;
   backgroundSessionIds: ReadonlySet<string>;
@@ -342,10 +343,10 @@ const IDLE: SessionActivity = { activeSessions: NO_IDS, backgroundSessionIds: NO
 
 const renderController = (onSessionDelete = vi.fn(), initialActivity: SessionActivity = IDLE) =>
   renderHook(
-    ({ activeSessions, backgroundSessionIds, keepProjectsExpanded }: SessionActivity) =>
+    ({ activeSessions, backgroundSessionIds, keepProjectsExpanded, selectedProject = null }: SessionActivity) =>
       useSidebarController({
         projects: PROJECTS,
-        selectedProject: null,
+        selectedProject,
         selectedSession: null,
         activeSessions,
         backgroundSessionIds,
@@ -659,4 +660,28 @@ test('Running groups keep their independent collapse state in multi-open mode', 
   assert.equal(result.current.isProjectExpanded('project-1'), false);
   act(() => result.current.setSearchMode('projects'));
   assert.equal(result.current.isProjectExpanded('project-1'), true);
+});
+
+
+test('a selected project intentionally collapsed before reload stays collapsed', () => {
+  localStorage.setItem('cloudcli-expanded-projects', JSON.stringify(['other-project']));
+  const controller = renderController(vi.fn(), { ...IDLE, keepProjectsExpanded: true, selectedProject: PROJECT });
+  assert.equal(controller.result.current.isProjectExpanded(PROJECT.projectId), false);
+  assert.equal(controller.result.current.isProjectExpanded('other-project'), true);
+  assert.deepEqual(JSON.parse(localStorage.getItem('cloudcli-expanded-projects')!), ['other-project']);
+  controller.rerender({ ...IDLE, keepProjectsExpanded: true, selectedProject: { ...PROJECT, projectId: 'new-selection' } });
+  assert.equal(controller.result.current.isProjectExpanded('new-selection'), true);
+});
+
+test('an empty saved set also preserves a collapsed selection restored after mount', () => {
+  localStorage.setItem('cloudcli-expanded-projects', '[]');
+  const controller = renderController(vi.fn(), { ...IDLE, keepProjectsExpanded: true });
+  controller.rerender({ ...IDLE, keepProjectsExpanded: true, selectedProject: PROJECT });
+  assert.equal(controller.result.current.isProjectExpanded(PROJECT.projectId), false);
+  assert.equal(localStorage.getItem('cloudcli-expanded-projects'), '[]');
+});
+
+test('without saved expansion, initial project selection still opens normally', () => {
+  const controller = renderController(vi.fn(), { ...IDLE, keepProjectsExpanded: true, selectedProject: PROJECT });
+  assert.equal(controller.result.current.isProjectExpanded(PROJECT.projectId), true);
 });
