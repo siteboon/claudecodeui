@@ -440,6 +440,9 @@ export class CursorSessionsProvider implements IProviderSessions {
   normalizeCursorBlobs(blobs: CursorMessageBlob[], sessionId: string | null): NormalizedMessage[] {
     const messages: NormalizedMessage[] = [];
     const toolUseMap = new Map<string, NormalizedMessage>();
+    // store.db records no time for a blob, so each row is given the moment it
+    // was read, spaced by its sequence to keep the order. Every row is marked
+    // below, so a client that shows times knows this one is not real.
     const baseTime = Date.now();
 
     for (let i = 0; i < blobs.length; i++) {
@@ -648,6 +651,10 @@ export class CursorSessionsProvider implements IProviderSessions {
       }
       return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
     });
+
+    for (const msg of messages) {
+      msg.timestampEstimated = true;
+    }
 
     return messages;
   }

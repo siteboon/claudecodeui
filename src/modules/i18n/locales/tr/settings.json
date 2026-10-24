@@ -59,6 +59,7 @@
     "darkMode": "Koyu Mod",
     "showRawParameters": "Ham parametreleri göster",
     "showThinking": "Düşünmeyi göster",
+    "showTimestamps": "Zaman damgalarını göster",
     "sendByCtrlEnter": "Ctrl+Enter ile gönder",
     "sendByCtrlEnterDescription": "Etkinleştirildiğinde, Ctrl+Enter'a basmak yalnız Enter yerine mesajı gönderir. IME (girdi metot düzenleyici) kullananlar için yanlışlıkla göndermeyi önler.",
     "dragHandle": {
