@@ -258,3 +258,16 @@ test('a refused stop settles the running row when an earlier row of the same tas
   assert.equal(stored.at(-1)?.toolUseId, 'toolu_agent_2');
   assert.equal(stored.at(-1)?.status, 'stopped');
 });
+
+test('a refused stop settles every running row of the task', () => {
+  const { dispatch, log } = renderHandlers();
+
+  for (const toolId of ['toolu_agent_1', 'toolu_agent_2']) {
+    dispatch(event({ kind: 'tool_use', toolId, toolName: 'Agent', toolInput: { description: 'Survey' } }));
+    dispatch(event({ kind: 'task_status', event: 'started', taskId: 'a1', toolUseId: toolId, taskType: 'local_agent' }));
+  }
+  dispatch(event({ kind: 'complete', success: true }));
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'a1' }));
+
+  assert.deepEqual(log.at(-1), { sessionId: 'viewed-session', tasks: [] });
+});

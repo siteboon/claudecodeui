@@ -177,12 +177,13 @@ export function useChatRealtimeHandlers({
           if (sid && msg.code === 'NO_SUCH_TASK' && typeof msg.taskId === 'string') {
             const rows = normalizedToChatMessages(sessionStore.getMessages(sid))
               .filter((message) => readBackgroundTaskId(message) === msg.taskId);
-            const launch = listRunningBackgroundLaunches(rows)[0];
-            if (launch) {
+            // A resumed agent can name the task on more than one running row.
+            const launches = listRunningBackgroundLaunches(rows);
+            for (const launch of launches) {
               handleEvent({
                 kind: 'task_status',
                 event: 'updated',
-                id: `task_gone_${msg.taskId}`,
+                id: `task_gone_${launch.toolId}`,
                 sessionId: sid,
                 provider,
                 timestamp: new Date().toISOString(),
@@ -190,6 +191,8 @@ export function useChatRealtimeHandlers({
                 toolUseId: launch.toolId,
                 status: 'stopped',
               });
+            }
+            if (launches.length > 0) {
               return;
             }
             // Its end arrived before the refusal: the card has settled already.
