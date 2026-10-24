@@ -131,7 +131,7 @@ test('a disabled consumer does not request until it is enabled', async () => {
   assert.deepEqual(result.current.commands, []);
 
   rerender({ enabled: true });
-  await waitFor(() => assert.equal(result.current.commands.length, 2), '/help and /btw');
+  await waitFor(() => assert.equal(result.current.commands.length, 2, '/help and /btw'));
   assert.equal(listCommands.mock.calls.length, 1);
 });
 

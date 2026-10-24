@@ -6,11 +6,12 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { clearQueuedMessage } from '@/shared/chatDrafts';
-import type { PermissionMode, Project, ProjectSession, SideQuestionData } from '@/shared/types';
+import type { PermissionMode, Project, ProjectSession } from '@/shared/types';
 
 /**
  * Commands the Claude Code CLI runs itself (/usage, /context, …) are sent as
- * typed. `/btw` is answered beside the chat — also while a turn is running.
+ * typed. `/btw` goes to the side chat beside the transcript — also while a
+ * turn is running — and never to the chat itself.
  */
 
 const PROJECT: Project = { projectId: 'project-1', displayName: 'Project One', fullPath: '/tmp/project-one' };
@@ -21,6 +22,7 @@ const jsonResponse = (body: unknown, status = 200) =>
 
 const render = (isLoading: boolean) => {
   const sent: Array<Record<string, unknown>> = [];
+  const sideQuestions: string[] = [];
   const view = renderHook(() =>
     useChatComposerState({
       selectedProject: PROJECT,
@@ -36,13 +38,14 @@ const render = (isLoading: boolean) => {
       canAbortSession: isLoading,
       tokenBudget: null,
       sendMessage: (message) => { sent.push(message as Record<string, unknown>); },
+      onSideQuestion: (question) => { sideQuestions.push(question); },
       scrollToBottom: () => undefined,
       addMessage: () => undefined,
       setIsUserScrolledUp: () => undefined,
       setPendingPermissionRequests: () => undefined,
     }),
   );
-  return { view, sent };
+  return { view, sent, sideQuestions };
 };
 
 const submit = async (view: ReturnType<typeof render>['view'], text: string) => {
@@ -52,15 +55,8 @@ const submit = async (view: ReturnType<typeof render>['view'], text: string) => 
   });
 };
 
-const btwCalls = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/providers/claude/btw'));
-
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
-    if (String(url).includes('/api/providers/claude/btw')) {
-      return jsonResponse({ success: true, data: { answer: 'It returns **4**.' } });
-    }
-    return jsonResponse([]);
-  }));
+  vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([])));
   clearQueuedMessage(SESSION.id);
   localStorage.clear();
 });
@@ -70,34 +66,29 @@ afterEach(() => {
   localStorage.clear();
 });
 
-test('/btw asks the side question and shows the answer, sending nothing to the chat', async () => {
-  const { view, sent } = render(false);
+test('/btw hands the question to the side chat and sends nothing to the chat', async () => {
+  const { view, sent, sideQuestions } = render(false);
   await submit(view, '/btw what does add(2, 2) return?');
 
-  assert.equal(btwCalls().length, 1);
-  const body = JSON.parse(String(btwCalls()[0][1]?.body));
-  assert.deepEqual(body, { sessionId: 'session-1', question: 'what does add(2, 2) return?', model: 'test-model' });
-  await waitFor(() => assert.equal((view.result.current.commandModalPayload?.data as SideQuestionData)?.answer, 'It returns **4**.'));
-  assert.equal(view.result.current.commandModalPayload?.kind, 'btw');
+  assert.deepEqual(sideQuestions, ['what does add(2, 2) return?']);
   assert.equal(sent.length, 0);
   assert.equal(view.result.current.input, '');
 });
 
 test('/btw works while a turn is running instead of being queued', async () => {
-  const { view, sent } = render(true);
+  const { view, sent, sideQuestions } = render(true);
   await submit(view, '/btw quick one');
 
-  assert.equal(btwCalls().length, 1);
+  assert.deepEqual(sideQuestions, ['quick one']);
   assert.equal(view.result.current.queuedDraft, null);
   assert.equal(sent.filter((frame) => frame.type === 'chat.inject').length, 0);
 });
 
-test('/btw without a question explains what to type', async () => {
-  const { view } = render(false);
+test('/btw alone just opens the side chat', async () => {
+  const { view, sideQuestions } = render(false);
   await submit(view, '/btw');
 
-  assert.equal(btwCalls().length, 0);
-  assert.match(String((view.result.current.commandModalPayload?.data as SideQuestionData)?.error), /Type a question/);
+  assert.deepEqual(sideQuestions, ['']);
 });
 
 test('a CLI command typed in full is sent to Claude Code as written', async () => {

@@ -15,7 +15,6 @@ import {
   TerminalSquare,
   Timer,
   Loader2,
-  MessageCircleQuestion,
   X,
 } from 'lucide-react';
 
@@ -24,10 +23,9 @@ import type {
   LLMProvider,
   ProviderModelActions,
   ProviderModelOption,
-  ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,SideQuestionData,StatusCommandData
+  ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
 } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
-import { Markdown } from '@/modules/chat/transcript/Markdown';
 
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
@@ -581,12 +579,6 @@ function CommandResultModal({
       subtitle: t('chat:misc.modalMeta.statusSubtitle'),
       icon: Activity,
     },
-    btw: {
-      eyebrow: '/btw',
-      title: t('chat:misc.modalMeta.btwTitle', { defaultValue: 'Side question' }),
-      subtitle: t('chat:misc.modalMeta.btwSubtitle', { defaultValue: 'Answered from this chat\'s context. Not added to the chat.' }),
-      icon: MessageCircleQuestion,
-    },
   } as const;
 
   const activeMeta = kind ? modalMeta[kind] : null;
@@ -650,7 +642,6 @@ function CommandResultModal({
           )}
           {payload?.kind === 'cost' && <CostContent data={payload.data as CostCommandData} />}
           {payload?.kind === 'status' && <StatusContent data={payload.data as StatusCommandData} />}
-          {payload?.kind === 'btw' && <SideQuestionContent data={payload.data as SideQuestionData} />}
         </div>
 
         <div className="flex shrink-0 flex-col gap-3 border-t border-border/70 bg-muted/20 px-4 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -664,27 +655,6 @@ function CommandResultModal({
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** The `/btw` question, then its answer, a spinner while it is asked, or the error. */
-function SideQuestionContent({ data }: { data: SideQuestionData }) {
-  return (
-    <div className="h-full overflow-y-auto">
-      <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-foreground">{data.question}</div>
-      <div className="mt-4 text-sm">
-        {data.error ? (
-          <p className="text-red-600 dark:text-red-400">{data.error}</p>
-        ) : data.answer === null ? (
-          <p className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Thinking…
-          </p>
-        ) : (
-          <Markdown>{data.answer}</Markdown>
-        )}
-      </div>
-    </div>
   );
 }
 

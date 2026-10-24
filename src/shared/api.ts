@@ -418,8 +418,17 @@ export const api = {
     capabilities: () => get('/api/providers/capabilities'),
     claudeCliCommands: (workspacePath?: string) =>
       get(`/api/providers/claude/cli-commands${workspacePath ? `?workspacePath=${encodeURIComponent(workspacePath)}` : ''}`),
-    claudeSideQuestion: (body: { sessionId: string | null; question: string; model?: string }) =>
-      post('/api/providers/claude/btw', body),
+    claudeSideQuestion: (
+      body: {
+        sessionId: string | null;
+        question: string;
+        model?: string;
+        effort?: string;
+        history?: Array<{ question: string; answer: string }>;
+        attachments?: unknown[];
+      },
+      options: ApiRequestOptions = {},
+    ) => post('/api/providers/claude/btw', body, options),
     claudePlanUsage: (refresh = false) =>
       get(`/api/providers/claude/plan-usage${refresh ? '?refresh=1' : ''}`),
     authStatus: (provider: string) =>

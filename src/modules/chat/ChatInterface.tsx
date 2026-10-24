@@ -21,6 +21,7 @@ import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessag
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
+import { useSideChat } from '@/modules/chat/hooks/useSideChat';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import {
   useProcessingSessions,
@@ -29,6 +30,7 @@ import {
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
+import SideChatPanel from '@/modules/chat/sideChat/SideChatPanel';
 
 type ChatInterfaceProps = {
   isActive: boolean;
@@ -186,6 +188,13 @@ function ChatInterface({
     onNavigateToSession?.(sessionId);
   }, [setCurrentSessionId, onSessionEstablished, onNavigateToSession]);
 
+  // The /btw side chat beside the transcript: one per chat, kept in the page.
+  const sideChat = useSideChat({
+    sessionId: currentSessionId || selectedSession?.id || null,
+    model: currentProviderModel,
+    effort: currentProviderEffort,
+  });
+
   const {
     input,
     setInput,
@@ -253,6 +262,7 @@ function ChatInterface({
     tokenBudget,
     sendMessage,
     subscribe,
+    onSideQuestion: sideChat.ask,
     sendByCtrlEnter,
     onSessionProcessing,
     onSessionEstablished: handleSessionEstablished,
@@ -457,7 +467,8 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-h-0">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>
             <ChatMessagesPane
@@ -608,6 +619,25 @@ function ChatInterface({
           sendByCtrlEnter={sendByCtrlEnter}
         />
         </div>
+      </div>
+
+      {sideChat.isOpen && (
+        <SideChatPanel
+          entries={sideChat.entries}
+          busy={sideChat.busy}
+          onAsk={sideChat.ask}
+          onStop={sideChat.stop}
+          onClear={sideChat.clear}
+          onClose={sideChat.close}
+          model={sideChat.model}
+          modelOptions={currentProviderModelOptions}
+          onSelectModel={sideChat.setModel}
+          effort={sideChat.effort}
+          effortOptions={currentProviderEffortOptions}
+          onSelectEffort={sideChat.setEffort}
+          modelsLoading={providerModelsLoading}
+        />
+      )}
       </div>
 
       <CommandResultModal

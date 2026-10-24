@@ -71,7 +71,7 @@ const renderComposer = () => {
 
 const renderLoadedComposer = async () => {
   const composer = renderComposer();
-  await waitFor(() => assert.equal(composer.view.result.current.slashCommandsCount, 3), "the custom commands plus /btw");
+  await waitFor(() => assert.equal(composer.view.result.current.slashCommandsCount, 3, "the custom commands plus /btw"));
   return composer;
 };
 

@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { BackgroundSendChoice, BackgroundSendPrompt, ServerEvent, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,SideQuestionData,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { BackgroundSendChoice, BackgroundSendPrompt, ServerEvent, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -31,6 +31,7 @@ import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
+import { uploadAttachmentFiles } from '@/modules/chat/utils/uploadAttachments';
 
 type UseChatComposerStateArgs = {
   selectedProject: Project | null;
@@ -53,6 +54,8 @@ type UseChatComposerStateArgs = {
   sendMessage: (message: unknown) => void;
   /** Websocket frame listener; lets a message sent mid-turn learn whether the run took it. */
   subscribe?: (listener: (event: ServerEvent) => void) => () => void;
+  /** `/btw <question>` goes to the side chat beside the transcript (an empty question just opens it). */
+  onSideQuestion?: (question: string) => void;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -112,31 +115,6 @@ const isImageAttachment = (attachment: ChatAttachment) => {
   return /\.(gif|jpe?g|png|svg|webp)$/i.test(attachment.path || attachment.name || '');
 };
 
-const uploadAttachmentFiles = async (files: File[]): Promise<unknown[]> => {
-  if (files.length === 0) {
-    return [];
-  }
-
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append('files', file);
-  });
-
-  const response = await api.assets.uploadFiles(formData);
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.error || 'Failed to upload files');
-  }
-
-  const result = await response.json();
-  if (!Array.isArray(result.attachments) || result.attachments.length !== files.length) {
-    throw new Error('File upload returned an incomplete result');
-  }
-  return result.attachments;
-};
-
-
 const restoreQueuedDraft = (sessionKey: string): QueuedDraft | null => {
   const saved = readQueuedMessage(sessionKey);
   return saved
@@ -195,6 +173,7 @@ export function useChatComposerState({
   tokenBudget,
   sendMessage,
   subscribe,
+  onSideQuestion,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -727,46 +706,19 @@ export function useChatComposerState({
     backgroundSendResolverRef.current = null;
   }, []);
 
-  // `/btw`: asks a side question that never enters the conversation and
-  // shows the answer in the command window. The composer is cleared at once.
+  // `/btw`: hands the question to the side chat beside the transcript; it
+  // never enters the conversation. The composer is cleared at once.
   const askSideQuestion = useCallback(
-    async (question: string) => {
+    (question: string) => {
       setInput('');
       inputValueRef.current = '';
       resetCommandMenuState();
       if (draftScopeRef.current) {
         writeDraftText(draftScopeRef.current, '');
       }
-      if (!question) {
-        setCommandModalPayload({
-          kind: 'btw',
-          data: { question: '/btw', answer: null, error: 'Type a question after /btw, for example: /btw what does this function return?' },
-        });
-        return;
-      }
-
-      const shown = (data: Partial<SideQuestionData>) => setCommandModalPayload({
-        kind: 'btw',
-        data: { question, answer: null, error: null, ...data },
-      });
-      shown({});
-      try {
-        const response = await api.providers.claudeSideQuestion({
-          sessionId: selectedSession?.id || currentSessionId || null,
-          question,
-          model: currentProviderModel,
-        });
-        const body = await response.json().catch(() => null);
-        if (!response.ok) {
-          shown({ error: body?.error?.message || body?.message || `The side question failed (${response.status}).` });
-          return;
-        }
-        shown({ answer: String(body?.data?.answer ?? '') });
-      } catch (error) {
-        shown({ error: error instanceof Error ? error.message : 'The side question failed.' });
-      }
+      onSideQuestion?.(question);
     },
-    [currentProviderModel, currentSessionId, resetCommandMenuState, selectedSession?.id],
+    [onSideQuestion, resetCommandMenuState],
   );
 
   // "Send now": hands a message to the session's running turn, which takes it
@@ -872,7 +824,7 @@ export function useChatComposerState({
       }
 
       // `/btw <question>`: answered beside the chat, so it works mid-turn too.
-      const sideQuestion = !queuedSubmission && !submitOptions?.skipCommandInterception && provider === 'claude'
+      const sideQuestion = !queuedSubmission && !submitOptions?.skipCommandInterception && provider === 'claude' && onSideQuestion
         ? currentInput.trimStart().match(/^\/btw(?:\s+([\s\S]*))?$/)
         : null;
       if (sideQuestion) {

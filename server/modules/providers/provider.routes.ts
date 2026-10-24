@@ -649,10 +649,27 @@ router.post(
   '/claude/btw',
   asyncHandler(async (req: Request, res: Response) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
+    const history = Array.isArray(body.history)
+      ? body.history
+        .filter((entry): entry is { question: string; answer: string } =>
+          Boolean(entry) && typeof entry.question === 'string' && typeof entry.answer === 'string')
+        .map(({ question, answer }) => ({ question, answer }))
+      : [];
+    // Stop in the side chat aborts the request; that ends the CLI process too.
+    const stopped = new AbortController();
+    res.on('close', () => {
+      if (!res.writableFinished) {
+        stopped.abort();
+      }
+    });
     const result = await claudeSideQuestionService.ask({
       sessionId: typeof body.sessionId === 'string' ? body.sessionId : null,
       question: typeof body.question === 'string' ? body.question : '',
       model: typeof body.model === 'string' ? body.model : null,
+      effort: typeof body.effort === 'string' ? body.effort : null,
+      history,
+      attachments: body.attachments,
+      signal: stopped.signal,
     });
     res.json(createApiSuccessResponse(result));
   }),

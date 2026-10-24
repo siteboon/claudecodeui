@@ -9,3 +9,5 @@ export { broadcastSessionUpserted, broadcastSessionUpsertedBatch } from './servi
 // from a timer, with no socket to stream to or report errors on.
 export { runDetachedChatTurn } from './services/chat-websocket.service.js';
 export type { ProviderRuntimeGateway } from './services/chat-websocket.service.js';
+// The upload-store boundary, also applied by the /btw side chat to its pictures.
+export { filterAttachmentsToUploadStore } from './services/chat-websocket.service.js';

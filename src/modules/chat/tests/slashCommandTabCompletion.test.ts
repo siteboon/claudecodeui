@@ -79,7 +79,7 @@ const setUp = async (typedInput: string) => {
     { initialProps: { input: '' } },
   );
 
-  await waitFor(() => assert.equal(result.current.slashCommandsCount, 3), "the custom commands plus /btw");
+  await waitFor(() => assert.equal(result.current.slashCommandsCount, 3, "the custom commands plus /btw"));
 
   // Mirror the composer: the textarea reports the typed text, then the hook is
   // told where the caret is so it can open and filter the menu.
