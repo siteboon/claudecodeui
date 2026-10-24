@@ -146,12 +146,14 @@ test('a Codex rollout that cannot be rewritten leaves the session where it was',
     const targetId = createTargetProject(path.join(directory, 'target'));
     const now = new Date().toISOString();
     sessionsDb.createSession('codex-gone', 'codex', source, 'Gone', now, now, path.join(directory, 'missing.jsonl'));
+    const updatedBefore = sessionsDb.getSessionById('codex-gone')?.updated_at;
 
     await assert.rejects(
       () => sessionsService.moveSessionToProject('codex-gone', targetId),
       (error: { code?: string }) => error.code === 'SESSION_MOVE_NOT_SUPPORTED',
     );
     assert.equal(sessionsDb.getSessionById('codex-gone')?.project_path, source);
+    assert.equal(sessionsDb.getSessionById('codex-gone')?.updated_at, updatedBefore, 'a failed move keeps its order');
   });
 });
 
