@@ -161,6 +161,38 @@ test('a queued message waits for background work its session\'s last turn left r
   });
 });
 
+test('follow-ups queued during one turn are all sent, once, in order, as the next turn', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    for (const content of ['follow-up A', 'follow-up B', 'follow-up C']) {
+      sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content, options: { model: 'opus' }, attachments: [] });
+    }
+
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0, 'nothing is left to send');
+
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'follow-up A\n\nfollow-up B\n\nfollow-up C');
+    assert.equal(runs[0].options.model, 'opus');
+    assert.equal(sessionDraftsDb.getDrafts(userId).length, 0);
+  });
+});
+
+test('a draft-text save after the queued message was sent does not send it again', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'send me once', attachments: [] });
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+
+    // The composer keeps saving its text while the user types the next
+    // follow-up; its copy of the queue still holds the message just sent.
+    sessionDraftsDb.saveDraftText(userId, SESSION_ID, 'typing the next one');
+
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0);
+    assert.deepEqual(runs.map((run) => run.command), ['send me once']);
+  });
+});
+
 test('a due message interrupts a run in progress instead of failing', async () => {
   await withIsolatedDatabase(async (userId) => {
     scheduledMessagesService.schedule({
