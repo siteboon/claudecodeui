@@ -260,7 +260,7 @@ test('a refused stop settles the running row when an earlier row of the same tas
 });
 
 test('a refused stop settles every running row of the task', () => {
-  const { dispatch, log } = renderHandlers();
+  const { dispatch, log, stored } = renderHandlers();
 
   for (const toolId of ['toolu_agent_1', 'toolu_agent_2']) {
     dispatch(event({ kind: 'tool_use', toolId, toolName: 'Agent', toolInput: { description: 'Survey' } }));
@@ -270,4 +270,8 @@ test('a refused stop settles every running row of the task', () => {
   dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'a1' }));
 
   assert.deepEqual(log.at(-1), { sessionId: 'viewed-session', tasks: [] });
+  assert.deepEqual(
+    stored.filter((message) => message.status === 'stopped').map((message) => message.toolUseId),
+    ['toolu_agent_1', 'toolu_agent_2'],
+  );
 });
