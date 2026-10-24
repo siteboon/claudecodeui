@@ -504,6 +504,8 @@
     "noPluginsInstalled": "未安裝外掛",
     "pullLatest": "從 git 拉取最新內容",
     "noGitRemote": "無 git 遠端儲存庫 — 無法更新",
+    "residentBadge": "常駐",
+    "residentBadgeTitle": "應用啟動後即掛載，不只是開啟它的分頁時才生效",
     "uninstallPlugin": "解除安裝外掛",
     "confirmUninstall": "再次點擊確認",
     "confirmUninstallMessage": "移除 {{name}}？此操作無法復原。",

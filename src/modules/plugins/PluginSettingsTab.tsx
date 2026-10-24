@@ -266,6 +266,14 @@ function PluginCard({
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {plugin.slot}
                 </span>
+                {plugin.alwaysMount && (
+                  <span
+                    className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] text-sky-600 dark:text-sky-300"
+                    title={t('pluginSettings.residentBadgeTitle')}
+                  >
+                    {t('pluginSettings.residentBadge')}
+                  </span>
+                )}
                 <ServerDot running={!!plugin.serverRunning} t={t} />
               </div>
               {plugin.description && (

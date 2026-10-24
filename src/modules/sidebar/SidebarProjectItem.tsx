@@ -160,6 +160,11 @@ function SidebarProjectItem({
         {isCompact && (
         <div className="bg-background">
           <div
+            // Resident plugins address this row through these attributes; see
+            // PluginHostLayer. The full path is the workspace's identity, and the
+            // name is what the row shows, so neither has to be re-derived from text.
+            data-cloudcli-project-path={project.fullPath}
+            data-cloudcli-project-name={project.displayName}
             className={cn(
               'p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150',
               isSelected && 'bg-primary/5 border-primary/20',
@@ -303,6 +308,10 @@ function SidebarProjectItem({
         {!isCompact && (
         <Button
           variant="ghost"
+          // Same row contract as the compact variant above: resident plugins
+          // find a workspace row by these attributes on either layout.
+          data-cloudcli-project-path={project.fullPath}
+          data-cloudcli-project-name={project.displayName}
           className={cn(
             'sticky top-0 z-10 flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50',
             isSelected

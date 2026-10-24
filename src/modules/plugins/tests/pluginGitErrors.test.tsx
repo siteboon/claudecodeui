@@ -31,6 +31,7 @@ const installedPlugin: Plugin = {
   entry: 'index.js',
   server: null,
   permissions: [],
+  alwaysMount: false,
   enabled: true,
   serverRunning: false,
   dirName: 'private-demo',

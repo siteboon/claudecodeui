@@ -2,8 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '@/shared/context/ThemeContext';
-import { api } from '@/shared/api';
 import { usePlugins } from '@/modules/plugins/context/PluginsContext';
+import {
+  createPluginHostApi,
+  loadPluginModule,
+  type PluginHostApi,
+  type PluginSurface,
+} from '@/modules/plugins/pluginModuleLoader';
 import type { Project, ProjectSession } from '@/shared/types';
 
 type PluginTabContentProps = {
@@ -19,6 +24,13 @@ type PluginContext = {
   // continue to receive a stable opaque id.
   project: { name: string; path: string } | null;
   session: { id: string; title: string } | null;
+  /** Distinguishes this in-tab mount from the resident layer's mount of the same bundle. */
+  surface: PluginSurface;
+};
+
+type PluginModule = {
+  mount?: (container: HTMLElement, host: PluginHostApi<PluginContext>) => void | Promise<void>;
+  unmount?: (container: HTMLElement) => void;
 };
 
 function buildContext(
@@ -40,6 +52,7 @@ function buildContext(
         title: selectedSession.title || selectedSession.name || selectedSession.id,
       }
       : null,
+    surface: 'tab',
   };
 }
 
@@ -59,7 +72,7 @@ export default function PluginTabContent({
   const contextRef = useRef<PluginContext>(buildContext(isDarkMode, selectedProject, selectedSession));
   const contextCallbacksRef = useRef<Set<(ctx: PluginContext) => void>>(new Set());
 
-  const moduleRef = useRef<any>(null);
+  const moduleRef = useRef<PluginModule | null>(null);
 
   const plugin = plugins.find(p => p.name === pluginName);
 
@@ -86,37 +99,19 @@ export default function PluginTabContent({
 
     (async () => {
       try {
-        // Fetch the plugin JS with auth headers (Cloudflare Worker requires auth on all routes).
-        // Then import it via a Blob URL so the browser never makes an unauthenticated request.
-        const res = await api.plugins.asset(pluginName, entryFile);
-        if (!res.ok) throw new Error(`Failed to fetch plugin (HTTP ${res.status})`);
-        const jsText = await res.text();
-        const blob = new Blob([jsText], { type: 'application/javascript' });
-        const blobUrl = URL.createObjectURL(blob);
-        // @vite-ignore
-        const mod = await import(/* @vite-ignore */ blobUrl).finally(() => URL.revokeObjectURL(blobUrl));
+        const mod = await loadPluginModule(pluginName, entryFile) as PluginModule;
         if (!active || !containerRef.current) return;
 
         moduleRef.current = mod;
 
-        // The host surface handed to the plugin module, distinct from the
-        // app's own `api` client that backs `rpc` below.
-        const pluginHostApi = {
-          get context(): PluginContext { return contextRef.current; },
-
-          onContextChange(cb: (ctx: PluginContext) => void): () => void {
-            contextCallbacks.add(cb);
-            return () => contextCallbacks.delete(cb);
+        await mod.mount?.(container, createPluginHostApi<PluginContext>(
+          pluginName,
+          () => contextRef.current,
+          (callback) => {
+            contextCallbacks.add(callback);
+            return () => { contextCallbacks.delete(callback); };
           },
-
-          async rpc(method: string, path: string, body?: unknown): Promise<unknown> {
-            const res = await api.plugins.rpc(pluginName, method, path, body);
-            if (!res.ok) throw new Error(`RPC error ${res.status}`);
-            return res.json();
-          },
-        };
-
-        await mod.mount?.(container, pluginHostApi);
+        ));
         if (!active) {
           try { mod.unmount?.(container); } catch { /* ignore */ }
           moduleRef.current = null;

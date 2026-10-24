@@ -96,6 +96,13 @@ export function validateManifest(manifest) {
     }
   }
 
+  // A resident plugin is mounted for the whole app session instead of only while
+  // its workspace tab is open, so a non-boolean here would silently decide how
+  // much of the UI a third-party bundle gets to attach to.
+  if (manifest.alwaysMount !== undefined && typeof manifest.alwaysMount !== 'boolean') {
+    return { valid: false, error: 'alwaysMount must be a boolean when present' };
+  }
+
   return { valid: true };
 }
 
@@ -216,6 +223,9 @@ export function scanPlugins() {
         entry: manifest.entry,
         server: manifest.server || null,
         permissions: manifest.permissions || [],
+        // Defaults to false: an existing plugin keeps the tab-only behaviour it
+        // was written for unless its manifest opts into a resident mount.
+        alwaysMount: manifest.alwaysMount === true,
         enabled: config[manifest.name]?.enabled !== false, // enabled by default
         dirName: entry.name,
         repoUrl,
