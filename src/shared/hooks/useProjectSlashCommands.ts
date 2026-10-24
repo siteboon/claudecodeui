@@ -20,6 +20,48 @@ type ProviderSkillsResponse = {
   };
 };
 
+type ClaudeCliCommand = {
+  name: string;
+  description?: string;
+  argumentHint?: string;
+};
+
+type ClaudeCliCommandsResponse = {
+  data?: {
+    commands?: ClaudeCliCommand[];
+  };
+};
+
+// `/btw` exists only in the CLI's terminal UI; the composer answers it itself.
+const SIDE_QUESTION_COMMAND: SlashCommand = {
+  name: '/btw',
+  description: 'Ask a quick side question about this chat. The answer is not added to the chat.',
+  namespace: 'claude',
+  type: 'cli',
+  argumentHint: '<question>',
+};
+
+// The commands the Claude Code CLI runs itself (/usage, /context, /compact, …).
+// Names the app already offers — its own built-ins, skills and custom
+// commands — keep their entry; the rest are sent to the CLI as typed.
+const mapCliCommands = (cliCommands: ClaudeCliCommand[], taken: Set<string>): SlashCommand[] => {
+  const commands: SlashCommand[] = [];
+  for (const command of [SIDE_QUESTION_COMMAND, ...cliCommands]) {
+    if (!command.name || taken.has(command.name)) {
+      continue;
+    }
+    taken.add(command.name);
+    commands.push({
+      name: command.name,
+      description: command.description,
+      namespace: 'claude',
+      type: 'cli',
+      argumentHint: command.argumentHint ?? '',
+    });
+  }
+  return commands;
+};
+
 type UseProjectSlashCommandsOptions = {
   // False while the consumer is not showing the list: the fetch is skipped
   // (and the previous list kept) until it becomes true again.
@@ -132,6 +174,20 @@ export function useProjectSlashCommands(
             type: 'custom',
           })),
         ];
+
+        if (provider === 'claude') {
+          const taken = new Set(allCommands.map((command) => command.name));
+          let cliCommands: ClaudeCliCommand[] = [];
+          try {
+            const cliResponse = await api.providers.claudeCliCommands(workspacePath);
+            if (cliResponse.ok) {
+              cliCommands = ((await cliResponse.json()) as ClaudeCliCommandsResponse)?.data?.commands || [];
+            }
+          } catch {
+            // A failed list only costs the CLI's own entries; the rest of the menu stays.
+          }
+          allCommands.push(...mapCliCommands(cliCommands, taken));
+        }
 
         if (!cancelled) {
           setCommands(allCommands);

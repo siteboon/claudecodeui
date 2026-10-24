@@ -1,7 +1,9 @@
 import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { claudeCliCommandsService } from '@/modules/providers/services/claude-cli-commands.service.js';
 import { claudePlanUsageService } from '@/modules/providers/services/claude-plan-usage.service.js';
+import { claudeSideQuestionService } from '@/modules/providers/services/claude-side-question.service.js';
 import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
@@ -630,6 +632,29 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const usage = await claudePlanUsageService.getPlanUsage({ refresh: req.query.refresh === '1' });
     res.json(createApiSuccessResponse(usage));
+  }),
+);
+
+/** The slash commands the Claude Code CLI itself runs (/usage, /context, /compact, …). */
+router.get(
+  '/claude/cli-commands',
+  asyncHandler(async (req: Request, res: Response) => {
+    const commands = await claudeCliCommandsService.listCommands(readOptionalQueryString(req.query.workspacePath));
+    res.json(createApiSuccessResponse({ commands }));
+  }),
+);
+
+/** `/btw`: a side question answered from a throwaway fork of the session. */
+router.post(
+  '/claude/btw',
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const result = await claudeSideQuestionService.ask({
+      sessionId: typeof body.sessionId === 'string' ? body.sessionId : null,
+      question: typeof body.question === 'string' ? body.question : '',
+      model: typeof body.model === 'string' ? body.model : null,
+    });
+    res.json(createApiSuccessResponse(result));
   }),
 );
 

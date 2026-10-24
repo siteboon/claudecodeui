@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { BackgroundSendChoice, BackgroundSendPrompt, ServerEvent, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { BackgroundSendChoice, BackgroundSendPrompt, ServerEvent, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,SideQuestionData,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -431,6 +431,19 @@ export function useChatComposerState({
         return;
       }
 
+      // The CLI runs its own commands when they arrive as a message; send what
+      // was typed (or the bare name, for a pick from the menu), uninterpreted.
+      if (command.type === 'cli') {
+        const typed = (rawInput ?? input).trim();
+        const commandText = typed.startsWith(command.name) ? typed : command.name;
+        setInput(commandText);
+        inputValueRef.current = commandText;
+        setTimeout(() => {
+          handleSubmitRef.current?.(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
+        }, 0);
+        return;
+      }
+
       try {
         const effectiveInput = rawInput ?? input;
         // Everything typed after the command name is its argument text, line
@@ -714,6 +727,48 @@ export function useChatComposerState({
     backgroundSendResolverRef.current = null;
   }, []);
 
+  // `/btw`: asks a side question that never enters the conversation and
+  // shows the answer in the command window. The composer is cleared at once.
+  const askSideQuestion = useCallback(
+    async (question: string) => {
+      setInput('');
+      inputValueRef.current = '';
+      resetCommandMenuState();
+      if (draftScopeRef.current) {
+        writeDraftText(draftScopeRef.current, '');
+      }
+      if (!question) {
+        setCommandModalPayload({
+          kind: 'btw',
+          data: { question: '/btw', answer: null, error: 'Type a question after /btw, for example: /btw what does this function return?' },
+        });
+        return;
+      }
+
+      const shown = (data: Partial<SideQuestionData>) => setCommandModalPayload({
+        kind: 'btw',
+        data: { question, answer: null, error: null, ...data },
+      });
+      shown({});
+      try {
+        const response = await api.providers.claudeSideQuestion({
+          sessionId: selectedSession?.id || currentSessionId || null,
+          question,
+          model: currentProviderModel,
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          shown({ error: body?.error?.message || body?.message || `The side question failed (${response.status}).` });
+          return;
+        }
+        shown({ answer: String(body?.data?.answer ?? '') });
+      } catch (error) {
+        shown({ error: error instanceof Error ? error.message : 'The side question failed.' });
+      }
+    },
+    [currentProviderModel, currentSessionId, resetCommandMenuState, selectedSession?.id],
+  );
+
   // "Send now": hands a message to the session's running turn, which takes it
   // in at its next tool step, as the terminal does. Resolves false when the run
   // could not take it (it just ended, or the provider has no mid-turn input),
@@ -816,6 +871,15 @@ export function useChatComposerState({
         return;
       }
 
+      // `/btw <question>`: answered beside the chat, so it works mid-turn too.
+      const sideQuestion = !queuedSubmission && !submitOptions?.skipCommandInterception && provider === 'claude'
+        ? currentInput.trimStart().match(/^\/btw(?:\s+([\s\S]*))?$/)
+        : null;
+      if (sideQuestion) {
+        askSideQuestion((sideQuestion[1] ?? '').trim());
+        return;
+      }
+
       // A turn is already in flight: stash this message instead of sending it.
       // Upload attached files now so the queued record contains durable image
       // descriptors that can be sent even if another session is open later.
@@ -908,7 +972,7 @@ export function useChatComposerState({
                 metadata: { type: 'builtin' },
               } as SlashCommand)
             : undefined);
-        if (matchedCommand && matchedCommand.type !== 'skill') {
+        if (matchedCommand && matchedCommand.type !== 'skill' && matchedCommand.type !== 'cli') {
           executeCommand(matchedCommand, isHelpAlias ? '/help' : commandInput);
           recordSentMessage(currentInput);
           setInput('');
@@ -1098,6 +1162,7 @@ export function useChatComposerState({
       buildSendOptions,
       currentSessionId,
       editingAnchorId,
+      askSideQuestion,
       executeCommand,
       injectIntoRun,
       isLoading,

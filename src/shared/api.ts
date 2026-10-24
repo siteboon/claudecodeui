@@ -416,6 +416,10 @@ export const api = {
   // Provider (coding agent) endpoints — models, capabilities, sessions, MCP, skills.
   providers: {
     capabilities: () => get('/api/providers/capabilities'),
+    claudeCliCommands: (workspacePath?: string) =>
+      get(`/api/providers/claude/cli-commands${workspacePath ? `?workspacePath=${encodeURIComponent(workspacePath)}` : ''}`),
+    claudeSideQuestion: (body: { sessionId: string | null; question: string; model?: string }) =>
+      post('/api/providers/claude/btw', body),
     claudePlanUsage: (refresh = false) =>
       get(`/api/providers/claude/plan-usage${refresh ? '?refresh=1' : ''}`),
     authStatus: (provider: string) =>

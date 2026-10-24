@@ -765,7 +765,14 @@ export type HelpCommandData = {
 /** Wrapper pairing a CommandModalKind with its matching command result data; pass it as the single payload prop that tells the chat command modal which slash-command result to render, or null to close it. */
 export type CommandModalPayload = {
   kind: CommandModalKind;
-  data: HelpCommandData | ModelCommandData | CostCommandData | StatusCommandData;
+  data: HelpCommandData | ModelCommandData | CostCommandData | StatusCommandData | SideQuestionData;
+};
+
+/** A `/btw` side question and its answer; `answer` and `error` are both null while it is asked. */
+export type SideQuestionData = {
+  question: string;
+  answer: string | null;
+  error: string | null;
 };
 
 /** A composer message queued while its session is still busy, holding the text, the in-memory and already-uploaded attachments and the send options snapshotted at queue time so it can be auto-sent unchanged once the session goes idle. */
@@ -811,7 +818,7 @@ export type SlashCommand = {
 };
 
 /** Discriminator naming which slash-command result the chat command modal is showing: 'help', 'models', 'cost' or 'status'. */
-type CommandModalKind = 'help' | 'models' | 'cost' | 'status';
+type CommandModalKind = 'help' | 'models' | 'cost' | 'status' | 'btw';
 
 // ---------------------------
 

@@ -20,11 +20,15 @@ const jsonResponse = (payload: unknown) => ({
 
 const listCommands = vi.fn();
 const listSkills = vi.fn();
+const listCliCommands = vi.fn();
 
 vi.mock('@/shared/api', () => ({
   api: {
     commands: { list: (...args: unknown[]) => listCommands(...args) },
-    providers: { skills: (...args: unknown[]) => listSkills(...args) },
+    providers: {
+      skills: (...args: unknown[]) => listSkills(...args),
+      claudeCliCommands: (...args: unknown[]) => listCliCommands(...args),
+    },
   },
 }));
 
@@ -75,7 +79,7 @@ const setUp = async (typedInput: string) => {
     { initialProps: { input: '' } },
   );
 
-  await waitFor(() => assert.equal(result.current.slashCommandsCount, 2));
+  await waitFor(() => assert.equal(result.current.slashCommandsCount, 3), "the custom commands plus /btw");
 
   // Mirror the composer: the textarea reports the typed text, then the hook is
   // told where the caret is so it can open and filter the menu.
@@ -115,6 +119,8 @@ beforeEach(() => {
     }),
   );
   listSkills.mockResolvedValue(jsonResponse({ success: true, data: { skills: [] } }));
+  listCliCommands.mockReset();
+  listCliCommands.mockResolvedValue(jsonResponse({ success: true, data: { commands: [] } }));
 });
 
 afterEach(() => {
@@ -162,4 +168,65 @@ describe('slash command menu keyboard selection', () => {
     );
     assert.deepEqual(setInputCalls, []);
   });
+});
+
+// Claude's own commands: "/usage" must not lose Enter to "/usage-credits" (or,
+// as before these were listed, to /cost, whose description says "usage").
+const setUpCli = async (typedInput: string) => {
+  listCliCommands.mockResolvedValue(jsonResponse({
+    success: true,
+    data: {
+      commands: [
+        { name: '/usage-credits', description: 'Buy usage credits', argumentHint: '' },
+        { name: '/usage', description: 'Show plan usage', argumentHint: '' },
+        { name: '/compact', description: 'Compact the conversation', argumentHint: '<instructions>' },
+      ],
+    },
+  }));
+  const setInputCalls: string[] = [];
+  const executedCommands: SlashCommand[] = [];
+  const textarea = document.createElement('textarea');
+  document.body.appendChild(textarea);
+  const { result, rerender } = renderHook(
+    ({ input }: { input: string }) =>
+      useSlashCommands({
+        selectedProject: project,
+        provider: 'claude',
+        input,
+        setInput: (value) => { setInputCalls.push(value as string); },
+        textareaRef: { current: textarea } as RefObject<HTMLTextAreaElement>,
+        onExecuteCommand: (command) => { executedCommands.push(command); },
+      }),
+    { initialProps: { input: '' } },
+  );
+  await waitFor(() => assert.equal(result.current.slashCommandsCount, 6));
+  textarea.value = typedInput;
+  rerender({ input: typedInput });
+  act(() => { result.current.handleCommandInputChange(typedInput, typedInput.length); });
+  // The query is applied after a short debounce.
+  await waitFor(() => assert.ok(
+    result.current.filteredCommands.length > 0
+      && result.current.filteredCommands.every((command) => command.name.startsWith(typedInput)),
+  ));
+  return { result, setInputCalls, executedCommands, textarea };
+};
+
+it('the command whose whole name was typed is first, and Enter runs it', async () => {
+  const { result, executedCommands, textarea } = await setUpCli('/usage');
+  assert.deepEqual(result.current.filteredCommands.map((command) => command.name), ['/usage', '/usage-credits']);
+
+  const { event } = keyEvent('Enter');
+  act(() => { result.current.handleCommandMenuKeyDown(event); });
+  assert.deepEqual(executedCommands.map((command) => command.name), ['/usage']);
+  textarea.remove();
+});
+
+it('Enter on a CLI command that takes an argument writes it into the composer instead', async () => {
+  const { result, executedCommands, setInputCalls, textarea } = await setUpCli('/compact');
+
+  const { event } = keyEvent('Enter');
+  act(() => { result.current.handleCommandMenuKeyDown(event); });
+  assert.equal(executedCommands.length, 0);
+  assert.equal(setInputCalls.at(-1), '/compact ');
+  textarea.remove();
 });

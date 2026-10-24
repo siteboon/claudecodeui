@@ -6,6 +6,11 @@ import { useProjectSlashCommands } from '@/shared/hooks/useProjectSlashCommands'
 import type { LLMProvider, Project, SlashCommand } from '@/shared/types';
 import { isSkillCommand } from '@/shared/utils';
 
+// A pick from the menu writes these into the composer instead of running them:
+// skills, and CLI commands that take an argument, so it can be typed first.
+const insertsOnPick = (command: SlashCommand): boolean =>
+  isSkillCommand(command) || (command.type === 'cli' && Boolean(command.argumentHint));
+
 const COMMAND_QUERY_DEBOUNCE_MS = 150;
 
 
@@ -53,9 +58,12 @@ const filterSlashCommands = (
   const commandPrefix = normalizedQuery.startsWith('/')
     ? normalizedQuery
     : `/${normalizedQuery}`;
-  const namePrefixMatches = commands.filter((command) =>
-    command.name.toLowerCase().startsWith(commandPrefix),
-  );
+  // The command whose whole name was typed comes first, so Enter on "/usage"
+  // runs /usage rather than a longer name that shares the prefix.
+  const namePrefixMatches = commands
+    .filter((command) => command.name.toLowerCase().startsWith(commandPrefix))
+    .sort((commandA, commandB) =>
+      Number(commandB.name.toLowerCase() === commandPrefix) - Number(commandA.name.toLowerCase() === commandPrefix));
 
   // Namespaced commands should behave like path completion. Once a provider
   // namespace is typed, only exact command-prefix matches should stay visible.
@@ -211,7 +219,7 @@ export function useSlashCommands({
 
   const selectCommandFromKeyboard = useCallback(
     (command: SlashCommand) => {
-      if (isSkillCommand(command)) {
+      if (insertsOnPick(command)) {
         insertCommandIntoInput(command);
         return;
       }
@@ -233,7 +241,7 @@ export function useSlashCommands({
       }
 
       trackCommandUsage(command);
-      if (isSkillCommand(command)) {
+      if (insertsOnPick(command)) {
         insertCommandIntoInput(command);
         return;
       }
