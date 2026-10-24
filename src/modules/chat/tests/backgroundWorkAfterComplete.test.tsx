@@ -243,3 +243,18 @@ test('a refused stop for a task whose row has no status yet is still reported', 
 
   assert.equal(stored.at(-1)?.kind, 'error');
 });
+
+test('a refused stop settles the running row when an earlier row of the same task has settled', () => {
+  const { dispatch, stored } = renderHandlers();
+
+  // A resumed agent: the first call settled, the second runs under the same id.
+  dispatch(event({ kind: 'tool_use', toolId: 'toolu_agent_1', toolName: 'Agent', toolInput: { description: 'Survey' } }));
+  dispatch(event({ kind: 'task_status', event: 'started', taskId: 'a1', toolUseId: 'toolu_agent_1', taskType: 'local_agent' }));
+  dispatch(event({ kind: 'task_status', event: 'notification', taskId: 'a1', toolUseId: 'toolu_agent_1', status: 'completed' }));
+  dispatch(event({ kind: 'tool_use', toolId: 'toolu_agent_2', toolName: 'Agent', toolInput: { description: 'Survey again' } }));
+  dispatch(event({ kind: 'task_status', event: 'started', taskId: 'a1', toolUseId: 'toolu_agent_2', taskType: 'local_agent' }));
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'a1' }));
+
+  assert.equal(stored.at(-1)?.toolUseId, 'toolu_agent_2');
+  assert.equal(stored.at(-1)?.status, 'stopped');
+});
