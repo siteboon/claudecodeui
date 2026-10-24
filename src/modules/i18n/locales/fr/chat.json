@@ -262,6 +262,7 @@
     "trigger": "Exporter la conversation",
     "heading": "Exporter en",
     "untitled": "Conversation",
+    "error": "Impossible de charger toute la conversation. Réessayez.",
     "html": {
       "label": "Page web (.html)",
       "description": "Autonome, identique à l’app, imprimable en PDF."

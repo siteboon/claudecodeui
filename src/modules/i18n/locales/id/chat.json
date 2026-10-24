@@ -291,6 +291,7 @@
     "trigger": "Ekspor percakapan",
     "heading": "Ekspor sebagai",
     "untitled": "Percakapan",
+    "error": "Tidak dapat memuat seluruh percakapan. Coba lagi.",
     "html": {
       "label": "Halaman web (.html)",
       "description": "Mandiri, tampil seperti aplikasi, dan dapat dicetak ke PDF."

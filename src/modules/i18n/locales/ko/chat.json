@@ -271,6 +271,7 @@
     "trigger": "대화 내보내기",
     "heading": "내보내기 형식",
     "untitled": "대화",
+    "error": "전체 대화를 불러오지 못했습니다. 다시 시도해 주세요.",
     "html": {
       "label": "웹 페이지 (.html)",
       "description": "단일 파일. 앱과 같은 모습이며 PDF로 인쇄 가능."

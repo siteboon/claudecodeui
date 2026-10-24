@@ -260,6 +260,7 @@
     "trigger": "Sohbeti dışa aktar",
     "heading": "Şu biçimde dışa aktar",
     "untitled": "Sohbet",
+    "error": "Sohbetin tamamı yüklenemedi. Tekrar deneyin.",
     "html": {
       "label": "Web sayfası (.html)",
       "description": "Tek dosya, uygulamayla aynı görünür, PDF’e yazdırılır."

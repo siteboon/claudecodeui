@@ -328,6 +328,7 @@
     "trigger": "Exportar conversación",
     "heading": "Exportar como",
     "untitled": "Conversación",
+    "error": "No se pudo cargar toda la conversación. Inténtalo de nuevo.",
     "html": {
       "label": "Página web (.html)",
       "description": "Autónoma, con el aspecto de la app, imprimible a PDF."
