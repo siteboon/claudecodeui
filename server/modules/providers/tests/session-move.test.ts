@@ -128,6 +128,15 @@ test('a session that has not run moves for any provider; one with a transcript n
     // Clients list a moved session first in its new project; paging must agree.
     assert.ok(new Date(moved?.updated_at ?? 0).getFullYear() > 2020, 'a move bumps updated_at');
 
+    // The bump is skipped once the row has moved on to another project.
+    getConnectionModule.getConnection()
+      .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE session_id = 'fresh'")
+      .run();
+    sessionsDb.touchMovedSession('fresh', source);
+    assert.equal(new Date(sessionsDb.getSessionById('fresh')?.updated_at ?? 0).getFullYear(), 2020);
+    sessionsDb.touchMovedSession('fresh', path.join(directory, 'target'));
+    assert.ok(new Date(sessionsDb.getSessionById('fresh')?.updated_at ?? 0).getFullYear() > 2020);
+
     sessionsDb.createSession('opencode-native', 'opencode', source, 'Ran already');
     await assert.rejects(
       () => sessionsService.moveSessionToProject('opencode-native', targetId),
