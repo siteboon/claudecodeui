@@ -232,3 +232,14 @@ test('a refused stop for a task with no card here is still reported', () => {
 
   assert.equal(stored.at(-1)?.kind, 'error');
 });
+
+test('a refused stop for a task whose row has no status yet is still reported', () => {
+  const { dispatch, stored } = renderHandlers();
+
+  // Only the launch acknowledgement: the row says nothing about the task.
+  dispatch(event({ kind: 'tool_use', toolId: 'toolu_bash_1', toolName: 'Bash', toolInput: { command: 'sleep 600', run_in_background: true } }));
+  dispatch(event({ kind: 'tool_result', toolId: 'toolu_bash_1', content: 'Running in background', toolUseResult: { backgroundTaskId: 'bjxsjif0e' } }));
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'bjxsjif0e' }));
+
+  assert.equal(stored.at(-1)?.kind, 'error');
+});

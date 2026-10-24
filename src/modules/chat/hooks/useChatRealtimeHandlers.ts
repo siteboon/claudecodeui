@@ -6,7 +6,7 @@ import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNoti
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
-import { collectRunningBackgroundTasks, listRunningBackgroundLaunches, readBackgroundTaskId } from '@/modules/chat/utils/backgroundTasks';
+import { collectRunningBackgroundTasks, readBackgroundTaskId, readBackgroundTaskStatus } from '@/modules/chat/utils/backgroundTasks';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -175,10 +175,10 @@ export function useChatRealtimeHandlers({
           // went away, say): settle its card and chip instead of reporting a
           // failure the user can do nothing about.
           if (sid && msg.code === 'NO_SUCH_TASK' && typeof msg.taskId === 'string') {
-            const chatMessages = normalizedToChatMessages(sessionStore.getMessages(sid));
-            const launch = listRunningBackgroundLaunches(chatMessages)
+            const row = normalizedToChatMessages(sessionStore.getMessages(sid))
               .find((message) => readBackgroundTaskId(message) === msg.taskId);
-            if (launch) {
+            const status = row ? readBackgroundTaskStatus(row) : undefined;
+            if (row?.toolId && status === 'running') {
               handleEvent({
                 kind: 'task_status',
                 event: 'updated',
@@ -187,13 +187,13 @@ export function useChatRealtimeHandlers({
                 provider,
                 timestamp: new Date().toISOString(),
                 taskId: msg.taskId,
-                toolUseId: launch.toolId,
+                toolUseId: row.toolId,
                 status: 'stopped',
               });
               return;
             }
             // Its end arrived before the refusal: the card has settled already.
-            if (chatMessages.some((message) => readBackgroundTaskId(message) === msg.taskId)) {
+            if (status) {
               return;
             }
           }
