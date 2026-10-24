@@ -175,7 +175,8 @@ export function useChatRealtimeHandlers({
           // went away, say): settle its card and chip instead of reporting a
           // failure the user can do nothing about.
           if (sid && msg.code === 'NO_SUCH_TASK' && typeof msg.taskId === 'string') {
-            const launch = listRunningBackgroundLaunches(normalizedToChatMessages(sessionStore.getMessages(sid)))
+            const chatMessages = normalizedToChatMessages(sessionStore.getMessages(sid));
+            const launch = listRunningBackgroundLaunches(chatMessages)
               .find((message) => readBackgroundTaskId(message) === msg.taskId);
             if (launch) {
               handleEvent({
@@ -189,6 +190,10 @@ export function useChatRealtimeHandlers({
                 toolUseId: launch.toolId,
                 status: 'stopped',
               });
+              return;
+            }
+            // Its end arrived before the refusal: the card has settled already.
+            if (chatMessages.some((message) => readBackgroundTaskId(message) === msg.taskId)) {
               return;
             }
           }

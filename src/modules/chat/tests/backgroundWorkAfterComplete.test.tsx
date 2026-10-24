@@ -211,6 +211,18 @@ test('a stop refused for a task whose end never arrived settles its chip instead
   assert.deepEqual(log.at(-1), { sessionId: 'viewed-session', tasks: [] });
   assert.equal(stored.some((message) => message.kind === 'error'), false);
   assert.equal(stored.at(-1)?.kind, 'task_status');
+  assert.equal(stored.at(-1)?.toolUseId, 'toolu_bash_1');
+  assert.equal(stored.at(-1)?.status, 'stopped');
+});
+
+test('a stop refused after the task\'s own end arrived adds no error row', () => {
+  const { dispatch, stored } = renderHandlers();
+
+  workflowLaunch().forEach(dispatch);
+  dispatch(event({ kind: 'task_status', event: 'notification', taskId: 'wxkj4kcvd', toolUseId: 'toolu_workflow_1', status: 'completed', summary: 'done' }));
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'wxkj4kcvd' }));
+
+  assert.equal(stored.some((message) => message.kind === 'error'), false);
 });
 
 test('a refused stop for a task with no card here is still reported', () => {
