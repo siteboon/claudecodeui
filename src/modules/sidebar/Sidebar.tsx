@@ -164,6 +164,7 @@ function Sidebar({
     setCurrentProject,
     setSidebarVisible: (visible) => setPreference('sidebarVisible', visible),
     sidebarVisible,
+    keepProjectsExpanded: preferences.keepProjectsExpanded,
   });
 
   useEffect(() => {
