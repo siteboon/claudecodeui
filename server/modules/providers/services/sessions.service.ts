@@ -498,7 +498,7 @@ export const sessionsService = {
     let warning: 'SESSION_MOVE_TRANSCRIPT_PENDING' | undefined;
     // Row before transcript, as a project relocation does: the watcher may
     // index the moved transcript (whose cwd names the new folder) mid-move.
-    sessionsDb.updateSessionProjectPath(sessionId, target.project_path, { touch: true });
+    sessionsDb.updateSessionProjectPath(sessionId, target.project_path);
     try {
       if (transcriptRelocation && session.jsonl_path) {
         let relocated;
@@ -572,6 +572,13 @@ export const sessionsService = {
             warning = 'SESSION_MOVE_TRANSCRIPT_PENDING';
           }
         }
+      }
+      // Only once the move has happened: clients list a moved session first in
+      // its new project, and paging must agree. A failed move keeps its order.
+      try {
+        sessionsDb.updateSessionProjectPath(sessionId, target.project_path, { touch: true });
+      } catch (touchError) {
+        console.warn(`[sessions] Could not bump updated_at of moved session ${sessionId}:`, touchError);
       }
     } finally {
       // On every exit: the watcher may already have broadcast the moved copy,

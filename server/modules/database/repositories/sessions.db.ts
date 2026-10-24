@@ -326,8 +326,8 @@ export const sessionsDb = {
    * separately (`updateSessionTranscriptPath`) once the file has moved.
    *
    * `touch` bumps `updated_at` for a real move: clients list the moved session
-   * first in its new project, and paging must agree with that order. A
-   * rollback leaves it alone.
+   * first in its new project, and paging must agree with that order. The move
+   * passes it only after the move has succeeded, so a failed move keeps it.
    */
   updateSessionProjectPath(sessionId: string, projectPath: string | null, options: { touch?: boolean } = {}): void {
     const db = getConnection();
