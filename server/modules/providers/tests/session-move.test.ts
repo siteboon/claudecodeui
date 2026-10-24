@@ -118,8 +118,15 @@ test('a session that has not run moves for any provider; one with a transcript n
     const targetId = createTargetProject(path.join(directory, 'target'));
 
     sessionsDb.createAppSession('fresh', 'opencode', source, 'Fresh');
+    const getConnectionModule = await import('@/modules/database/connection.js');
+    getConnectionModule.getConnection()
+      .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE session_id = 'fresh'")
+      .run();
     await sessionsService.moveSessionToProject('fresh', targetId);
-    assert.equal(sessionsDb.getSessionById('fresh')?.project_path, path.join(directory, 'target'));
+    const moved = sessionsDb.getSessionById('fresh');
+    assert.equal(moved?.project_path, path.join(directory, 'target'));
+    // Clients list a moved session first in its new project; paging must agree.
+    assert.ok(new Date(moved?.updated_at ?? 0).getFullYear() > 2020, 'a move bumps updated_at');
 
     sessionsDb.createSession('opencode-native', 'opencode', source, 'Ran already');
     await assert.rejects(

@@ -498,7 +498,7 @@ export const sessionsService = {
     let warning: 'SESSION_MOVE_TRANSCRIPT_PENDING' | undefined;
     // Row before transcript, as a project relocation does: the watcher may
     // index the moved transcript (whose cwd names the new folder) mid-move.
-    sessionsDb.updateSessionProjectPath(sessionId, target.project_path);
+    sessionsDb.updateSessionProjectPath(sessionId, target.project_path, { touch: true });
     try {
       if (transcriptRelocation && session.jsonl_path) {
         let relocated;
