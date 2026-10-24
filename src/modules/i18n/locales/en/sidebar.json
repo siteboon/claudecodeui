@@ -176,5 +176,13 @@
     "archiveSessions_other": "Archive {{count}} sessions",
     "archiveSessionsNotice_one": "Archive keeps the session out of the active list while preserving its history.",
     "archiveSessionsNotice_other": "Archive keeps the sessions out of the active list while preserving their history."
+  },
+  "usage": {
+    "title": "Usage",
+    "fiveHour": "5-hour",
+    "week": "Week",
+    "resets": "Resets {{time}}",
+    "refresh": "Click to refresh",
+    "unavailable": "No plan limits for this login"
   }
 }

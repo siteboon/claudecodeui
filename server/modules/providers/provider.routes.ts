@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { claudePlanUsageService } from '@/modules/providers/services/claude-plan-usage.service.js';
 import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
@@ -622,6 +623,15 @@ const parseCustomModelsOnlyPayload = (payload: unknown): boolean => {
 
   return enabled;
 };
+
+/** The claude.ai plan limits (5-hour and weekly windows) the CLI's /usage command shows. */
+router.get(
+  '/claude/plan-usage',
+  asyncHandler(async (req: Request, res: Response) => {
+    const usage = await claudePlanUsageService.getPlanUsage({ refresh: req.query.refresh === '1' });
+    res.json(createApiSuccessResponse(usage));
+  }),
+);
 
 router.get(
   '/:provider/auth/status',

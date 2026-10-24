@@ -416,6 +416,8 @@ export const api = {
   // Provider (coding agent) endpoints — models, capabilities, sessions, MCP, skills.
   providers: {
     capabilities: () => get('/api/providers/capabilities'),
+    claudePlanUsage: (refresh = false) =>
+      get(`/api/providers/claude/plan-usage${refresh ? '?refresh=1' : ''}`),
     authStatus: (provider: string) =>
       get(`/api/providers/${encodeURIComponent(provider)}/auth/status`),
     claudeSettingsPermissions: () => get('/api/providers/claude/settings-permissions'),
