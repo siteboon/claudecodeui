@@ -36,10 +36,13 @@ on a 29k-row session costs ~112 MB instead of ~1 GB.
    `prepareTranscriptMessages` runs on REST reads only, so the transcript mid-run does not
    match the transcript after a refresh. Reconciliation, not equality, is the contract — see
    [the realtime stream](./02-realtime-stream.md).
-6. **The render list is narrowed three times, and none of them is virtualization.**
-   `visibleMessages` is a tail slice of `chatMessages` (100 rows by default); each surviving
-   row mounts its content only near the viewport; and each *mounted* row still skips layout
-   and paint off-screen via `content-visibility: auto`. Every row keeps a DOM node throughout.
+6. **The render list is narrowed twice, and neither is virtualization.**
+   `visibleMessages` is a tail slice of `chatMessages` (100 rows by default), and each
+   surviving row mounts its content only near the viewport. Every row keeps a DOM node
+   throughout. (`content-visibility: auto` used to be a third pass; it was removed because a
+   row's intrinsic size changed when it remounted, which fed back into the manual scroll
+   anchoring `useLazyRowObserver` does where the browser has none. See
+   [scrolling](./05-scrolling.md#keeping-the-view-still-above-the-viewport).)
 7. **A row's wrapper element never unmounts.** It carries `data-message-timestamp` whenever
    the row has a timestamp, so a search jump can find and scroll to a row whose content is
    still a placeholder. Scroll *anchor restore* is different — it selects `.chat-message`,
@@ -120,7 +123,9 @@ renders.
 
 `status` has exactly one writer: `fetchFromServer` sets `loading` before it queues, then
 `idle` or `error` when it settles (also `idle` when `canRequest` refuses). Nothing else in the
-store touches it. `'streaming'` is declared in the `SessionStatus` union but no code path
+store touches it. Because every later call rewrites it, a caller must not read it to learn
+how its own call went: `fetchFromServer` returns that as `ok` (see the gotchas). `'streaming'`
+is declared in the `SessionStatus` union but no code path
 assigns it — streaming is visible through the `__streaming_<sessionId>` row instead, and busy
 state lives in the processing map described in [the realtime stream](./02-realtime-stream.md).
 
@@ -160,7 +165,7 @@ These eleven names are the whole surface `useSessionStore` returns. There is no 
 
 | Call | What it does | Called from |
 | --- | --- | --- |
-| `fetchFromServer(sessionId, {limit, offset, canRequest})` | Replaces `serverMessages` with one page. `limit: null` means the whole transcript. Sets `total`/`hasMore`/`offset`/`fetchedAt`, prunes realtime. | Session open, "Load all", search jump, `loadFullTranscript`. |
+| `fetchFromServer(sessionId, {limit, offset, canRequest})` | Replaces `serverMessages` with one page. `limit: null` means the whole transcript. Sets `total`/`hasMore`/`offset`/`fetchedAt`, prunes realtime. Returns this call's outcome: `{ slot, ok }`, `ok` false for a failed request (it never throws), or `null` when `canRequest` refused it. | Session open, "Load all", search jump, `loadFullTranscript`. |
 | `fetchMore(sessionId, {limit, canRequest})` | Fetches the page at `slot.offset` and prepends it via `mergeOlderServerPage`. Returns `{slot, prependedCount}`. | `loadOlderMessages` on scroll-to-top. |
 | `refreshLatestFromServer(sessionId, {limit, canRequest})` | Re-fetches the newest page and stitches it onto the cached suffix without refetching the transcript. Returns `{slot, applied, changed, deferred}`. | Only `latestRefreshExecutorRef`, i.e. everything routed through `requestLatestMessages`: `complete`, websocket reconnect, external update, stale re-activation. |
 | `appendRealtime(sessionId, msg)` | Pushes one row onto `realtimeMessages`, re-stamping `sessionId` if the frame disagreed. Trims to `MAX_REALTIME_MESSAGES`. | `useChatRealtimeHandlers`, from its catch-all branch, plus three explicit calls. See the note below the table. |
@@ -218,15 +223,15 @@ and a hidden tab fails it — except export, which is allowed to finish.**
 
 | Trigger | Call | Notes |
 | --- | --- | --- |
-| Session selected (not already hydrated) | `fetchFromServer(limit: SESSION_MESSAGES_PAGE_SIZE, offset: 0)` | Guarded by `lastLoadedSessionKeyRef` = `sessionId:projectId` plus `slot.fetchedAt`, so tab switches do not refetch. |
+| Session selected (not already hydrated) | `fetchFromServer(limit: SESSION_MESSAGES_PAGE_SIZE, offset: 0)` | Guarded by `lastLoadedSessionKeyRef` = `sessionId:projectId` plus `slot.fetchedAt`, so tab switches do not refetch. Like every other caller it captures `sessionOpenRef` first: a page that lands after the user switched sessions (or away and back) touches neither the paging nor `isLoadingSessionMessages`, which the session change ends for the open it leaves. |
 | Session re-activated and stale | `requestLatestMessages` | Only when `isStale`. |
 | `complete` frame for the viewed session | `requestLatestMessages` | In `useChatRealtimeHandlers`. |
 | `websocket_reconnected` | `requestLatestMessages`, awaited, then `chat.subscribe` | `ChatInterface.tsx` `handleWebSocketReconnect`. |
-| `externalMessageUpdate` bumped by the sidebar | `requestLatestMessages` | Skipped while the session is processing. |
+| `externalMessageUpdate` bumped | `requestLatestMessages` | Bumped in project-workspace's `useProjectsState.ts` on a `session_upserted` event for the viewed session while it is not processing (its transcript changed on disk, from another client or the CLI). Skipped while the session is processing here too; a bump skipped that way is not refreshed later, the next one is. Keyed on the count alone: a new session object for the same session (a sidebar search click hands over one) does not refresh again. Its follow to the bottom 200 ms later declines while a jump is pending, and is not retried, instead of dropping the jump ([scrolling](./05-scrolling.md#deferred-scrolls-re-check-intent)). |
 | Scroll within 100 px of the top | `fetchMore` | Locked by `topLoadLockRef` until `scrollTop > 20`. |
-| "Load all" clicked | `fetchFromServer(limit: null)` | Also sets `visibleMessageCount = Infinity`. |
+| "Load all" clicked | `fetchFromServer(limit: null)` | Also sets `visibleMessageCount = Infinity`, unless the fetch failed. |
 | Search jump, unless the transcript is already fully loaded | `fetchFromServer(limit: null)` | Fetches everything; widens the window only as far as the hit needs. |
-| Export | `loadFullTranscript` → `fetchFromServer(limit: null)` | Does not touch the render window. |
+| Export | `loadFullTranscript` → `fetchFromServer(limit: null)` | Does not touch the render window. Rejects when the fetch failed or was refused. |
 
 Each of these passes a `canRequest` predicate, and all but one are
 `isActive && activeSessionId === sessionId`; `loadFullTranscript` (export) checks only the
@@ -236,8 +241,11 @@ focus mid-request. What a refusal does depends on the call:
 - `refreshLatestFromServer` returns `deferred: true`. `latestRefreshExecutorRef` reports that
   to `messageHistoryRefreshCoordinator`, which keeps the session marked dirty; activation
   flushes exactly one request. That is what stops a background tab from issuing history reads.
-- `fetchFromServer` returns `null` with the slot left at `status: 'idle'`. The search-jump
-  effect recognises that `null` and re-arms itself for when the tab comes back.
+- `fetchFromServer` returns `null` with the slot left at `status: 'idle'`. The search jump
+  puts itself back for when the tab comes back, as it does whenever the tab is hidden once
+  its fetch has settled. Opening a session keeps the paging it reset before the request,
+  and export rejects (the session changed under it), which `ChatExportMenu` shows as an
+  error next to its trigger.
 - `fetchMore` returns `prependedCount: 0` and the pager simply does not advance.
 
 ---
@@ -424,7 +432,7 @@ Three details make this safe rather than jumpy:
   A rendered row that is 0px tall (a thinking row with Show thinking off) records 0, and
   fractional heights are kept rather than rounded. A placeholder taller than its content
   would put a row just above the band back inside it, and the row would remount and unmount
-  on every frame wherever no scroll anchoring absorbs the change (Safari, #1357).
+  on every frame wherever no scroll anchoring absorbs the change (Safari before 27, #1357).
 - **The tail starts mounted.** `initiallyNearViewport` is
   `index >= rowCount - INITIAL_MOUNTED_TAIL_ROWS`, so the initial scroll-to-bottom measures
   real heights instead of estimates.
@@ -444,12 +452,24 @@ non-intersections a hidden tab reports"*, and *"keeps every row mounted where
 IntersectionObserver does not exist"*. Three more cover the band edge: an empty row leaves
 as a 0px placeholder, and neither an empty row nor a fractional-height row flickers there.
 
-This layers on top of CSS containment, not instead of it: `.chat-message` in `src/index.css`
-carries `contain: layout style paint` and `content-visibility: auto` with
-`contain-intrinsic-size: auto 180px` — 240px for assistant rows, 96px for user, tool and error
-rows — which lets a *mounted* off-screen row skip layout, paint and style. Note that
-`.chat-message` is on the row's content, not on `LazyMessageRow`'s wrapper: an unmounted row
-is a bare sized `div`, so it costs nothing to skip either way.
+A placeholder is also kept out of scroll anchoring. `LazyMessageRow` marks it with
+`data-lazy-placeholder`, and `src/index.css` gives
+`.chat-messages-pane [data-lazy-placeholder]` a `width: 0` inside
+`@supports (overflow-anchor: auto)`. Native anchoring only picks boxes with area, so after a
+prepend it anchors to the first real row instead of a blank estimate whose growth it would
+then fail to absorb. Where the browser has no scroll anchoring (Safari before 27),
+placeholders keep their full width, and `useLazyRowObserver` anchors manually and never
+chooses a placeholder either: `LazyMessageRow` reports each mount through `trackMountedRow`
+from a layout effect, and only mounted rows are candidates. The same marker holds a search
+highlight back (`.search-highlight-flash[data-lazy-placeholder]`) until the row mounts. See
+[scrolling](./05-scrolling.md#keeping-the-view-still-above-the-viewport) for both paths.
+
+`.chat-message` in `src/index.css` keeps `contain: layout style paint`, but no longer
+`content-visibility: auto`: a mounted row is always fully rendered, so its height does not
+depend on how near the viewport it is, and the export override in `buildTranscriptHtml.tsx`
+that undid it for printing is gone. Rows farther than the band are unmounted anyway.
+Note that `.chat-message` is on the row's content, not on `LazyMessageRow`'s wrapper: an
+unmounted row is a bare sized `div`.
 
 ---
 
@@ -470,9 +490,9 @@ Three callers need the full array, and they differ only in what they do to the r
 
 | Consumer | Path | Window |
 | --- | --- | --- |
-| "Load all" click | `loadAllMessages` → `fetchFromServer(limit: null)` | `visibleMessageCount = Infinity` — the user asked to see it. |
-| Search jump | the search effect → `fetchFromServer(limit: null)` | Grown to at least `resolveSearchWindowSize` = `length - targetIndex + SEARCH_TARGET_CONTEXT_MESSAGES`; never shrunk, because the window is a `Math.max` against what was already showing. |
-| Export | `loadFullTranscript` → `fetchFromServer(limit: null)` | Untouched. Export reads the returned array, never the DOM. |
+| "Load all" click | `loadAllMessages` → `fetchFromServer(limit: null)` | `visibleMessageCount = Infinity` — the user asked to see it. A failed fetch (`null`, or `ok: false`) arms no restore, leaves the window and `allMessagesLoaded` alone and hides the pill, so paging from the top keeps working. Its loading flags are cleared only in the open that set them. |
+| Search jump | the search effect → `fetchFromServer(limit: null)` | Grown through `widenVisibleWindow` to at least `resolveSearchWindowSize` = `length - targetIndex + SEARCH_TARGET_CONTEXT_MESSAGES`; never shrunk, because the window is a `Math.max` against what was already showing. Widening captures the same scroll restore as a prepended page. A transcript that lands after the user switched sessions, or switched away and back, is dropped before it touches any state. One that lands after the jump was stopped (the user's scroll to the bottom, the user's own input, a newer jump) is recorded (`hasMoreMessages` false, `totalMessages`, the offset, `allMessagesLoaded`), since the store holds it, and only the landing is dropped. A failed fetch (`ok: false`, or a throw) leaves the store as it was, and the hit is looked for in the messages already loaded. |
+| Export | `loadFullTranscript` → `fetchFromServer(limit: null)` | Untouched. Export reads the returned array, never the DOM. A failed or refused fetch rejects, so no file is written from only the rows already loaded; `ChatExportMenu` catches the rejection, logs it to the console, ends its busy state and shows a short error under its trigger (`export.error`, in a `role="status"` live region) until the next attempt or for 5 s. When the window already covers every loaded row, the older rows appear in front of the first one with no restore; scroll anchoring holds the view (native, or `useLazyRowObserver` on Safari before 27, see [scrolling](./05-scrolling.md)). |
 
 Search needs it because a hit resolved by the sidebar may live in a page that was never
 fetched, and `findSearchTargetIndex` resolves against the loaded transcript rather than the
@@ -482,8 +502,13 @@ containing only its last page.
 There is a fourth way the window grows, and it fetches nothing. Once `hasMoreMessages` is
 false but the projected list is still longer than `visibleMessageCount`, `ChatMessagesPane`
 shows a "showing last N" line with a "load earlier" link. It calls `loadEarlierMessages`,
-which adds 100 to `visibleMessageCount`. That is the only widener that is not paired with a
-fetch, because by then the store already holds everything.
+which adds 100 to `visibleMessageCount` through `widenVisibleWindow`. It fetches nothing
+because by then the store already holds everything, but it captures the same scroll
+restore as a page of older messages, so the view stays on the row the user was reading.
+`widenVisibleWindow` advances `visibleMessageCountRef` as it widens, so two clicks before a
+render add 200, not 100, and keeps the first restore it captured.
+`revealMessage` (the background-tasks strip) also widens without a fetch through
+`widenVisibleWindow`, and gets the restore before it centres (and flashes) the row.
 
 ## Why the transcript is not virtualized
 
@@ -497,7 +522,7 @@ The reasoning worth keeping:
 
 1. **The list is already bounded twice** — a 100-row tail window plus
    `content-visibility: auto`, which is the browser's native version of what windowing buys.
-   Now three times, with `LazyMessageRow`.
+   `LazyMessageRow` has since taken over from `content-visibility`, which was removed.
 2. **The scroll machinery reads the DOM.** Anchor restore does
    `querySelectorAll('.chat-message')` + `getBoundingClientRect`, then checks
    `anchor.isConnected` and falls back to a `scrollHeight` delta. A virtualizer unmounts that
@@ -585,9 +610,23 @@ of ~1 GB with seven thousand.
   few thousand elements per commit. The consequence to know: swapping the scroll container
   element under a live pane would leave the observer rooted at the old one.
 - **A refused `fetchFromServer` and a failed one look different on purpose.** A refusal
-  returns `null` with `status: 'idle'`; a failure returns the slot with `status: 'error'`.
-  The search-jump effect keys off the `null` to re-arm itself for the next activation, which
-  it must not do for a genuine network error.
+  returns `null` (the slot's `status` back at `'idle'`); a failure returns
+  `{ slot, ok: false }` (the slot marked `'error'`) and never throws; a load returns
+  `{ slot, ok: true }`. A refusal happens behind another tab, where the search jump puts
+  itself back for the next activation anyway, or after the user left the session. A failure
+  must not be read as a full load: "Load all" and the search jump treat it as nothing
+  loaded (no `Infinity` window, no restore, `allMessagesLoaded` left false), and
+  `loadFullTranscript` rejects, so export writes no partial file (the export menu says so).
+  Opening a session takes its paging from the slot only when the slot still holds rows an
+  earlier open loaded (`fetchedAt` set): those are what is rendered, and `fetchMore` pages on
+  from their offset. With nothing loaded before, it leaves the paging it reset.
+  `fetchMore` reports a failure as a page that prepended nothing with `hasMore` unchanged,
+  so the pager simply does not advance.
+- **`ok` is per call; the slot's `status` is not.** `fetchFromServer` used to return the
+  shared slot, and its callers read `slot.status` after their await. By then a call queued
+  behind it could have rewritten it (a refusal sets `'idle'`, a new call `'loading'`), so a
+  failed request read as a loaded one. `sessionStoreFetchOutcome.test.ts` pins the queued
+  refusal case.
 
 ## If you change this, check that
 
@@ -598,10 +637,10 @@ of ~1 GB with seven thousand.
 | `computeMerged` / `dedupeAdjacentAssistantEchoes` | `sessionStoreTruncate.test.tsx` and `sessionMessageReconciliation.test.ts`; the edit/replacement ordering is asserted there. |
 | Any mutator | It must assign a **new** `serverMessages`/`realtimeMessages` array rather than mutating one in place, or `recomputeMergedIfNeeded` sees unchanged references and skips the recompute. |
 | `normalizedToChatMessages` | The `WeakMap` projection cache invalidation keys, and `useChatMessages.test.ts` which pins object reuse across prepends and streaming. |
-| `LazyMessageRow` / `useLazyRowObserver` | Search jumps, which address rows by `data-message-timestamp` on the permanent wrapper, and scroll anchor restore, which selects `.chat-message` inside the *mounted* content ([scrolling](./05-scrolling.md)). |
+| `LazyMessageRow` / `useLazyRowObserver` | Search jumps, which address rows by `data-message-timestamp` on the permanent wrapper, and scroll anchor restore, which selects `.chat-message` inside the *mounted* content ([scrolling](./05-scrolling.md)). Also scroll anchoring: placeholders must keep `data-lazy-placeholder` (and its `width: 0` where the browser anchors), and mounts must keep reaching `trackMountedRow` from a layout effect; `transcriptScrollAnchoring.test.tsx` pins both. |
 | `INITIAL_MOUNTED_TAIL_ROWS` | The initial scroll-to-bottom, which relies on the newest rows having real measured heights. |
 | The history cache's key or validity check | `sessions.service.test.ts` and the Cursor/OpenCode bypass — their history does not live in `jsonl_path`. |
 | `prepareTranscriptMessages` | The live-vs-history divergence documented in [the realtime stream](./02-realtime-stream.md) and the tool grouping in [the tool view](./06-tool-view.md). |
 | `truncateAt` or `replacesAnchorId` | `history_truncated` emission order in the gateway ([websocket transport](./01-websocket-transport.md)) and `removeOptimisticUserEchoes`. |
-| `visibleMessageCount` or who writes it | All four writers: `INITIAL_VISIBLE_MESSAGES` on session change, `+SESSION_MESSAGES_PAGE_SIZE` on prepend, `Infinity` on "Load all", `Math.max` with `resolveSearchWindowSize` on a search jump, plus `loadEarlierMessages` stepping 100. A shrink anywhere can scroll the transcript out from under the user. |
+| `visibleMessageCount` or who writes it | Every writer: `INITIAL_VISIBLE_MESSAGES` on session change, `+SESSION_MESSAGES_PAGE_SIZE` on prepend, `Infinity` on a "Load all" that loaded, `Math.max` through `widenVisibleWindow` on a search jump or `revealMessage`, plus `loadEarlierMessages` stepping 100 through `widenVisibleWindow` too. The one deliberate shrink is `scrollToBottomAndReset` (the jump-to-bottom button after "Load all"), which drops it back to `INITIAL_VISIBLE_MESSAGES` after moving to the bottom; a shrink anywhere else can scroll the transcript out from under the user. Anything else that grows it in front of the first row must capture a restore, as `loadOlderMessages` and `loadAllMessages` do, normally via `widenVisibleWindow`, so the restore effect (keyed on `visibleMessageCount`) has something to restore. `scrollRestoreGuards.test.tsx` pins the widen's restore and guards, two "Load earlier" clicks before a render, and that no fetch landing after a session switch writes the window. |
 | `messagesRepresentSamePersistedRow` | Every other helper in `sessionMessagePagination.ts` — all overlap detection funnels through it, so loosening it silently glues unrelated pages together and tightening it turns every refresh into a full bridge walk. |

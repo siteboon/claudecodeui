@@ -235,6 +235,14 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+
+    /* The search highlight only changes colours, and cut to 0.01ms it would
+       not be seen at all, so it keeps its length (--search-flash-duration,
+       set with .search-highlight-flash below; its class still comes off on
+       the animation's end). The class outranks the universal selector above. */
+    .search-highlight-flash {
+      animation-duration: var(--search-flash-duration) !important;
+    }
   }
 }
 
@@ -568,6 +576,21 @@
     contain: layout style paint;
   }
 
+  /* A LazyMessageRow placeholder is a blank size estimate. Anchoring to one
+     after a prepend holds the view on the very row whose growth has to be
+     absorbed, so where the browser anchors, placeholders take no width:
+     scroll anchoring skips boxes with no area and picks the first real row
+     instead. Not overflow-anchor: none, because a row flipping it back to
+     auto as it mounts makes Chromium drop the pane's anchor in that very
+     commit. Browsers without scroll anchoring (Safari before 27) skip
+     placeholders in useLazyRowObserver, so theirs keep their full width,
+     which spares WebKit's IntersectionObserver boxes with no area. */
+  @supports (overflow-anchor: auto) {
+    .chat-messages-pane [data-lazy-placeholder] {
+      width: 0;
+    }
+  }
+
   .chat-composer-shell {
     contain: layout style;
   }
@@ -588,20 +611,11 @@
     clip-path: inset(-8px -8px 0 -8px);
   }
 
+  /* No content-visibility: LazyMessageRow already unmounts rows far from the
+     viewport, and a row whose size depends on how near the viewport it is
+     feeds back into the scroll corrections that keep the view still. */
   .chat-message {
     contain: layout style paint;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 180px;
-  }
-
-  .chat-message.assistant {
-    contain-intrinsic-size: auto 240px;
-  }
-
-  .chat-message.user,
-  .chat-message.tool,
-  .chat-message.error {
-    contain-intrinsic-size: auto 96px;
   }
 
   /* Mobile touch optimization and safe areas */
@@ -995,9 +1009,19 @@
     }
   }
 
-  /* Search result highlight flash */
+  /* Highlight flash on the row a search jump or a reveal lands on. The class is
+     taken off when this animation ends (useChatSessionState listens for
+     `animationend` of `search-flash`, so keep the name in step). */
   .search-highlight-flash {
-    animation: search-flash 4s ease-out;
+    --search-flash-duration: 4s;
+    animation: search-flash var(--search-flash-duration) ease-out;
+  }
+
+  /* A jump can land on a row that is still a placeholder (no width where the
+     browser anchors, a blank box elsewhere). The flash starts when the row
+     mounts and the marker goes, since the animation applies only from then. */
+  .search-highlight-flash[data-lazy-placeholder] {
+    animation: none;
   }
 
   @keyframes search-flash {

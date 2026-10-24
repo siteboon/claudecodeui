@@ -102,9 +102,6 @@ ${styles}
     border: 1px solid hsl(var(--border)); background: transparent; color: inherit;
     border-radius: 0.5rem; padding: 0.375rem 0.75rem; font-size: 0.75rem; cursor: pointer;
   }
-  /* Off-screen skipping is a scrolling optimisation; in a printed document it
-     leaves blank pages. */
-  .chat-message { content-visibility: visible !important; contain-intrinsic-size: auto !important; }
   @media print {
     .chat-export-theme-toggle { display: none; }
     .chat-export-shell { max-width: none; padding: 0; }

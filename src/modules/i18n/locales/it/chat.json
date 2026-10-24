@@ -260,6 +260,7 @@
     "trigger": "Esporta conversazione",
     "heading": "Esporta come",
     "untitled": "Conversazione",
+    "error": "Impossibile caricare l'intera conversazione. Riprova.",
     "html": {
       "label": "Pagina web (.html)",
       "description": "Autonoma, uguale all’app, stampabile in PDF."

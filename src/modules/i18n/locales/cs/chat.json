@@ -331,6 +331,7 @@
     "trigger": "Exportovat konverzaci",
     "heading": "Exportovat jako",
     "untitled": "Konverzace",
+    "error": "Celou konverzaci se nepodařilo načíst. Zkuste to znovu.",
     "html": {
       "label": "Webová stránka (.html)",
       "description": "Samostatný soubor, vypadá jako aplikace, lze vytisknout do PDF."
