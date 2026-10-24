@@ -73,7 +73,8 @@ test('assembles built-in, deduped skills and custom commands in that order', asy
     skillName: 'review',
   });
   assert.equal(result.current.error, false);
-  assert.deepEqual(listCommands.mock.calls[0], ['/work/triage-repo']);
+  // The provider rides along so the route can scope CLI-native commands.
+  assert.deepEqual(listCommands.mock.calls[0], ['/work/triage-repo', 'claude']);
   assert.deepEqual(listSkills.mock.calls[0], ['claude', { workspacePath: '/work/triage-repo' }]);
 });
 
@@ -126,4 +127,47 @@ test('a disabled consumer does not request until it is enabled', async () => {
   rerender({ enabled: true });
   await waitFor(() => assert.equal(result.current.commands.length, 1));
   assert.equal(listCommands.mock.calls.length, 1);
+});
+
+test('a provider switch hides the previous scope while the new fetch is in flight', async () => {
+  // The first scope resolves; the second stays pending so the switch window
+  // is observable — the old list must not leak through it.
+  listCommands.mockResolvedValueOnce(
+    jsonResponse({ builtIn: [{ name: '/compact' }], native: [] }),
+  );
+  listCommands.mockImplementationOnce(() => new Promise(() => undefined));
+  listSkills.mockResolvedValue(jsonResponse({ data: { skills: [] } }));
+
+  const { useProjectSlashCommands } = await import('@/shared/hooks/useProjectSlashCommands');
+  const { result, rerender } = renderHook(
+    ({ provider }: { provider: 'claude' | 'codex' }) => useProjectSlashCommands(project, provider),
+    { initialProps: { provider: 'claude' as 'claude' | 'codex' } },
+  );
+
+  await waitFor(() => assert.equal(result.current.commands.length, 1));
+  assert.equal(result.current.commands[0].name, '/compact');
+
+  rerender({ provider: 'codex' });
+
+  // The in-flight codex fetch has not landed, and the claude list is scoped
+  // away: nothing from the previous provider may be offered meanwhile.
+  assert.deepEqual(result.current.commands, []);
+});
+
+test('a same-scope refresh keeps the list visible while it runs', async () => {
+  listCommands.mockResolvedValueOnce(jsonResponse({ builtIn: [{ name: '/help' }], native: [] }));
+  listSkills.mockResolvedValue(jsonResponse({ data: { skills: [] } }));
+
+  const { useProjectSlashCommands } = await import('@/shared/hooks/useProjectSlashCommands');
+  const { result } = renderHook(() => useProjectSlashCommands(project, 'claude'));
+
+  await waitFor(() => assert.equal(result.current.commands.length, 1));
+
+  // The next refresh never resolves, but a same-scope refresh must keep the
+  // current list on screen rather than blanking it.
+  listCommands.mockImplementationOnce(() => new Promise(() => undefined));
+  result.current.refresh();
+
+  await waitFor(() => assert.equal(listCommands.mock.calls.length, 2));
+  assert.deepEqual(result.current.commands.map((command) => command.name), ['/help']);
 });

@@ -214,6 +214,7 @@ function ChatInterface({
     isDragActive,
     openAttachmentPicker,
     handleSubmit,
+    sendCompactCommand,
     backgroundSendPrompt,
     resolveBackgroundSendPrompt,
     queuedDraft,
@@ -540,6 +541,9 @@ function ChatInterface({
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
+          provider={provider}
+          hasSelectedSession={Boolean(selectedSession)}
+          onCompact={sendCompactCommand}
           permissionMode={permissionMode}
           availablePermissionModes={availablePermissionModes}
           onSelectPermissionMode={selectPermissionMode}
