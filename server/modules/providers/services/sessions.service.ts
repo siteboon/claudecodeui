@@ -576,7 +576,9 @@ export const sessionsService = {
       // Only once the move has happened: clients list a moved session first in
       // its new project, and paging must agree. A failed move keeps its order.
       try {
-        // Only updated_at: project_path may have changed again while this awaited.
+        // Bumps only updated_at, and only while the row is still in the target:
+        // a concurrent move may have changed project_path while this awaited.
+        // shortcut: if that concurrent move then rolls back to the target, this move's bump is lost; harmless ordering only.
         sessionsDb.touchMovedSession(sessionId, target.project_path);
       } catch (touchError) {
         console.warn(`[sessions] Could not bump updated_at of moved session ${sessionId}:`, touchError);
