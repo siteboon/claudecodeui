@@ -146,6 +146,10 @@ test('a Codex rollout that cannot be rewritten leaves the session where it was',
     const targetId = createTargetProject(path.join(directory, 'target'));
     const now = new Date().toISOString();
     sessionsDb.createSession('codex-gone', 'codex', source, 'Gone', now, now, path.join(directory, 'missing.jsonl'));
+    // An old timestamp, so a wrong bump cannot coincide with it.
+    (await import('@/modules/database/connection.js')).getConnection()
+      .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE session_id = 'codex-gone'")
+      .run();
     const updatedBefore = sessionsDb.getSessionById('codex-gone')?.updated_at;
 
     await assert.rejects(

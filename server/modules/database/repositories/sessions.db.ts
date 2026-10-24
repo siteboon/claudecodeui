@@ -324,21 +324,25 @@ export const sessionsDb = {
   /**
    * Files one session under another project. Its transcript path is updated
    * separately (`updateSessionTranscriptPath`) once the file has moved.
-   *
-   * `touch` bumps `updated_at` for a real move: clients list the moved session
-   * first in its new project, and paging must agree with that order. The move
-   * passes it only after the move has succeeded, so a failed move keeps it.
    */
-  updateSessionProjectPath(sessionId: string, projectPath: string | null, options: { touch?: boolean } = {}): void {
+  updateSessionProjectPath(sessionId: string, projectPath: string | null): void {
     const db = getConnection();
     // NULL stays NULL: it is how a rollback restores a row that had no project.
     const normalizedProjectPath = projectPath === null ? null : normalizeProjectPath(projectPath);
     db.prepare(
       `UPDATE sessions
-       SET project_path = ?,
-           updated_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE updated_at END
+       SET project_path = ?
        WHERE session_id = ?`
-    ).run(normalizedProjectPath, options.touch ? 1 : 0, sessionId);
+    ).run(normalizedProjectPath, sessionId);
+  },
+
+  /**
+   * Marks a session as just changed, e.g. after a move: clients list the moved
+   * session first in its new project, and paging must agree with that order.
+   */
+  touchSession(sessionId: string): void {
+    const db = getConnection();
+    db.prepare('UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE session_id = ?').run(sessionId);
   },
 
   /**
