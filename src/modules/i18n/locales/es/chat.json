@@ -150,6 +150,7 @@
     "disabled": "Entrada deshabilitada",
     "attachFiles": "Adjuntar archivos",
     "attachImages": "Adjuntar imágenes",
+    "fileTooLarge": "{{name}} es demasiado grande para adjuntarlo (máx. {{size}} MB)",
     "send": "Enviar",
     "stop": "Detener",
     "hintText": {

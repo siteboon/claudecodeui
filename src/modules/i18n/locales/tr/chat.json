@@ -123,6 +123,7 @@
     "disabled": "Girdi devre dışı",
     "attachFiles": "Dosya ekle",
     "attachImages": "Resim ekle",
+    "fileTooLarge": "{{name}} eklenemeyecek kadar büyük (en fazla {{size}} MB)",
     "send": "Gönder",
     "stop": "Durdur",
     "hintText": {

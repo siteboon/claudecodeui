@@ -126,6 +126,7 @@
     "disabled": "입력 비활성화",
     "attachFiles": "파일 첨부",
     "attachImages": "이미지 첨부",
+    "fileTooLarge": "{{name}} 파일이 너무 커서 첨부할 수 없습니다 (최대 {{size}}MB)",
     "send": "전송",
     "stop": "중지",
     "hintText": {

@@ -132,6 +132,7 @@
       "title": "Ton",
       "description": "Spielt einen kurzen Ton ab, wenn ein Chat-Lauf abgeschlossen ist.",
       "enabled": "Aktiviert",
+      "volume": "Lautstärke",
       "test": "Ton testen"
     },
     "events": {

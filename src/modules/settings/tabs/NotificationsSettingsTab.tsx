@@ -39,7 +39,7 @@ export default function NotificationsSettingsTab({
   onEnableDesktopNotifications,
   onDisableDesktopNotifications,
 }: NotificationsSettingsTabProps) {
-  const { t } = useTranslation('settings');
+  const { t, i18n } = useTranslation('settings');
 
   const pushSupported = pushPermission !== 'unsupported';
   const pushDenied = pushPermission === 'denied';
@@ -183,6 +183,30 @@ export default function NotificationsSettingsTab({
             />
             {t('notifications.sound.enabled', { defaultValue: 'Enabled' })}
           </label>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label htmlFor="notification-sound-volume" className="shrink-0 text-sm text-foreground">
+            {t('notifications.sound.volume', { defaultValue: 'Volume' })}
+          </label>
+          <input
+            id="notification-sound-volume"
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={notificationPreferences.soundVolume}
+            onChange={(event) =>
+              onNotificationPreferencesChange({
+                ...notificationPreferences,
+                soundVolume: Number(event.target.value),
+              })
+            }
+            className="h-2 w-full min-w-0 max-w-xs cursor-pointer accent-blue-600"
+          />
+          <span className="w-12 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
+            {new Intl.NumberFormat(i18n.language, { style: 'percent' }).format(notificationPreferences.soundVolume / 100)}
+          </span>
         </div>
 
         <Button

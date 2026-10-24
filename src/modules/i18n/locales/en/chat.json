@@ -139,6 +139,7 @@
     "disabled": "Input disabled",
     "attachFiles": "Attach files",
     "attachImages": "Attach images",
+    "fileTooLarge": "{{name}} is too large to attach (max {{size}} MB)",
     "send": "Send",
     "stop": "Stop",
     "hintText": {

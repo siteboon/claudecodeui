@@ -495,6 +495,8 @@ export const api = {
     file: (storedName: string) => get(`/api/assets/files/${encodeURIComponent(storedName)}`),
     image: (filename: string, options: ApiRequestOptions = {}) =>
       get(`/api/assets/images/${encodeURIComponent(filename)}`, options),
+    // { maxFileSizeBytes }: the per-file limit the server enforces on uploadFiles.
+    limits: () => get('/api/assets/limits'),
   },
 
   // TaskMaster endpoints — all addressed by DB projectId post-migration.
