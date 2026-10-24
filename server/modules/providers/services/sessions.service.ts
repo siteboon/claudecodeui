@@ -577,7 +577,7 @@ export const sessionsService = {
       // its new project, and paging must agree. A failed move keeps its order.
       try {
         // Only updated_at: project_path may have changed again while this awaited.
-        sessionsDb.touchSession(sessionId);
+        sessionsDb.touchMovedSession(sessionId, target.project_path);
       } catch (touchError) {
         console.warn(`[sessions] Could not bump updated_at of moved session ${sessionId}:`, touchError);
       }

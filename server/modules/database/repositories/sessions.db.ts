@@ -337,12 +337,15 @@ export const sessionsDb = {
   },
 
   /**
-   * Marks a session as just changed, e.g. after a move: clients list the moved
-   * session first in its new project, and paging must agree with that order.
+   * Marks a moved session as just changed: clients list it first in its new
+   * project, and paging must agree with that order. Only while the row is
+   * still in `projectPath`, so a concurrent move is not bumped in its stead.
+   * ISO like the indexers write, so text-ordered queries sort it correctly.
    */
-  touchSession(sessionId: string): void {
+  touchMovedSession(sessionId: string, projectPath: string): void {
     const db = getConnection();
-    db.prepare('UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE session_id = ?').run(sessionId);
+    db.prepare('UPDATE sessions SET updated_at = ? WHERE session_id = ? AND project_path = ?')
+      .run(new Date().toISOString(), sessionId, normalizeProjectPath(projectPath));
   },
 
   /**
