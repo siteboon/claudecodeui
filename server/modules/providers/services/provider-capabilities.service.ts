@@ -42,6 +42,12 @@ type ProviderCapabilities = {
    * Whether a session's transcript can be branched into an independent one.
    */
   supportsSessionForking: boolean;
+  /**
+   * Whether a session's transcript can be moved so it resumes from another
+   * project's directory. Mirrors the provider having a `transcriptRelocation`
+   * facet; keep the two in step.
+   */
+  supportsSessionMoving: boolean;
 };
 
 /**
@@ -66,6 +72,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSessionMoving: true,
   },
   cursor: {
     provider: 'cursor',
@@ -80,6 +87,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: [],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSessionMoving: false,
   },
   codex: {
     provider: 'codex',
@@ -98,6 +106,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSessionMoving: true,
   },
   opencode: {
     provider: 'opencode',
@@ -117,6 +126,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSessionMoving: false,
   },
 };
 

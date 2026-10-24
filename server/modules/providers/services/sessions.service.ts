@@ -13,9 +13,10 @@ import type {
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
+  SessionTranscriptRelocation,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
-import { AppError, sliceTailPage } from '@/shared/utils.js';
+import { AppError, normalizeProjectPath, sliceTailPage } from '@/shared/utils.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -380,6 +381,218 @@ export const sessionsService = {
       projectPath: source.project_path ?? '',
       sessionName,
     };
+  },
+
+  /**
+   * Moves the transcripts of a project whose folder was renamed or moved, so
+   * each session stays resumable from the new folder.
+   *
+   * Used by the Projects module when a project is repointed. Each provider's
+   * sessions go to its optional `transcriptRelocation` facet; providers without
+   * one, and provider ids that are no longer registered, are skipped and keep
+   * their artifacts where they are. Returns the sessions whose transcript now
+   * lives at the returned `jsonlPath`.
+   */
+  async relocateProjectTranscripts(input: {
+    sessions: Array<SessionTranscriptRelocation & { provider: string }>;
+    oldProjectPath: string;
+    newProjectPath: string;
+  }): Promise<SessionTranscriptRelocation[]> {
+    const relocated: SessionTranscriptRelocation[] = [];
+    for (const provider of providerRegistry.listProviders()) {
+      const sessions = input.sessions
+        .filter((session) => session.provider === provider.id)
+        .map(({ sessionId, jsonlPath }) => ({ sessionId, jsonlPath }));
+      if (!provider.transcriptRelocation || sessions.length === 0) {
+        continue;
+      }
+
+      relocated.push(...await provider.transcriptRelocation.relocateTranscripts({
+        sessions,
+        oldProjectPath: input.oldProjectPath,
+        newProjectPath: input.newProjectPath,
+      }));
+    }
+
+    return relocated;
+  },
+
+  /**
+   * Files a session under another project, so it lists there and its next run
+   * works in that project's directory.
+   *
+   * A session that has run has a transcript recording where it ran; the
+   * provider's `transcriptRelocation` facet (the one a relocated project folder
+   * uses) moves or rewrites it for the new directory, otherwise the indexer
+   * would file it back and the provider would not find it when resuming.
+   * Providers without that facet can only move sessions that have not run yet.
+   */
+  async moveSessionToProject(
+    sessionId: string,
+    projectId: string,
+  ): Promise<{ sessionId: string; projectId: string; projectPath: string; warning?: 'SESSION_MOVE_TRANSCRIPT_PENDING' }> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const target = projectsDb.getProjectById(projectId);
+    if (!target) {
+      throw new AppError(`Project "${projectId}" was not found.`, {
+        code: 'PROJECT_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    if (normalizeProjectPath(session.project_path ?? '') === normalizeProjectPath(target.project_path)) {
+      throw new AppError('The session already belongs to this project.', {
+        code: 'SESSION_ALREADY_IN_PROJECT',
+        statusCode: 409,
+      });
+    }
+
+    // A live turn keeps writing to the old transcript with the old directory,
+    // and so does an idle Claude CLI that still has the session open.
+    // shortcut: an idle `codex resume` in a terminal is not detectable here; would need a Codex process registry.
+    const running = await this.listRunningSessions();
+    const openInClaudeCli = session.provider === 'claude' && session.provider_session_id
+      ? (await listBusyClaudeCliSessions({ includeIdle: true }))
+        .some((live) => live.providerSessionId === session.provider_session_id)
+      : false;
+    if (openInClaudeCli || running.some((entry) => entry.sessionId === sessionId)) {
+      throw new AppError('Stop the session before moving it to another project.', {
+        code: 'SESSION_MOVE_RUNNING',
+        statusCode: 409,
+      });
+    }
+
+    const transcriptRelocation = providerRegistry.resolveProvider(session.provider as LLMProvider)
+      .transcriptRelocation;
+    // OpenCode keeps no per-session file (`jsonl_path` is NULL) and Cursor
+    // files transcripts by a directory hash; neither can be moved here.
+    if (session.provider_session_id && (!transcriptRelocation || !session.jsonl_path)) {
+      throw new AppError(`Sessions cannot be moved for provider "${session.provider}".`, {
+        code: 'SESSION_MOVE_NOT_SUPPORTED',
+        statusCode: 409,
+      });
+    }
+
+    const previousProjectPath = session.project_path;
+    // A failed restore is logged, never thrown: the error worth reporting is
+    // the one that made the move roll back.
+    const restoreRow = (restoreTranscriptPath: boolean) => {
+      try {
+        sessionsDb.updateSessionProjectPath(sessionId, previousProjectPath);
+        // The watcher may have pointed the row at the moved copy meanwhile.
+        if (restoreTranscriptPath && session.jsonl_path) {
+          sessionsDb.updateSessionTranscriptPath(sessionId, session.jsonl_path);
+        }
+      } catch (restoreError) {
+        console.warn(`[sessions] Could not restore the row of ${sessionId}:`, restoreError);
+      }
+    };
+    // Set when the move took effect but its transcript path could not be saved.
+    let warning: 'SESSION_MOVE_TRANSCRIPT_PENDING' | undefined;
+    // Row before transcript, as a project relocation does: the watcher may
+    // index the moved transcript (whose cwd names the new folder) mid-move.
+    sessionsDb.updateSessionProjectPath(sessionId, target.project_path);
+    try {
+      if (transcriptRelocation && session.jsonl_path) {
+        let relocated;
+        try {
+          relocated = await transcriptRelocation.relocateTranscripts({
+            sessions: [{ sessionId, jsonlPath: session.jsonl_path }],
+            oldProjectPath: previousProjectPath ?? '',
+            newProjectPath: target.project_path,
+          });
+        } catch (error) {
+          // The provider undid its file changes; put the row back to match.
+          restoreRow(true);
+          throw error;
+        }
+
+        if (relocated.length === 0) {
+          // Skipped (not where the provider expects it, or a path it cannot
+          // encode): nothing moved on disk, so neither may the row.
+          restoreRow(false);
+          throw new AppError('This session\'s transcript could not be moved to the target project.', {
+            code: 'SESSION_MOVE_NOT_SUPPORTED',
+            statusCode: 409,
+          });
+        }
+        const movedPath = relocated[0].jsonlPath;
+        // Codex rewrites in place, so the row already names the file. Claude
+        // moves it to another folder, and the row has to follow.
+        if (movedPath !== session.jsonl_path) {
+          // A busy database usually clears quickly, and moving the file back is
+          // the expensive way out, so the cheap write gets a second try.
+          let writeError: unknown = null;
+          for (const attempt of [1, 2]) {
+            try {
+              sessionsDb.updateSessionTranscriptPath(sessionId, movedPath);
+              writeError = null;
+              break;
+            } catch (error) {
+              writeError = error;
+              console.warn(`[sessions] Could not save the moved transcript path of ${sessionId} (attempt ${attempt}):`, error);
+              if (attempt === 1) await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+          }
+          if (writeError) {
+            // The file has moved but the row cannot say so: move it back to
+            // where the old row points, then restore the row.
+            // shortcut: the move-back swaps target -> old, so a row that already named the target before the move is changed too; keep the original bytes if that ever matters.
+            let movedBack = false;
+            try {
+              movedBack = (await transcriptRelocation.relocateTranscripts({
+                sessions: relocated,
+                oldProjectPath: target.project_path,
+                newProjectPath: previousProjectPath ?? '',
+              })).length > 0;
+            } catch (rollbackError) {
+              console.warn(`[sessions] Could not move the transcript of ${sessionId} back:`, rollbackError);
+            }
+            if (movedBack) {
+              restoreRow(true);
+              throw new AppError('The session could not be moved; it stays in its project.', {
+                code: 'SESSION_MOVE_FAILED',
+                statusCode: 500,
+              });
+            }
+            // The session is in the target project, where its file now is, so
+            // the caller must treat it as moved (refresh, follow the open chat).
+            // The watcher repoints jsonl_path once it indexes the moved file.
+            console.warn(
+              `[sessions] Session ${sessionId} is in ${target.project_path} but its row still names ${session.jsonl_path}; the transcript is at ${movedPath}.`,
+            );
+            // A code, not a sentence: the client shows it in the user's language.
+            warning = 'SESSION_MOVE_TRANSCRIPT_PENDING';
+          }
+        }
+      }
+      // Only once the move has happened: clients list a moved session first in
+      // its new project, and paging must agree. A failed move keeps its order.
+      try {
+        // Bumps only updated_at, and only while the row is still in the target:
+        // a concurrent move may have changed project_path while this awaited.
+        // shortcut: if that concurrent move then rolls back to the target, this move's bump is lost; harmless ordering only.
+        sessionsDb.touchMovedSession(sessionId, target.project_path);
+      } catch (touchError) {
+        console.warn(`[sessions] Could not bump updated_at of moved session ${sessionId}:`, touchError);
+      }
+    } finally {
+      // On every exit: the watcher may already have broadcast the moved copy,
+      // so clients must hear where the session ended up, moved or rolled back.
+      sessionHistoryCache.invalidate(sessionId);
+      await broadcastSessionUpserted(sessionId).catch((broadcastError) => {
+        console.warn(`[sessions] Could not broadcast session ${sessionId}:`, broadcastError);
+      });
+    }
+
+    return { sessionId, projectId: target.project_id, projectPath: target.project_path, ...(warning ? { warning } : {}) };
   },
 
   /**

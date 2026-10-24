@@ -1265,6 +1265,45 @@ export async function extractFirstValidJsonlData<T>(
   return null;
 }
 
+/**
+ * Rewrites the working directory a JSONL transcript records, for moving a
+ * session to another project. Used by the Codex relocation facet.
+ *
+ * `holder` picks the object carrying `cwd` on one row (Codex: its `payload`).
+ * Only rows whose `cwd` is `fromPath` (compared after `normalizeProjectPath`)
+ * change; Claude's facet also swaps only the exact folder. A subdirectory of
+ * the old project has no counterpart in an unrelated target, and the Codex
+ * synchronizer files a session by `session_meta`, not by a later
+ * `turn_context`. Every other line, including
+ * ones that do not parse, is kept byte for byte.
+ */
+export function rewriteJsonlCwd(
+  content: string,
+  fromPath: string,
+  toPath: string,
+  holder: (row: AnyRecord) => AnyRecord | null | undefined,
+): string {
+  const from = normalizeProjectPath(fromPath);
+  if (!from) return content;
+  return content
+    .split('\n')
+    .map((line) => {
+      if (!line.includes('"cwd"')) return line;
+      try {
+        const row = JSON.parse(line) as AnyRecord;
+        const target = holder(row);
+        if (!target || typeof target.cwd !== 'string' || normalizeProjectPath(target.cwd) !== from) {
+          return line;
+        }
+        target.cwd = toPath;
+        return JSON.stringify(row);
+      } catch {
+        return line;
+      }
+    })
+    .join('\n');
+}
+
 // ---------------------------
 //----------------- CLAUDE TRANSCRIPT ROW UTILITIES ------------
 /**

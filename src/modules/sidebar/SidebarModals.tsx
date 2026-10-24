@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { AlertTriangle, EyeOff, Trash2 } from 'lucide-react';
+import { AlertTriangle, EyeOff, FolderInput, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
 import { Settings } from '@/modules/settings';
 import { VersionUpgradeModal } from '@/modules/version-upgrade';
-import type { InstallMode, PendingSidebarDeletion, Project, ReleaseInfo, SettingsProject } from '@/shared/types';
+import type { InstallMode, PendingSidebarDeletion, Project, ReleaseInfo, SessionWithProvider, SettingsProject } from '@/shared/types';
 import { normalizeProjectForSettings } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { ProjectCreationWizard } from '@/modules/project-creation-wizard';
 
@@ -24,6 +24,10 @@ type SidebarModalsProps = {
   onConfirmDeleteSession: (hardDelete?: boolean) => void;
   /** Archives or permanently deletes every session of the pending bulk selection. */
   onConfirmDeleteSessions: (hardDelete?: boolean) => void;
+  /** The session whose move-to-project picker is open. */
+  pendingMove: SessionWithProvider | null;
+  onCancelMove: () => void;
+  onConfirmMove: (projectId: string) => void;
   showVersionModal: boolean;
   onCloseVersionModal: () => void;
   releaseInfo: ReleaseInfo | null;
@@ -60,6 +64,9 @@ export default function SidebarModals({
   onConfirmDeleteProject,
   onConfirmDeleteSession,
   onConfirmDeleteSessions,
+  pendingMove,
+  onCancelMove,
+  onConfirmMove,
   showVersionModal,
   onCloseVersionModal,
   releaseInfo,
@@ -72,6 +79,11 @@ export default function SidebarModals({
   const settingsProjects = useMemo(
     () => projects.map(normalizeProjectForSettings),
     [projects],
+  );
+
+  const moveTargets = useMemo(
+    () => (pendingMove ? projects.filter((project) => project.projectId !== pendingMove.__projectId) : []),
+    [pendingMove, projects],
   );
 
   return (
@@ -250,6 +262,59 @@ export default function SidebarModals({
                   {t('deleteConfirmation.deleteSessionPermanently', 'Delete permanently')}
                 </Button>
                 <Button variant="ghost" className="w-full" onClick={onCancelDeletion}>
+                  {t('actions.cancel')}
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {pendingMove &&
+        ReactDOM.createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="move-session-title"
+              className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') onCancelMove();
+              }}
+            >
+              <div className="p-6 pb-3">
+                <h3 id="move-session-title" className="mb-1 text-lg font-semibold text-foreground">
+                  {t('moveSession.title')}
+                </h3>
+                <p className="truncate text-sm font-medium text-foreground">
+                  {pendingMove.summary || t('sessions.unnamed')}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">{t('moveSession.description')}</p>
+              </div>
+              <div className="max-h-72 overflow-y-auto px-4 pb-2">
+                {moveTargets.length === 0 ? (
+                  <p className="px-2 py-3 text-sm text-muted-foreground">{t('moveSession.noProjects')}</p>
+                ) : (
+                  moveTargets.map((project) => (
+                      <button
+                        key={project.projectId}
+                        type="button"
+                        className="flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left hover:bg-muted focus:bg-muted focus:outline-none"
+                        onClick={() => onConfirmMove(project.projectId)}
+                      >
+                        <FolderInput className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm text-foreground">{project.displayName}</span>
+                          <span className="block truncate text-xs text-muted-foreground" title={project.fullPath}>
+                            {project.fullPath}
+                          </span>
+                        </span>
+                      </button>
+                  ))
+                )}
+              </div>
+              <div className="border-t border-border bg-muted/30 p-4">
+                <Button variant="ghost" className="w-full" onClick={onCancelMove} autoFocus>
                   {t('actions.cancel')}
                 </Button>
               </div>
