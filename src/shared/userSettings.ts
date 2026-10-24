@@ -21,6 +21,7 @@ export type UserPreferences = {
   userLanguage: string;
   tasksEnabled: boolean;
   projectSortOrder: 'name' | 'date';
+  groupProjectsByName: boolean;
   claudePermissions: unknown;
   cursorPermissions: unknown;
   codexPermissions: unknown;
@@ -58,6 +59,7 @@ const LEGACY_STORAGE_KEYS: Record<UserPreferenceKey, string> = {
   userLanguage: 'userLanguage',
   tasksEnabled: 'tasks-enabled',
   projectSortOrder: 'claude-settings',
+  groupProjectsByName: 'claude-settings',
   claudePermissions: 'claude-settings',
   cursorPermissions: 'cursor-tools-settings',
   codexPermissions: 'codex-settings',
@@ -199,8 +201,9 @@ export function subscribeToUserPreferences(listener: () => void): () => void {
 /**
  * Reads what a preference was stored under before this module existed.
  *
- * `claude-settings` held four settings in one blob, so `projectSortOrder` and
- * `claudePermissions` are pulled out of it separately.
+ * `claude-settings` held several settings in one blob, so `projectSortOrder`,
+ * `groupProjectsByName` and `claudePermissions` are pulled out of it
+ * separately.
  */
 function readLegacyPreference(key: UserPreferenceKey): unknown {
   let raw: string | null = null;
@@ -227,6 +230,10 @@ function readLegacyPreference(key: UserPreferenceKey): unknown {
 
   if (key === 'projectSortOrder') {
     return isRecord(parsed) ? parsed.projectSortOrder : undefined;
+  }
+
+  if (key === 'groupProjectsByName') {
+    return isRecord(parsed) ? parsed.groupProjectsByName : undefined;
   }
 
   if (key === 'claudePermissions') {

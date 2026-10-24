@@ -167,5 +167,8 @@
     "archiveSessions_other": "归档 {{count}} 个会话",
     "archiveSessionsNotice_one": "归档会将所选会话移出活动列表，但保留其历史记录。",
     "archiveSessionsNotice_other": "归档会将所选会话移出活动列表，但保留其历史记录。"
+  },
+  "projectGroup": {
+    "locations_other": "{{count}} 个路径"
   }
 }
