@@ -17,6 +17,20 @@ import {
 } from '@/modules/sidebar/utils/sidebarStoredPreferences';
 
 
+const EXPANDED_PROJECTS_STORAGE_KEY = 'cloudcli-expanded-projects';
+
+/** Read browser-local project expansion, tolerating missing or invalid storage. */
+function readExpandedProjects(): Set<string> | null {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(EXPANDED_PROJECTS_STORAGE_KEY) ?? 'null');
+    return Array.isArray(saved)
+      ? new Set(saved.filter((id): id is string => typeof id === 'string'))
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 type ArchivedSessionsApiPayload = {
   success?: boolean;
   data?: {
@@ -60,6 +74,7 @@ type UseSidebarControllerArgs = {
   setCurrentProject: (project: Project) => void;
   setSidebarVisible: (visible: boolean) => void;
   sidebarVisible: boolean;
+  keepProjectsExpanded?: boolean;
 };
 
 /** Server error codes of a refused move, shown as translated reasons instead of the server's English text. */
@@ -72,6 +87,7 @@ const MOVE_SESSION_ERROR_KEYS: Record<string, string> = {
   PROJECT_NOT_FOUND: 'messages.moveSessionProjectNotFound',
 };
 
+/** Used by Sidebar to coordinate project navigation, expansion and session actions. */
 export function useSidebarController({
   projects,
   selectedProject,
@@ -90,9 +106,44 @@ export function useSidebarController({
   setCurrentProject,
   setSidebarVisible,
   sidebarVisible,
+  keepProjectsExpanded = false,
 }: UseSidebarControllerArgs) {
   const paletteOps = usePaletteOps();
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  // Remember whether a saved set existed before the first persistence effect.
+  const restoredExpandedProjects = useRef<Set<string> | null>(null);
+  // Project expansion is browser-local; the opt-in preference follows the user.
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
+    restoredExpandedProjects.current = keepProjectsExpanded ? readExpandedProjects() : null;
+    return restoredExpandedProjects.current ?? new Set();
+  });
+  // Detect preference hydration as well as a live toggle without overwriting saved groups.
+  const previousKeepProjectsExpanded = useRef(keepProjectsExpanded);
+  // Distinguish the initial restored selection from subsequent navigation.
+  const selectionExpansion = useRef<{ seenSelection: boolean; projectId?: string }>({ seenSelection: false });
+  useEffect(() => {
+    const wasEnabled = previousKeepProjectsExpanded.current;
+    previousKeepProjectsExpanded.current = keepProjectsExpanded;
+    if (!keepProjectsExpanded) {
+      if (wasEnabled && expandedProjects.size > 1) {
+        const retainedId = selectedProject?.projectId && expandedProjects.has(selectedProject.projectId)
+          ? selectedProject.projectId
+          : [...expandedProjects][0];
+        setExpandedProjects(new Set([retainedId]));
+      }
+      return;
+    }
+    if (!wasEnabled) {
+      const saved = readExpandedProjects();
+      restoredExpandedProjects.current = saved;
+      if (saved) {
+        setExpandedProjects(saved);
+        return;
+      }
+    }
+    try {
+      localStorage.setItem(EXPANDED_PROJECTS_STORAGE_KEY, JSON.stringify([...expandedProjects]));
+    } catch { /* Keep navigation working when browser storage is unavailable. */ }
+  }, [expandedProjects, keepProjectsExpanded, selectedProject?.projectId]);
   // Running groups start expanded and remember manual collapses independently of Projects.
   const [collapsedRunningProjects, setCollapsedRunningProjects] = useState<Set<string>>(new Set());
   // The one rename the sidebar has open, as a single value so a project and a
@@ -137,6 +188,11 @@ export function useSidebarController({
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
   const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
+  // The projects whose next session page is being fetched; `loadingMoreProjects`
+  // only mirrors it for the button. A ref, because the click handler has to know
+  // at once whether a load is running, and a flag set inside a state updater is
+  // not set yet when read back: React may hold the updater until the next render.
+  const projectIdsLoadingMoreSessionsRef = useRef<Set<string>>(new Set());
   const searchSeqRef = useRef(0);
   const recentConversationsSeqRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -171,9 +227,13 @@ export function useSidebarController({
     // Depending on the full `selectedProject` object (or `selectedSession`) causes
     // websocket-driven list refreshes to re-open projects users manually collapsed.
     const selectedProjectId = selectedProject?.projectId;
-    if (!selectedProjectId) {
-      return;
-    }
+    if (selectionExpansion.current.projectId === selectedProjectId) return;
+    const isInitialSelection = !selectionExpansion.current.seenSelection;
+    selectionExpansion.current.projectId = selectedProjectId;
+    if (!selectedProjectId) return;
+    selectionExpansion.current.seenSelection = true;
+    // A saved set is authoritative on reload, including an intentionally empty set.
+    if (isInitialSelection && keepProjectsExpanded && restoredExpandedProjects.current !== null) return;
 
     setExpandedProjects((prev) => {
       if (prev.has(selectedProjectId)) {
@@ -183,7 +243,7 @@ export function useSidebarController({
       next.add(selectedProjectId);
       return next;
     });
-  }, [selectedProject?.projectId]);
+  }, [selectedProject?.projectId, keepProjectsExpanded]);
 
   useEffect(() => {
     if (projects.length > 0 && !isLoading) {
@@ -575,14 +635,16 @@ export function useSidebarController({
       }
 
       setExpandedProjects((prev) => {
-        const next = new Set<string>();
-        if (!prev.has(projectId)) {
+        const next = keepProjectsExpanded ? new Set(prev) : new Set<string>();
+        if (prev.has(projectId)) {
+          next.delete(projectId);
+        } else {
           next.add(projectId);
         }
         return next;
       });
     },
-    [searchMode],
+    [searchMode, keepProjectsExpanded],
   );
 
   const isProjectExpanded = useCallback(
@@ -682,21 +744,18 @@ export function useSidebarController({
       return;
     }
 
-    let shouldLoad = false;
-    setLoadingMoreProjects((previous) => {
-      if (previous.has(projectId)) {
-        return previous;
-      }
+    // A second click before the button re-renders as disabled would fetch the
+    // same page again.
+    if (projectIdsLoadingMoreSessionsRef.current.has(projectId)) {
+      return;
+    }
 
-      shouldLoad = true;
+    projectIdsLoadingMoreSessionsRef.current.add(projectId);
+    setLoadingMoreProjects((previous) => {
       const next = new Set(previous);
       next.add(projectId);
       return next;
     });
-
-    if (!shouldLoad) {
-      return;
-    }
 
     try {
       await onLoadMoreSessions(projectId);
@@ -704,6 +763,7 @@ export function useSidebarController({
       console.error('[Sidebar] Failed to load more sessions:', error);
       alert(t('messages.refreshError'));
     } finally {
+      projectIdsLoadingMoreSessionsRef.current.delete(projectId);
       setLoadingMoreProjects((previous) => {
         const next = new Set(previous);
         next.delete(projectId);
