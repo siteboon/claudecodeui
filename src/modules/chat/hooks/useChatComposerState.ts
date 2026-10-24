@@ -54,6 +54,12 @@ type UseChatComposerStateArgs = {
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
+   * Invoked when the server has taken the session's queued message to send
+   * it, so the run it starts can be watched and the message stays on screen
+   * as its card goes away.
+   */
+  onQueuedMessageSent?: (sessionId: string) => void;
+  /**
    * Invoked with the freshly allocated session id when the user sends the
    * first message of a brand-new conversation. The backend allocates the id
    * via POST /api/providers/sessions BEFORE the websocket send, so the id is
@@ -212,6 +218,7 @@ export function useChatComposerState({
   sendMessage,
   sendByCtrlEnter,
   onSessionProcessing,
+  onQueuedMessageSent,
   onSessionEstablished,
   onFileOpen,
   onShowSettings,
@@ -1165,6 +1172,13 @@ export function useChatComposerState({
     handleSubmitRef.current = handleSubmit;
   }, [handleSubmit]);
 
+  // Read through a ref so a new callback identity never restarts the poll
+  // below and pushes its next check further out.
+  const onQueuedMessageSentRef = useRef(onQueuedMessageSent);
+  useEffect(() => {
+    onQueuedMessageSentRef.current = onQueuedMessageSent;
+  }, [onQueuedMessageSent]);
+
   // The VPS dispatcher owns sending. While the card is visible, periodically
   // reconcile it with the server, so the UI notices when the server claims it
   // or another tab adds to it.
@@ -1178,6 +1192,7 @@ export function useChatComposerState({
       if (!cancelled && !readQueuedMessage(sessionKey)) {
         queuedDraftSessionRef.current = sessionKey;
         setQueuedDraft(null);
+        onQueuedMessageSentRef.current?.(sessionKey);
       }
       // Another tab may have added to the queued message; the card shows what
       // will be sent, so it follows the server's copy.

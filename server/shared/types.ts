@@ -334,6 +334,12 @@ export type NormalizedMessage = {
    * the live events they missed across websocket reconnects.
    */
   seq?: number;
+  /**
+   * The run `seq` counts in, set alongside it. Every run of a session restarts
+   * at seq 1, so a client sends this back with `chat.subscribe` and replay
+   * starts from the beginning when its position is from another run.
+   */
+  runId?: string;
   role?: 'user' | 'assistant';
   content?: string;
   /**

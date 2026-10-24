@@ -67,6 +67,7 @@ test('revealing a row not yet rendered waits for it instead of scrolling to its 
       resetStreamingState: vi.fn(),
       statusCheckSentAtRef: { current: new Map() },
       lastSeqRef: { current: new Map() },
+      watchedRunSessionsRef: { current: new Map() },
       sessionStore: store as never,
     }),
   );
@@ -106,6 +107,7 @@ test('the last attempt settles for the nearest row, for a hit collapsed inside a
       resetStreamingState: vi.fn(),
       statusCheckSentAtRef: { current: new Map() },
       lastSeqRef: { current: new Map() },
+      watchedRunSessionsRef: { current: new Map() },
       sessionStore: store as never,
     }),
   );
