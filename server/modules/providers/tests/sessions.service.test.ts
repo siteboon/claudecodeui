@@ -382,6 +382,29 @@ test('running sessions ignore registry files a crash left behind', { concurrency
   });
 });
 
+test('running sessions ignore a registry file whose pid now belongs to another process', {
+  concurrency: false,
+  // procStart is only compared on the platforms that can read a start time.
+  skip: process.platform !== 'win32' && process.platform !== 'linux',
+}, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('reused-session', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('reused-session', 'claude-native-reused');
+
+    await withClaudeCliRegistry(
+      // The pid is alive, but it is not the process the CLI recorded: that one
+      // is gone and the pid was handed out again, e.g. after a reboot.
+      [{ pid: process.pid, sessionId: 'claude-native-reused', status: 'busy', startedAt: 6_000, procStart: '1' }],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false } },
+        async () => {
+          assert.deepEqual(await sessionsService.listRunningSessions(), []);
+        },
+      ),
+    );
+  });
+});
+
 test('a CLI turn does not duplicate a session already running a chat run', { concurrency: false }, async () => {
   await withIsolatedDatabase(async () => {
     sessionsDb.createAppSession('both-session', 'claude', '/tmp/running-project');
