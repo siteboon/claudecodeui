@@ -30,6 +30,8 @@ const installedPlugin: Plugin = {
   slot: 'tab',
   entry: 'index.js',
   server: null,
+  scripts: [],
+  styles: [],
   permissions: [],
   enabled: true,
   serverRunning: false,
