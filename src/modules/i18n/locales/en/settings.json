@@ -207,6 +207,11 @@
         "label": "Font Size",
         "description": "Editor font size in pixels"
       }
+    },
+    "keepProjectsExpanded": {
+      "section": "Sidebar",
+      "label": "Keep projects expanded",
+      "description": "Open several projects together and remember them after reloading."
     }
   },
   "mcpForm": {

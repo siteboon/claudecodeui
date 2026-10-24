@@ -129,7 +129,7 @@
       "ctrlEnter": "Ctrl+Enter לשליחה • Shift+Enter לשורה חדשה • Tab להחלפת מצב • / לפקודות סלאש",
       "enter": "Enter לשליחה • Shift+Enter לשורה חדשה • Tab להחלפת מצב • / לפקודות סלאש",
       "queue": "Enter להוספת ההודעה הבאה לתור",
-      "updateQueued": "Enter לעדכון ההודעה שבתור"
+      "appendQueued": "Enter להוספה להודעה שבתור"
     },
     "clickToChangeMode": "לחיצה להחלפת מצב ההרשאות (או Tab בשדה הקלט)",
     "showAllCommands": "הצגת כל הפקודות",
@@ -137,7 +137,8 @@
     "scrollToBottom": "גלילה לסוף",
     "queue": {
       "sendNext": "הוספת ההודעה הבאה לתור",
-      "update": "עדכון ההודעה שבתור",
+      "append": "הוספה להודעה שבתור",
+      "notCombinable": "לא ניתן להוסיף את ההודעה לתור: פקודת סלאש פועלת בנפרד, ולכן אי אפשר לשלב אותה עם ההודעה שבתור. יש לשלוח אותה אחרי שההודעה שבתור תישלח.",
       "label": "בתור",
       "willSend": "תישלח כשזה יסתיים",
       "edit": "עריכת ההודעה שבתור",
@@ -151,6 +152,8 @@
     "loadingModels": "טוען מודלים…",
     "modelMenu": "בחירת מודל ורמת חשיבה",
     "permissionHeading": "איך לאשר פעולות של {{provider}}?",
+    "permissionCycleHint": "לחיצה על Tab בשדה הקלט מחליפה מצב",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "החלפת הודעה קודמת",
       "filesNotReverted": "קבצים שהסוכן כבר שינה לא משוחזרים",
