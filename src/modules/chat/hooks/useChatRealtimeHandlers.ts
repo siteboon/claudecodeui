@@ -128,6 +128,10 @@ export function useChatRealtimeHandlers({
           onWebSocketReconnect?.();
           return;
 
+        // Answer to a "Send now" (chat.inject); the composer that sent it listens itself.
+        case 'inject_result':
+          return;
+
         case 'history_truncated': {
           // An already-sent message was replaced. Every client watching this
           // session drops the superseded turns before the replacement streams

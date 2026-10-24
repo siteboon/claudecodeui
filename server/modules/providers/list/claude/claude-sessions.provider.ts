@@ -1357,6 +1357,25 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       return [];
     }
 
+    // A message the user sent while a turn was running ("Send now", or typing
+    // mid-turn in the terminal or an IDE) is recorded as a `queued_command`
+    // attachment, not a user row. Show it as the user message it was.
+    // Messages from other sessions and task notifications stay hidden.
+    if (
+      raw.type === 'attachment'
+      && raw.attachment?.type === 'queued_command'
+      && raw.attachment.commandMode === 'prompt'
+      && raw.attachment.isMeta !== true
+      && (typeof raw.attachment.prompt === 'string' || Array.isArray(raw.attachment.prompt))
+    ) {
+      return this.normalizeMessageRows({
+        uuid: raw.uuid,
+        timestamp: raw.attachment.timestamp ?? raw.timestamp,
+        type: 'user',
+        message: { role: 'user', content: raw.attachment.prompt },
+      }, sessionId);
+    }
+
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
       if (Array.isArray(raw.message.content)) {
         // Image attachments sent through the SDK are persisted as base64

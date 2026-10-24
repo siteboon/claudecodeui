@@ -2189,3 +2189,30 @@ test('synchronizeFile skips non-jsonl files', { concurrency: false }, async () =
     assert.equal(result, null);
   });
 });
+
+test('a message sent while a turn was running shows as a user message', () => {
+  const provider = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  const queued = (prompt: unknown, extra: Record<string, unknown> = {}) => ({
+    type: 'attachment',
+    uuid: 'att-1',
+    timestamp: '2026-10-24T09:35:21.215Z',
+    attachment: { type: 'queued_command', commandMode: 'prompt', prompt, timestamp: '2026-10-24T09:35:21.215Z', ...extra },
+  });
+
+  const [plain] = provider.normalizeMessage(queued('also say BANANA'), 's1');
+  assert.equal(plain.kind, 'text');
+  assert.equal(plain.role, 'user');
+  assert.equal(plain.content, 'also say BANANA');
+  assert.equal(plain.transcriptAnchorId, 'att-1');
+
+  const [withImage] = provider.normalizeMessage(queued([
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } },
+    { type: 'text', text: 'look at this' },
+  ]), 's1');
+  assert.equal(withImage.content, 'look at this');
+  assert.deepEqual(withImage.images, [{ data: 'data:image/png;base64,AAAA' }]);
+
+  // Notes from other sessions and task notifications are not the user's words.
+  assert.deepEqual(provider.normalizeMessage(queued('<cross-session-message>hi</cross-session-message>', { isMeta: true }), 's1'), []);
+  assert.deepEqual(provider.normalizeMessage(queued('<task-notification>x</task-notification>', { commandMode: 'task-notification' }), 's1'), []);
+});

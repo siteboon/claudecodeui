@@ -7,6 +7,7 @@ import test from 'node:test';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
+  injectClaudeSDKMessage,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
   stopClaudeSDKTask,
@@ -29,6 +30,8 @@ type Scripted = {
   end: () => void;
   released: () => boolean;
   stopped: string[];
+  /** Every message the CLI read from its stdin, in order. */
+  received: Array<Record<string, unknown>>;
 };
 
 /** A stand-in for the SDK query: yields what the test emits, and reads the held prompt to notice its release. */
@@ -37,17 +40,19 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
   let wake: (() => void) | null = null;
   let released = false;
   const stopped: string[] = [];
+  const received: Array<Record<string, unknown>> = [];
 
   const script: Scripted = {
     emit: (message) => { queue.push(message); wake?.(); },
     end: () => { queue.push(null); wake?.(); },
     released: () => released,
     stopped,
+    received,
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
     void (async () => {
-      for await (const _message of prompt) { /* the CLI reads its stdin */ }
+      for await (const message of prompt) { received.push(message as Record<string, unknown>); }
       released = true;
     })();
 
@@ -306,4 +311,69 @@ test('a turn whose tool emits no task events still holds on the static rule', as
 
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
   });
+});
+
+/*
+ * "Send now": a message handed to a running turn goes to the CLI at priority
+ * 'next', so it is taken in at the next tool step. The turn's completion
+ * waits briefly in case the CLI answers it in a follow-up turn instead.
+ */
+const text = (body: string) => ({
+  type: 'assistant', session_id: NATIVE_ID, parent_tool_use_id: null,
+  message: { role: 'assistant', content: [{ type: 'text', text: body }] },
+});
+const completes = (sent: NormalizedMessage[]) => sent.filter((message) => message.kind === 'complete').length;
+
+test('a message sent now reaches the running turn at priority next', async () => {
+  await withRun(async ({ script, sent }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_sleep', 'Bash', { command: 'sleep 5' }));
+    await waitFor(() => script.received.length === 1);
+
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'also say BANANA', {}), true);
+    await waitFor(() => script.received.length === 2);
+    const injected = script.received[1] as { priority?: string; message?: { content?: unknown } };
+    assert.equal(injected.priority, 'next');
+    assert.equal(injected.message?.content, 'also say BANANA');
+
+    script.emit(text('DONE BANANA'));
+    script.emit(result());
+    await settle();
+    assert.equal(completes(sent), 0, 'completion waits for a possible follow-up turn');
+    await waitFor(() => completes(sent) === 1);
+    assert.equal(script.released(), true);
+  });
+});
+
+test('a message the turn missed completes with the follow-up turn that answers it', async () => {
+  await withRun(async ({ script, sent }) => {
+    script.emit(init());
+    await waitFor(() => script.received.length === 1);
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'say BANANA', {}), true);
+    script.emit(text('a paragraph about rivers'));
+    script.emit(result());
+    await settle();
+    script.emit(init());
+    script.emit(text('BANANA'));
+    await settle();
+    assert.equal(completes(sent), 0, 'the follow-up turn is still running');
+    assert.equal(script.released(), false);
+    script.emit(result());
+    await waitFor(() => completes(sent) === 1);
+    assert.equal(script.released(), true);
+  });
+});
+
+test('a turn that already completed refuses a message sent now', async () => {
+  await withRun(async ({ script, sent }) => {
+    script.emit(init());
+    script.emit(result());
+    await waitFor(() => completes(sent) === 1);
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'too late', {}), false);
+    assert.equal(script.received.length, 1);
+  });
+});
+
+test('no live run refuses a message sent now', async () => {
+  assert.equal(await injectClaudeSDKMessage('no-such-session', 'hello', {}), false);
 });

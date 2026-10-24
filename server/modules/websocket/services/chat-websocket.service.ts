@@ -74,6 +74,12 @@ export type ProviderRuntimeGateway = {
   ): Promise<unknown>;
   abort(provider: LLMProvider, sessionId: string): Promise<boolean>;
   stopBackgroundTask(provider: LLMProvider, sessionId: string, taskId: string): Promise<boolean>;
+  inject(
+    provider: LLMProvider,
+    sessionId: string,
+    text: string,
+    attachments: { images: unknown[]; files: unknown[] },
+  ): Promise<boolean>;
   /** Whether a provider runtime still holds background work for the session after its turn ended. */
   hasBackgroundWork(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
@@ -441,6 +447,54 @@ async function handleChatAbort(
 }
 
 /**
+ * Handles `chat.inject` ("Send now"): hands the session's running turn another
+ * user message instead of queueing it behind the turn. Always answers with
+ * `inject_result`, so the client can fall back to queueing when the run could
+ * not take the message (it ended, or the provider has no mid-turn input).
+ */
+async function handleChatInject(
+  ws: WebSocket,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const sessionId = readRequiredSessionId(data);
+  const requestId = typeof data.requestId === 'string' ? data.requestId : null;
+  const reply = (accepted: boolean, reason: string | null) => {
+    sendJson(ws, {
+      kind: 'inject_result',
+      requestId,
+      accepted,
+      reason,
+      sessionId: sessionId ?? null,
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  const content = typeof data.content === 'string' ? data.content : '';
+  if (!sessionId || !content.trim()) {
+    reply(false, 'INVALID_REQUEST');
+    return;
+  }
+
+  const run = chatRunRegistry.getRun(sessionId);
+  if (!run || run.status !== 'running') {
+    reply(false, 'NO_ACTIVE_RUN');
+    return;
+  }
+
+  // Same trust boundary as chat.send: only upload-store files may reach the runtime.
+  const clientOptions = (data.options ?? {}) as AnyRecord;
+  const verifiedAttachments = filterAttachmentsToUploadStore(
+    normalizeAttachmentDescriptors(clientOptions.attachments),
+  );
+  const accepted = await dependencies.runtime.inject(run.provider, sessionId, content, {
+    images: verifiedAttachments.filter(isImageAttachmentDescriptor),
+    files: verifiedAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+  });
+  reply(accepted, accepted ? null : 'NOT_ACCEPTED');
+}
+
+/**
  * Handles `chat.stop-task`: stops one background task of a session — an
  * agent, a workflow or a backgrounded command that is still going after its
  * turn ended. Unlike `chat.abort` there is no run to consult: the task lives
@@ -581,6 +635,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * - `chat.send`                { sessionId, content, options? }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
+ * - `chat.inject`              { sessionId, requestId, content, options: { attachments } }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
  * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
  *
@@ -686,6 +741,9 @@ export function handleChatConnection(
           return;
         case 'chat.stop-task':
           await handleChatStopTask(ws, data, dependencies);
+          return;
+        case 'chat.inject':
+          await handleChatInject(ws, data, dependencies);
           return;
         case 'chat.subscribe':
           handleChatSubscribe(ws, data, dependencies);

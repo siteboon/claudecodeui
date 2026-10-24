@@ -51,6 +51,16 @@ export interface IProviderRuntime {
    * settled, or the id was never one of its own.
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
+  /**
+   * Hands the session's running turn another user message ("Send now"), which
+   * the provider takes in at its next tool step. Resolves false when no live
+   * turn can take it; the client then queues the message instead.
+   */
+  inject?(
+    sessionId: string,
+    text: string,
+    attachments: { images: unknown[]; files: unknown[] },
+  ): Promise<boolean>;
 }
 
 /**

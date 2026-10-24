@@ -252,6 +252,7 @@ function ChatInterface({
     canAbortSession,
     tokenBudget,
     sendMessage,
+    subscribe,
     sendByCtrlEnter,
     onSessionProcessing,
     onSessionEstablished: handleSessionEstablished,

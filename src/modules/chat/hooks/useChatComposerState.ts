@@ -15,7 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { BackgroundSendChoice, BackgroundSendPrompt, ServerEvent, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -51,6 +51,8 @@ type UseChatComposerStateArgs = {
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
+  /** Websocket frame listener; lets a message sent mid-turn learn whether the run took it. */
+  subscribe?: (listener: (event: ServerEvent) => void) => () => void;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -192,6 +194,7 @@ export function useChatComposerState({
   canAbortSession,
   tokenBudget,
   sendMessage,
+  subscribe,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -711,6 +714,42 @@ export function useChatComposerState({
     backgroundSendResolverRef.current = null;
   }, []);
 
+  // "Send now": hands a message to the session's running turn, which takes it
+  // in at its next tool step, as the terminal does. Resolves false when the run
+  // could not take it (it just ended, or the provider has no mid-turn input),
+  // and the caller queues the message instead.
+  const injectIntoRun = useCallback(
+    (sessionId: string, content: string, attachments: unknown[]) => new Promise<boolean>((resolve) => {
+      if (!subscribe) {
+        resolve(false);
+        return;
+      }
+      const requestId = `inject_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      let unsubscribe = () => {};
+      const timer = window.setTimeout(() => {
+        unsubscribe();
+        resolve(false);
+      }, 5000);
+      unsubscribe = subscribe((event) => {
+        const frame = event as { kind?: unknown; requestId?: unknown; accepted?: unknown };
+        if (frame?.kind !== 'inject_result' || frame.requestId !== requestId) {
+          return;
+        }
+        window.clearTimeout(timer);
+        unsubscribe();
+        resolve(frame.accepted === true);
+      });
+      sendMessage({
+        type: 'chat.inject',
+        sessionId,
+        requestId,
+        content,
+        options: { attachments },
+      });
+    }),
+    [sendMessage, subscribe],
+  );
+
   // Persist a message to send "when this finishes" and show it as the queued
   // card. Used while a turn is in flight and when the user chooses to queue
   // behind background work. Attachments must already be uploaded.
@@ -803,6 +842,39 @@ export function useChatComposerState({
             content: `Failed to upload files: ${message}`,
             timestamp: new Date(),
           });
+          return;
+        }
+
+        const liveSessionId = selectedSession?.id || currentSessionId || null;
+        if (
+          liveSessionId
+          && provider === 'claude'
+          && !currentInput.trimStart().startsWith('/')
+          && await injectIntoRun(liveSessionId, currentInput, uploadedAttachments)
+        ) {
+          const attachmentRecords = uploadedAttachments as ChatAttachment[];
+          addMessage({
+            type: 'user',
+            content: currentInput,
+            images: attachmentRecords.filter(isImageAttachment),
+            files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
+            timestamp: new Date(),
+          });
+          recordSentMessage(currentInput, liveSessionId);
+          setInput('');
+          inputValueRef.current = '';
+          resetCommandMenuState();
+          setAttachedFiles([]);
+          setFileErrors(new Map());
+          setIsTextareaExpanded(false);
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+          }
+          if (draftScopeRef.current) {
+            writeDraftText(draftScopeRef.current, '');
+          }
+          setIsUserScrolledUp(false);
+          setTimeout(() => scrollToBottom(), 100);
           return;
         }
 
@@ -1027,6 +1099,7 @@ export function useChatComposerState({
       currentSessionId,
       editingAnchorId,
       executeCommand,
+      injectIntoRun,
       isLoading,
       onSessionProcessing,
       onSessionEstablished,

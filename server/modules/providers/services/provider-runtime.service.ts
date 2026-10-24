@@ -97,6 +97,17 @@ export function createProviderRuntimeService(
       return Boolean(await runtime.stopBackgroundTask?.(sessionId, taskId));
     },
 
+    async inject(
+      providerName: LLMProvider,
+      sessionId: string,
+      text: string,
+      attachments: { images: unknown[]; files: unknown[] },
+    ): Promise<boolean> {
+      // A runtime without mid-turn input cannot take the message.
+      const { runtime } = dependencies.resolveProvider(providerName);
+      return Boolean(await runtime.inject?.(sessionId, text, attachments));
+    },
+
     hasBackgroundWork(sessionId: string): boolean {
       return dependencies.listProviders().some((provider) =>
         (provider.runtime.listBackgroundWork?.() ?? []).some((entry) => entry.sessionId === sessionId));
