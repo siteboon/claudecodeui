@@ -16,11 +16,36 @@ type ToolDefinition = {
   inputSchema: Record<string, unknown>;
 };
 
+type ToolContent =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string };
+
 const textResponse = (text: string) => ({
-  content: [{ type: 'text', text }],
+  content: [{ type: 'text', text }] as ToolContent[],
 });
 
-const jsonResponse = (value: unknown) => textResponse(JSON.stringify(value, null, 2));
+// Sessions carry their latest screenshot as a base64 data URL for the Browser panel. Left in the
+// JSON text it costs 10k+ tokens per call (and per session in list results) and models cannot
+// read it, so it never goes into the text.
+const omitScreenshotDataUrl = (key: string, value: unknown) => (key === 'screenshotDataUrl' ? undefined : value);
+
+const jsonResponse = (value: unknown) => textResponse(JSON.stringify(value, omitScreenshotDataUrl, 2));
+
+const SCREENSHOT_DATA_URL_PATTERN = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=]+)$/i;
+
+/**
+ * For the tools whose purpose is to show the page: the JSON without the data URL, followed by the
+ * screenshot as an MCP image content block that clients hand to the model as an image.
+ */
+const pageViewResponse = (value: unknown) => {
+  const response = jsonResponse(value);
+  const dataUrl = (value as { session?: { screenshotDataUrl?: unknown } } | null)?.session?.screenshotDataUrl;
+  const screenshot = typeof dataUrl === 'string' ? SCREENSHOT_DATA_URL_PATTERN.exec(dataUrl) : null;
+  if (screenshot) {
+    response.content.push({ type: 'image', data: screenshot[2], mimeType: screenshot[1] });
+  }
+  return response;
+};
 
 const readString = (value: unknown, name: string): string => {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -86,12 +111,12 @@ const tools: ToolDefinition[] = [
   },
   {
     name: 'browser_snapshot',
-    description: 'Capture current page metadata, screenshot data URL, and visible body text for a Browser session.',
+    description: 'Capture current page metadata, visible body text, and a screenshot image for a Browser session.',
     inputSchema: sessionIdSchema,
   },
   {
     name: 'browser_take_screenshot',
-    description: 'Capture the latest screenshot for a Browser session.',
+    description: 'Capture a screenshot image of the current page for a Browser session, with the same page metadata and visible body text as browser_snapshot.',
     inputSchema: sessionIdSchema,
   },
   {
@@ -226,10 +251,8 @@ async function callTool(name: string, args: Record<string, unknown>) {
     case 'browser_list_sessions':
       return jsonResponse(await callBrowserUseApi(name, {}));
     case 'browser_snapshot':
-      return jsonResponse(await callBrowserUseApi(name, { sessionId: readString(args.sessionId, 'sessionId') }));
-    case 'browser_take_screenshot': {
-      return jsonResponse(await callBrowserUseApi(name, { sessionId: readString(args.sessionId, 'sessionId') }));
-    }
+    case 'browser_take_screenshot':
+      return pageViewResponse(await callBrowserUseApi(name, { sessionId: readString(args.sessionId, 'sessionId') }));
     case 'browser_navigate':
       return jsonResponse(await callBrowserUseApi(name, {
         sessionId: readString(args.sessionId, 'sessionId'),

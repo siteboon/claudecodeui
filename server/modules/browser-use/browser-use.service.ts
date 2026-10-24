@@ -54,6 +54,8 @@ type RuntimeHandle = {
   browser?: any;
   context?: any;
   page?: any;
+  // Set when the launched Chromium could not render any text (see detectMissingFonts).
+  fontsMissing?: boolean;
 };
 
 type BrowserUseSettings = {
@@ -85,6 +87,16 @@ const PROFILE_ROOT = path.join(os.homedir(), '.cloudcli', 'browser-use', 'profil
 const MCP_SERVER_NAME = 'cloudcli-browser';
 const LEGACY_MCP_SERVER_NAMES = ['cloudcli-browser-use'];
 const RUNTIME_READINESS_CACHE_TTL_MS = 30_000;
+const SNAPSHOT_TEXT_LIMIT = 30_000;
+// Chromium on Linux reaches fonts only through fontconfig. With none reachable it lays text out at zero
+// size: innerText comes back empty, text locators never match, and pages with form controls abort the
+// renderer in Skia ("Not implemented"). Agents get the cause and the fix instead of silently empty text.
+const MISSING_FONTS_MESSAGE = 'Chromium found no usable fonts, so pages render without text, snapshots return no text, '
+  + 'and pages with form controls can crash the browser. Install fonts on the machine running CloudCLI (on Debian or '
+  + 'Ubuntu, `npx playwright install-deps chromium` installs them and needs root or sudo) or set FONTCONFIG_FILE to a '
+  + 'fontconfig file that lists a font directory and restart CloudCLI, then create a new Browser session.';
+// The probe takes milliseconds; a renderer that never answers must not hold up session creation.
+const FONT_PROBE_TIMEOUT_MS = 3_000;
 
 function readSettings(): BrowserUseSettings {
   try {
@@ -389,6 +401,45 @@ async function captureSession(session: BrowserUseSession, page: any): Promise<vo
   session.updatedAt = new Date().toISOString();
 }
 
+/**
+ * Measures a string on a canvas in the freshly launched browser; a width of zero means no font is reachable.
+ * A failed or timed-out probe counts as "fonts present" so it can never raise a false warning.
+ */
+async function detectMissingFonts(page: any): Promise<boolean> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    const width = await Promise.race([
+      page.evaluate("document.createElement('canvas').getContext('2d')?.measureText('Hello').width"),
+      new Promise((resolve) => {
+        timeout = setTimeout(resolve, FONT_PROBE_TIMEOUT_MS, null);
+      }),
+    ]);
+    return width === 0;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Reads the page's rendered text for snapshots. Failures and font-less empty results are reported in
+ * `textError` (and logged) instead of being swallowed into an empty string.
+ */
+async function readPageText(handle: RuntimeHandle): Promise<{ text: string; textError?: string }> {
+  try {
+    const text: string = (await handle.page.locator('body').innerText({ timeout: 5_000 })).slice(0, SNAPSHOT_TEXT_LIMIT);
+    if (!text.trim() && handle.fontsMissing) {
+      return { text, textError: MISSING_FONTS_MESSAGE };
+    }
+    return { text };
+  } catch (error) {
+    const reason = (error instanceof Error ? error.message : String(error)).split('\n')[0];
+    console.warn('[Browser] Failed to read page text:', reason);
+    return { text: '', textError: `Failed to read page text: ${reason}` };
+  }
+}
+
 async function getActionPoint(page: any, input: { selector?: string; text?: string; x?: number; y?: number }) {
   if (typeof input.x === 'number' && typeof input.y === 'number') {
     return { x: input.x, y: input.y };
@@ -562,10 +613,14 @@ export const browserUseService = {
       context = await browser.newContext(contextOptions);
       page = await context.newPage();
     }
+    const fontsMissing = await detectMissingFonts(page);
+    if (fontsMissing) {
+      console.warn(`[Browser] ${MISSING_FONTS_MESSAGE}`);
+    }
     session.status = 'ready';
-    session.message = 'Browser session is ready.';
+    session.message = fontsMissing ? MISSING_FONTS_MESSAGE : 'Browser session is ready.';
     sessions.set(session.id, session);
-    handles.set(session.id, { browser, context, page });
+    handles.set(session.id, { browser, context, page, fontsMissing });
     await captureSession(session, page);
     return publicSession(session);
   },
@@ -626,10 +681,11 @@ export const browserUseService = {
       throw new Error('Browser runtime handle is not available.');
     }
     await captureSession(session, handle.page);
-    const text = await handle.page.locator('body').innerText({ timeout: 5_000 }).catch(() => '');
+    const { text, textError } = await readPageText(handle);
     return {
       session: publicSession(session),
-      text: text.slice(0, 30_000),
+      text,
+      ...(textError ? { textError } : {}),
     };
   },
 
