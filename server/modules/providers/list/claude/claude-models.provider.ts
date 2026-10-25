@@ -1,6 +1,11 @@
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
+
+import { query } from '@anthropic-ai/claude-agent-sdk';
+import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
@@ -276,20 +281,118 @@ const readClaudeSessionModelFromJsonl = async (
   return null;
 };
 
+// The CLI's list changes only when Claude Code updates or the login changes.
+const SUPPORTED_MODELS_CACHE_MS = 10 * 60 * 1000;
+
+/**
+ * The CLI's own model list (what its /model picker shows) mapped onto the
+ * catalog shape. Ultracode is kept for models the fixed catalog offers it on.
+ */
+export const buildClaudeModelsDefinition = (models: ModelInfo[]): ProviderModelsDefinition => {
+  const options: ProviderModelOption[] = models
+    .filter((model) => typeof model.value === 'string' && model.value)
+    .map((model) => {
+      const levels = model.supportsEffort ? model.supportedEffortLevels ?? [] : [];
+      const values: Array<{ value: string; description?: string }> = levels.map((level) => ({ value: level }));
+      const known = findClaudeModelOption(model.value);
+      if (levels.includes('xhigh') && known?.effort?.values.some((option) => option.value === CLAUDE_ULTRACODE_EFFORT)) {
+        values.push(ULTRACODE_EFFORT_OPTION);
+      }
+      return {
+        value: model.value,
+        label: model.displayName || model.value,
+        description: model.description,
+        ...(values.length > 0
+          ? { effort: { default: levels.includes('high') ? 'high' : levels[0], values } }
+          : {}),
+      };
+    });
+  return {
+    OPTIONS: options,
+    DEFAULT: options.some((option) => option.value === CLAUDE_PREDEFINED_MODELS.DEFAULT)
+      ? CLAUDE_PREDEFINED_MODELS.DEFAULT
+      : options[0]?.value ?? CLAUDE_PREDEFINED_MODELS.DEFAULT,
+  };
+};
+
+type ModelsQuery = AsyncIterable<unknown> & { supportedModels?: () => Promise<ModelInfo[]> };
+
+type ClaudeProviderModelsDependencies = {
+  createQuery: (params: { prompt: AsyncIterable<never>; options: Record<string, unknown> }) => ModelsQuery;
+  now: () => number;
+};
+
 export class ClaudeProviderModels implements IProviderModels {
+  private cached: { models: ProviderModelsDefinition; at: number } | null = null;
+  private inFlight: Promise<ProviderModelsDefinition> | null = null;
+
+  constructor(private readonly dependencies: ClaudeProviderModelsDependencies = {
+    createQuery: (params) => query(params as never) as unknown as ModelsQuery,
+    now: () => Date.now(),
+  }) {}
+
+  /**
+   * Asks the CLI for its model list from a process that is sent no prompt and
+   * saves no session (the reason this was once disabled: a prompted query left
+   * a session file behind). Falls back to the fixed catalog when it cannot.
+   */
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    // claude creates a new jsonl file as a separate session for this request.
-    // As a result, it lists the workspace where this is invoked when it shouldn't.
-    //
-    // Disabled for now:
-    // const queryInstance = query({
-    //   prompt: 'Get supported models',
-    //   options: buildClaudeQueryOptions(),
-    // });
-    // const supportedModels = await queryInstance.supportedModels();
-    // queryInstance.close();
-    // return buildClaudeModelsDefinition(supportedModels);
-    return CLAUDE_PREDEFINED_MODELS;
+    if (this.cached && this.dependencies.now() - this.cached.at < SUPPORTED_MODELS_CACHE_MS) {
+      return this.cached.models;
+    }
+    if (!this.inFlight) {
+      this.inFlight = this.readSupportedModels()
+        .then((models) => {
+          this.cached = { models, at: this.dependencies.now() };
+          return models;
+        })
+        .catch((error) => {
+          console.warn('[Claude] Using the built-in model list:', error instanceof Error ? error.message : error);
+          return CLAUDE_PREDEFINED_MODELS;
+        })
+        .finally(() => { this.inFlight = null; });
+    }
+    return this.inFlight;
+  }
+
+  private async readSupportedModels(): Promise<ProviderModelsDefinition> {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const prompt: AsyncIterable<never> = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          await held;
+          return { done: true, value: undefined as never };
+        },
+      }),
+    };
+    const options: Record<string, unknown> = { cwd: os.homedir(), persistSession: false };
+    const executable = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+    if (executable) {
+      options.pathToClaudeCodeExecutable = executable;
+    }
+
+    const instance = this.dependencies.createQuery({ prompt, options });
+    try {
+      if (typeof instance.supportedModels !== 'function') {
+        throw new Error('the installed Claude SDK cannot list models');
+      }
+      const definition = buildClaudeModelsDefinition(await instance.supportedModels());
+      if (definition.OPTIONS.length === 0) {
+        throw new Error('the CLI listed no models');
+      }
+      return definition;
+    } finally {
+      release();
+      // Drain so the process winds down instead of lingering.
+      void (async () => {
+        try {
+          for await (const _message of instance) { /* discard */ }
+        } catch {
+          // A process that exits on closed stdin may end its stream with an error.
+        }
+      })();
+    }
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
