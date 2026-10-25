@@ -250,3 +250,24 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
+
+// ---------------------------
+
+//----------------- ERROR TEXT ------------
+
+/**
+ * Turns a thrown value into one display line. When it carries a server `details` string or list (git's own
+ * stderr, conflicting file names) that is appended, because the bare message alone ('git worktree remove failed') hides the cause.
+ */
+export const getErrorText = (error: unknown): string => {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const details = (error as Error & { details?: unknown }).details;
+  const detailText = Array.isArray(details)
+    ? details.filter((entry) => typeof entry === 'string').join(', ')
+    : typeof details === 'string'
+      ? details
+      : '';
+  return detailText ? `${error.message}: ${detailText}` : error.message;
+};

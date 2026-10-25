@@ -1,0 +1,114 @@
+{
+  "section": {
+    "title": "Workbench sessions",
+    "newSession": "New worktree session",
+    "empty": "No sessions yet. Start one with +.",
+    "pollFailed": "Could not refresh sessions",
+    "hooksSettings": "Status hooks"
+  },
+  "status": {
+    "running": "Running",
+    "waiting": "Needs input",
+    "done": "Done",
+    "error": "Error"
+  },
+  "agents": {
+    "claude": "Claude",
+    "codex": "Codex"
+  },
+  "unpushed": "{{count}} unpushed",
+  "unpushedTooltip": "{{count}} commit(s) on this branch are not pushed to a remote",
+  "common": {
+    "cancel": "Cancel",
+    "working": "Working…"
+  },
+  "newSession": {
+    "title": "New worktree session",
+    "description": "Creates a git worktree on its own branch and starts the agent in it.",
+    "project": "Project",
+    "otherFolder": "Other folder…",
+    "folderPlaceholder": "Path to a git repository",
+    "baseBranch": "Base branch",
+    "baseBranchPlaceholder": "Current branch",
+    "agent": "Agent",
+    "prompt": "First prompt",
+    "promptPlaceholder": "What should the agent do?",
+    "sessionTitle": "Title (optional)",
+    "titlePlaceholder": "Generated from the prompt",
+    "create": "Create session",
+    "creating": "Creating…"
+  },
+  "actions": {
+    "commitPlaceholder": "Commit message",
+    "commit": "Commit",
+    "committed": "Committed {{commit}}.",
+    "rebase": "Rebase",
+    "rebased": "Rebased onto {{base}}.",
+    "merge": "Squash-merge",
+    "merged": "Squash-merged {{branch}} into {{target}}.",
+    "push": "Push branch",
+    "pushed": "Pushed {{branch}}.",
+    "copyPath": "Copy path",
+    "pathCopied": "Worktree path copied.",
+    "discard": "Discard",
+    "worktreeMissing": "The worktree folder no longer exists."
+  },
+  "merge": {
+    "title": "Squash-merge into base branch",
+    "body": "This squashes {{branch}} into one commit on {{base}} in your main working copy.",
+    "requirements": "The main working copy must be on the base branch and have no uncommitted changes, and this worktree must be committed. On conflicts the merge is aborted.",
+    "messagePlaceholder": "Commit message (optional)",
+    "confirm": "Merge"
+  },
+  "discard": {
+    "title": "Discard this session?",
+    "body": "This permanently deletes the worktree folder and its branch. It cannot be undone.",
+    "loading": "Checking what will be deleted…",
+    "worktree": "Worktree folder: {{path}}",
+    "branch": "Branch: {{branch}}",
+    "dirty": "{{count}} uncommitted file(s) will be lost",
+    "commits": "{{count}} commit(s) not merged into the base branch will be lost",
+    "confirm": "Delete worktree and branch"
+  },
+  "diff": {
+    "title": "Changes",
+    "reload": "Reload diff",
+    "loading": "Loading changes…",
+    "empty": "No changes yet.",
+    "uncommitted": "Uncommitted",
+    "untracked": "Untracked",
+    "committed": "Committed on branch"
+  },
+  "hooks": {
+    "title": "Status hooks",
+    "explain": "Workbench can show when an agent is waiting for you or finished. To do that, each CLI gets small hooks in its own user-level config. Nothing is changed until you confirm for that CLI.",
+    "loading": "Checking installed hooks…",
+    "installed": "Installed",
+    "notInstalled": "Not installed",
+    "pointFile": "Merged into {{path}}; nothing else in the file is changed.",
+    "pointBackup": "A timestamped backup of the file is made first.",
+    "pointScoped": "The hook does nothing outside Workbench sessions.",
+    "pointRemove": "You can remove it again here at any time.",
+    "remove": "Remove hooks",
+    "fallback": "Without hooks, Workbench still guesses from terminal activity.",
+    "dontAsk": "Don't ask again",
+    "close": "Close",
+    "claude": {
+      "explain": "Adds Notification, Stop and UserPromptSubmit hooks to Claude Code.",
+      "defaultPath": "~/.claude/settings.json",
+      "install": "Install for Claude"
+    },
+    "codex": {
+      "explain": "Adds notification hooks to Codex.",
+      "defaultPath": "~/.codex/hooks.json",
+      "install": "Install for Codex",
+      "trustNote": "After installing, open Codex once and run /hooks to trust the new hooks; Codex skips untrusted hooks."
+    }
+  },
+  "notifications": {
+    "waitingTitle": "{{title}} needs input",
+    "waitingBody": "The agent on {{branch}} is waiting for you.",
+    "doneTitle": "{{title}} is done",
+    "doneBody": "The agent on {{branch}} finished."
+  }
+}

@@ -29,6 +29,8 @@ type ShellProps = {
   selectedProject?: Project | null;
   selectedSession?: ProjectSession | null;
   initialCommand?: string | null;
+  /** Starts the terminal for a Workbench worktree session instead of a plain project terminal. */
+  workbenchSessionId?: string | null;
   isPlainShell?: boolean;
   onProcessComplete?: ((exitCode: number) => void) | null;
   minimal?: boolean;
@@ -36,11 +38,12 @@ type ShellProps = {
   isActive?: boolean;
 };
 
-/** Exported through the shell barrel: the standalone-shell module renders it as a full-page terminal and the task-master module embeds it in its setup modal to run TaskMaster's init command. */
+/** Exported through the shell barrel: the standalone-shell module (also for Workbench worktree sessions) renders it as a full-page terminal and the task-master module embeds it in its setup modal to run TaskMaster's init command. */
 export default function Shell({
   selectedProject = null,
   selectedSession = null,
   initialCommand = null,
+  workbenchSessionId = null,
   isPlainShell = false,
   onProcessComplete = null,
   minimal = false,
@@ -74,6 +77,7 @@ export default function Shell({
     selectedProject,
     selectedSession,
     initialCommand,
+    workbenchSessionId,
     isPlainShell,
     bypassPermissions,
     minimal,

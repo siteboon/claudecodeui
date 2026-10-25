@@ -1857,3 +1857,88 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+// ---------------------------
+
+//----------------- WORKBENCH WORKTREE SESSIONS ------------
+
+/** An agent a Workbench session can run; each session runs one official CLI inside its own worktree. */
+export type WorkbenchAgent = 'claude' | 'codex';
+
+/** Lifecycle state the server tracks for a Workbench session; `waiting` means the CLI needs input or permission. */
+export type WorkbenchStatus = 'running' | 'waiting' | 'done' | 'error';
+
+/** A Workbench session as returned by `/api/workbench/sessions`: the stored record plus live git facts (dirty files, commits ahead of base, unpushed commits). */
+export type WorkbenchSession = {
+  id: string;
+  projectPath: string;
+  projectId: string | null;
+  worktreePath: string;
+  branch: string;
+  baseBranch: string;
+  agent: WorkbenchAgent;
+  profileId: string;
+  title: string;
+  status: WorkbenchStatus;
+  createdAt: string;
+  lastActivityAt: string;
+  cliSessionId: string | null;
+  firstPrompt: string;
+  launched: boolean;
+  dirtyFiles: number;
+  ahead: number;
+  unpushed: number;
+  hasUpstream: boolean;
+  worktreeExists: boolean;
+};
+
+/** One file in a Workbench session diff; `patch` is the unified diff text rendered in the diff panel. */
+export type WorkbenchDiffFile = {
+  path: string;
+  status: 'added' | 'deleted' | 'modified' | 'renamed' | 'untracked';
+  additions: number;
+  deletions: number;
+  patch: string;
+};
+
+/** A session's diff: commits on the branch since base, uncommitted tracked changes, and untracked file paths. */
+export type WorkbenchSessionDiff = {
+  baseBranch: string;
+  branch: string;
+  committed: WorkbenchDiffFile[];
+  uncommitted: WorkbenchDiffFile[];
+  untracked: string[];
+};
+
+/** What discarding a session would delete; shown in the confirmation dialog before the destructive call. */
+export type WorkbenchDiscardPreview = {
+  branch: string;
+  worktreePath: string;
+  dirtyFiles: number;
+  unmergedCommits: number;
+};
+
+/** A CLI whose status hooks Workbench can install; each has its own config file and its own consent. */
+export type WorkbenchHookAgent = 'claude' | 'codex';
+
+/** Whether Workbench's status hooks are installed for one CLI, and which user-level file holds them. */
+export type WorkbenchHooksAgentStatus = {
+  installed: boolean;
+  settingsPath: string;
+};
+
+/** Hook install state for every supported CLI; the top-level fields mirror Claude's entry for older callers. */
+export type WorkbenchHooksStatus = {
+  installed: boolean;
+  settingsPath: string;
+  agents: Record<WorkbenchHookAgent, WorkbenchHooksAgentStatus>;
+};
+
+/** Values collected by the New Session dialog and sent to the server to create a worktree session. */
+export type WorkbenchCreateSessionInput = {
+  projectPath: string;
+  baseBranch: string;
+  agent: WorkbenchAgent;
+  prompt: string;
+  title: string;
+};

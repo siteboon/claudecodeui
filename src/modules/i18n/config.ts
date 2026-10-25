@@ -17,6 +17,8 @@ import enCommon from '@/modules/i18n/locales/en/common.json';
 import enSettings from '@/modules/i18n/locales/en/settings.json';
 import enAuth from '@/modules/i18n/locales/en/auth.json';
 import enSidebar from '@/modules/i18n/locales/en/sidebar.json';
+// Workbench worktree sessions ship English only; other languages fall back to it.
+import enWorkbench from '@/modules/i18n/locales/en/workbench.json';
 import enChat from '@/modules/i18n/locales/en/chat.json';
 import enCodeEditor from '@/modules/i18n/locales/en/codeEditor.json';
 // oxlint-disable-next-line importx/order
@@ -187,6 +189,7 @@ i18n
         settings: enSettings,
         auth: enAuth,
         sidebar: enSidebar,
+        workbench: enWorkbench,
         chat: enChat,
         codeEditor: enCodeEditor,
         tasks: enTasks,
@@ -335,7 +338,7 @@ git: enGit,
     debug: false,
 
     // Namespaces - load only what's needed
-    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks', 'git'],
+    ns: ['common', 'settings', 'auth', 'sidebar', 'chat', 'codeEditor', 'tasks', 'git', 'workbench'],
     defaultNS: 'common',
 
     // Key separator for nested keys (default: '.')

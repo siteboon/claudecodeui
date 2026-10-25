@@ -10,6 +10,8 @@ type ShellInitMessage = {
   cols: number;
   rows: number;
   initialCommand: string | null | undefined;
+  /** Workbench worktree session to launch; the server then chooses cwd, command and env. */
+  workbenchSessionId?: string;
   isPlainShell: boolean;
   forceRestart?: boolean;
   bypassPermissions?: boolean;

@@ -19,6 +19,8 @@ type UseShellConnectionOptions = {
   selectedProjectRef: MutableRefObject<Project | null | undefined>;
   selectedSessionRef: MutableRefObject<ProjectSession | null | undefined>;
   initialCommandRef: MutableRefObject<string | null | undefined>;
+  /** Set for Workbench worktree sessions: the server then picks the cwd, CLI command and env itself. */
+  workbenchSessionIdRef?: MutableRefObject<string | null | undefined>;
   isPlainShellRef: MutableRefObject<boolean>;
   bypassPermissionsRef: MutableRefObject<boolean>;
   isDarkModeRef: MutableRefObject<boolean>;
@@ -46,6 +48,7 @@ export function useShellConnection({
   selectedProjectRef,
   selectedSessionRef,
   initialCommandRef,
+  workbenchSessionIdRef,
   isPlainShellRef,
   bypassPermissionsRef,
   isDarkModeRef,
@@ -174,6 +177,7 @@ export function useShellConnection({
               cols: currentTerminal.cols,
               rows: currentTerminal.rows,
               initialCommand: initialCommandRef.current,
+              workbenchSessionId: workbenchSessionIdRef?.current || undefined,
               isPlainShell: isPlainShellRef.current,
               forceRestart,
               // Launch-time flag: bypass mode can only join the CLI's
@@ -216,6 +220,7 @@ export function useShellConnection({
       fitAddonRef,
       handleSocketMessage,
       initialCommandRef,
+      workbenchSessionIdRef,
       isConnected,
       isConnecting,
       isDarkModeRef,

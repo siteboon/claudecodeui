@@ -9,6 +9,8 @@ type StandaloneShellProps = {
   project?: Project | null;
   session?: ProjectSession | null;
   command?: string | null;
+  /** Opens the terminal for a Workbench worktree session; the project then only supplies a label. */
+  workbenchSessionId?: string | null;
   isPlainShell?: boolean | null;
   isActive?: boolean;
   autoConnect?: boolean;
@@ -21,11 +23,12 @@ type StandaloneShellProps = {
   minimal?: boolean;
 };
 
-/** This module's only public export: used by the project-workspace module for its shell tab and by provider-auth to run an interactive login command. */
+/** This module's only public export: used by the project-workspace module for its shell tab, by the workbench-sessions module for worktree sessions, and by provider-auth to run an interactive login command. */
 export default function StandaloneShell({
   project = null,
   session = null,
   command = null,
+  workbenchSessionId = null,
   isPlainShell = null,
   isActive = true,
   autoConnect = true,
@@ -67,6 +70,7 @@ export default function StandaloneShell({
           selectedProject={project}
           selectedSession={session}
           initialCommand={command}
+          workbenchSessionId={workbenchSessionId}
           isPlainShell={shouldUsePlainShell}
           isActive={isActive}
           onProcessComplete={handleProcessComplete}

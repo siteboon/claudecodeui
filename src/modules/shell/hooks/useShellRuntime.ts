@@ -12,6 +12,7 @@ type UseShellRuntimeOptions = {
   selectedProject: Project | null | undefined;
   selectedSession: ProjectSession | null | undefined;
   initialCommand: string | null | undefined;
+  workbenchSessionId?: string | null;
   isPlainShell: boolean;
   bypassPermissions: boolean;
   minimal: boolean;
@@ -39,6 +40,7 @@ export function useShellRuntime({
   selectedProject,
   selectedSession,
   initialCommand,
+  workbenchSessionId,
   isPlainShell,
   bypassPermissions,
   minimal,
@@ -56,6 +58,7 @@ export function useShellRuntime({
   const selectedProjectRef = useRef(selectedProject);
   const selectedSessionRef = useRef(selectedSession);
   const initialCommandRef = useRef(initialCommand);
+  const workbenchSessionIdRef = useRef(workbenchSessionId);
   const isPlainShellRef = useRef(isPlainShell);
   const bypassPermissionsRef = useRef(bypassPermissions);
   const isDarkModeRef = useRef(isDarkMode);
@@ -67,11 +70,12 @@ export function useShellRuntime({
     selectedProjectRef.current = selectedProject;
     selectedSessionRef.current = selectedSession;
     initialCommandRef.current = initialCommand;
+    workbenchSessionIdRef.current = workbenchSessionId;
     isPlainShellRef.current = isPlainShell;
     bypassPermissionsRef.current = bypassPermissions;
     isDarkModeRef.current = isDarkMode;
     onProcessCompleteRef.current = onProcessComplete;
-  }, [selectedProject, selectedSession, initialCommand, isPlainShell, bypassPermissions, isDarkMode, onProcessComplete]);
+  }, [selectedProject, selectedSession, initialCommand, workbenchSessionId, isPlainShell, bypassPermissions, isDarkMode, onProcessComplete]);
 
   const closeSocket = useCallback(() => {
     const activeSocket = wsRef.current;
@@ -113,6 +117,7 @@ export function useShellRuntime({
     selectedProjectRef,
     selectedSessionRef,
     initialCommandRef,
+    workbenchSessionIdRef,
     isPlainShellRef,
     bypassPermissionsRef,
     isDarkModeRef,

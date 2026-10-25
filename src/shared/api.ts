@@ -414,6 +414,28 @@ export const api = {
     ) => post('/api/worktrees/remove', { project: projectId, worktreePath, ...options }),
   },
 
+  // Workbench worktree sessions (see server/modules/workbench-sessions).
+  workbench: {
+    listSessions: () => get('/api/workbench/sessions'),
+    createSession: (input: unknown) => post('/api/workbench/sessions', input),
+    diff: (id: string) => get(`/api/workbench/sessions/${encodeURIComponent(id)}/diff`),
+    commit: (id: string, message: string) =>
+      post(`/api/workbench/sessions/${encodeURIComponent(id)}/commit`, { message }),
+    rebase: (id: string) => post(`/api/workbench/sessions/${encodeURIComponent(id)}/rebase`, {}),
+    merge: (id: string, message?: string) =>
+      post(`/api/workbench/sessions/${encodeURIComponent(id)}/merge`, { confirm: true, message }),
+    push: (id: string) => post(`/api/workbench/sessions/${encodeURIComponent(id)}/push`, {}),
+    discardPreview: (id: string) =>
+      get(`/api/workbench/sessions/${encodeURIComponent(id)}/discard-preview`),
+    discard: (id: string) =>
+      post(`/api/workbench/sessions/${encodeURIComponent(id)}/discard`, { confirm: true }),
+    hooksStatus: () => get('/api/workbench/hooks/status'),
+    installHooks: (agent: 'claude' | 'codex') =>
+      post('/api/workbench/hooks/install', { confirm: true, agent }),
+    uninstallHooks: (agent: 'claude' | 'codex') =>
+      post('/api/workbench/hooks/uninstall', { confirm: true, agent }),
+  },
+
   // Provider (coding agent) endpoints — models, capabilities, sessions, MCP, skills.
   providers: {
     capabilities: () => get('/api/providers/capabilities'),
