@@ -132,7 +132,7 @@ export default function WorkbenchSessionView({ session }: WorkbenchSessionViewPr
   const isBusy = busyAction !== null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background md:overflow-hidden">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 px-4 py-2">
         <LLMProviderLogo provider={session.agent} className="h-4 w-4 flex-shrink-0" />
         <h2 className="min-w-0 truncate text-sm font-medium text-foreground" title={session.title}>{session.title}</h2>
@@ -164,13 +164,13 @@ export default function WorkbenchSessionView({ session }: WorkbenchSessionViewPr
           }}
           placeholder={t('actions.commitPlaceholder')}
           aria-label={t('actions.commitPlaceholder')}
-          className="h-8 min-w-48 max-w-sm flex-1"
+          className="h-11 min-w-48 max-w-sm flex-1 md:h-8"
           disabled={isBusy}
         />
-        <Button size="sm" variant="outline" disabled={isBusy || !commitMessage.trim()} onClick={() => void handleCommit()}>
+        <Button size="sm" variant="outline" disabled={isBusy || !commitMessage.trim()} onClick={() => void handleCommit()} className="min-h-11 md:min-h-0">
           <GitCommit /> {t('actions.commit')}
         </Button>
-        <Button size="sm" variant="outline" disabled={isBusy} onClick={() => void handleRebase()}>
+        <Button size="sm" variant="outline" disabled={isBusy} onClick={() => void handleRebase()} className="min-h-11 md:min-h-0">
           <RefreshCcw /> {t('actions.rebase')}
         </Button>
         <Button
@@ -180,17 +180,16 @@ export default function WorkbenchSessionView({ session }: WorkbenchSessionViewPr
           onClick={() => {
             setDialogError(null);
             setPendingAction('merge');
-          }}
-        >
+          }} className="min-h-11 md:min-h-0">
           <GitMerge /> {t('actions.merge')}
         </Button>
-        <Button size="sm" variant="outline" disabled={isBusy} onClick={() => void handlePush()}>
+        <Button size="sm" variant="outline" disabled={isBusy} onClick={() => void handlePush()} className="min-h-11 md:min-h-0">
           <Upload /> {t('actions.push')}
         </Button>
-        <Button size="sm" variant="ghost" disabled={isBusy} onClick={() => void handleCopyPath()} title={t('actions.copyPath')}>
+        <Button size="sm" variant="ghost" disabled={isBusy} onClick={() => void handleCopyPath()} title={t('actions.copyPath')} className="min-h-11 md:min-h-0">
           <Copy /> {t('actions.copyPath')}
         </Button>
-        <Button size="sm" variant="ghost" className="ml-auto text-destructive hover:text-destructive" disabled={isBusy} onClick={() => void openDiscardDialog()}>
+        <Button size="sm" variant="ghost" className="ml-auto text-destructive hover:text-destructive min-h-11 md:min-h-0" disabled={isBusy} onClick={() => void openDiscardDialog()}>
           <Trash2 /> {t('actions.discard')}
         </Button>
       </div>
@@ -208,7 +207,8 @@ export default function WorkbenchSessionView({ session }: WorkbenchSessionViewPr
         </p>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] md:grid-rows-1">
+      {/* Phones: the whole view scrolls and the terminal and diff get fixed, usable heights; desktop: side by side filling the window. */}
+      <div className="grid flex-none grid-rows-[60vh_50vh] md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,1fr)_minmax(18rem,26rem)] md:grid-rows-1">
         <div className="min-h-0 min-w-0 overflow-hidden border-b border-border/60 md:border-b-0 md:border-r">
           {session.worktreeExists ? (
             <StandaloneShell
@@ -222,7 +222,7 @@ export default function WorkbenchSessionView({ session }: WorkbenchSessionViewPr
             <p className="p-4 text-sm text-muted-foreground">{t('actions.worktreeMissing')}</p>
           )}
         </div>
-        <div className="min-h-0 min-w-0">
+        <div className="min-h-0 min-w-0 overflow-hidden">
           <WorkbenchDiffPanel diff={diff} isLoading={isLoading} error={diffError} onReload={reload} />
         </div>
       </div>

@@ -37,7 +37,7 @@ function Segmented<T extends string>({ label, options, value, getLabel, onChange
           type="button"
           aria-pressed={value === option}
           onClick={() => onChange(option)}
-          className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+          className={`min-h-11 rounded-md border px-2.5 py-1 text-xs transition-colors md:min-h-0 ${
             value === option
               ? 'border-primary bg-primary/10 text-foreground'
               : 'border-input text-muted-foreground hover:bg-accent/50'
@@ -91,7 +91,7 @@ export default function UsageView() {
           <h2 className="text-base font-semibold text-foreground">{t('title')}</h2>
           <p className="text-xs text-muted-foreground">{t('description')}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading}>
+        <Button variant="outline" size="sm" onClick={refresh} disabled={isLoading} className="min-h-11 md:min-h-0">
           <RefreshCw className={isLoading ? 'animate-spin' : ''} /> {t('refresh')}
         </Button>
       </div>
@@ -118,7 +118,7 @@ export default function UsageView() {
       {error && (
         <div role="alert" className="flex flex-wrap items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           <span>{t('states.error', { message: error })}</span>
-          <Button variant="outline" size="sm" onClick={refresh}>{t('states.retry')}</Button>
+          <Button variant="outline" size="sm" onClick={refresh} className="min-h-11 md:min-h-0">{t('states.retry')}</Button>
         </div>
       )}
 

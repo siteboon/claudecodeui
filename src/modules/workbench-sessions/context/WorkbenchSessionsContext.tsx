@@ -11,7 +11,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { api, readApiJson } from '@/shared/api';
-import type { WorkbenchSession } from '@/shared/types';
+import type { WorkbenchProposal, WorkbenchSession } from '@/shared/types';
 import { getErrorText } from '@/shared/utils';
 import {
   INITIAL_POLL_STATE,
@@ -19,8 +19,11 @@ import {
   applySessionsSnapshot,
   type SessionsPollState,
 } from '@/modules/workbench-sessions/utils/workbenchSessionLogic';
+import { countPendingProposals } from '@/modules/workbench-sessions/utils/agentAccessLogic';
 
 const POLL_INTERVAL_MS = 3000;
+// Proposals change rarely (an agent has to write one), so they are polled less often than sessions.
+const PROPOSALS_POLL_INTERVAL_MS = 10_000;
 
 type WorkbenchSessionsContextValue = {
   sessions: WorkbenchSession[];
@@ -34,6 +37,13 @@ type WorkbenchSessionsContextValue = {
   refresh: () => Promise<void>;
   /** Asks for browser notification permission. Must be called from a user gesture (a button click). */
   requestNotificationPermission: () => void;
+  /** Agent task proposals waiting for the owner; drives the sidebar badge. */
+  pendingProposalCount: number;
+  /** Re-reads the pending count right away; called after approving or rejecting. */
+  refreshProposals: () => Promise<void>;
+  /** Whether the Agent access dialog is open; shared so the sidebar button and the notification event can both open it. */
+  isAgentAccessOpen: boolean;
+  setAgentAccessOpen: (open: boolean) => void;
 };
 
 const WorkbenchSessionsContext = createContext<WorkbenchSessionsContextValue | null>(null);
@@ -67,6 +77,11 @@ export function WorkbenchSessionsProvider({ children }: { children: ReactNode })
   const [isLoaded, setIsLoaded] = useState(false);
   // Which Workbench session fills the main area; null shows the regular project workspace.
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  // Number of pending agent proposals, for the sidebar badge.
+  const [pendingProposalCount, setPendingProposalCount] = useState(0);
+  // Whether the Agent access dialog is showing.
+  const [isAgentAccessOpen, setAgentAccessOpen] = useState(false);
 
   const selectSession = useCallback((sessionId: string | null) => {
     setSelectedSessionId(sessionId);
@@ -117,6 +132,31 @@ export function WorkbenchSessionsProvider({ children }: { children: ReactNode })
     };
   }, [refresh]);
 
+  const refreshProposals = useCallback(async () => {
+    try {
+      const response = await api.workbench.agentProposals();
+      const body = await readApiJson<{ data: { proposals: WorkbenchProposal[] } }>(response);
+      setPendingProposalCount(countPendingProposals(body.data.proposals));
+    } catch {
+      // Keep the last known count; a failed poll must not hide pending proposals or raise errors.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshProposals();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshProposals();
+    }, PROPOSALS_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [refreshProposals]);
+
+  // The Electron shell fires this when the proposal notification is clicked.
+  useEffect(() => {
+    const handleOpen = () => setAgentAccessOpen(true);
+    window.addEventListener('workbench:open-proposals', handleOpen);
+    return () => window.removeEventListener('workbench:open-proposals', handleOpen);
+  }, []);
+
   // The Electron shell fires this when a native notification is clicked; detail is the session id.
   useEffect(() => {
     const handleSelect = (event: Event) => {
@@ -151,8 +191,23 @@ export function WorkbenchSessionsProvider({ children }: { children: ReactNode })
       selectSession,
       refresh,
       requestNotificationPermission,
+      pendingProposalCount,
+      refreshProposals,
+      isAgentAccessOpen,
+      setAgentAccessOpen,
     }),
-    [pollState, isLoaded, selectedSessionId, selectedSession, selectSession, refresh, requestNotificationPermission],
+    [
+      pollState,
+      isLoaded,
+      selectedSessionId,
+      selectedSession,
+      selectSession,
+      refresh,
+      requestNotificationPermission,
+      pendingProposalCount,
+      refreshProposals,
+      isAgentAccessOpen,
+    ],
   );
 
   return <WorkbenchSessionsContext.Provider value={value}>{children}</WorkbenchSessionsContext.Provider>;

@@ -1971,3 +1971,35 @@ export type UsageDailyData = {
   filesScanned: number;
   generatedAt: string;
 };
+
+// ---------------------------
+
+//----------------- WORKBENCH AGENT ACCESS ------------
+
+/** An access token an outside agent uses to read Workbench state and propose tasks; the plaintext is never part of this record. */
+export type WorkbenchAgentToken = {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revoked: boolean;
+};
+
+/** Where a task proposal from an agent stands: waiting for the owner, decided by them, or timed out. */
+export type WorkbenchProposalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
+
+/** A task an outside agent proposed. `prompt` is untrusted text written by an agent and must only ever be rendered as plain text. */
+export type WorkbenchProposal = {
+  id: string;
+  tokenName: string;
+  projectName: string;
+  agent: WorkbenchAgent;
+  title: string;
+  prompt: string;
+  baseBranch: string | null;
+  status: WorkbenchProposalStatus;
+  createdAt: string;
+  decidedAt: string | null;
+  sessionId: string | null;
+  note: string | null;
+};

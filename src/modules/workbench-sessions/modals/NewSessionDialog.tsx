@@ -83,7 +83,7 @@ export default function NewSessionDialog({
             <select
               value={projectChoice}
               onChange={(event) => setProjectChoice(event.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              className="h-11 w-full rounded-md border border-input bg-background px-2 text-sm md:h-9"
             >
               {projects.map((project) => (
                 <option key={project.projectId} value={project.fullPath}>
@@ -123,7 +123,7 @@ export default function NewSessionDialog({
                   type="button"
                   onClick={() => setAgent(option)}
                   aria-pressed={agent === option}
-                  className={`flex flex-1 items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm md:min-h-0 transition-colors ${
                     agent === option
                       ? 'border-primary bg-primary/10 text-foreground'
                       : 'border-input text-muted-foreground hover:bg-accent/50'
@@ -164,10 +164,10 @@ export default function NewSessionDialog({
           )}
 
           <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="min-h-11 md:min-h-0">
               {t('common.cancel')}
             </Button>
-            <Button type="submit" size="sm" disabled={!canSubmit}>
+            <Button type="submit" size="sm" disabled={!canSubmit} className="min-h-11 md:min-h-0">
               {isSubmitting ? t('newSession.creating') : t('newSession.create')}
             </Button>
           </div>

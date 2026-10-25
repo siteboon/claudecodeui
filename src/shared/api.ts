@@ -434,6 +434,15 @@ export const api = {
       get(`/api/workbench/sessions/${encodeURIComponent(id)}/discard-preview`),
     discard: (id: string) =>
       post(`/api/workbench/sessions/${encodeURIComponent(id)}/discard`, { confirm: true }),
+    agentTokens: () => get('/api/workbench/agent/tokens'),
+    createAgentToken: (name: string) => post('/api/workbench/agent/tokens', { name }),
+    revokeAgentToken: (id: string) =>
+      del(`/api/workbench/agent/tokens/${encodeURIComponent(id)}`),
+    agentProposals: () => get('/api/workbench/agent/proposals'),
+    approveProposal: (id: string) =>
+      post(`/api/workbench/agent/proposals/${encodeURIComponent(id)}/approve`, { confirm: true }),
+    rejectProposal: (id: string, note?: string) =>
+      post(`/api/workbench/agent/proposals/${encodeURIComponent(id)}/reject`, { note: note || undefined }),
     hooksStatus: () => get('/api/workbench/hooks/status'),
     installHooks: (agent: 'claude' | 'codex') =>
       post('/api/workbench/hooks/install', { confirm: true, agent }),

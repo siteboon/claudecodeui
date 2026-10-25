@@ -27,7 +27,7 @@ function FileEntry({ file, scope }: FileEntryProps) {
         onClick={() => setIsOpen((value) => !value)}
         aria-expanded={isOpen}
         aria-controls={`${scope}-${file.path}`}
-        className="flex w-full min-w-0 items-center gap-1.5 px-2 py-1.5 text-left text-xs hover:bg-accent/50"
+        className="flex min-h-11 w-full min-w-0 items-center gap-1.5 px-2 py-1.5 text-left text-xs hover:bg-accent/50 md:min-h-0"
       >
         {isOpen ? <ChevronDown className="h-3 w-3 flex-shrink-0" /> : <ChevronRight className="h-3 w-3 flex-shrink-0" />}
         <span className="min-w-0 flex-1 truncate font-mono" title={file.path}>{file.path}</span>
@@ -91,7 +91,7 @@ export default function WorkbenchDiffPanel({ diff, isLoading, error, onReload }:
         <button
           type="button"
           onClick={onReload}
-          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground md:h-6 md:w-6"
           aria-label={t('diff.reload')}
           title={t('diff.reload')}
         >

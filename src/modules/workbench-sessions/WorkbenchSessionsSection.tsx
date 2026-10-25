@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, GitBranch, Plus, Settings2 } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, GitBranch, Plus, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { api, readApiJson } from '@/shared/api';
 import type { Project, WorkbenchHooksStatus, WorkbenchSession } from '@/shared/types';
 import { LLMProviderLogo } from '@/shared/ui';
 import { useWorkbenchSessions } from '@/modules/workbench-sessions/context/WorkbenchSessionsContext';
+import AgentAccessDialog from '@/modules/workbench-sessions/modals/AgentAccessDialog';
 import HooksConsentDialog from '@/modules/workbench-sessions/modals/HooksConsentDialog';
 import NewSessionDialog from '@/modules/workbench-sessions/modals/NewSessionDialog';
+import { formatPendingBadge } from '@/modules/workbench-sessions/utils/agentAccessLogic';
 import {
   formatCompactAge,
   getStatusBadge,
@@ -99,8 +101,18 @@ type WorkbenchSessionsSectionProps = {
 /** Rendered by the sidebar module above its project list: Workbench worktree sessions grouped by project, plus the New Session entry point. */
 export default function WorkbenchSessionsSection({ projects }: WorkbenchSessionsSectionProps) {
   const { t } = useTranslation('workbench');
-  const { sessions, isLoaded, error, selectedSessionId, selectSession, refresh, requestNotificationPermission } =
-    useWorkbenchSessions();
+  const {
+    sessions,
+    isLoaded,
+    error,
+    selectedSessionId,
+    selectSession,
+    refresh,
+    requestNotificationPermission,
+    pendingProposalCount,
+    setAgentAccessOpen,
+  } = useWorkbenchSessions();
+  const pendingBadge = formatPendingBadge(pendingProposalCount);
   // Section collapse state: the list can get long, and users working elsewhere want it out of the way.
   const [isExpanded, setIsExpanded] = useState(true);
   // Whether the New Session dialog is showing.
@@ -139,7 +151,7 @@ export default function WorkbenchSessionsSection({ projects }: WorkbenchSessions
           type="button"
           onClick={() => setIsExpanded((value) => !value)}
           aria-expanded={isExpanded}
-          className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+          className="flex min-h-11 items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground md:min-h-0"
         >
           {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
           {t('section.title')}
@@ -148,8 +160,22 @@ export default function WorkbenchSessionsSection({ projects }: WorkbenchSessions
         <div className="flex items-center">
         <button
           type="button"
+          onClick={() => setAgentAccessOpen(true)}
+          className="relative flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground md:h-6 md:w-6"
+          aria-label={pendingProposalCount > 0 ? t('section.agentAccessPending', { count: pendingProposalCount }) : t('section.agentAccess')}
+          title={t('section.agentAccess')}
+        >
+          <Bot className="h-3.5 w-3.5" />
+          {pendingBadge && (
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium leading-none text-primary-foreground md:-right-1 md:-top-1">
+              {pendingBadge}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
           onClick={() => setIsHooksConsentOpen(true)}
-          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground md:h-6 md:w-6"
           aria-label={t('section.hooksSettings')}
           title={t('section.hooksSettings')}
         >
@@ -158,7 +184,7 @@ export default function WorkbenchSessionsSection({ projects }: WorkbenchSessions
         <button
           type="button"
           onClick={() => setIsNewSessionOpen(true)}
-          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground md:h-6 md:w-6"
           aria-label={t('section.newSession')}
           title={t('section.newSession')}
         >
@@ -209,6 +235,7 @@ export default function WorkbenchSessionsSection({ projects }: WorkbenchSessions
         onOpenChange={setIsHooksConsentOpen}
         onDeclined={writeHooksDeclined}
       />
+      <AgentAccessDialog />
     </section>
   );
 }

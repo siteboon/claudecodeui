@@ -59,11 +59,11 @@ function AgentSection({ agent, installed, settingsPath, isBusy, error, onInstall
       )}
       <div className="mt-3 flex justify-end">
         {installed ? (
-          <Button variant="outline" size="sm" disabled={isBusy} onClick={onRemove}>
+          <Button variant="outline" size="sm" disabled={isBusy} onClick={onRemove} className="min-h-11 md:min-h-0">
             {isBusy ? t('common.working') : t('hooks.remove')}
           </Button>
         ) : (
-          <Button size="sm" disabled={isBusy} onClick={onInstall}>
+          <Button size="sm" disabled={isBusy} onClick={onInstall} className="min-h-11 md:min-h-0">
             {isBusy ? t('common.working') : t(`hooks.${agent}.install`)}
           </Button>
         )}
@@ -151,11 +151,10 @@ export default function HooksConsentDialog({ open, onOpenChange, onDeclined }: H
             onClick={() => {
               onDeclined();
               onOpenChange(false);
-            }}
-          >
+            }} className="min-h-11 md:min-h-0">
             {t('hooks.dontAsk')}
           </Button>
-          <Button variant="outline" size="sm" disabled={busyAgent !== null} onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" disabled={busyAgent !== null} onClick={() => onOpenChange(false)} className="min-h-11 md:min-h-0">
             {t('hooks.close')}
           </Button>
         </div>

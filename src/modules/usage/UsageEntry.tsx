@@ -17,7 +17,7 @@ export default function UsageEntry() {
         type="button"
         onClick={() => setIsOpen(true)}
         title={t('entry.title')}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+        className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 md:min-h-0 text-left text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
       >
         <BarChart3 className="h-3.5 w-3.5 flex-shrink-0" />
         {t('entry.label')}
@@ -29,7 +29,7 @@ export default function UsageEntry() {
           <span id="usage-description" className="sr-only">{t('description')}</span>
           {isOpen && <UsageView />}
           <div className="mt-4 flex justify-end">
-            <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>{t('close')}</Button>
+            <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="min-h-11 md:min-h-0">{t('close')}</Button>
           </div>
         </DialogContent>
       </Dialog>

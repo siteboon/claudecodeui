@@ -42,7 +42,7 @@ export default function ConfirmActionDialog({
           </p>
         )}
         <div className="mt-4 flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={isBusy}>
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} disabled={isBusy} className="min-h-11 md:min-h-0">
             {t('common.cancel')}
           </Button>
           <Button
@@ -50,7 +50,7 @@ export default function ConfirmActionDialog({
             size="sm"
             onClick={onConfirm}
             disabled={isBusy}
-          >
+           className="min-h-11 md:min-h-0">
             {isBusy ? t('common.working') : confirmLabel}
           </Button>
         </div>

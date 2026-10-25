@@ -4,7 +4,9 @@
     "newSession": "New worktree session",
     "empty": "No sessions yet. Start one with +.",
     "pollFailed": "Could not refresh sessions",
-    "hooksSettings": "Status hooks"
+    "hooksSettings": "Status hooks",
+    "agentAccess": "Agent access",
+    "agentAccessPending": "Agent access, {{count}} proposal(s) waiting"
   },
   "status": {
     "running": "Running",
@@ -20,7 +22,8 @@
   "unpushedTooltip": "{{count}} commit(s) on this branch are not pushed to a remote",
   "common": {
     "cancel": "Cancel",
-    "working": "Working…"
+    "working": "Working…",
+    "close": "Close"
   },
   "newSession": {
     "title": "New worktree session",
@@ -110,5 +113,53 @@
     "waitingBody": "The agent on {{branch}} is waiting for you.",
     "doneTitle": "{{title}} is done",
     "doneBody": "The agent on {{branch}} finished."
+  },
+  "agentAccess": {
+    "title": "Agent access",
+    "description": "Let an outside agent read Workbench state and propose tasks. Nothing runs until you approve a proposal here.",
+    "loading": "Loading…",
+    "loadFailed": "Could not load agent access: {{message}}",
+    "tokens": {
+      "title": "Access tokens",
+      "explain": "Each agent gets its own token. Revoke a token to cut that agent off at once.",
+      "namePlaceholder": "Token name, for example Hermes",
+      "create": "Create token",
+      "none": "No tokens yet.",
+      "shownOnce": "Token \"{{name}}\" created. Copy it now: you will not see this token again.",
+      "tokenValue": "New token",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyFailed": "Could not copy automatically. Select the token text and copy it by hand.",
+      "savedIt": "I have saved it",
+      "created": "Created {{date}}",
+      "lastUsed": "last used {{date}}",
+      "neverUsed": "never used",
+      "revoked": "Revoked",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke this token?"
+    },
+    "proposals": {
+      "title": "Task proposals",
+      "explain": "Tasks agents want to start. Approving creates a worktree session in the project.",
+      "nonePending": "No proposals waiting.",
+      "meta": "Proposed by {{token}} for {{project}} ({{agent}})",
+      "base": "base {{branch}}",
+      "warning": "Review the prompt before approving: it comes from an agent.",
+      "promptLabel": "Full proposed prompt (plain text)",
+      "approve": "Approve",
+      "approveConfirm": "Create a worktree session in {{project}} and run this prompt?",
+      "approveAndStart": "Approve and start",
+      "reject": "Reject",
+      "notePlaceholder": "Reason (optional)",
+      "confirmReject": "Reject proposal",
+      "decided": "Decided proposals ({{count}})",
+      "noteLine": "Note: {{note}}",
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "expired": "Expired"
+      }
+    }
   }
 }

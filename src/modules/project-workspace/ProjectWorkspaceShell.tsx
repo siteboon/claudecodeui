@@ -23,7 +23,7 @@ function ProjectWorkspaceShell({
       style={{ bottom: 'var(--keyboard-height, 0px)' }}
     >
       <ProjectEffects navigate={navigate} />
-      <WorkbenchSelectionSync />
+      <WorkbenchSelectionSync isMobile={isMobile} />
       <ProjectSidebarRegion isMobile={isMobile} />
 
       <div className="flex min-w-0 flex-1 flex-col">
