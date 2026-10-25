@@ -59,6 +59,8 @@ type WorkflowAgentRow = Omit<WorkflowAgentProgress, 'state'> & {
   key: string;
   phase?: string;
   status: BackgroundTaskStatus | 'queued';
+  /** The last entry in the agent's transcript, from the journal read: where a run that ended under it stopped. */
+  lastActivityAt?: number;
 };
 
 /** How often an open, running agent's timeline is re-read from its transcript. */
@@ -167,6 +169,8 @@ function mergeWorkflowAgents(
       label: agent.label ?? live?.label,
       phase: agent.phase ?? live?.phase,
       status: settleAgentStatus(agent.status, state, isWorkflowRunning),
+      startedAt: live?.startedAt ?? agent.startedAt,
+      lastActivityAt: agent.lastActivityAt,
     };
   });
 
@@ -280,6 +284,46 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
 });
 WorkflowAgentTimeline.displayName = 'WorkflowAgentTimeline';
 
+/**
+ * How long an agent has taken, or undefined when nothing says. A running
+ * agent counts from its start to `now`; a finished one uses the SDK's own
+ * duration when the live stream gave one, else its transcript's first to last
+ * entry — which for a run that ended under it is where it stopped.
+ */
+function workflowAgentElapsedMs(agent: WorkflowAgentRow, now: number): number | undefined {
+  let elapsed: number | undefined;
+  if (agent.status === 'running') {
+    elapsed = agent.startedAt !== undefined ? now - agent.startedAt : undefined;
+  } else if (agent.durationMs !== undefined) {
+    elapsed = agent.durationMs;
+  } else if (agent.startedAt !== undefined && agent.lastActivityAt !== undefined) {
+    elapsed = agent.lastActivityAt - agent.startedAt;
+  }
+  return elapsed !== undefined && elapsed >= 0 ? elapsed : undefined;
+}
+
+/** How often a running agent's elapsed time is redrawn. */
+const AGENT_ELAPSED_TICK_MS = 1_000;
+
+/** The agent's elapsed time after its status — counting up while it runs. */
+function WorkflowAgentElapsed({ agent }: { agent: WorkflowAgentRow }) {
+  const isTicking = agent.status === 'running' && agent.startedAt !== undefined;
+  // The clock a running agent's elapsed time is measured against; re-set every
+  // tick so the row redraws while nothing else about the agent changes.
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!isTicking) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => setNow(Date.now()), AGENT_ELAPSED_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [isTicking]);
+
+  const elapsed = workflowAgentElapsedMs(agent, now);
+  return elapsed === undefined ? null : <> · {formatTaskDuration(elapsed)}</>;
+}
+
 type WorkflowAgentRowProps = {
   agent: WorkflowAgentRow;
   /** Where the agent's transcript can be fetched from; absent outside a session. */
@@ -312,6 +356,7 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
       {agent.phase && <span className="flex-shrink-0 text-muted-foreground/70">· {agent.phase}</span>}
       <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground/70">
         {t(`workflow.agentStatus.${agent.status}`, agent.status)}
+        <WorkflowAgentElapsed agent={agent} />
       </span>
     </>
   );
