@@ -188,6 +188,7 @@ if (!app.requestSingleInstanceLock()) {
 
     server = new ServerProcess({
       appRoot,
+      isPackaged: app.isPackaged,
       onSessionStatus: notifySessionStatus,
       onSessionCount: (count) => {
         if (count !== sessionCount) {

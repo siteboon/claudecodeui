@@ -44,8 +44,9 @@ export function killProcessTree(pid) {
 
 /** Runs the Workbench server as a child process bound to 127.0.0.1 on a free port. */
 export class ServerProcess {
-  constructor({ appRoot, onSessionCount, onSessionStatus }) {
+  constructor({ appRoot, isPackaged = false, onSessionCount, onSessionStatus }) {
     this.appRoot = appRoot;
+    this.isPackaged = isPackaged;
     this.onSessionCount = onSessionCount;
     this.onSessionStatus = onSessionStatus;
     this.child = null;
@@ -59,7 +60,10 @@ export class ServerProcess {
 
   resolveLaunch() {
     const builtEntry = path.join(this.appRoot, 'dist-server', 'server', 'index.js');
-    if (fs.existsSync(builtEntry)) {
+    // Only the packaged app runs the compiled server under Electron's Node (native modules are
+    // rebuilt for that ABI at package time). In development the checkout's native modules are
+    // built for the system Node, so the sources run through tsx there, even if dist-server exists.
+    if (this.isPackaged && fs.existsSync(builtEntry)) {
       return { command: process.execPath, args: [builtEntry], env: { ELECTRON_RUN_AS_NODE: '1' } };
     }
     // Development: run the TypeScript sources through tsx on the system Node
@@ -88,7 +92,9 @@ export class ServerProcess {
     });
 
     const log = (chunk) => {
-      this.logs.push(String(chunk));
+      // Drop minified bootstrap noise so error dialogs stay readable.
+      const text = String(chunk).split(String.fromCharCode(10)).filter((line) => line.length < 400).join(String.fromCharCode(10));
+      this.logs.push(text);
       if (this.logs.length > 300) this.logs.splice(0, this.logs.length - 300);
     };
     this.child.stdout.on('data', log);
