@@ -3,8 +3,9 @@ import express from 'express';
 import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
 import {
   getHooksStatus,
-  installClaudeHooks,
-  uninstallClaudeHooks,
+  installHooks,
+  uninstallHooks,
+  type HookAgent,
 } from '@/modules/workbench-sessions/workbench-hooks.service.js';
 import { getRunScript, setRunScript } from '@/modules/workbench-sessions/workbench-config.js';
 import { getHookToken, recordHookEvent } from '@/modules/workbench-sessions/workbench-runtime.service.js';
@@ -28,6 +29,10 @@ function str(value: unknown): string {
 
 function pid(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function hookAgent(body: unknown): HookAgent {
+  return (body as Record<string, unknown> | undefined)?.agent === 'codex' ? 'codex' : 'claude';
 }
 
 function bool(value: unknown): boolean {
@@ -119,11 +124,11 @@ export function createWorkbenchSessionsRouter(): express.Router {
   }));
 
   router.post('/hooks/install', asyncHandler(async (req, res) => {
-    res.json(createApiSuccessResponse(await installClaudeHooks(bool((req.body as Record<string, unknown>).confirm))));
+    res.json(createApiSuccessResponse(await installHooks(hookAgent(req.body), bool((req.body as Record<string, unknown>).confirm))));
   }));
 
   router.post('/hooks/uninstall', asyncHandler(async (req, res) => {
-    res.json(createApiSuccessResponse(await uninstallClaudeHooks(bool((req.body as Record<string, unknown>).confirm))));
+    res.json(createApiSuccessResponse(await uninstallHooks(hookAgent(req.body), bool((req.body as Record<string, unknown>).confirm))));
   }));
 
   return router;

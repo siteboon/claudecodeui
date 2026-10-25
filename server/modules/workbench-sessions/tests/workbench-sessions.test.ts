@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -224,4 +224,53 @@ test('discard stops terminals and finishes cleanup after a partial failure', asy
   assert.equal(run(['branch', '--list', session.branch]), '');
 
   terminals.registerPtyKiller(() => 0);
+});
+
+test('codex hooks: merged into hooks.json, and the hook script posts the event with the token', async () => {
+  process.env.CODEX_HOME = path.join(tempRoot, 'codex-home');
+  const file = hooks.codexHooksPath();
+  await mkdir(path.dirname(file), { recursive: true });
+  const original = { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo keep' }] }] } };
+  await writeFile(file, JSON.stringify(original));
+
+  await assert.rejects(hooks.installHooks('codex', false), /explicit confirmation/);
+  const { backupPath } = await hooks.installHooks('codex', true);
+  assert.ok(backupPath && existsSync(backupPath));
+  const merged = JSON.parse(await readFile(file, 'utf8'));
+  assert.deepEqual(Object.keys(merged.hooks).sort(), ['PermissionRequest', 'PreToolUse', 'Stop', 'UserPromptSubmit']);
+  assert.equal(merged.hooks.PreToolUse.length, 1);
+  assert.equal((await hooks.getHooksStatus()).agents.codex.installed, true);
+
+  // Run the installed script exactly as the CLI would, against a local receiver.
+  const http = await import('node:http');
+  const received: Array<{ token: string | undefined; body: string }> = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      received.push({ token: req.headers['x-workbench-token'] as string | undefined, body });
+      res.end('{}');
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as { port: number }).port;
+  const env = { ...process.env, WORKBENCH_SESSION_ID: 'abc', WORKBENCH_PORT: String(port), WORKBENCH_HOOK_TOKEN: 'tok' };
+  // Async spawn: the receiver lives in this process, so the event loop must stay free.
+  const runHook = (hookEnv: NodeJS.ProcessEnv, event: string) => new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, [hooks.hookScriptPath(), event], { env: hookEnv });
+    child.on('error', reject);
+    child.on('close', () => resolve());
+    child.stdin.end('{"x":1}');
+  });
+  await runHook(env, 'PermissionRequest');
+  const silentEnv = { ...process.env };
+  delete silentEnv.WORKBENCH_SESSION_ID;
+  await runHook(silentEnv, 'Stop');
+  server.close();
+  assert.equal(received.length, 1, 'no request outside a Workbench session');
+  assert.equal(received[0].token, 'tok');
+  assert.deepEqual(JSON.parse(received[0].body), { sessionId: 'abc', event: 'PermissionRequest' });
+
+  await hooks.uninstallHooks('codex', true);
+  assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), original);
 });

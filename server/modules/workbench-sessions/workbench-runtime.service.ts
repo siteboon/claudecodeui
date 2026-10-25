@@ -158,6 +158,7 @@ export function onSessionExit(id: string, exitCode: number): void {
 
 const HOOK_EVENT_STATUS: Record<string, WorkbenchStatus> = {
   Notification: 'waiting',
+  PermissionRequest: 'waiting',
   Stop: 'done',
   UserPromptSubmit: 'running',
 };
