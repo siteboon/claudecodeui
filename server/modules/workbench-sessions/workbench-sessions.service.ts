@@ -1,10 +1,11 @@
-import { copyFile, mkdir, readdir, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { worktreeServices } from '@/modules/worktrees/index.js';
 import { AppError, normalizeProjectPath } from '@/shared/utils.js';
+import { killSessionTerminals } from '@/modules/workbench-sessions/workbench-terminals.js';
 import { git, gitOrNull, parseUnifiedDiff, type DiffFile } from '@/modules/workbench-sessions/workbench-git.js';
 import {
   workbenchSessionsStore,
@@ -321,17 +322,33 @@ export async function discardSession(id: string, confirm: boolean): Promise<{ re
   }
   const session = await requireSession(id);
   const repoRoot = await resolveRepoRoot(session.projectPath);
-  if (await pathExists(session.worktreePath)) {
-    await worktreeServices.remove({
-      projectPath: repoRoot,
-      worktreePath: session.worktreePath,
-      force: true,
-      deleteBranch: true,
-    });
-  } else {
-    await git(['worktree', 'prune'], repoRoot).catch(() => undefined);
-    await git(['branch', '-D', session.branch], repoRoot).catch(() => undefined);
+  // Terminals running in the worktree hold the folder open on Windows; stop them first.
+  if (killSessionTerminals(session.worktreePath) > 0) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
+  // Each step is idempotent so a retry after a partial failure still finishes the cleanup.
+  if (await pathExists(session.worktreePath)) {
+    try {
+      await worktreeServices.remove({
+        projectPath: repoRoot,
+        worktreePath: session.worktreePath,
+        force: true,
+        deleteBranch: true,
+      });
+    } catch {
+      // Fall through to manual cleanup below (locked folder, or git already deregistered it).
+    }
+  }
+  if (await pathExists(session.worktreePath)) {
+    await rm(session.worktreePath, { recursive: true, force: true, maxRetries: 8, retryDelay: 300 }).catch((error) => {
+      throw new AppError(`Could not delete ${session.worktreePath}: ${error instanceof Error ? error.message : String(error)}`, {
+        code: 'WORKTREE_DELETE_FAILED',
+        statusCode: 500,
+      });
+    });
+  }
+  await git(['worktree', 'prune'], repoRoot).catch(() => undefined);
+  await git(['branch', '-D', session.branch], repoRoot).catch(() => undefined);
   workbenchSessionsStore.markDiscarded(session.id);
   return { removedPath: session.worktreePath, branch: session.branch };
 }

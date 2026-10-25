@@ -8,4 +8,5 @@ export {
   onSessionLaunched,
   onSessionOutput,
 } from './workbench-runtime.service.js';
+export { registerPtyKiller } from './workbench-terminals.js';
 export { workbenchSessionsStore } from './workbench-sessions.store.js';

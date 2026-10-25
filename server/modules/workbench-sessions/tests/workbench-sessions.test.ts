@@ -205,3 +205,23 @@ test('run script: per-project config and a distinct PORT per session', async () 
   await config.setRunScript(a.projectPath, '');
   assert.equal(await config.getRunScript(a.projectPath), '');
 });
+
+test('discard stops terminals and finishes cleanup after a partial failure', async () => {
+  const terminals = await import('@/modules/workbench-sessions/workbench-terminals.js');
+  const killed: string[] = [];
+  terminals.registerPtyKiller((dir) => { killed.push(dir); return 1; });
+
+  const session = await svc.createSession({ projectPath: repo, agent: 'claude', prompt: 'partial discard' });
+  // Simulate git having deregistered the worktree while a locked folder was left behind.
+  run(['worktree', 'remove', '--force', session.worktreePath]);
+  await mkdir(session.worktreePath, { recursive: true });
+  await writeFile(path.join(session.worktreePath, 'leftover.txt'), 'x');
+  assert.notEqual(run(['branch', '--list', session.branch]), '');
+
+  await svc.discardSession(session.id, true);
+  assert.deepEqual(killed, [session.worktreePath], 'terminals in the worktree were stopped first');
+  assert.equal(existsSync(session.worktreePath), false);
+  assert.equal(run(['branch', '--list', session.branch]), '');
+
+  terminals.registerPtyKiller(() => 0);
+});

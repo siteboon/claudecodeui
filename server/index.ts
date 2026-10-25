@@ -21,11 +21,12 @@ import {
     createWorkbenchHookRouter,
     createWorkbenchSessionsRouter,
     onSessionExit,
+    registerPtyKiller,
     onSessionLaunched,
     onSessionOutput,
     workbenchSessionsStore,
 } from '@/modules/workbench-sessions/index.js';
-import { chatRunRegistry, createWebSocketServer, getActivePtySessionCount, killAllPtySessions } from '@/modules/websocket/index.js';
+import { chatRunRegistry, createWebSocketServer, getActivePtySessionCount, killAllPtySessions, killPtySessionsForPath } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
@@ -112,6 +113,8 @@ const agentRoutes = createAgentModule({
 // A completed run stays subscribable while its session's background work
 // (agents, workflows, backgrounded commands) is still reporting through it.
 chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackgroundWork(sessionId));
+
+registerPtyKiller(killPtySessionsForPath);
 
 createWebSocketServer(server, {
     verifyClient: {

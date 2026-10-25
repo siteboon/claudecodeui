@@ -47,6 +47,27 @@ export function getActivePtySessionCount(): number {
   return ptySessionsMap.size;
 }
 
+/** Kills the terminals whose working directory is `dir` (so Windows releases the folder). */
+export function killPtySessionsForPath(dir: string): number {
+  const same = (a: string, b: string) => {
+    const norm = (value: string) => path.resolve(value).replace(/[\/]+$/, '');
+    return process.platform === 'win32' ? norm(a).toLowerCase() === norm(b).toLowerCase() : norm(a) === norm(b);
+  };
+  let killed = 0;
+  for (const [key, entry] of ptySessionsMap) {
+    if (!same(entry.projectPath, dir)) continue;
+    if (entry.timeoutId) clearTimeout(entry.timeoutId);
+    try {
+      entry.pty.kill();
+    } catch {
+      // Already exited.
+    }
+    ptySessionsMap.delete(key);
+    killed += 1;
+  }
+  return killed;
+}
+
 /** Kills every live terminal session (called on shutdown so no CLI is orphaned). */
 export function killAllPtySessions(): void {
   for (const entry of ptySessionsMap.values()) {
