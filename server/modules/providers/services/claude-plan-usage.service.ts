@@ -3,22 +3,7 @@ import os from 'node:os';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
-
-/** One plan rate-limit window: percent used (0-100) and when it resets (ISO 8601). */
-export type PlanUsageWindow = {
-  utilization: number | null;
-  resetsAt: string | null;
-};
-
-/** The claude.ai plan limits the CLI's /usage command shows. */
-export type ClaudePlanUsage = {
-  /** False for API key, Bedrock, Vertex and other logins without plan limits. */
-  available: boolean;
-  subscriptionType: string | null;
-  fiveHour: PlanUsageWindow | null;
-  sevenDay: PlanUsageWindow | null;
-  fetchedAt: string;
-};
+import type { ProviderPlanUsage, ProviderPlanUsageWindow } from '@/shared/index.js';
 
 type RawWindow = { utilization?: number | null; resets_at?: string | null } | null | undefined;
 
@@ -42,7 +27,7 @@ type ClaudePlanUsageServiceDependencies = {
 const CACHE_MS = 60_000;
 const REFRESH_MIN_AGE_MS = 10_000;
 
-const toWindow = (raw: RawWindow): PlanUsageWindow | null => (
+const toWindow = (raw: RawWindow): ProviderPlanUsageWindow | null => (
   raw ? { utilization: raw.utilization ?? null, resetsAt: raw.resets_at ?? null } : null
 );
 
@@ -50,12 +35,12 @@ export function createClaudePlanUsageService(dependencies: ClaudePlanUsageServic
   createQuery: (params) => query(params as never) as unknown as UsageQuery,
   now: () => Date.now(),
 }) {
-  let cached: { usage: ClaudePlanUsage; at: number } | null = null;
-  let inFlight: Promise<ClaudePlanUsage> | null = null;
+  let cached: { usage: ProviderPlanUsage; at: number } | null = null;
+  let inFlight: Promise<ProviderPlanUsage> | null = null;
 
   // Starts the CLI with an input stream that sends nothing — no prompt, so no
   // model request — asks for the /usage data, then closes stdin so it exits.
-  const read = async (): Promise<ClaudePlanUsage> => {
+  const read = async (): Promise<ProviderPlanUsage> => {
     let release = () => {};
     const held = new Promise<void>((resolve) => { release = resolve; });
     const prompt: AsyncIterable<never> = {
@@ -102,7 +87,7 @@ export function createClaudePlanUsageService(dependencies: ClaudePlanUsageServic
   };
 
   return {
-    async getPlanUsage(options: { refresh?: boolean } = {}): Promise<ClaudePlanUsage> {
+    async getPlanUsage(options: { refresh?: boolean } = {}): Promise<ProviderPlanUsage> {
       // A refresh still reuses a read from the last few seconds, so repeated
       // clicks cannot start a process each.
       const maxAge = options.refresh ? REFRESH_MIN_AGE_MS : CACHE_MS;

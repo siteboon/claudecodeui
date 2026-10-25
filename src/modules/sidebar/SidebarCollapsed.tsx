@@ -1,8 +1,6 @@
 import { Settings, Sparkles, PanelLeftOpen, AlertTriangle } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { SidebarUsageIcon } from '@/modules/sidebar/SidebarUsage';
-
 type SidebarCollapsedProps = {
   onExpand: () => void;
   onShowSettings: () => void;
@@ -44,9 +42,6 @@ export default function SidebarCollapsed({
       >
         <Settings className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
       </button>
-
-      {/* Plan usage */}
-      <SidebarUsageIcon t={t} />
 
       {/* Restart-required indicator */}
       {restartRequired && (

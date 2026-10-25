@@ -429,8 +429,8 @@ export const api = {
       },
       options: ApiRequestOptions = {},
     ) => post('/api/providers/claude/btw', body, options),
-    claudePlanUsage: (refresh = false) =>
-      get(`/api/providers/claude/plan-usage${refresh ? '?refresh=1' : ''}`),
+    planUsage: (provider: 'claude' | 'codex', refresh = false) =>
+      get(`/api/providers/${provider}/plan-usage${refresh ? '?refresh=1' : ''}`),
     authStatus: (provider: string) =>
       get(`/api/providers/${encodeURIComponent(provider)}/auth/status`),
     claudeSettingsPermissions: () => get('/api/providers/claude/settings-permissions'),

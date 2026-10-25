@@ -59,6 +59,29 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
 };
 
 // ---------------------------
+//----------------- PROVIDER PLAN USAGE ------------
+/**
+ * One subscription quota window displayed in provider settings.
+ * Utilization is percent used, and resetsAt is an ISO timestamp when supplied.
+ */
+export type ProviderPlanUsageWindow = {
+  utilization: number | null;
+  resetsAt: string | null;
+};
+
+/**
+ * Included plan usage returned by Claude and Codex account routes.
+ * An unavailable response has no quota windows, such as for an API key login.
+ */
+export type ProviderPlanUsage = {
+  available: boolean;
+  subscriptionType: string | null;
+  fiveHour: ProviderPlanUsageWindow | null;
+  sevenDay: ProviderPlanUsageWindow | null;
+  fetchedAt: string;
+};
+
+// ---------------------------
 //----------------- PROVIDER MESSAGE MODEL ------------
 /**
  * Providers supported by the unified server runtime.

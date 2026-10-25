@@ -2,6 +2,7 @@ import { AlertTriangle, LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge, Button, LLMProviderLogo } from '@/shared/ui';
+import PlanUsageCard from '@/modules/settings/PlanUsageCard';
 import type { AgentProvider, ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types';
 
 type AccountContentProps = {
@@ -187,6 +188,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
           )}
         </div>
       </div>
+      {(agent === 'claude' || agent === 'codex') && <PlanUsageCard provider={agent} />}
     </div>
   );
 }

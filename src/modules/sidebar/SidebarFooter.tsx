@@ -1,7 +1,6 @@
 import { Settings, ArrowUpCircle, AlertTriangle } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import SidebarUsage from '@/modules/sidebar/SidebarUsage';
 import { IS_PLATFORM } from '@/shared/utils';
 import type { ReleaseInfo } from '@/shared/types';
 
@@ -18,7 +17,7 @@ type SidebarFooterProps = {
   t: TFunction;
 };
 
-/** Rendered by SidebarContent at the bottom of the panel for plan usage, settings and update status. */
+/** Rendered by SidebarContent at the bottom of the panel for settings and update status. */
 export default function SidebarFooter({
   updateAvailable,
   restartRequired,
@@ -95,11 +94,8 @@ export default function SidebarFooter({
         </>
       )}
 
-      {/* Usage + Settings */}
+      {/* Settings */}
       <div className="nav-divider" />
-
-      {/* Plan usage (desktop and mobile) */}
-      <SidebarUsage t={t} />
 
       {/* Desktop settings */}
       <div className="hidden px-2 py-1.5 md:block">

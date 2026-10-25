@@ -27,6 +27,16 @@ test('lists GPT-6 Sol and GPT-6 Luna with the effort levels the Codex CLI accept
   );
 });
 
+test('lists GPT-6.1 Sol with its supported reasoning efforts', () => {
+  const sol = findCodexModel('gpt-6.1-sol');
+  assert.equal(sol?.label, 'GPT-6.1 Sol');
+  assert.equal(sol?.effort?.default, 'medium');
+  assert.deepEqual(
+    sol?.effort?.values.map((effort) => effort.value),
+    ['low', 'medium', 'high', 'xhigh', 'max'],
+  );
+});
+
 test('bundles a Codex CLI new enough to know the GPT-6 Sol and Luna models', () => {
   // Codex only ships metadata for gpt-6-sol / gpt-6-luna from 0.155.0 on. An
   // older CLI still sends the request, but on fallback metadata: it warns

@@ -42,6 +42,19 @@ export type CodexThreadFork = {
   path: string;
 };
 
+/** Raw quota windows consumed by the Providers plan usage service. */
+export type CodexRateLimitWindow = {
+  usedPercent: number;
+  windowDurationMins: number | null;
+  resetsAt: number | null;
+};
+
+/** The Codex app server's included usage snapshot for the active account. */
+export type CodexRateLimitSnapshot = {
+  primary: CodexRateLimitWindow | null;
+  secondary: CodexRateLimitWindow | null;
+};
+
 /**
  * Resolves the `codex` launcher shipped in node_modules.
  *
@@ -192,6 +205,26 @@ async function withAppServer<T>(
 }
 
 export const codexAppServer = {
+  /** Reads the active account's plan limits for the Providers settings panel. */
+  async readRateLimits(): Promise<CodexRateLimitSnapshot> {
+    return withAppServer(async (call) => {
+      const result = await call('account/rateLimits/read', {
+        excludeResetCreditDetails: true,
+      }) as {
+        rateLimits?: CodexRateLimitSnapshot;
+        rateLimitsByLimitId?: Record<string, CodexRateLimitSnapshot> | null;
+      } | undefined;
+      const limits = result?.rateLimitsByLimitId?.codex ?? result?.rateLimits;
+      if (!limits) {
+        throw new AppError('Codex did not return plan limits.', {
+          code: 'CODEX_PLAN_USAGE_UNAVAILABLE',
+          statusCode: 502,
+        });
+      }
+      return limits;
+    });
+  },
+
   /**
    * Copies a thread into a new one that ends at `lastTurnId`, or copies the
    * whole thread when it is omitted.

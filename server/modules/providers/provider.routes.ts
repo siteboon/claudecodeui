@@ -3,6 +3,7 @@ import express, { type Request, type Response } from 'express';
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { claudeCliCommandsService } from '@/modules/providers/services/claude-cli-commands.service.js';
 import { claudePlanUsageService } from '@/modules/providers/services/claude-plan-usage.service.js';
+import { codexPlanUsageService } from '@/modules/providers/services/codex-plan-usage.service.js';
 import { claudeSideQuestionService } from '@/modules/providers/services/claude-side-question.service.js';
 import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
@@ -631,6 +632,15 @@ router.get(
   '/claude/plan-usage',
   asyncHandler(async (req: Request, res: Response) => {
     const usage = await claudePlanUsageService.getPlanUsage({ refresh: req.query.refresh === '1' });
+    res.json(createApiSuccessResponse(usage));
+  }),
+);
+
+/** The Codex account's 5-hour and weekly included-usage windows. */
+router.get(
+  '/codex/plan-usage',
+  asyncHandler(async (req: Request, res: Response) => {
+    const usage = await codexPlanUsageService.getPlanUsage({ refresh: req.query.refresh === '1' });
     res.json(createApiSuccessResponse(usage));
   }),
 );
