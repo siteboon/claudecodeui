@@ -274,3 +274,31 @@ test('codex hooks: merged into hooks.json, and the hook script posts the event w
   await hooks.uninstallHooks('codex', true);
   assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), original);
 });
+
+test('resume: a launched session reconnects with the CLI resume command, else starts fresh in the worktree', async () => {
+  const { workbenchSessionsStore } = await import('@/modules/workbench-sessions/workbench-sessions.store.js');
+  const claude = await svc.createSession({ projectPath: repo, agent: 'claude', prompt: 'resume claude' });
+  const codex = await svc.createSession({ projectPath: repo, agent: 'codex', prompt: 'resume codex' });
+
+  // Not launched yet: the first prompt is used, never resume.
+  assert.match((await runtime.buildLaunch(claude, 'linux')).command, /^claude "\$\(cat /);
+
+  // Launched, CLI session id known (as recorded from the CLI's own index): resume it.
+  workbenchSessionsStore.markLaunched(claude.id);
+  workbenchSessionsStore.setCliSessionId(claude.id, '11111111-2222-3333-4444-555555555555');
+  const launchedClaude = workbenchSessionsStore.get(claude.id)!;
+  assert.equal((await runtime.buildLaunch(launchedClaude, 'linux')).command, "claude --resume '11111111-2222-3333-4444-555555555555'");
+  assert.equal((await runtime.buildLaunch(launchedClaude, 'win32')).command, "claude --resume '11111111-2222-3333-4444-555555555555'");
+
+  workbenchSessionsStore.markLaunched(codex.id);
+  workbenchSessionsStore.setCliSessionId(codex.id, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+  const launchedCodex = workbenchSessionsStore.get(codex.id)!;
+  assert.equal((await runtime.buildLaunch(launchedCodex, 'linux')).command, "codex resume 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'");
+
+  // Launched but no CLI session known: plain CLI in the same worktree, no stale prompt re-sent.
+  const bare = await svc.createSession({ projectPath: repo, agent: 'claude', prompt: 'resume bare' });
+  workbenchSessionsStore.markLaunched(bare.id);
+  const bareLaunch = await runtime.buildLaunch(workbenchSessionsStore.get(bare.id)!, 'linux');
+  assert.equal(bareLaunch.command, 'claude');
+  assert.equal(bareLaunch.cwd, bare.worktreePath);
+});
