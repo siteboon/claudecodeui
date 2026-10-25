@@ -1,0 +1,58 @@
+{
+  "appId": "local.workbench.desktop",
+  "productName": "Workbench",
+  "asar": false,
+  "npmRebuild": true,
+  "directories": {
+    "output": "release/workbench"
+  },
+  "extraMetadata": {
+    "main": "electron/workbench/main.js"
+  },
+  "files": [
+    "electron/workbench/**",
+    "electron/assets/**",
+    "public/**",
+    "dist/**",
+    "dist-server/**",
+    "shared/**",
+    "package.json",
+    "!**/*.map"
+  ],
+  "artifactName": "Workbench-${version}-${os}-${arch}.${ext}",
+  "win": {
+    "icon": "electron/assets/logo-windows.ico",
+    "target": [
+      "nsis",
+      "portable"
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "installerIcon": "electron/assets/logo-windows.ico",
+    "uninstallerIcon": "electron/assets/logo-windows.ico"
+  },
+  "mac": {
+    "category": "public.app-category.developer-tools",
+    "icon": "electron/assets/logo-macos.icns",
+    "identity": null,
+    "notarize": false,
+    "target": [
+      {
+        "target": "dmg",
+        "arch": [
+          "arm64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "arm64"
+        ]
+      }
+    ]
+  },
+  "beforeBuild": "electron/workbench/builder-hooks.cjs",
+  "afterAllArtifactBuild": "electron/workbench/builder-hooks.cjs"
+}

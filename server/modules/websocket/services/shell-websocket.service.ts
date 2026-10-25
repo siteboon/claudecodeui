@@ -39,6 +39,26 @@ type PtySessionEntry = {
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
+
+/** Number of live terminal sessions (used by the desktop shell's tray). */
+export function getActivePtySessionCount(): number {
+  return ptySessionsMap.size;
+}
+
+/** Kills every live terminal session (called on shutdown so no CLI is orphaned). */
+export function killAllPtySessions(): void {
+  for (const entry of ptySessionsMap.values()) {
+    if (entry.timeoutId) {
+      clearTimeout(entry.timeoutId);
+    }
+    try {
+      entry.pty.kill();
+    } catch {
+      // Already exited.
+    }
+  }
+  ptySessionsMap.clear();
+}
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
@@ -640,7 +660,7 @@ export function handleShellConnection(
         );
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const claudeColorScheme = claudeFollowsAppTheme ? colorScheme : null;
-        const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+        const shell = os.platform() === 'win32' ? 'powershell.exe' : (process.env.SHELL || '/bin/bash');
         const shellArgs =
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
         const termCols = readNumber(data.cols, 80);

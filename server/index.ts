@@ -15,7 +15,7 @@ import {
     initializeSessionsWatcher,
     providerRuntimeService,
 } from '@/modules/providers/index.js';
-import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
+import { chatRunRegistry, createWebSocketServer, getActivePtySessionCount, killAllPtySessions } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
@@ -387,6 +387,7 @@ async function startServer() {
         closeScheduledMessageDispatcher();
         // Clean up plugin processes on shutdown
         const shutdownRuntimeServices = async () => {
+            killAllPtySessions();
             try {
                 await browserUseService.stopAllSessions();
             } catch (err) {
@@ -404,6 +405,15 @@ async function startServer() {
             }
             process.exit(0);
         };
+        // Desktop shell: report live terminal count over the IPC channel (when spawned with one).
+        if (typeof process.send === 'function') {
+            setInterval(() => {
+                process.send?.({ type: 'workbench:sessions', count: getActivePtySessionCount() });
+            }, 2000).unref();
+            process.on('message', (message: any) => {
+                if (message?.type === 'workbench:shutdown') void shutdownRuntimeServices();
+            });
+        }
         process.on('SIGTERM', () => void shutdownRuntimeServices());
         process.on('SIGINT', () => void shutdownRuntimeServices());
     } catch (error) {
