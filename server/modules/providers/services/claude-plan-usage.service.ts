@@ -1,21 +1,18 @@
 import os from 'node:os';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import type { Query } from '@anthropic-ai/claude-agent-sdk';
 
-import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import { resolveClaudeCodeExecutablePath } from '@/shared/index.js';
 import type { ProviderPlanUsage, ProviderPlanUsageWindow } from '@/shared/index.js';
 
 type RawWindow = { utilization?: number | null; resets_at?: string | null } | null | undefined;
 
-type RawUsage = {
-  subscription_type?: string | null;
-  rate_limits_available?: boolean;
-  rate_limits?: { five_hour?: RawWindow; seven_day?: RawWindow } | null;
-};
-
-type UsageQuery = AsyncIterable<unknown> & {
-  usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: (opts?: { skipBehaviors?: boolean }) => Promise<RawUsage>;
-};
+// Refer to the SDK contract so a dependency without this API fails typecheck.
+// Keep the runtime guard for incompatible installations of the experimental API.
+type UsageQuery = AsyncIterable<unknown> & Partial<Pick<Query,
+  'usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET'
+>>;
 
 type ClaudePlanUsageServiceDependencies = {
   createQuery: (params: { prompt: AsyncIterable<never>; options: Record<string, unknown> }) => UsageQuery;
@@ -31,6 +28,7 @@ const toWindow = (raw: RawWindow): ProviderPlanUsageWindow | null => (
   raw ? { utilization: raw.utilization ?? null, resetsAt: raw.resets_at ?? null } : null
 );
 
+/** Creates the Claude usage reader used by the Providers route and its tests. */
 export function createClaudePlanUsageService(dependencies: ClaudePlanUsageServiceDependencies = {
   createQuery: (params) => query(params as never) as unknown as UsageQuery,
   now: () => Date.now(),
@@ -62,8 +60,7 @@ export function createClaudePlanUsageService(dependencies: ClaudePlanUsageServic
     try {
       const readUsage = instance.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET;
       if (typeof readUsage !== 'function') {
-        // The SDK renamed or dropped the experimental call.
-        return { available: false, subscriptionType: null, fiveHour: null, sevenDay: null, fetchedAt: new Date(dependencies.now()).toISOString() };
+        throw new Error('The installed Claude SDK cannot read plan usage. Update CloudCLI dependencies and restart.');
       }
       const raw = await readUsage.call(instance, { skipBehaviors: true });
       return {
@@ -107,4 +104,5 @@ export function createClaudePlanUsageService(dependencies: ClaudePlanUsageServic
   };
 }
 
+/** Used by the Providers route to fetch Claude plan windows. */
 export const claudePlanUsageService = createClaudePlanUsageService();

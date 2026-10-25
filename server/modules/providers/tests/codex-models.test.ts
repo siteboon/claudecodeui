@@ -37,11 +37,15 @@ test('lists GPT-6.1 Sol with its supported reasoning efforts', () => {
   );
 });
 
-test('bundles a Codex CLI new enough to know the GPT-6 Sol and Luna models', () => {
-  // Codex only ships metadata for gpt-6-sol / gpt-6-luna from 0.155.0 on. An
-  // older CLI still sends the request, but on fallback metadata: it warns
-  // "Model metadata ... not found" and quietly drops `ultra` to `medium`.
+test('bundles the Codex version verified to run GPT-6.1 Sol with a ChatGPT login', () => {
+  // 0.156.1 returns model_not_found for GPT-6.1 Sol with the same login that
+  // succeeds on 0.164.0. Check the SDK-resolved CLI too: its runtime dependency
+  // can be nested and older than the app-server CLI at the project root.
   const { version } = require('@openai/codex/package.json') as { version: string };
   const [major, minor] = version.split('.').map(Number);
-  assert.ok(major > 0 || minor >= 155, `bundled @openai/codex ${version} predates 0.155.0`);
+  assert.ok(major > 0 || minor >= 164, `bundled @openai/codex ${version} predates verified 0.164.0`);
+
+  const sdkRequire = createRequire(import.meta.resolve('@openai/codex-sdk'));
+  const sdkCli = sdkRequire('@openai/codex/package.json') as { version: string };
+  assert.equal(sdkCli.version, version, 'conversation SDK and app-server must use the same CLI version');
 });

@@ -77,3 +77,24 @@ test('a login without plan limits reports unavailable', async () => {
   assert.equal(usage.available, false);
   assert.equal(usage.fiveHour, null);
 });
+
+test('a missing SDK usage API reports an error, releases the process, and permits retry', async () => {
+  let released = 0;
+  const service = createClaudePlanUsageService({
+    now: () => 1_000_000,
+    createQuery: ({ prompt }) => {
+      void (async () => {
+        for await (const _message of prompt) { /* nothing is sent */ }
+        released += 1;
+      })();
+      return (async function* () { /* old SDK with no usage method */ })();
+    },
+  });
+
+  await assert.rejects(service.getPlanUsage(), /installed Claude SDK cannot read plan usage/);
+  await settle();
+  assert.equal(released, 1);
+  await assert.rejects(service.getPlanUsage(), /installed Claude SDK cannot read plan usage/);
+  await settle();
+  assert.equal(released, 2, 'an SDK failure is not cached as an account without limits');
+});
