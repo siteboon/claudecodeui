@@ -31,7 +31,7 @@ import {
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
-import { getClaudeSDKSessionStartTime } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+const getClaudeSDKSessionStartTime = (): number | null => null;
 import {
   getReportedClaudeContextWindow,
   summarizeClaudeTokenUsage,

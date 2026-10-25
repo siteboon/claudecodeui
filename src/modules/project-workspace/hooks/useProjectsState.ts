@@ -370,13 +370,14 @@ const isValidTab = (tab: string): tab is AppTab => {
 const readPersistedTab = (): AppTab => {
   try {
     const stored = localStorage.getItem('activeTab');
-    if (stored && isValidTab(stored)) {
+    // Workbench: headless chat is disabled, so a persisted 'chat' tab falls back to the terminal.
+    if (stored && stored !== 'chat' && isValidTab(stored)) {
       return stored as AppTab;
     }
   } catch {
     // localStorage unavailable
   }
-  return 'chat';
+  return 'shell';
 };
 
 export function useProjectsState({
@@ -1038,7 +1039,7 @@ export function useProjectsState({
       setSelectedSession(session);
 
       if (activeTab === 'tasks' || activeTab === 'browser') {
-        setActiveTab('chat');
+        setActiveTab('shell');
       }
 
       if (isMobile) {
@@ -1063,7 +1064,7 @@ export function useProjectsState({
     (project: Project) => {
       setSelectedProject(project);
       setSelectedSession(null);
-      setActiveTab('chat');
+      setActiveTab('shell');
       setNewSessionTrigger((previous) => previous + 1);
       navigate('/');
 

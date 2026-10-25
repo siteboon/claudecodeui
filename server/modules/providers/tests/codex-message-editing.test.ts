@@ -281,7 +281,7 @@ test('the indexer does not hand back a thread a session was edited off', { concu
   });
 });
 
-test('deleting an edited session removes every transcript it lived in', { concurrency: false }, async () => {
+test('deleting an edited session leaves every transcript on disk', { concurrency: false }, async () => {
   await withIndexedSession(THREE_TURNS, async ({ sessionId, homeDir, workspacePath }) => {
     const { sessionsService } = await import('@/modules/providers/services/sessions.service.js');
     const preEditPath = sessionsDb.getSessionById(sessionId)?.jsonl_path as string;
@@ -299,11 +299,9 @@ test('deleting an edited session removes every transcript it lived in', { concur
 
     await sessionsService.deleteOrArchiveSessionById(sessionId, { force: true, deletedFromDisk: true });
 
-    // The row only ever points at the newest transcript, so deleting from that
-    // alone would leave the replaced turns on disk — and unreachable, because
-    // the indexer refuses a superseded thread.
-    assert.equal(existsSync(forkPath), false);
-    assert.equal(existsSync(preEditPath), false);
+    // Workbench never deletes transcript files owned by the CLIs; only DB rows go.
+    assert.equal(existsSync(forkPath), true);
+    assert.equal(existsSync(preEditPath), true);
     assert.equal(sessionsDb.isProviderSessionSuperseded('thread-1', 'codex'), false);
   });
 });

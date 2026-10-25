@@ -189,17 +189,20 @@ app.use('/api/user', authenticateToken, userRoutes);
 app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Browser MCP bridge API (local token protected)
-app.use('/api/browser-use-mcp', browserUseMcpRoutes);
+// Workbench: disabled (see WORKBENCH-PHASE1-PLAN.md)
+// app.use('/api/browser-use-mcp', browserUseMcpRoutes);
 
 // Browser API Routes (protected)
 app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
-app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
+// Workbench: scheduled headless messages disabled
+// app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
 
 // Agent API Routes (uses API key authentication)
-app.use('/api/agent', agentRoutes);
+// Workbench: external agent API disabled (unauthenticated, headless)
+// app.use('/api/agent', agentRoutes);
 
 app.use('/api/voice', authenticateToken, voiceRoutes);
 
@@ -279,7 +282,7 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
 });
 
 const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || '127.0.0.1';
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');
@@ -371,7 +374,8 @@ async function startServer() {
             await initializeSessionsWatcher();
             // Sends anything that came due while the server was not running,
             // then keeps polling.
-            initializeScheduledMessageDispatcher(providerRuntimeService);
+            // Workbench: scheduled headless messages disabled
+            // initializeScheduledMessageDispatcher(providerRuntimeService);
 
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {

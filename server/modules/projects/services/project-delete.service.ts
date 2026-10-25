@@ -26,16 +26,8 @@ function uniqueJsonlPathsFromSessions(
   return result;
 }
 
-async function unlinkJsonlIfExists(filePath: string): Promise<void> {
-  try {
-    await fs.unlink(filePath);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      return;
-    }
-    console.warn(`[project-delete] Failed to remove ${filePath}:`, (error as Error).message);
-  }
+async function unlinkJsonlIfExists(_filePath: string): Promise<void> {
+  // Workbench never deletes files inside ~/.claude or ~/.codex; only DB rows are removed.
 }
 
 /**

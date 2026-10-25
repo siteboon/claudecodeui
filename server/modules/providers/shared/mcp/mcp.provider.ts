@@ -66,8 +66,22 @@ export abstract class McpProvider implements IProviderMcp {
       .filter((entry): entry is ProviderMcpServer => entry !== null);
   }
 
+  /**
+   * Workbench: user/local scopes live in ~/.claude.json, ~/.codex/config.toml etc.
+   * Those files belong to the official CLIs, so only project-scope files are written.
+   */
+  private assertWritableScope(scope: McpScope): void {
+    if (scope !== 'project') {
+      throw new AppError('Workbench does not modify user-level CLI config files.', {
+        code: 'MCP_SCOPE_READ_ONLY',
+        statusCode: 403,
+      });
+    }
+  }
+
   async upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer> {
     const scope = input.scope ?? 'project';
+    this.assertWritableScope(scope);
     this.assertScopeAndTransport(scope, input.transport);
 
     const workspacePath = resolveWorkspacePath(input.workspacePath);
@@ -97,6 +111,7 @@ export abstract class McpProvider implements IProviderMcp {
     input: { name: string; scope?: McpScope; workspacePath?: string },
   ): Promise<{ removed: boolean; provider: LLMProvider; name: string; scope: McpScope }> {
     const scope = input.scope ?? 'project';
+    this.assertWritableScope(scope);
     this.assertScope(scope);
 
     const workspacePath = resolveWorkspacePath(input.workspacePath);

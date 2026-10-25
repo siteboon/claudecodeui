@@ -58,3 +58,11 @@ SQLite `~/.cloudcli/auth.db` (users, api_keys, **user_credentials incl. plaintex
 5. **Unauthenticated `/api/agent`** route and plaintext GitHub tokens in SQLite. Disable the route; avoid the token store.
 6. **Electron cloud-account/deep-link features** call `cloudcli.ai`; remove for Workbench.
 7. `codex` is not on PATH on this PC; Codex sessions untested.
+
+## Phase 0b status (hard-rule cleanup) — done
+- Claude/Codex SDK runtimes and fork provider removed (`@anthropic-ai/claude-agent-sdk`, `@openai/codex-sdk` uninstalled); providers use `server/modules/providers/shared/base/disabled-runtime.ts`. Agents run only in the Shell (PTY) tab; chat tab hidden, default tab is `shell`.
+- Claude/Codex auth providers only run `<cli> --version`; no credential file, token or settings-env reads.
+- MCP writes restricted to project scope (user/local scopes throw `MCP_SCOPE_READ_ONLY`). Session/project delete no longer unlinks transcript files.
+- `HOST` defaults to `127.0.0.1`. `/api/agent`, `/api/browser-use-mcp`, `/api/scheduled-messages` and the dispatcher are disabled.
+- Verified: server typecheck clean; server boots, listens on 127.0.0.1 only, indexes existing Claude sessions, `/api/agent` no longer served.
+- **Still open:** OpenCode/Cursor providers still read their own auth files/env (`opencode-auth.provider.ts`, `opencode-models.provider.ts`); the stored-GitHub-token DB code and `AccountContent.tsx` subscription-override UI/types remain (dead code); `codex-app-server.client.ts` still spawns the bundled `codex app-server` for model lists; 10 server tests fail in untouched code (Windows temp/symlink/path tests, image attachments) and one client test file has a pre-existing type error — not checked against a clean baseline.

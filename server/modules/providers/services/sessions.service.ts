@@ -103,17 +103,9 @@ function buildCloudCliSessionName(initialMessage: string): string {
 /**
  * Removes one file if it exists.
  */
-async function removeFileIfExists(filePath: string): Promise<boolean> {
-  try {
-    await fsp.unlink(filePath);
-    return true;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      return false;
-    }
-    throw error;
-  }
+async function removeFileIfExists(_filePath: string): Promise<boolean> {
+  // Workbench never deletes files inside ~/.claude or ~/.codex; only DB rows are removed.
+  return false;
 }
 
 /**
