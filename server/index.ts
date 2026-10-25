@@ -15,6 +15,12 @@ import {
     initializeSessionsWatcher,
     providerRuntimeService,
 } from '@/modules/providers/index.js';
+import {
+    attachConnectionGuard,
+    createLoginRateLimiter,
+    isRemoteEnabled,
+    registerFromLoopbackOnly,
+} from '@/modules/remote-access/index.js';
 import { createUsageRouter } from '@/modules/usage/index.js';
 import {
     buildLaunch,
@@ -95,6 +101,8 @@ console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
 const app = express();
 const server = http.createServer(app);
+// Only loopback (and Tailscale, when remote access is switched on) may connect at all.
+attachConnectionGuard(server);
 const queryClaude = providerRuntimeService.getRunner('claude');
 const queryCursor = providerRuntimeService.getRunner('cursor');
 const queryCodex = providerRuntimeService.getRunner('codex');
@@ -176,6 +184,8 @@ app.get('/health', (req, res) => {
 app.use('/api', validateApiKey);
 
 // Authentication routes (public)
+app.post('/api/auth/login', createLoginRateLimiter());
+app.post('/api/auth/register', registerFromLoopbackOnly);
 app.use('/api/auth', authRoutes);
 
 // File Tree API Routes (protected)
@@ -313,7 +323,7 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
 });
 
 const SERVER_PORT = Number.parseInt(process.env.SERVER_PORT || '3001', 10);
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || (isRemoteEnabled() ? '0.0.0.0' : '127.0.0.1');
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 const LOCAL_SERVER_MARKER_PATH = path.join(os.homedir(), '.cloudcli', 'local-server.json');

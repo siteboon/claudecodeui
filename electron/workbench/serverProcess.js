@@ -17,6 +17,14 @@ function getFreePort() {
   });
 }
 
+function isPortFree(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.listen(port, '0.0.0.0', () => server.close(() => resolve(true)));
+  });
+}
+
 function checkHealth(port) {
   return new Promise((resolve) => {
     const req = http.get({ host: HOST, port, path: '/health', timeout: 800 }, (res) => {
@@ -44,8 +52,9 @@ export function killProcessTree(pid) {
 
 /** Runs the Workbench server as a child process bound to 127.0.0.1 on a free port. */
 export class ServerProcess {
-  constructor({ appRoot, isPackaged = false, onSessionCount, onSessionStatus }) {
+  constructor({ appRoot, isPackaged = false, remotePort = null, onSessionCount, onSessionStatus }) {
     this.appRoot = appRoot;
+    this.remotePort = remotePort;
     this.isPackaged = isPackaged;
     this.onSessionCount = onSessionCount;
     this.onSessionStatus = onSessionStatus;
@@ -80,15 +89,28 @@ export class ServerProcess {
     };
   }
 
+  /** Remote mode prefers a fixed port (stable phone bookmark); otherwise any free loopback port. */
+  async choosePort() {
+    if (this.remotePort && (await isPortFree(this.remotePort))) return this.remotePort;
+    return getFreePort();
+  }
+
   async start() {
-    this.port = Number(process.env.WORKBENCH_SERVER_PORT) || await getFreePort();
+    this.port = Number(process.env.WORKBENCH_SERVER_PORT) || await this.choosePort();
     const launch = this.resolveLaunch();
     this.child = spawn(launch.command, launch.args, {
       cwd: this.appRoot,
       detached: process.platform !== 'win32',
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-      env: { ...process.env, ...launch.env, HOST, SERVER_PORT: String(this.port) },
+      env: {
+        ...process.env,
+        ...launch.env,
+        // Remote access is opt-in; the server then listens on all interfaces but its TCP guard
+        // only admits loopback and Tailscale addresses.
+        ...(this.remotePort ? { WORKBENCH_REMOTE: '1', HOST: '0.0.0.0' } : { HOST }),
+        SERVER_PORT: String(this.port),
+      },
     });
 
     const log = (chunk) => {

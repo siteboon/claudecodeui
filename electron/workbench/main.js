@@ -1,10 +1,11 @@
-import { app, BrowserWindow, dialog, Menu, Notification, nativeImage, shell, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, Menu, Notification, nativeImage, shell, Tray } from 'electron';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { fixPath } from './pathFix.js';
+import { REMOTE_PORT, findTailscaleAddress } from './remoteAccess.js';
 import { ServerProcess } from './serverProcess.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,11 +18,71 @@ if (process.platform === 'win32') app.setAppUserModelId('local.workbench.desktop
 let mainWindow = null;
 let tray = null;
 let server = null;
+let remoteEnabled = false;
 let sessionCount = 0;
 let isQuitting = false;
 
 const appRoot = app.isPackaged ? app.getAppPath() : path.resolve(__dirname, '..', '..');
 const statePath = () => path.join(app.getPath('userData'), 'window-state.json');
+
+const settingsPath = () => path.join(app.getPath('userData'), 'workbench-settings.json');
+
+function loadSettings() {
+  try {
+    return JSON.parse(fs.readFileSync(settingsPath(), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function saveSettings(settings) {
+  fs.writeFileSync(settingsPath(), JSON.stringify(settings, null, 2));
+}
+
+function createServer() {
+  return new ServerProcess({
+    appRoot,
+    isPackaged: app.isPackaged,
+    remotePort: remoteEnabled ? REMOTE_PORT : null,
+    onSessionStatus: notifySessionStatus,
+    onSessionCount: (count) => {
+      if (count !== sessionCount) {
+        sessionCount = count;
+        refreshTray();
+      }
+    },
+  });
+}
+
+/** Remote access is opt-in and explained before it is switched on; the server restarts to apply it. */
+async function setRemoteAccess(enable) {
+  if (enable) {
+    const { response } = await dialog.showMessageBox(mainWindow ?? undefined, {
+      type: 'warning',
+      buttons: ['Cancel', 'Enable remote access'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Remote access',
+      message: 'Allow other devices on your Tailscale network to open Workbench?',
+      detail: 'Anyone who can sign in to Workbench can run code on this PC through its terminals. Only Tailscale devices can connect (not your Wi-Fi/LAN or the internet), and sign-in is rate limited. Make sure your Workbench password is long and unique. Running sessions will be restarted.',
+    });
+    if (response !== 1) {
+      refreshTray();
+      return;
+    }
+  }
+  remoteEnabled = enable;
+  saveSettings({ ...loadSettings(), remoteAccess: enable });
+  await server?.stop();
+  server = createServer();
+  try {
+    const url = await server.start();
+    if (mainWindow) mainWindow.loadURL(process.env.WORKBENCH_DEV_URL || url);
+  } catch (error) {
+    dialog.showErrorBox(`${APP_NAME} failed to restart`, String(error.message || error));
+  }
+  refreshTray();
+}
 
 function loadWindowState() {
   try {
@@ -144,6 +205,16 @@ function buildTrayImage() {
   return image;
 }
 
+function remoteMenuItems() {
+  if (!remoteEnabled || !server?.port) return [];
+  const address = findTailscaleAddress();
+  if (!address) {
+    return [{ label: 'Tailscale not detected: start Tailscale on this PC', enabled: false }];
+  }
+  const remoteUrl = `http://${address}:${server.port}`;
+  return [{ label: `Copy phone URL: ${remoteUrl}`, click: () => clipboard.writeText(remoteUrl) }];
+}
+
 function refreshTray() {
   if (!tray) return;
   const loginItem = app.getLoginItemSettings();
@@ -160,6 +231,14 @@ function refreshTray() {
         refreshTray();
       },
     },
+    { type: 'separator' },
+    {
+      label: 'Remote access (Tailscale)',
+      type: 'checkbox',
+      checked: remoteEnabled,
+      click: (item) => { void setRemoteAccess(item.checked); },
+    },
+    ...remoteMenuItems(),
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]));
@@ -186,17 +265,8 @@ if (!app.requestSingleInstanceLock()) {
     await fixPath();
     buildAppMenu();
 
-    server = new ServerProcess({
-      appRoot,
-      isPackaged: app.isPackaged,
-      onSessionStatus: notifySessionStatus,
-      onSessionCount: (count) => {
-        if (count !== sessionCount) {
-          sessionCount = count;
-          refreshTray();
-        }
-      },
-    });
+    remoteEnabled = loadSettings().remoteAccess === true;
+    server = createServer();
 
     let url;
     try {
@@ -212,6 +282,8 @@ if (!app.requestSingleInstanceLock()) {
     tray = new Tray(buildTrayImage());
     tray.on('click', showWindow);
     refreshTray();
+    // Tailscale may come up after the app starts, so keep the phone URL fresh.
+    setInterval(refreshTray, 30_000).unref();
 
     const missing = findMissingClis();
     if (missing.length) showMissingCliNotice(missing);
