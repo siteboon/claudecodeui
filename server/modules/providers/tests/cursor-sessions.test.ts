@@ -131,6 +131,30 @@ test('Cursor synchronizer skips transcripts whose workspace no longer exists', {
   }
 });
 
+test('Cursor synchronizer skips transcripts whose folder name matches more than one workspace', { concurrency: false }, async () => {
+  const tempRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cursor-session-sync-ambiguous-')));
+  // Both encode to `my-app`, so the folder name alone cannot tell them apart.
+  await mkdir(path.join(tempRoot, 'my-app'), { recursive: true });
+  await mkdir(path.join(tempRoot, 'my_app'), { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await writeCursorTranscript(
+      tempRoot, encodeCursorProjectName(path.join(tempRoot, 'my-app')), 'cursor-ambiguous-1', 'Hello'
+    );
+
+    await withIsolatedDatabase(async () => {
+      const processed = await new CursorSessionSynchronizer().synchronize();
+
+      assert.equal(processed, 0);
+      assert.equal(sessionsDb.getSessionById('cursor-ambiguous-1'), null);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Cursor synchronizer does not index nested subagent transcripts via the folder-name fallback', { concurrency: false }, async () => {
   const tempRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cursor-session-sync-sub-')));
   const workspacePath = path.join(tempRoot, 'workspace');

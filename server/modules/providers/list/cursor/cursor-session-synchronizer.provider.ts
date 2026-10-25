@@ -56,11 +56,25 @@ async function isDirectoryEntry(parentDir: string, entry: import('node:fs').Dire
  * non-alphanumeric character replaced by `-`, so `/Users/me/my_app-2.0`
  * becomes `Users-me-my-app-2-0`. That mapping is lossy, so the name is matched
  * against real directory entries one level at a time, backtracking on
- * ambiguous prefixes. Returns null when the workspace no longer exists.
+ * ambiguous prefixes. Returns null when the workspace no longer exists, or
+ * when several existing paths encode to the same name (e.g. `my-app` and
+ * `my_app` side by side), since picking one could file sessions under the
+ * wrong project.
  */
-async function resolveEncodedProjectPath(encodedRest: string, currentDir = path.parse(process.cwd()).root): Promise<string | null> {
+async function resolveEncodedProjectPath(encodedName: string): Promise<string | null> {
+  const matches: string[] = [];
+  await collectEncodedPathMatches(encodedName, path.parse(process.cwd()).root, matches);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/**
+ * Appends every existing directory under `currentDir` whose encoded path equals
+ * `encodedRest` to `matches`, stopping once two are found (enough to prove ambiguity).
+ */
+async function collectEncodedPathMatches(encodedRest: string, currentDir: string, matches: string[]): Promise<void> {
   if (encodedRest === '') {
-    return currentDir;
+    matches.push(currentDir);
+    return;
   }
 
   for (const entry of await listDirectoryEntriesSafe(currentDir)) {
@@ -72,16 +86,15 @@ async function resolveEncodedProjectPath(encodedRest: string, currentDir = path.
       continue;
     }
 
-    const resolved = await resolveEncodedProjectPath(
+    await collectEncodedPathMatches(
       encodedRest.slice(encodedName.length + 1),
-      path.join(currentDir, entry.name)
+      path.join(currentDir, entry.name),
+      matches
     );
-    if (resolved) {
-      return resolved;
+    if (matches.length > 1) {
+      return;
     }
   }
-
-  return null;
 }
 
 /**
