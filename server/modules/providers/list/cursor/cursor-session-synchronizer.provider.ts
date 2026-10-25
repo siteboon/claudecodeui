@@ -33,6 +33,58 @@ async function listDirectoryEntriesSafe(
 }
 
 /**
+ * Returns whether a directory entry is a directory, following symlinks.
+ */
+async function isDirectoryEntry(parentDir: string, entry: import('node:fs').Dirent): Promise<boolean> {
+  if (entry.isDirectory()) {
+    return true;
+  }
+  if (!entry.isSymbolicLink()) {
+    return false;
+  }
+  try {
+    return (await fsp.stat(path.join(parentDir, entry.name))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolves a Cursor project folder name back to the workspace path it encodes.
+ *
+ * Cursor names `~/.cursor/projects/<name>` after the workspace path with every
+ * non-alphanumeric character replaced by `-`, so `/Users/me/my_app-2.0`
+ * becomes `Users-me-my-app-2-0`. That mapping is lossy, so the name is matched
+ * against real directory entries one level at a time, backtracking on
+ * ambiguous prefixes. Returns null when the workspace no longer exists.
+ */
+async function resolveEncodedProjectPath(encodedRest: string, currentDir = path.parse(process.cwd()).root): Promise<string | null> {
+  if (encodedRest === '') {
+    return currentDir;
+  }
+
+  for (const entry of await listDirectoryEntriesSafe(currentDir)) {
+    const encodedName = entry.name.replace(/[^A-Za-z0-9]/g, '-');
+    if (encodedRest !== encodedName && !encodedRest.startsWith(`${encodedName}-`)) {
+      continue;
+    }
+    if (!(await isDirectoryEntry(currentDir, entry))) {
+      continue;
+    }
+
+    const resolved = await resolveEncodedProjectPath(
+      encodedRest.slice(encodedName.length + 1),
+      path.join(currentDir, entry.name)
+    );
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Session indexer for Cursor transcript artifacts.
  */
 export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
@@ -127,7 +179,14 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
     const sessionId = path.basename(filePath, '.jsonl');
     const grandparentDir = path.dirname(path.dirname(path.dirname(filePath)));
     const workerLogPath = path.join(grandparentDir, 'worker.log');
-    const projectPath = await this.extractProjectPathFromWorkerLog(workerLogPath);
+    let projectPath = await this.extractProjectPathFromWorkerLog(workerLogPath);
+
+    // Newer Cursor builds no longer log `workspacePath=` (and most projects have
+    // no worker.log at all), so fall back to decoding the project folder name.
+    // Only top-level transcripts qualify; nested subagent transcripts stay skipped.
+    if (!projectPath && path.dirname(grandparentDir) === path.join(this.cursorHome, 'projects')) {
+      projectPath = await resolveEncodedProjectPath(path.basename(grandparentDir));
+    }
 
     if (!projectPath) {
       return null;
