@@ -117,3 +117,14 @@ test('chat.inject drops attachments outside the upload store', async () => {
     assert.deepEqual(injects[0]?.attachments, { images: [], files: [] });
   });
 });
+
+test('chat.inject on a running Codex turn goes to the Codex runtime', async () => {
+  await withGateway(async ({ socket, injects }) => {
+    chatRunRegistry.startRun({ appSessionId: SESSION_ID, provider: 'codex', providerSessionId: null, connection: null, userId: 1 });
+    socket.emit('message', JSON.stringify({ type: 'chat.inject', sessionId: SESSION_ID, requestId: 'r4', content: 'also say BANANA' }));
+    await settle();
+
+    assert.deepEqual(injects, [{ provider: 'codex', sessionId: SESSION_ID, text: 'also say BANANA', attachments: { images: [], files: [] } }]);
+    assert.equal(socket.frames.at(-1)?.accepted, true);
+  });
+});

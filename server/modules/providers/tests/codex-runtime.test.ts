@@ -5,9 +5,11 @@ import test from 'node:test';
 import { Codex } from '@openai/codex-sdk';
 import type { Thread, ThreadOptions } from '@openai/codex-sdk';
 
-import { codexRuntime } from '@/modules/providers/list/codex/codex-runtime.provider.js';
+import { queryCodexExec } from '@/modules/providers/list/codex/codex-runtime.provider.js';
 import type { ProviderRuntimeContext } from '@/shared/index.js';
 
+// These drive the `codex exec` fallback transport (CLOUDCLI_CODEX_TRANSPORT=exec);
+// the app-server transport has its own tests in codex-runtime-app-server.test.ts.
 for (const resumed of [false, true]) {
   for (const permissionMode of [undefined, 'default', 'unknown', 'acceptEdits', 'bypassPermissions']) {
     test(`Codex ${resumed ? 'resumes' : 'starts'} with supported permissions (${permissionMode ?? 'omitted'})`, async (t) => {
@@ -41,7 +43,7 @@ for (const resumed of [false, true]) {
         isProviderInstalled: async () => true,
       };
 
-      await codexRuntime.run('hey there', {
+      await queryCodexExec('hey there', {
         sessionId: resumed ? 'app-session' : undefined,
         permissionMode,
         cwd: process.cwd(),
@@ -81,7 +83,7 @@ for (const command of ['', '  \n\t']) {
       isProviderInstalled: async () => true,
     };
 
-    await codexRuntime.run(command, {
+    await queryCodexExec(command, {
       cwd: process.cwd(),
       images: [{ path: imagePath, mimeType: 'image/png' }],
     }, { isWebSocketWriter: true, send: () => {} }, context);

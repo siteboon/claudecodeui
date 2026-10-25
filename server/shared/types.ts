@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'node:child_process';
 import type { IncomingMessage } from 'node:http';
 import type { Readable } from 'node:stream';
 
@@ -677,6 +678,11 @@ export type ProviderRuntimeContext = {
     interrupt(): Promise<void>;
     stopTask?(taskId: string): Promise<void>;
   };
+  /**
+   * Starts the `codex app-server` child for a Codex run. Production leaves
+   * this unset and the runtime spawns the CLI; tests supply a scripted child.
+   */
+  spawnCodexAppServer?: () => Pick<ChildProcess, 'stdin' | 'stdout' | 'stderr' | 'on' | 'kill'>;
 };
 
 export type ProviderRunFunction = (

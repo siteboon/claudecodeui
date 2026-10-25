@@ -107,6 +107,10 @@ const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
 
+// Providers whose running turn takes a message mid-turn ("Send now"). The
+// others queue it until the turn ends.
+const SEND_NOW_PROVIDERS = new Set<LLMProvider>(['claude', 'codex']);
+
 const MAX_ATTACHMENT_COUNT = 10;
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
 
@@ -864,7 +868,7 @@ export function useChatComposerState({
         const liveSessionId = selectedSession?.id || currentSessionId || null;
         if (
           liveSessionId
-          && provider === 'claude'
+          && SEND_NOW_PROVIDERS.has(provider)
           && !currentInput.trimStart().startsWith('/')
           && await injectIntoRun(liveSessionId, currentInput, uploadedAttachments)
         ) {

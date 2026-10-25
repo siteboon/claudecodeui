@@ -11,13 +11,14 @@ import type { ChatMessage, PermissionMode, Project, ProjectSession, ServerEvent 
 /**
  * "Send now": a message submitted while a turn is running goes to that turn
  * (`chat.inject`), which takes it in at its next tool step, as the terminal
- * does. When the run cannot take it, the composer queues it as before.
+ * does. Claude and Codex runs can take it; when the run cannot, or the
+ * provider has no mid-turn input, the composer queues it as before.
  */
 
 const PROJECT: Project = { projectId: 'project-1', displayName: 'Project One', fullPath: '/tmp/project-one' };
 const SESSION: ProjectSession = { id: 'session-1' };
 
-const render = (accepted: boolean) => {
+const render = (accepted: boolean, provider: 'claude' | 'codex' | 'cursor' = 'claude') => {
   const sent: Array<Record<string, unknown>> = [];
   const added: ChatMessage[] = [];
   const listeners = new Set<(event: ServerEvent) => void>();
@@ -26,7 +27,7 @@ const render = (accepted: boolean) => {
       selectedProject: PROJECT,
       selectedSession: SESSION,
       currentSessionId: SESSION.id,
-      provider: 'claude',
+      provider,
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
@@ -106,4 +107,23 @@ test('a slash command typed during a running turn is queued, not sent now', asyn
 
   assert.equal(sent.filter((frame) => frame.type === 'chat.inject').length, 0);
   await waitFor(() => assert.equal(view.result.current.queuedDraft?.content, '/compact'));
+});
+
+test('a message sent during a running Codex turn goes to that turn too', async () => {
+  const { view, sent, added } = render(true, 'codex');
+  await submit(view, 'also say BANANA');
+
+  const injects = sent.filter((frame) => frame.type === 'chat.inject');
+  assert.equal(injects.length, 1);
+  assert.equal(injects[0].content, 'also say BANANA');
+  assert.equal(view.result.current.queuedDraft, null, 'nothing is queued');
+  assert.equal(added.at(-1)?.content, 'also say BANANA');
+});
+
+test('a provider without mid-turn input still queues', async () => {
+  const { view, sent } = render(true, 'cursor');
+  await submit(view, 'later');
+
+  assert.equal(sent.filter((frame) => frame.type === 'chat.inject').length, 0);
+  await waitFor(() => assert.equal(view.result.current.queuedDraft?.content, 'later'));
 });

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import readline from 'node:readline';
@@ -9,16 +10,16 @@ import { AppError } from '@/shared/utils.js';
  * Minimal JSON-RPC client for `codex app-server`.
  *
  * Codex ships two entry points and they expose different things. The
- * `@openai/codex-sdk` this app runs conversations through is a wrapper around
- * `codex exec`, and its whole surface is `startThread` and `resumeThread` —
- * there is no way to branch a thread or to resume one partway. The same
- * binary's `app-server` subcommand speaks JSON-RPC and does have that
- * primitive, `thread/fork`, which is what the Codex IDE clients build their
- * own "fork" and "edit an earlier message" on top of.
+ * `@openai/codex-sdk` is a wrapper around `codex exec`, and its whole surface
+ * is `startThread` and `resumeThread` — one input per process, no way to
+ * branch a thread or to resume one partway. The same binary's `app-server`
+ * subcommand speaks JSON-RPC and has those primitives: `thread/fork`, which
+ * the Codex IDE clients build "fork" and "edit an earlier message" on, and
+ * `turn/steer`, which hands a running turn more input.
  *
- * So this is a second transport to the same CLI, opened only for the
- * operations the SDK cannot express. Everything else still goes through the
- * SDK.
+ * Chat turns run over this transport (see codex-runtime.provider.ts) so they
+ * can be steered; the SDK path stays behind CLOUDCLI_CODEX_TRANSPORT=exec as
+ * a fallback.
  */
 
 /** How long a single request may take before the child is killed. */
@@ -74,23 +75,61 @@ function resolveCodexLauncher(): string {
   }
 }
 
+/** A `codex app-server` child, or a scripted stand-in with the same pipes. */
+export type CodexAppServerChild = Pick<ChildProcess, 'stdin' | 'stdout' | 'stderr' | 'on' | 'kill'>;
+
+/** Answers one server-to-client request (an approval prompt); a throw becomes a JSON-RPC error. */
+export type CodexServerRequestHandler = (
+  method: string,
+  params: Record<string, unknown>,
+  requestId: number | string,
+) => Promise<unknown>;
+
 /**
- * Runs one exchange against a freshly spawned `codex app-server`.
+ * One open connection to a `codex app-server` child.
  *
- * A process per operation rather than a pooled long-lived one: the handshake
- * costs a fraction of a second, forking happens at most once per user action,
- * and a shared child would need lifecycle handling — restarts, back-pressure,
- * a crash taking every pending fork with it — for no measurable gain next to
- * the model turn that follows.
+ * The one-shot helpers below open one for a single exchange; a running chat
+ * keeps one open for its whole turn, because steering and interrupting are
+ * requests against the turn that child is running.
  */
-async function withAppServer<T>(
-  run: (call: (method: string, params: unknown) => Promise<unknown>) => Promise<T>,
-): Promise<T> {
-  const launcher = resolveCodexLauncher();
-  const child = spawn(process.execPath, [launcher, 'app-server'], {
-    env: process.env,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+export type CodexAppServerConnection = {
+  request(method: string, params: unknown, timeoutMs?: number): Promise<unknown>;
+  /** Called for every server notification, in arrival order. */
+  onNotification(handler: (method: string, params: Record<string, unknown>) => void): void;
+  /** Answers approval prompts and other server requests. Without one they are refused. */
+  onServerRequest(handler: CodexServerRequestHandler): void;
+  /** Called once when the child goes away, for whatever reason. */
+  onExit(handler: (reason: string) => void): void;
+  /** Why the child went away, or null while it runs. */
+  readonly exitReason: string | null;
+  /** The last line the child wrote to stderr, for explaining a crash. */
+  lastStderrLine(): string;
+  close(): void;
+};
+
+type JsonRpcIncoming = JsonRpcResponse & {
+  id?: number | string;
+  method?: string;
+  params?: Record<string, unknown>;
+};
+
+/**
+ * Spawns `codex app-server` and completes the initialize handshake.
+ *
+ * `spawnChild` exists for tests, which script the child's stdout instead of
+ * running the CLI.
+ */
+export async function openCodexAppServer(options: {
+  cwd?: string;
+  spawnChild?: () => CodexAppServerChild;
+} = {}): Promise<CodexAppServerConnection> {
+  const child = options.spawnChild
+    ? options.spawnChild()
+    : spawn(process.execPath, [resolveCodexLauncher(), 'app-server'], {
+      cwd: options.cwd,
+      env: process.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
 
   // The server logs sandbox and skill warnings to stderr on every start. They
   // are not failures and drowning the app log in them helps nobody, so stderr
@@ -103,18 +142,49 @@ async function withAppServer<T>(
   let nextRequestId = 1;
   const pending = new Map<number, (response: JsonRpcResponse) => void>();
   let exitReason: string | null = null;
+  let notificationHandler: (method: string, params: Record<string, unknown>) => void = () => {};
+  let serverRequestHandler: CodexServerRequestHandler | null = null;
+  const exitHandlers: Array<(reason: string) => void> = [];
 
-  const reader = readline.createInterface({ input: child.stdout });
+  const write = (message: unknown) => {
+    if (!exitReason) {
+      child.stdin?.write(`${JSON.stringify(message)}\n`);
+    }
+  };
+
+  const answerServerRequest = async (id: number | string, method: string, params: Record<string, unknown>) => {
+    if (!serverRequestHandler) {
+      write({ jsonrpc: '2.0', id, error: { code: -32601, message: `${method} is not supported by this client` } });
+      return;
+    }
+    try {
+      const result = await serverRequestHandler(method, params, id);
+      write({ jsonrpc: '2.0', id, result });
+    } catch (error) {
+      write({ jsonrpc: '2.0', id, error: { code: -32603, message: error instanceof Error ? error.message : String(error) } });
+    }
+  };
+
+  const reader = readline.createInterface({ input: child.stdout! });
   reader.on('line', (line) => {
     if (!line.trim()) {
       return;
     }
-    let message: JsonRpcResponse;
+    let message: JsonRpcIncoming;
     try {
-      message = JSON.parse(line) as JsonRpcResponse;
+      message = JSON.parse(line) as JsonRpcIncoming;
     } catch {
-      // Server-to-client notifications and any non-JSON banner are not
-      // replies to anything this client asked for.
+      // A non-JSON banner is not a reply to anything this client asked for.
+      return;
+    }
+    if (typeof message.method === 'string') {
+      // Requests from the server carry an id of their own, which can collide
+      // with this client's ids; the method is what tells them apart.
+      if (message.id !== undefined && message.id !== null) {
+        void answerServerRequest(message.id, message.method, message.params ?? {});
+      } else {
+        notificationHandler(message.method, message.params ?? {});
+      }
       return;
     }
     if (typeof message.id !== 'number') {
@@ -125,26 +195,33 @@ async function withAppServer<T>(
   });
 
   const failPending = (reason: string) => {
-    exitReason = reason;
+    if (!exitReason) {
+      exitReason = reason;
+      for (const handler of exitHandlers) {
+        handler(reason);
+      }
+    }
     for (const resolve of pending.values()) {
       resolve({ error: { message: reason } });
     }
     pending.clear();
   };
 
-  child.on('error', (error) => failPending(error.message));
-  child.on('exit', (code, signal) => {
+  child.on('error', (error: Error) => failPending(error.message));
+  child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
     failPending(`codex app-server exited (code ${code ?? 'null'}, signal ${signal ?? 'null'})`);
   });
   // A child that dies mid-request leaves its pipes broken, and the next write
   // raises EPIPE on the stream rather than at the call site. Without a
   // listener that is an unhandled 'error' event, which takes the whole server
-  // down over one failed fork.
+  // down over one failed request.
   child.stdin?.on('error', (error) => failPending(error.message));
   child.stdout?.on('error', (error) => failPending(error.message));
   child.stderr?.on('error', () => {});
 
-  const call = (method: string, params: unknown): Promise<unknown> =>
+  const lastStderrLine = () => stderr.trim().split('\n').slice(-1)[0] || '';
+
+  const request = (method: string, params: unknown, timeoutMs = REQUEST_TIMEOUT_MS): Promise<unknown> =>
     new Promise((resolve, reject) => {
       if (exitReason) {
         reject(new AppError(`Codex app-server is not running: ${exitReason}`, {
@@ -157,11 +234,11 @@ async function withAppServer<T>(
       const id = nextRequestId++;
       const timer = setTimeout(() => {
         pending.delete(id);
-        reject(new AppError(`Codex app-server did not answer "${method}" within ${REQUEST_TIMEOUT_MS}ms.`, {
+        reject(new AppError(`Codex app-server did not answer "${method}" within ${timeoutMs}ms.`, {
           code: 'CODEX_APP_SERVER_TIMEOUT',
           statusCode: 504,
         }));
-      }, REQUEST_TIMEOUT_MS);
+      }, timeoutMs);
 
       pending.set(id, (response) => {
         clearTimeout(timer);
@@ -176,31 +253,76 @@ async function withAppServer<T>(
         resolve(response.result);
       });
 
-      child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+      write({ jsonrpc: '2.0', id, method, params });
     });
 
+  const close = () => {
+    reader.close();
+    child.kill();
+  };
+
   try {
-    // `capabilities` is deliberately empty. `thread/fork` with `lastTurnId` is
-    // in the stable protocol; only `beforeTurnId` and the turn-listing methods
-    // are gated behind `experimentalApi`, and neither is needed here.
-    await call('initialize', {
+    // `capabilities` is deliberately empty. Everything used here — fork with
+    // `lastTurnId`, turn start/steer/interrupt — is in the stable protocol.
+    await request('initialize', {
       clientInfo: { name: 'cloudcli', title: 'CloudCLI', version: '1' },
       capabilities: {},
     });
-    child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'initialized', params: {} })}\n`);
-
-    return await run(call);
+    write({ jsonrpc: '2.0', method: 'initialized', params: {} });
   } catch (error) {
-    if (error instanceof AppError && exitReason) {
-      throw new AppError(`${error.message}${stderr ? ` — ${stderr.trim().split('\n').slice(-1)[0]}` : ''}`, {
-        code: error.code,
-        statusCode: error.statusCode,
-      });
-    }
-    throw error;
+    close();
+    throw withStderr(error, exitReason, lastStderrLine());
+  }
+
+  return {
+    request,
+    onNotification(handler) {
+      notificationHandler = handler;
+    },
+    onServerRequest(handler) {
+      serverRequestHandler = handler;
+    },
+    onExit(handler) {
+      exitHandlers.push(handler);
+    },
+    get exitReason() {
+      return exitReason;
+    },
+    lastStderrLine,
+    close,
+  };
+}
+
+/** Adds the child's last stderr line to an error caused by the child dying. */
+function withStderr(error: unknown, exitReason: string | null, stderrLine: string): unknown {
+  if (error instanceof AppError && exitReason) {
+    return new AppError(`${error.message}${stderrLine ? ` — ${stderrLine}` : ''}`, {
+      code: error.code,
+      statusCode: error.statusCode,
+    });
+  }
+  return error;
+}
+
+/**
+ * Runs one exchange against a freshly spawned `codex app-server`.
+ *
+ * A process per operation rather than a pooled long-lived one: the handshake
+ * costs a fraction of a second, forking happens at most once per user action,
+ * and a shared child would need lifecycle handling — restarts, back-pressure,
+ * a crash taking every pending fork with it — for no measurable gain next to
+ * the model turn that follows.
+ */
+async function withAppServer<T>(
+  run: (call: (method: string, params: unknown) => Promise<unknown>) => Promise<T>,
+): Promise<T> {
+  const connection = await openCodexAppServer();
+  try {
+    return await run((method, params) => connection.request(method, params));
+  } catch (error) {
+    throw withStderr(error, connection.exitReason, connection.lastStderrLine());
   } finally {
-    reader.close();
-    child.kill();
+    connection.close();
   }
 }
 

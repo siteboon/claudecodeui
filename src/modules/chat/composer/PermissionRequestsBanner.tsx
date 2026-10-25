@@ -60,10 +60,13 @@ export default function PermissionRequestsBanner({
         }
 
         const rawInput = formatToolInputForDisplay(request.input);
-        const permissionEntry = buildClaudeToolPermissionEntry(request.toolName, rawInput);
+        // Codex keeps its own grants: "remember" there means "do not ask again
+        // in this chat", and nothing is written to Claude's saved tool rules.
+        const isCodexRequest = (request.context as { provider?: unknown } | undefined)?.provider === 'codex';
+        const permissionEntry = isCodexRequest ? null : buildClaudeToolPermissionEntry(request.toolName, rawInput);
         const settings = getClaudeSettings();
         const alreadyAllowed = permissionEntry ? settings.allowedTools.includes(permissionEntry) : false;
-        const rememberLabel = alreadyAllowed ? 'Allow (saved)' : 'Allow & remember';
+        const rememberLabel = isCodexRequest ? 'Allow for this chat' : alreadyAllowed ? 'Allow (saved)' : 'Allow & remember';
         const matchingRequestIds = permissionEntry
           ? pendingPermissionRequests
               .filter(
@@ -113,12 +116,16 @@ export default function PermissionRequestsBanner({
               <ConfirmationAction
                 variant="outline"
                 onClick={() => {
+                  if (isCodexRequest) {
+                    handlePermissionDecision(request.requestId, { allow: true, rememberEntry: 'session' });
+                    return;
+                  }
                   if (permissionEntry && !alreadyAllowed) {
                     handleGrantToolPermission({ entry: permissionEntry, toolName: request.toolName });
                   }
                   handlePermissionDecision(matchingRequestIds, { allow: true, rememberEntry: permissionEntry });
                 }}
-                disabled={!permissionEntry}
+                disabled={!permissionEntry && !isCodexRequest}
               >
                 {rememberLabel}
               </ConfirmationAction>
