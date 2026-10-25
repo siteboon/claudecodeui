@@ -12,7 +12,7 @@ import { homeDataDir } from '@/modules/workbench-sessions/workbench-sessions.ser
  * outside Workbench is unaffected. Hook commands run through a POSIX shell (Git Bash on
  * Windows, which Claude Code requires), so one sh script serves every platform.
  */
-const MARKER = 'workbench/hooks/notify.sh';
+const MARKER = 'WORKBENCH_HOOK=1';
 const EVENTS = ['Notification', 'Stop', 'UserPromptSubmit'] as const;
 
 export const HOOK_SCRIPT = `#!/bin/sh
@@ -42,7 +42,7 @@ export function hookScriptPath(): string {
 /** Forward slashes keep the path valid in Git Bash on Windows. */
 function commandFor(event: string): string {
   const script = hookScriptPath().split(path.sep).join('/');
-  return `sh "${script}" ${event}`;
+  return `${MARKER} sh "${script}" ${event}`;
 }
 
 async function readSettings(file: string): Promise<{ settings: Settings; existed: boolean }> {

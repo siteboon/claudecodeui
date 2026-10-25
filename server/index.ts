@@ -17,6 +17,7 @@ import {
 } from '@/modules/providers/index.js';
 import {
     buildLaunch,
+    buildRunLaunch,
     createWorkbenchHookRouter,
     createWorkbenchSessionsRouter,
     onSessionExit,
@@ -122,9 +123,10 @@ createWebSocketServer(server, {
     },
     shell: {
         workbench: {
-            launch: async (sessionId) => {
+            launch: async (sessionId, mode) => {
                 const session = workbenchSessionsStore.get(sessionId);
-                return session && session.status !== 'discarded' ? buildLaunch(session) : null;
+                if (!session || session.status === 'discarded') return null;
+                return mode === 'run' ? buildRunLaunch(session) : buildLaunch(session);
             },
             onLaunched: onSessionLaunched,
             onOutput: onSessionOutput,

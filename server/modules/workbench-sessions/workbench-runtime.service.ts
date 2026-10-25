@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { getRunScript } from '@/modules/workbench-sessions/workbench-config.js';
 import { findCliSessionId, homeDataDir } from '@/modules/workbench-sessions/workbench-sessions.service.js';
 import {
   workbenchSessionsStore,
@@ -25,7 +26,11 @@ export type SessionLaunch = {
   command: string;
   provider: WorkbenchSession['agent'];
   env: Record<string, string>;
+  isRun?: boolean;
 };
+
+/** First port handed out to per-session dev servers; each session gets its own offset. */
+export const RUN_PORT_BASE = 4100;
 
 function powershellQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
@@ -74,6 +79,25 @@ export async function buildLaunch(session: WorkbenchSession, platform: NodeJS.Pl
       WORKBENCH_PORT: process.env.SERVER_PORT || '3001',
       WORKBENCH_HOOK_TOKEN: hookToken,
     },
+  };
+}
+
+/**
+ * Launch spec for the project's run script (for example `npm run dev`) in the session's
+ * worktree. Each session gets its own PORT so parallel dev servers do not collide.
+ */
+export async function buildRunLaunch(session: WorkbenchSession): Promise<SessionLaunch | null> {
+  const script = await getRunScript(session.projectPath);
+  if (!script) return null;
+  const ordered = workbenchSessionsStore.list().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const index = Math.max(0, ordered.findIndex((entry) => entry.id === session.id));
+  return {
+    sessionId: session.id,
+    cwd: session.worktreePath,
+    command: script,
+    provider: session.agent,
+    isRun: true,
+    env: { PORT: String(RUN_PORT_BASE + index), WORKBENCH_SESSION_ID: session.id },
   };
 }
 

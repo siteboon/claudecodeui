@@ -10,6 +10,7 @@ const tempRoot = path.join(os.tmpdir(), `wb-test-${Date.now()}-${Math.random().t
 process.env.DATABASE_PATH = path.join(tempRoot, 'db', 'test.db');
 process.env.WORKBENCH_WORKTREES_ROOT = path.join(tempRoot, 'trees');
 process.env.CLAUDE_CONFIG_DIR = path.join(tempRoot, 'claude-config');
+process.env.WORKBENCH_DATA_DIR = path.join(tempRoot, 'data');
 
 const repo = path.join(tempRoot, 'My Repo');
 
@@ -183,4 +184,24 @@ test('hook install needs confirmation, backs up, merges and uninstalls cleanly',
   assert.deepEqual(JSON.parse(await readFile(settingsPath, 'utf8')), original);
   const backups = (await readdir(path.dirname(settingsPath))).filter((name) => name.includes('workbench-backup'));
   assert.ok(backups.length >= 2);
+});
+
+test('run script: per-project config and a distinct PORT per session', async () => {
+  const config = await import('@/modules/workbench-sessions/workbench-config.js');
+  const a = await svc.createSession({ projectPath: repo, agent: 'claude', prompt: 'run script a' });
+  const b = await svc.createSession({ projectPath: repo, agent: 'claude', prompt: 'run script b' });
+
+  assert.equal(await runtime.buildRunLaunch(a), null, 'no run script configured yet');
+  await config.setRunScript(a.projectPath, 'npm run dev');
+  assert.equal(await config.getRunScript(a.projectPath), 'npm run dev');
+
+  const launchA = await runtime.buildRunLaunch(a);
+  const launchB = await runtime.buildRunLaunch(b);
+  assert.equal(launchA?.command, 'npm run dev');
+  assert.equal(launchA?.cwd, a.worktreePath);
+  assert.equal(launchA?.isRun, true);
+  assert.notEqual(launchA?.env.PORT, launchB?.env.PORT);
+
+  await config.setRunScript(a.projectPath, '');
+  assert.equal(await config.getRunScript(a.projectPath), '');
 });

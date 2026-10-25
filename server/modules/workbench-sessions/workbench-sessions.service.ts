@@ -347,5 +347,5 @@ export function findCliSessionId(session: WorkbenchSession): string | null {
 }
 
 export function homeDataDir(): string {
-  return path.join(os.homedir(), '.workbench');
+  return process.env.WORKBENCH_DATA_DIR?.trim() || path.join(os.homedir(), '.workbench');
 }

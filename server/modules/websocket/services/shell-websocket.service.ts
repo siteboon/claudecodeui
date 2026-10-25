@@ -14,6 +14,7 @@ type ShellIncomingMessage = {
   rows?: number;
   projectPath?: string;
   workbenchSessionId?: string;
+  workbenchMode?: string;
   sessionId?: string;
   hasSession?: boolean;
   provider?: string;
@@ -143,7 +144,8 @@ type ShellWebSocketDependencies = {
   spawnPty?: typeof pty.spawn;
   /** Workbench worktree sessions: supplies cwd/command/env and receives PTY lifecycle events. */
   workbench?: {
-    launch(sessionId: string): Promise<{
+    launch(sessionId: string, mode?: string): Promise<{
+      isRun?: boolean;
       sessionId: string;
       cwd: string;
       command: string;
@@ -582,10 +584,10 @@ export function handleShellConnection(
       if (data.type === 'init') {
         const workbenchSessionId = readString(data.workbenchSessionId);
         const workbenchLaunch = workbenchSessionId && dependencies.workbench
-          ? await dependencies.workbench.launch(workbenchSessionId)
+          ? await dependencies.workbench.launch(workbenchSessionId, readString(data.workbenchMode))
           : null;
         const projectPath = workbenchLaunch?.cwd ?? readString(data.projectPath, process.cwd());
-        const sessionId = workbenchLaunch ? `wb-${workbenchLaunch.sessionId}` : (readString(data.sessionId) || null);
+        const sessionId = workbenchLaunch ? `wb-${workbenchLaunch.isRun ? 'run-' : ''}${workbenchLaunch.sessionId}` : (readString(data.sessionId) || null);
         const hasSession = readBoolean(data.hasSession);
         const provider = workbenchLaunch?.provider ?? readString(data.provider, 'claude');
         const initialCommand = readString(data.initialCommand);
@@ -712,12 +714,12 @@ export function handleShellConnection(
           claudeColorScheme,
         });
 
-        if (workbenchLaunch) {
+        if (workbenchLaunch && !workbenchLaunch.isRun) {
           dependencies.workbench?.onLaunched(workbenchLaunch.sessionId);
         }
 
         shellProcess.onData((chunk) => {
-          if (workbenchLaunch) {
+          if (workbenchLaunch && !workbenchLaunch.isRun) {
             dependencies.workbench?.onOutput(workbenchLaunch.sessionId);
           }
           if (!ptySessionKey) {
@@ -796,7 +798,7 @@ export function handleShellConnection(
         });
 
         shellProcess.onExit((exitCode) => {
-          if (workbenchLaunch) {
+          if (workbenchLaunch && !workbenchLaunch.isRun) {
             dependencies.workbench?.onExit(workbenchLaunch.sessionId, exitCode.exitCode);
           }
           if (!ptySessionKey) {

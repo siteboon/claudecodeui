@@ -3,6 +3,7 @@ export { createWorkbenchHookRouter, createWorkbenchSessionsRouter } from './work
 // Shell integration: launch spec and PTY lifecycle callbacks.
 export {
   buildLaunch,
+  buildRunLaunch,
   onSessionExit,
   onSessionLaunched,
   onSessionOutput,

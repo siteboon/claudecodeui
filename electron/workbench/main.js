@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, Menu, Notification, nativeImage, shell, Tray } from 'electron';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -105,6 +105,29 @@ function showWindow() {
   mainWindow.focus();
 }
 
+/** OS notification when a worktree session needs input or finishes; click focuses that session. */
+function notifySessionStatus({ sessionId, title, status }) {
+  if (!Notification.isSupported()) return;
+  if (mainWindow && mainWindow.isFocused()) return;
+  const bodies = {
+    waiting: 'Needs your input',
+    done: 'Finished',
+    error: 'Ended with an error',
+  };
+  const notification = new Notification({ title: title || APP_NAME, body: bodies[status] ?? status, silent: false });
+  notification.on('click', () => {
+    showWindow();
+    mainWindow?.webContents
+      .executeJavaScript(`window.dispatchEvent(new CustomEvent('workbench:select-session', { detail: ${JSON.stringify(sessionId)} }))`)
+      .catch(() => undefined);
+  });
+  try {
+    notification.show();
+  } catch {
+    // Permission denied or no notification service: ignore, the in-app badge still shows status.
+  }
+}
+
 function buildTrayImage() {
   // 32x32 monochrome ring; a template image on macOS so it adapts to the menu bar.
   const size = 32;
@@ -165,6 +188,7 @@ if (!app.requestSingleInstanceLock()) {
 
     server = new ServerProcess({
       appRoot,
+      onSessionStatus: notifySessionStatus,
       onSessionCount: (count) => {
         if (count !== sessionCount) {
           sessionCount = count;

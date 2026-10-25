@@ -44,9 +44,10 @@ export function killProcessTree(pid) {
 
 /** Runs the Workbench server as a child process bound to 127.0.0.1 on a free port. */
 export class ServerProcess {
-  constructor({ appRoot, onSessionCount }) {
+  constructor({ appRoot, onSessionCount, onSessionStatus }) {
     this.appRoot = appRoot;
     this.onSessionCount = onSessionCount;
+    this.onSessionStatus = onSessionStatus;
     this.child = null;
     this.port = null;
     this.logs = [];
@@ -94,6 +95,7 @@ export class ServerProcess {
     this.child.stderr.on('data', log);
     this.child.on('message', (message) => {
       if (message?.type === 'workbench:sessions') this.onSessionCount?.(message.count);
+      if (message?.type === 'workbench:status') this.onSessionStatus?.(message);
     });
     let exited = false;
     this.child.once('exit', () => { exited = true; this.child = null; });

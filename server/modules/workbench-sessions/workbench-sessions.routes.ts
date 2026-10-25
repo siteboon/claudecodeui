@@ -6,6 +6,7 @@ import {
   installClaudeHooks,
   uninstallClaudeHooks,
 } from '@/modules/workbench-sessions/workbench-hooks.service.js';
+import { getRunScript, setRunScript } from '@/modules/workbench-sessions/workbench-config.js';
 import { getHookToken, recordHookEvent } from '@/modules/workbench-sessions/workbench-runtime.service.js';
 import {
   commitSession,
@@ -98,6 +99,19 @@ export function createWorkbenchSessionsRouter(): express.Router {
     res.json(createApiSuccessResponse(
       await discardSession(pid(req.params.id), bool((req.body as Record<string, unknown>).confirm)),
     ));
+  }));
+
+  router.get('/run-config', asyncHandler(async (req, res) => {
+    const projectPath = str(req.query.projectPath);
+    res.json(createApiSuccessResponse({ projectPath, command: await getRunScript(projectPath) }));
+  }));
+
+  router.put('/run-config', asyncHandler(async (req, res) => {
+    const body = req.body as Record<string, unknown>;
+    const projectPath = str(body.projectPath);
+    if (!projectPath) throw new AppError('projectPath is required', { code: 'INVALID_REQUEST_BODY', statusCode: 400 });
+    await setRunScript(projectPath, str(body.command));
+    res.json(createApiSuccessResponse({ projectPath, command: await getRunScript(projectPath) }));
   }));
 
   router.get('/hooks/status', asyncHandler(async (_req, res) => {
