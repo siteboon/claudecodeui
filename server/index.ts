@@ -21,6 +21,7 @@ import {
     isRemoteEnabled,
     registerFromLoopbackOnly,
 } from '@/modules/remote-access/index.js';
+import { createAgentAdminRouter, createAgentFeedRouter } from '@/modules/workbench-agent/index.js';
 import { createUsageRouter } from '@/modules/usage/index.js';
 import {
     buildLaunch,
@@ -206,6 +207,10 @@ app.use('/api/worktrees', authenticateToken, worktreesRoutes);
 // Workbench worktree sessions: token-protected hook receiver first, then the JWT API.
 app.use('/api/workbench', createWorkbenchHookRouter());
 app.use('/api/workbench', authenticateToken, createWorkbenchSessionsRouter());
+
+// Agent access (Hermes): owner-side token/approval management behind JWT, narrow bearer-token feed outside it.
+app.use('/api/workbench/agent', authenticateToken, createAgentAdminRouter());
+app.use('/api/workbench-agent', createAgentFeedRouter());
 
 // Daily token usage from local CLI logs (read-only).
 app.use('/api/usage', authenticateToken, createUsageRouter());

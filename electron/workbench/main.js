@@ -45,6 +45,7 @@ function createServer() {
     isPackaged: app.isPackaged,
     remotePort: remoteEnabled ? REMOTE_PORT : null,
     onSessionStatus: notifySessionStatus,
+    onProposal: notifyProposal,
     onSessionCount: (count) => {
       if (count !== sessionCount) {
         sessionCount = count;
@@ -186,6 +187,23 @@ function notifySessionStatus({ sessionId, title, status }) {
     notification.show();
   } catch {
     // Permission denied or no notification service: ignore, the in-app badge still shows status.
+  }
+}
+
+/** An agent (for example Hermes) proposed a task; nothing runs until it is approved in the app. */
+function notifyProposal({ title, from }) {
+  if (!Notification.isSupported()) return;
+  const notification = new Notification({ title: `${from || 'Agent'} proposed a task`, body: title || 'Review it in Workbench', silent: false });
+  notification.on('click', () => {
+    showWindow();
+    mainWindow?.webContents
+      .executeJavaScript("window.dispatchEvent(new CustomEvent('workbench:open-proposals'))")
+      .catch(() => undefined);
+  });
+  try {
+    notification.show();
+  } catch {
+    // No notification service available.
   }
 }
 
