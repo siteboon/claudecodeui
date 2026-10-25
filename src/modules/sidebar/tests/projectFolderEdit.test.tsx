@@ -154,6 +154,7 @@ const CONTROLLER_ARGS: Parameters<typeof useSidebarController>[0] = {
   selectedProject: null,
   selectedSession: null,
   activeSessions: new Set<string>(),
+  backgroundSessionIds: new Set<string>(),
   isLoading: false,
   isMobile: false,
   t: t as unknown as TFunction,
