@@ -15,6 +15,15 @@ import {
     initializeSessionsWatcher,
     providerRuntimeService,
 } from '@/modules/providers/index.js';
+import {
+    buildLaunch,
+    createWorkbenchHookRouter,
+    createWorkbenchSessionsRouter,
+    onSessionExit,
+    onSessionLaunched,
+    onSessionOutput,
+    workbenchSessionsStore,
+} from '@/modules/workbench-sessions/index.js';
 import { chatRunRegistry, createWebSocketServer, getActivePtySessionCount, killAllPtySessions } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
@@ -112,6 +121,15 @@ createWebSocketServer(server, {
         runtime: providerRuntimeService,
     },
     shell: {
+        workbench: {
+            launch: async (sessionId) => {
+                const session = workbenchSessionsStore.get(sessionId);
+                return session && session.status !== 'discarded' ? buildLaunch(session) : null;
+            },
+            onLaunched: onSessionLaunched,
+            onOutput: onSessionOutput,
+            onExit: onSessionExit,
+        },
         resolveProviderSessionId: (sessionId, provider) => {
             const dbSession = sessionsDb.getSessionById(sessionId);
             if (dbSession) {
@@ -168,6 +186,10 @@ app.use('/api/git', authenticateToken, gitRoutes);
 
 // Git worktree management (protected)
 app.use('/api/worktrees', authenticateToken, worktreesRoutes);
+
+// Workbench worktree sessions: token-protected hook receiver first, then the JWT API.
+app.use('/api/workbench', createWorkbenchHookRouter());
+app.use('/api/workbench', authenticateToken, createWorkbenchSessionsRouter());
 
 // TaskMaster API Routes (protected)
 app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);

@@ -74,7 +74,7 @@ const open: WorktreeServices['open'] = (input) => openWorktreeAsProject(input, {
  * This is the module's composition root: it is the only location that combines
  * concrete adapters with the independently testable workflow functions.
  */
-const worktreeServices: WorktreeServices = {
+export const worktreeServices: WorktreeServices = {
   resolveProjectPath(projectId) {
     const projectPath = worktreeProjects.getProjectPathById(projectId);
     if (!projectPath) {

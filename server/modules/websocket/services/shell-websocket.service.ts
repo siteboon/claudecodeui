@@ -13,6 +13,7 @@ type ShellIncomingMessage = {
   cols?: number;
   rows?: number;
   projectPath?: string;
+  workbenchSessionId?: string;
   sessionId?: string;
   hasSession?: boolean;
   provider?: string;
@@ -140,6 +141,19 @@ type ShellWebSocketDependencies = {
     provider: string,
   ) => string | null | undefined;
   spawnPty?: typeof pty.spawn;
+  /** Workbench worktree sessions: supplies cwd/command/env and receives PTY lifecycle events. */
+  workbench?: {
+    launch(sessionId: string): Promise<{
+      sessionId: string;
+      cwd: string;
+      command: string;
+      provider: string;
+      env: Record<string, string>;
+    } | null>;
+    onLaunched(sessionId: string): void;
+    onOutput(sessionId: string): void;
+    onExit(sessionId: string, exitCode: number): void;
+  };
 };
 
 /**
@@ -566,10 +580,14 @@ export function handleShellConnection(
       }
 
       if (data.type === 'init') {
-        const projectPath = readString(data.projectPath, process.cwd());
-        const sessionId = readString(data.sessionId) || null;
+        const workbenchSessionId = readString(data.workbenchSessionId);
+        const workbenchLaunch = workbenchSessionId && dependencies.workbench
+          ? await dependencies.workbench.launch(workbenchSessionId)
+          : null;
+        const projectPath = workbenchLaunch?.cwd ?? readString(data.projectPath, process.cwd());
+        const sessionId = workbenchLaunch ? `wb-${workbenchLaunch.sessionId}` : (readString(data.sessionId) || null);
         const hasSession = readBoolean(data.hasSession);
-        const provider = readString(data.provider, 'claude');
+        const provider = workbenchLaunch?.provider ?? readString(data.provider, 'claude');
         const initialCommand = readString(data.initialCommand);
         const forceRestart = readBoolean(data.forceRestart);
         const colorScheme = readColorScheme(data.colorScheme);
@@ -653,11 +671,9 @@ export function handleShellConnection(
           return;
         }
 
-        const { command: shellCommand, claudeFollowsAppTheme } = buildShellCommand(
-          data,
-          dependencies,
-          resolvedProjectPath,
-        );
+        const { command: shellCommand, claudeFollowsAppTheme } = workbenchLaunch
+          ? { command: workbenchLaunch.command, claudeFollowsAppTheme: false }
+          : buildShellCommand(data, dependencies, resolvedProjectPath);
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const claudeColorScheme = claudeFollowsAppTheme ? colorScheme : null;
         const shell = os.platform() === 'win32' ? 'powershell.exe' : (process.env.SHELL || '/bin/bash');
@@ -674,6 +690,7 @@ export function handleShellConnection(
           cwd: resolvedProjectPath,
           env: {
             ...process.env,
+            ...(workbenchLaunch?.env ?? {}),
             [prioritizedPath.key]: prioritizedPath.value,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
@@ -695,7 +712,14 @@ export function handleShellConnection(
           claudeColorScheme,
         });
 
+        if (workbenchLaunch) {
+          dependencies.workbench?.onLaunched(workbenchLaunch.sessionId);
+        }
+
         shellProcess.onData((chunk) => {
+          if (workbenchLaunch) {
+            dependencies.workbench?.onOutput(workbenchLaunch.sessionId);
+          }
           if (!ptySessionKey) {
             return;
           }
@@ -772,6 +796,9 @@ export function handleShellConnection(
         });
 
         shellProcess.onExit((exitCode) => {
+          if (workbenchLaunch) {
+            dependencies.workbench?.onExit(workbenchLaunch.sessionId, exitCode.exitCode);
+          }
           if (!ptySessionKey) {
             return;
           }
