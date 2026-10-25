@@ -1942,3 +1942,32 @@ export type WorkbenchCreateSessionInput = {
   prompt: string;
   title: string;
 };
+
+// ---------------------------
+
+//----------------- LOCAL TOKEN USAGE ------------
+
+/** Token counts for one agent (or both) on one day; `total` is the sum of the four other fields. */
+export type UsageCounts = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheCreation: number;
+  total: number;
+};
+
+/** One local calendar day (`YYYY-MM-DD`) of token usage, split by agent plus the combined `total`. */
+export type UsageDay = {
+  date: string;
+  claude: UsageCounts;
+  codex: UsageCounts;
+  total: UsageCounts;
+};
+
+/** Payload of `GET /api/usage/daily`: days that had any usage, all-time totals, and how many log files were scanned. */
+export type UsageDailyData = {
+  days: UsageDay[];
+  totals: { claude: UsageCounts; codex: UsageCounts; total: UsageCounts };
+  filesScanned: number;
+  generatedAt: string;
+};

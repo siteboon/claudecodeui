@@ -414,6 +414,11 @@ export const api = {
     ) => post('/api/worktrees/remove', { project: projectId, worktreePath, ...options }),
   },
 
+  // Token usage read from local CLI logs (see server/modules/usage).
+  usage: {
+    daily: () => get('/api/usage/daily'),
+  },
+
   // Workbench worktree sessions (see server/modules/workbench-sessions).
   workbench: {
     listSessions: () => get('/api/workbench/sessions'),

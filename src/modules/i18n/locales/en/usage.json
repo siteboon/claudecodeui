@@ -1,0 +1,66 @@
+{
+  "entry": {
+    "label": "Token usage",
+    "title": "Open token usage"
+  },
+  "title": "Token usage",
+  "description": "Daily tokens from the local Claude Code and Codex logs on this computer.",
+  "refresh": "Refresh",
+  "close": "Close",
+  "metric": {
+    "label": "Count",
+    "all": "All tokens",
+    "noCacheRead": "Excluding cache reads",
+    "inputOutput": "Input + output only"
+  },
+  "agent": {
+    "label": "Agent",
+    "all": "All",
+    "claude": "Claude",
+    "codex": "Codex"
+  },
+  "tiles": {
+    "today": "Today",
+    "last7Days": "Last 7 days",
+    "last30Days": "Last 30 days",
+    "allTime": "All time",
+    "split": "Claude vs Codex"
+  },
+  "split": {
+    "claude": "Claude",
+    "codex": "Codex",
+    "none": "No usage in this view."
+  },
+  "heatmap": {
+    "title": "Daily activity",
+    "label": "Daily token usage heatmap, last 53 weeks. Use the arrow keys to move between days.",
+    "cellLabel": "{{date}}: {{value}} tokens (Claude {{claude}}, Codex {{codex}})",
+    "cellLabelEmpty": "{{date}}: no usage",
+    "less": "Less",
+    "more": "More",
+    "hint": "Hover or focus a day for details.",
+    "none": "Hover or focus a day to see its numbers."
+  },
+  "tooltip": {
+    "total": "Total",
+    "claude": "Claude",
+    "codex": "Codex",
+    "noUsage": "No usage"
+  },
+  "topDays": {
+    "title": "Busiest days",
+    "empty": "No busy days yet."
+  },
+  "states": {
+    "loading": "Reading local logs…",
+    "empty": "No token usage found yet. Usage appears once Claude Code or Codex has run on this computer.",
+    "error": "Could not load usage: {{message}}",
+    "retry": "Try again"
+  },
+  "note": "These numbers come from local log files only; nothing is sent anywhere. Codex numbers are unverified until Codex logs exist on this computer. {{files}} log files scanned.",
+  "weekday": {
+    "mon": "Mon",
+    "wed": "Wed",
+    "fri": "Fri"
+  }
+}
