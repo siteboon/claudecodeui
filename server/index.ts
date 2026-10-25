@@ -15,6 +15,7 @@ import {
     initializeSessionsWatcher,
     providerRuntimeService,
 } from '@/modules/providers/index.js';
+import { createUsageRouter } from '@/modules/usage/index.js';
 import {
     buildLaunch,
     buildRunLaunch,
@@ -195,6 +196,9 @@ app.use('/api/worktrees', authenticateToken, worktreesRoutes);
 // Workbench worktree sessions: token-protected hook receiver first, then the JWT API.
 app.use('/api/workbench', createWorkbenchHookRouter());
 app.use('/api/workbench', authenticateToken, createWorkbenchSessionsRouter());
+
+// Daily token usage from local CLI logs (read-only).
+app.use('/api/usage', authenticateToken, createUsageRouter());
 
 // TaskMaster API Routes (protected)
 app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
