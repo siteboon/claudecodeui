@@ -286,14 +286,16 @@ export type SideQuestion = {
  *
  * `started` and `done` include the whole row; `delta` carries incremental text;
  * `error` marks failure and may carry the existing row on a duplicate id or null
- * on other refusals. Every event is broadcast to every connected chat client
+ * on other refusals. `dismissed` is sent when a side question is dismissed,
+ * running or not, so every tab drops the id instead of leaving it pending
+ * until a full reload. Every event is broadcast to every connected chat client
  * so side-by-side tabs stay in sync.
  */
 export type SideQuestionEvent = {
   kind: 'side_question';
   sessionId: string;            // app session id
   sideQuestionId: string;
-  phase: 'started' | 'delta' | 'done' | 'error';
+  phase: 'started' | 'delta' | 'done' | 'error' | 'dismissed';
   text?: string;                // delta only: the next piece of the answer
   error?: string;               // error only
   sideQuestion?: SideQuestion;  // started, done, and error when a row exists: the whole row

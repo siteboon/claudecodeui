@@ -149,10 +149,38 @@ export function createSideQuestionsService(dependencies: SideQuestionsServiceDep
   /**
    * Aborts a side question if it is still running, then deletes its row.
    * Returns whether a row actually went, so the route can answer 404 or 200.
+   *
+   * Looks the row up by id first: a hit that belongs to another session is
+   * left completely alone (not aborted, not deleted) and reported as if it
+   * did not exist, so one session can never stop or erase another's
+   * question just by guessing its id.
+   *
+   * `notify`, when given, is told about a successful dismiss (`phase:
+   * 'dismissed'`) so every connected client — not just the asker — drops the
+   * id instead of leaving it pending until a full reload.
    */
-  function dismiss(sessionId: string, id: string): boolean {
+  function dismiss(
+    sessionId: string,
+    id: string,
+    notify?: (event: SideQuestionEvent) => void,
+  ): boolean {
+    const row = db.getById(id);
+    if (!row || row.session_id !== sessionId) {
+      return false;
+    }
+
     controllers.get(id)?.abort();
-    return db.delete(sessionId, id);
+    const deleted = db.delete(sessionId, id);
+    if (deleted) {
+      notify?.({
+        kind: 'side_question',
+        sessionId,
+        sideQuestionId: id,
+        phase: 'dismissed',
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return deleted;
   }
 
   /**

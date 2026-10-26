@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
-import { sessionsDb } from '@/modules/database/index.js';
+import { sessionsDb, sideQuestionsDb, type SideQuestionRow } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService, sideQuestionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
@@ -348,6 +348,25 @@ function sendSideQuestionError(
 }
 
 /**
+ * Maps a side-question row (snake_case) to the wire shape, the same mapping
+ * `side-questions.service.ts` keeps privately — duplicated here because the
+ * only thing `chat.btw` needs is this one lookup, not the whole service.
+ */
+function toSideQuestionWire(row: SideQuestionRow): SideQuestion {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    question: row.question,
+    answer: row.answer,
+    status: row.status,
+    error: row.error,
+    model: row.model,
+    createdAt: row.created_at,
+    finishedAt: row.finished_at,
+  };
+}
+
+/**
  * Broadcasts a side-question event to every connected chat client, not just
  * the asking socket, so another tab or a reconnected tab sees it too.
  */
@@ -403,14 +422,19 @@ function handleChatBtw(
     return;
   }
 
-  const existing = sideQuestionsService.listForSession(sessionId).find((item) => item.id === sideQuestionId);
-  if (existing) {
+  // Looked up across every session, not just this one: the id is a database
+  // primary key, so a duplicate from another session would otherwise hit the
+  // INSERT and reject `ask` unhandled. The existing row is only attached to
+  // the refusal when it belongs to the asker's own session — never leak
+  // another session's row to this one.
+  const existingRow = sideQuestionsDb.getById(sideQuestionId);
+  if (existingRow) {
     sendSideQuestionError(
       ws,
       sessionId,
       sideQuestionId,
       'A side question with that id already exists.',
-      existing,
+      existingRow.session_id === sessionId ? toSideQuestionWire(existingRow) : undefined,
     );
     return;
   }
@@ -420,19 +444,29 @@ function handleChatBtw(
 
   // Not awaited: the frame is accepted as soon as the question is admitted,
   // and the answer streams in through started/delta/done/error broadcasts.
-  void sideQuestionsService.ask(
-    {
-      sessionId,
-      provider,
-      providerSessionId: session.provider_session_id,
-      projectPath: session.project_path,
-      sideQuestionId,
-      question,
-      model,
-    },
-    dependencies.runtime,
-    broadcastSideQuestionEvent,
-  );
+  // `ask` resolves on every runtime/provider failure (an `error` outcome),
+  // but a DB error inside it (create/appendAnswer/finish/getById) still
+  // rejects the promise; without this `.catch` that is an unhandled
+  // rejection, and Node 26 exits the whole process on one of those — every
+  // session on the server would go down for one bad `chat.btw` frame.
+  sideQuestionsService
+    .ask(
+      {
+        sessionId,
+        provider,
+        providerSessionId: session.provider_session_id,
+        projectPath: session.project_path,
+        sideQuestionId,
+        question,
+        model,
+      },
+      dependencies.runtime,
+      broadcastSideQuestionEvent,
+    )
+    .catch((error: unknown) => {
+      console.error('[Chat] side question "ask" rejected unexpectedly', { sessionId, sideQuestionId, error });
+      sendSideQuestionError(ws, sessionId, sideQuestionId, 'chat.btw failed unexpectedly.');
+    });
 }
 
 /**
