@@ -2215,6 +2215,7 @@ export const claudeRuntime = {
   stopBackgroundTask: stopClaudeSDKTask,
   askSideQuestion,
   steer: steerClaudeSDKSession,
+  hasLiveSession: isClaudeSDKSessionActive,
 };
 
 // Export public API
