@@ -175,15 +175,39 @@ test('Cursor synchronizer finds chats created before the last scan', { concurren
   });
 });
 
-test('Cursor synchronizer re-indexes a chat when its meta.json changes', { concurrency: false }, async () => {
+test('Cursor synchronizer re-indexes a chat from its meta.json or store.db', { concurrency: false }, async () => {
   await withCursorHome('cursor-sync-file-', async (homeDir, workspacePath) => {
     const chatDir = await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-watch');
 
     await withIsolatedDatabase(async () => {
       const synchronizer = new CursorSessionSynchronizer();
 
-      assert.equal(await synchronizer.synchronizeFile(path.join(chatDir, 'store.db')), null);
+      assert.equal(await synchronizer.synchronizeFile(path.join(chatDir, 'store.db-wal')), null);
+      assert.equal(await synchronizer.synchronizeFile(path.join(chatDir, 'store.db')), 'cli-chat-watch');
       assert.equal(await synchronizer.synchronizeFile(path.join(chatDir, 'meta.json')), 'cli-chat-watch');
+    });
+  });
+});
+
+test('Cursor synchronizer removes rows an older build indexed from transcripts', { concurrency: false }, async () => {
+  await withCursorHome('cursor-sync-stale-', async (homeDir, workspacePath) => {
+    const chatDir = await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-kept', { firstUserLine: 'Kept' });
+    const transcriptPath = (sessionId: string) => path.join(
+      homeDir, '.cursor', 'projects', 'workspace', 'agent-transcripts', sessionId, `${sessionId}.jsonl`
+    );
+    const ideTranscript = transcriptPath('ide-chat-stale');
+    await mkdir(path.dirname(ideTranscript), { recursive: true });
+    await writeFile(ideTranscript, '{"role":"user","message":{"content":[]}}\n', 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      // Rows as the transcript-based indexer left them: a CLI chat and an IDE chat.
+      sessionsDb.createSession('cli-chat-kept', 'cursor', workspacePath, 'Kept', undefined, undefined, transcriptPath('cli-chat-kept'));
+      sessionsDb.createSession('ide-chat-stale', 'cursor', workspacePath, 'IDE chat', undefined, undefined, ideTranscript);
+
+      await new CursorSessionSynchronizer().synchronize();
+
+      assert.equal(sessionsDb.getSessionById('cli-chat-kept')?.jsonl_path, path.join(chatDir, 'store.db'));
+      assert.equal(sessionsDb.getSessionById('ide-chat-stale'), null);
     });
   });
 });
@@ -198,6 +222,15 @@ test('Cursor history loads for a project opened through a symlink', { concurrenc
 
     assert.equal(history.total, 1);
     assert.equal(history.messages[0]?.content, 'Linked hello');
+
+    // A leftover directory without a store under the resolved hash must not
+    // hide the store kept under the path as given.
+    await rm(cursorChatDir(homeDir, workspacePath, 'cli-chat-link'), { recursive: true });
+    await writeCursorCliChat(homeDir, linkedPath, 'cli-chat-link', { firstUserLine: 'Given path' });
+    await mkdir(cursorChatDir(homeDir, workspacePath, 'cli-chat-link'), { recursive: true });
+
+    const givenPathHistory = await new CursorSessionsProvider().fetchHistory('cli-chat-link', { projectPath: linkedPath });
+    assert.equal(givenPathHistory.messages[0]?.content, 'Given path');
   });
 });
 

@@ -1111,8 +1111,8 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * cursor-agent hashes `path.resolve(process.cwd())`. On macOS and Linux that is
  * the physical path, so a project opened through a symlink only matches once
  * resolved; elsewhere the path may be kept as given. Both forms are tried and
- * the first one with an existing chat directory wins (the resolved form when
- * neither exists). Used by the Cursor sessions provider to load history and by
+ * the first one holding a `store.db` wins (the resolved form when neither
+ * does). Used by the Cursor sessions provider to load history and by
  * the Cursor runtime to check that a session is a resumable CLI chat. Throws
  * when `sessionId` is not a single directory name.
  */
@@ -1133,7 +1133,7 @@ export function resolveCursorChatDirectory(projectPath: string, sessionId: strin
     createHash('md5').update(workspacePath).digest('hex'),
     safeSessionId,
   ));
-  return chatDirectories.find((directory) => fs.existsSync(directory)) ?? chatDirectories[0];
+  return chatDirectories.find((directory) => fs.existsSync(path.join(directory, 'store.db'))) ?? chatDirectories[0];
 }
 
 // ---------------------------

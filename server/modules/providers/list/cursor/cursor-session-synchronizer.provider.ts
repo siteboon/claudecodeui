@@ -32,11 +32,19 @@ async function listDirectoryEntriesSafe(
   }
 }
 
+/**
+ * Returns whether a regular file exists. Only a missing path counts as absent;
+ * any other error (permissions, symlink loops) is rethrown so it gets logged.
+ */
 async function fileExists(filePath: string): Promise<boolean> {
   try {
     return (await fsp.stat(filePath)).isFile();
-  } catch {
-    return false;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') {
+      return false;
+    }
+    throw error;
   }
 }
 
@@ -51,6 +59,9 @@ function toCursorProjectSlug(workspacePath: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+/**
+ * Converts a `meta.json` millisecond timestamp to ISO, ignoring invalid values.
+ */
 function toIsoTimestamp(value: unknown): string | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? new Date(value).toISOString()
@@ -76,10 +87,15 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
    * `since` is ignored: there is one small `meta.json` per chat, and chats
    * created before an upgrade (which older builds never indexed) must still
    * be found by the first scan afterwards.
+   *
+   * One unreadable chat is logged and skipped rather than ending the scan.
+   * After a scan with no such failures, rows left by the older
+   * transcript-based indexer are removed (see `removeStaleTranscriptRows`).
    */
   async synchronize(_since?: Date): Promise<number> {
     const chatsRoot = path.join(this.cursorHome, 'chats');
-    let processed = 0;
+    const indexedSessionIds = new Set<string>();
+    let failed = false;
 
     for (const workspaceEntry of await listDirectoryEntriesSafe(chatsRoot)) {
       if (!workspaceEntry.isDirectory()) {
@@ -92,26 +108,60 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
           continue;
         }
 
-        if (await this.indexChatDirectory(path.join(workspaceDir, chatEntry.name))) {
-          processed += 1;
+        const chatDir = path.join(workspaceDir, chatEntry.name);
+        try {
+          const sessionId = await this.indexChatDirectory(chatDir);
+          if (sessionId) {
+            indexedSessionIds.add(path.basename(chatDir));
+          }
+        } catch (error) {
+          failed = true;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('Failed to index Cursor chat', { chatDir, error: message });
         }
       }
     }
 
-    return processed;
+    if (!failed) {
+      this.removeStaleTranscriptRows();
+    }
+
+    return indexedSessionIds.size;
   }
 
   /**
-   * Re-indexes the chat a watched `meta.json` belongs to.
+   * Deletes Cursor rows that still point at an `agent-transcripts` `.jsonl`.
+   *
+   * Older builds indexed those transcripts, which also include Cursor IDE
+   * chats that CloudCLI can neither load nor resume. Every CLI chat this scan
+   * found was repointed at its `store.db`, so a row still on a transcript is
+   * one cursor-agent has no chat for. Rows already on a `store.db` are left to
+   * the shared orphan pruning, so a chat indexed by the watcher mid-scan stays.
+   */
+  private removeStaleTranscriptRows(): void {
+    for (const row of sessionsDb.getProviderSessionsWithTranscriptPath(this.provider)) {
+      if (path.basename(row.jsonl_path) !== 'store.db') {
+        sessionsDb.deleteSessionById(row.session_id);
+      }
+    }
+  }
+
+  /**
+   * Re-indexes the chat a watched `meta.json` or newly created `store.db`
+   * belongs to.
    */
   async synchronizeFile(filePath: string): Promise<string | null> {
-    if (path.basename(filePath) !== 'meta.json') {
+    const baseName = path.basename(filePath);
+    if (baseName !== 'meta.json' && baseName !== 'store.db') {
       return null;
     }
 
     return this.indexChatDirectory(path.dirname(filePath));
   }
 
+  /**
+   * Upserts one chat directory; returns its session id, or null when skipped.
+   */
   private async indexChatDirectory(chatDir: string): Promise<string | null> {
     const parsed = await this.parseChatDirectory(chatDir);
     if (!parsed) {
