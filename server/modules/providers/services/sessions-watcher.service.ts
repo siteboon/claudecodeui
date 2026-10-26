@@ -10,16 +10,33 @@ import type { LLMProvider } from '@/shared/types.js';
 
 type WatcherEventType = 'add' | 'change';
 
-const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> = [
+type ProviderWatchPath = {
+  provider: LLMProvider;
+  rootPath: string;
+  /**
+   * When set, only `<rootPath>/<any folder>/<onlySubdirectory>` is watched;
+   * every other file and folder under the root is skipped.
+   */
+  onlySubdirectory?: string;
+};
+
+const PROVIDER_WATCH_PATHS: ProviderWatchPath[] = [
   {
     provider: 'claude',
     rootPath: path.join(os.homedir(), '.claude', 'projects'),
   },
   {
-    // cursor-agent's chat stores, not `~/.cursor/projects`: transcripts there
-    // also come from Cursor IDE chats, which the CLI cannot load or resume.
+    // cursor-agent's chat stores, the source for resumable CLI chats.
     provider: 'cursor',
     rootPath: path.join(os.homedir(), '.cursor', 'chats'),
+  },
+  {
+    // Chat transcripts, the source for read-only Cursor IDE chats. The rest of
+    // this folder (terminals, MCP descriptors, canvases) holds far more files
+    // than the transcripts, so polling skips it.
+    provider: 'cursor',
+    rootPath: path.join(os.homedir(), '.cursor', 'projects'),
+    onlySubdirectory: 'agent-transcripts',
   },
   {
     provider: 'codex',
@@ -57,10 +74,16 @@ const IGNORED_FILE_SUFFIXES = ['.tmp', '.swp'];
  * Only the part of the path below `rootPath` is checked, so a home directory
  * that happens to sit under `/build` or `/dist` cannot hide a whole provider.
  *
+ * With `onlySubdirectory`, anything below a first-level folder other than
+ * that subdirectory is ignored as well.
+ *
  * Exported for the providers module's tests, which run it against chokidar on
  * a real directory tree.
  */
-export function createWatcherIgnoredMatcher(rootPath: string): (filePath: string) => boolean {
+export function createWatcherIgnoredMatcher(
+  rootPath: string,
+  onlySubdirectory?: string,
+): (filePath: string) => boolean {
   return (filePath: string) => {
     const relativePath = path.relative(rootPath, filePath);
     // Outside the root is `..` as a whole component, or an absolute result
@@ -73,6 +96,10 @@ export function createWatcherIgnoredMatcher(rootPath: string): (filePath: string
     }
 
     const segments = relativePath.split(path.sep);
+    if (onlySubdirectory && segments.length >= 2 && segments[1] !== onlySubdirectory) {
+      return true;
+    }
+
     const baseName = segments[segments.length - 1];
     if (IGNORED_FILE_NAMES.has(baseName) || IGNORED_FILE_SUFFIXES.some((suffix) => baseName.endsWith(suffix))) {
       return true;
@@ -115,9 +142,12 @@ function isWatcherTargetFile(provider: LLMProvider, filePath: string, eventType:
   if (provider === 'cursor') {
     // meta.json is rewritten by cursor-agent on every turn, unlike the busy
     // store.db. A store.db that appears after its meta.json still needs its
-    // own `add`, or the chat waits for the next turn to be indexed.
+    // own `add`, or the chat waits for the next turn to be indexed. `.jsonl`
+    // files come from the transcripts root, for Cursor IDE chats.
     const baseName = path.basename(filePath);
-    return baseName === 'meta.json' || (baseName === 'store.db' && eventType === 'add');
+    return baseName === 'meta.json'
+      || (baseName === 'store.db' && eventType === 'add')
+      || baseName.endsWith('.jsonl');
   }
 
   return filePath.endsWith('.jsonl');
@@ -253,12 +283,12 @@ export async function initializeSessionsWatcher(): Promise<void> {
     failures: initialSync.failures,
   });
 
-  for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
+  for (const { provider, rootPath, onlySubdirectory } of PROVIDER_WATCH_PATHS) {
     try {
       await fsPromises.mkdir(rootPath, { recursive: true });
 
       const watcher = chokidar.watch(rootPath, {
-        ignored: createWatcherIgnoredMatcher(rootPath),
+        ignored: createWatcherIgnoredMatcher(rootPath, onlySubdirectory),
         persistent: true,
         ignoreInitial: true,
         followSymlinks: false,

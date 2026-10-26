@@ -13,12 +13,15 @@ type SessionSummary = {
   summary: string;
   messageCount: number;
   lastActivity: string;
+  /** The session can be read but not continued (a Cursor IDE chat). */
+  readOnly: boolean;
 };
 
 type SessionRepositoryRow = {
   provider: string;
   session_id: string;
   custom_name?: string | null;
+  read_only?: number | null;
   updated_at?: string | null;
   created_at?: string | null;
 };
@@ -124,6 +127,7 @@ function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
     summary: row.custom_name || '',
     messageCount: 0,
     lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+    readOnly: Boolean(row.read_only),
   };
 }
 

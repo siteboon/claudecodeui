@@ -1,12 +1,16 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
   extractFirstValidJsonlData,
   normalizeSessionName,
   readFileTimestamps,
+  resolveCursorTranscriptPath,
+  stripCursorContinuedChatTag,
+  toCursorProjectSlug,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
@@ -18,6 +22,9 @@ type ParsedSession = {
   createdAt?: string;
   updatedAt?: string;
 };
+
+/** How long the IDE workspace list read from `workspaceStorage` is reused. */
+const IDE_WORKSPACES_CACHE_MS = 30_000;
 
 /**
  * Returns directory entries or an empty list when the folder is missing.
@@ -49,17 +56,6 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 /**
- * Mirrors how Cursor names `~/.cursor/projects/<slug>` after a workspace path:
- * non-alphanumerics become `-`, runs of `-` collapse, and edges are trimmed.
- */
-function toCursorProjectSlug(workspacePath: string): string {
-  return workspacePath
-    .replace(/[^a-zA-Z0-9]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-/**
  * Converts a `meta.json` millisecond timestamp to ISO, ignoring invalid values.
  */
 function toIsoTimestamp(value: unknown): string | undefined {
@@ -69,22 +65,42 @@ function toIsoTimestamp(value: unknown): string | undefined {
 }
 
 /**
- * Session indexer for Cursor CLI (cursor-agent) chats.
+ * Returns the Cursor app's per-user data directory, which holds the IDE's
+ * `workspaceStorage`. It follows VS Code's layout on each platform.
+ */
+function resolveCursorUserDirectory(): string {
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'Cursor', 'User');
+  }
+
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Cursor', 'User');
+  }
+
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'Cursor', 'User');
+}
+
+/**
+ * Session indexer for Cursor chats.
  *
- * cursor-agent keeps each chat in `~/.cursor/chats/<md5(cwd)>/<id>/` as a
+ * CLI (cursor-agent) chats live in `~/.cursor/chats/<md5(cwd)>/<id>/` as a
  * `meta.json` sidecar plus the `store.db` history CloudCLI reads and resumes.
- * Only these chats are indexed: Cursor IDE chats also leave transcripts under
- * `~/.cursor/projects`, but have no CLI store, so they can neither be loaded
- * nor resumed by cursor-agent.
+ *
+ * Cursor IDE chats have no CLI store, only the transcript every chat leaves at
+ * `~/.cursor/projects/<slug>/agent-transcripts/<id>/<id>.jsonl`. They are
+ * indexed read-only: cursor-agent cannot resume them, and resuming their id
+ * would overwrite the transcript. The slug cannot be decoded back into a path,
+ * so the IDE's own list of opened folders is encoded forwards and matched.
  */
 export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'cursor' as const;
   private readonly cursorHome = path.join(os.homedir(), '.cursor');
+  private ideWorkspacesCache: { readAt: number; folderBySlug: Map<string, string | null> } | null = null;
 
   /**
-   * Scans every Cursor CLI chat and upserts it into the DB.
+   * Scans every Cursor CLI chat and IDE chat transcript and upserts them.
    *
-   * `since` is ignored: there is one small `meta.json` per chat, and chats
+   * `since` is ignored: there is one small `meta.json` per CLI chat, and chats
    * created before an upgrade (which older builds never indexed) must still
    * be found by the first scan afterwards.
    *
@@ -94,7 +110,10 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   async synchronize(_since?: Date): Promise<number> {
     const chatsRoot = path.join(this.cursorHome, 'chats');
-    const indexedSessionIds = new Set<string>();
+    // Every CLI chat id on disk, indexed or not: a transcript with one of
+    // these ids belongs to the CLI chat and must never be listed as an IDE chat.
+    const cliChatIds = new Set<string>();
+    let processed = 0;
     let failed = false;
 
     for (const workspaceEntry of await listDirectoryEntriesSafe(chatsRoot)) {
@@ -108,11 +127,11 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
           continue;
         }
 
+        cliChatIds.add(chatEntry.name);
         const chatDir = path.join(workspaceDir, chatEntry.name);
         try {
-          const sessionId = await this.indexChatDirectory(chatDir);
-          if (sessionId) {
-            indexedSessionIds.add(path.basename(chatDir));
+          if (await this.indexChatDirectory(chatDir)) {
+            processed += 1;
           }
         } catch (error) {
           failed = true;
@@ -122,45 +141,184 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       }
     }
 
+    const folderBySlug = await this.readIdeWorkspaceFolders(true);
+    for (const [slug, workspacePath] of folderBySlug) {
+      if (!workspacePath) {
+        continue;
+      }
+
+      const transcriptsDir = path.join(this.cursorHome, 'projects', slug, 'agent-transcripts');
+      for (const transcriptEntry of await listDirectoryEntriesSafe(transcriptsDir)) {
+        if (!transcriptEntry.isDirectory() || cliChatIds.has(transcriptEntry.name)) {
+          continue;
+        }
+
+        const transcriptPath = path.join(transcriptsDir, transcriptEntry.name, `${transcriptEntry.name}.jsonl`);
+        try {
+          if (await this.indexIdeTranscript(transcriptEntry.name, workspacePath, transcriptPath)) {
+            processed += 1;
+          }
+        } catch (error) {
+          failed = true;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('Failed to index Cursor IDE chat', { transcriptPath, error: message });
+        }
+      }
+    }
+
     if (!failed) {
       this.removeStaleTranscriptRows();
     }
 
-    return indexedSessionIds.size;
+    return processed;
   }
 
   /**
-   * Deletes Cursor rows that still point at an `agent-transcripts` `.jsonl`.
+   * Deletes Cursor rows that point at a transcript but are not IDE chats.
    *
-   * Older builds indexed those transcripts, which also include Cursor IDE
-   * chats that CloudCLI can neither load nor resume. Every CLI chat this scan
-   * found was repointed at its `store.db`, so a row still on a transcript is
-   * one cursor-agent has no chat for. Rows already on a `store.db` are left to
-   * the shared orphan pruning, so a chat indexed by the watcher mid-scan stays.
+   * Older builds indexed every `agent-transcripts` file as a resumable chat.
+   * This scan repointed each CLI chat at its `store.db` and flagged each IDE
+   * chat it could place as read-only, so a writable row still on a transcript
+   * is one neither kind accounts for, such as a chat whose folder Cursor
+   * cannot place. Rows on a `store.db` are left to the shared orphan pruning,
+   * so a chat indexed by the watcher mid-scan stays.
    */
   private removeStaleTranscriptRows(): void {
     for (const row of sessionsDb.getProviderSessionsWithTranscriptPath(this.provider)) {
-      if (path.basename(row.jsonl_path) !== 'store.db') {
+      if (path.basename(row.jsonl_path) !== 'store.db' && !row.read_only) {
         sessionsDb.deleteSessionById(row.session_id);
       }
     }
   }
 
   /**
-   * Re-indexes the chat a watched `meta.json` or newly created `store.db`
-   * belongs to.
+   * Re-indexes the chat a watched file belongs to: a CLI chat's `meta.json` or
+   * newly created `store.db`, or an IDE chat's transcript.
    */
   async synchronizeFile(filePath: string): Promise<string | null> {
     const baseName = path.basename(filePath);
-    if (baseName !== 'meta.json' && baseName !== 'store.db') {
-      return null;
+    if (baseName === 'meta.json' || baseName === 'store.db') {
+      return this.indexChatDirectory(path.dirname(filePath));
     }
 
-    return this.indexChatDirectory(path.dirname(filePath));
+    return this.synchronizeIdeTranscriptFile(filePath);
   }
 
   /**
-   * Upserts one chat directory; returns its session id, or null when skipped.
+   * Indexes one `projects/<slug>/agent-transcripts/<id>/<id>.jsonl` file as an
+   * IDE chat, unless it belongs to a CLI chat or to no known IDE workspace.
+   */
+  private async synchronizeIdeTranscriptFile(filePath: string): Promise<string | null> {
+    const relativePath = path.relative(path.join(this.cursorHome, 'projects'), filePath);
+    const [slug, transcriptsDirName, sessionId, fileName, ...rest] = relativePath.split(path.sep);
+    if (rest.length > 0 || transcriptsDirName !== 'agent-transcripts' || fileName !== `${sessionId}.jsonl`) {
+      return null;
+    }
+
+    if (await this.hasCliChat(sessionId)) {
+      return null;
+    }
+
+    let workspacePath = (await this.readIdeWorkspaceFolders(false)).get(slug);
+    if (workspacePath === undefined) {
+      // A folder opened since the cached read: look again once.
+      workspacePath = (await this.readIdeWorkspaceFolders(true)).get(slug);
+    }
+
+    return workspacePath ? this.indexIdeTranscript(sessionId, workspacePath, filePath) : null;
+  }
+
+  /**
+   * Returns whether cursor-agent has a chat directory with this id in any
+   * workspace.
+   */
+  private async hasCliChat(sessionId: string): Promise<boolean> {
+    const chatsRoot = path.join(this.cursorHome, 'chats');
+    for (const workspaceEntry of await listDirectoryEntriesSafe(chatsRoot)) {
+      if (!workspaceEntry.isDirectory()) {
+        continue;
+      }
+
+      try {
+        if ((await fsp.stat(path.join(chatsRoot, workspaceEntry.name, sessionId))).isDirectory()) {
+          return true;
+        }
+      } catch {
+        // Not in this workspace.
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Maps each `~/.cursor/projects` slug to the IDE workspace folder it was
+   * named after, from the IDE's `workspaceStorage/<id>/workspace.json` files.
+   *
+   * A slug two different folders encode to maps to `null`, since its chats
+   * cannot be placed. Multi-root (`.code-workspace`) and remote windows are
+   * left out: they have no single local folder to list the chats under.
+   */
+  private async readIdeWorkspaceFolders(refresh: boolean): Promise<Map<string, string | null>> {
+    if (!refresh && this.ideWorkspacesCache && Date.now() - this.ideWorkspacesCache.readAt < IDE_WORKSPACES_CACHE_MS) {
+      return this.ideWorkspacesCache.folderBySlug;
+    }
+
+    const storageDir = path.join(resolveCursorUserDirectory(), 'workspaceStorage');
+    const folderBySlug = new Map<string, string | null>();
+    for (const entry of await listDirectoryEntriesSafe(storageDir)) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      let folderPath: string;
+      try {
+        const workspace = JSON.parse(await fsp.readFile(path.join(storageDir, entry.name, 'workspace.json'), 'utf8'));
+        if (typeof workspace?.folder !== 'string' || !workspace.folder.startsWith('file:')) {
+          continue;
+        }
+        folderPath = fileURLToPath(workspace.folder);
+      } catch {
+        continue;
+      }
+
+      const slug = toCursorProjectSlug(folderPath);
+      const known = folderBySlug.get(slug);
+      folderBySlug.set(slug, known === undefined || known === folderPath ? folderPath : null);
+    }
+
+    this.ideWorkspacesCache = { readAt: Date.now(), folderBySlug };
+    return folderBySlug;
+  }
+
+  /**
+   * Upserts one IDE chat as a read-only session; returns its id, or null when
+   * the transcript is missing or empty.
+   */
+  private async indexIdeTranscript(
+    sessionId: string,
+    workspacePath: string,
+    transcriptPath: string
+  ): Promise<string | null> {
+    if (!(await fileExists(transcriptPath)) || (await fsp.stat(transcriptPath)).size === 0) {
+      return null;
+    }
+
+    const timestamps = await readFileTimestamps(transcriptPath);
+    return sessionsDb.createSession(
+      sessionId,
+      this.provider,
+      workspacePath,
+      await this.readTranscriptSessionName(transcriptPath),
+      timestamps?.createdAt,
+      timestamps?.updatedAt,
+      transcriptPath,
+      { readOnly: true }
+    );
+  }
+
+  /**
+   * Upserts one CLI chat directory; returns its session id, or null when skipped.
    */
   private async indexChatDirectory(chatDir: string): Promise<string | null> {
     const parsed = await this.parseChatDirectory(chatDir);
@@ -217,7 +375,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       projectPath,
       sessionName: title
         ? normalizeSessionName(title, 'Untitled Cursor Session')
-        : await this.readTranscriptSessionName(projectPath, sessionId),
+        : await this.readTranscriptSessionName(resolveCursorTranscriptPath(projectPath, sessionId)),
       storeDbPath,
       createdAt: toIsoTimestamp(meta.createdAtMs),
       updatedAt: toIsoTimestamp(meta.updatedAtMs),
@@ -226,18 +384,9 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
 
   /**
    * Names a chat after the first line the user typed, read from the transcript
-   * cursor-agent writes for every CLI chat under `~/.cursor/projects`.
+   * Cursor writes for every chat under `~/.cursor/projects`.
    */
-  private async readTranscriptSessionName(projectPath: string, sessionId: string): Promise<string> {
-    const transcriptPath = path.join(
-      this.cursorHome,
-      'projects',
-      toCursorProjectSlug(projectPath),
-      'agent-transcripts',
-      sessionId,
-      `${sessionId}.jsonl`
-    );
-
+  private async readTranscriptSessionName(transcriptPath: string): Promise<string> {
     const firstLine = await extractFirstValidJsonlData(transcriptPath, (rawData) => {
       const data = rawData as Record<string, any>;
       if (data.role !== 'user') {
@@ -245,11 +394,10 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       }
 
       const text = typeof data.message?.content?.[0]?.text === 'string' ? data.message.content[0].text : '';
-      // Drop Cursor's `<timestamp>…</timestamp>` prefix and `<user_query>` tags
-      // so the session name comes from the actual first line the user typed.
-      return text
-        .replace(/<timestamp>[\s\S]*?<\/timestamp>/g, '')
-        .replace(/<\/?user_query>/g, '')
+      // What the user typed is inside `<user_query>`; Cursor puts context such
+      // as `<timestamp>`, `<external_links>` or attached files around it.
+      const userQuery = /<user_query>([\s\S]*?)<\/user_query>/.exec(text)?.[1];
+      return stripCursorContinuedChatTag(userQuery ?? text.replace(/<timestamp>[\s\S]*?<\/timestamp>/g, ''))
         .trim()
         .split('\n')[0];
     });

@@ -15,6 +15,8 @@ type SessionRow = {
   effort: string | null;
   /** The app session this one was branched from; NULL unless it is a fork. */
   forked_from_session_id: string | null;
+  /** 1 when the session can be read but not continued (a Cursor IDE chat). */
+  read_only: number;
   isArchived: number;
   created_at: string;
   updated_at: string;
@@ -26,7 +28,7 @@ type RecentSessionsPage = {
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, forked_from_session_id, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, forked_from_session_id, read_only, isArchived, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -79,6 +81,10 @@ export const sessionsDb = {
    * transcript shows up on disk, instead of producing a duplicate row. An
    * app-created row keeps its existing name; synchronizer names only update
    * rows that were themselves created by indexing provider storage.
+   *
+   * `readOnly` marks a session that can be read but not continued; it is
+   * rewritten on every upsert, so a chat that later gains a resumable store
+   * becomes writable again.
    */
   createSession(
     providerSessionId: string,
@@ -87,9 +93,11 @@ export const sessionsDb = {
     customName?: string,
     createdAt?: string,
     updatedAt?: string,
-    jsonlPath?: string | null
+    jsonlPath?: string | null,
+    options: { readOnly?: boolean } = {}
   ): string {
     const db = getConnection();
+    const readOnlyValue = options.readOnly ? 1 : 0;
     const createdAtValue = normalizeTimestamp(createdAt);
     const updatedAtValue = normalizeTimestamp(updatedAt);
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
@@ -113,6 +121,7 @@ export const sessionsDb = {
            updated_at = COALESCE(?, CURRENT_TIMESTAMP),
            project_path = ?,
            jsonl_path = ?,
+           read_only = ?,
            isArchived = CASE WHEN ? IS NULL OR julianday(?) > julianday(updated_at) THEN 0 ELSE isArchived END,
            custom_name = CASE
              WHEN session_id <> provider_session_id AND custom_name IS NOT NULL THEN custom_name
@@ -124,6 +133,7 @@ export const sessionsDb = {
         updatedAtValue,
         normalizedProjectPath,
         jsonlPath ?? null,
+        readOnlyValue,
         updatedAtValue,
         updatedAtValue,
         customName ?? null,
@@ -137,14 +147,15 @@ export const sessionsDb = {
     // keyed by the provider-native id for both columns. The ON CONFLICT path
     // covers legacy rows that predate the provider_session_id mapping.
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, read_only, isArchived, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))
        ON CONFLICT(session_id) DO UPDATE SET
          provider = excluded.provider,
          provider_session_id = excluded.provider_session_id,
          updated_at = excluded.updated_at,
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
+         read_only = excluded.read_only,
          isArchived = CASE WHEN ? IS NULL OR julianday(excluded.updated_at) > julianday(sessions.updated_at) THEN 0 ELSE sessions.isArchived END,
          custom_name = CASE
            WHEN sessions.session_id <> sessions.provider_session_id AND sessions.custom_name IS NOT NULL
@@ -158,6 +169,7 @@ export const sessionsDb = {
       customName ?? null,
       normalizedProjectPath,
       jsonlPath ?? null,
+      readOnlyValue,
       createdAtValue,
       updatedAtValue,
       updatedAtValue
@@ -174,12 +186,14 @@ export const sessionsDb = {
    * stays NULL until the provider runtime announces its own id and
    * `assignProviderSessionId` records the mapping. `customName` is derived
    * from the first visible CloudCLI message by the sessions service.
+   * `forkedFromSessionId` links a chat started to continue a read-only one.
    */
   createAppSession(
     sessionId: string,
     provider: string,
     projectPath: string,
     customName?: string,
+    forkedFromSessionId?: string,
   ): string {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
@@ -187,9 +201,9 @@ export const sessionsDb = {
     projectsDb.createProjectPath(normalizedProjectPath);
 
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, NULL, ?, ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-    ).run(sessionId, provider, customName ?? null, normalizedProjectPath);
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, forked_from_session_id, isArchived, created_at, updated_at)
+       VALUES (?, ?, NULL, ?, ?, NULL, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    ).run(sessionId, provider, customName ?? null, normalizedProjectPath, forkedFromSessionId ?? null);
 
     return sessionId;
   },
@@ -727,14 +741,16 @@ export const sessionsDb = {
    * Lists one provider's indexed rows that point at a transcript file.
    * Used by the Cursor synchronizer to drop rows an older indexer created.
    */
-  getProviderSessionsWithTranscriptPath(provider: string): Array<{ session_id: string; jsonl_path: string }> {
+  getProviderSessionsWithTranscriptPath(
+    provider: string
+  ): Array<{ session_id: string; jsonl_path: string; read_only: number }> {
     const db = getConnection();
     return db
       .prepare(
-        `SELECT session_id, jsonl_path
+        `SELECT session_id, jsonl_path, COALESCE(read_only, 0) AS read_only
          FROM sessions
          WHERE provider = ? AND jsonl_path IS NOT NULL AND jsonl_path <> ''`
       )
-      .all(provider) as Array<{ session_id: string; jsonl_path: string }>;
+      .all(provider) as Array<{ session_id: string; jsonl_path: string; read_only: number }>;
   },
 };

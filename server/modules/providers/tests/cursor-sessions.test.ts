@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
 
 import Database from 'better-sqlite3';
 
@@ -11,6 +12,8 @@ import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/datab
 import { spawnCursor } from '@/modules/providers/list/cursor/cursor-runtime.provider.js';
 import { CursorSessionSynchronizer } from '@/modules/providers/list/cursor/cursor-session-synchronizer.provider.js';
 import { CursorSessionsProvider } from '@/modules/providers/list/cursor/cursor-sessions.provider.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { prependCursorContinuedChatTag, toCursorProjectSlug } from '@/shared/utils.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -280,5 +283,225 @@ test('Cursor runtime resumes a session that has a CLI chat store', { concurrency
       assert.doesNotMatch(error.message, /cannot be continued/);
       assert.ok(!sent.some((message) => /cannot be continued/.test(String(message.content))));
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cursor IDE chats: read-only listing and "continue in CLI"
+// ---------------------------------------------------------------------------
+
+// Where the IDE keeps `workspaceStorage`, mirroring the synchronizer's lookup
+// under the patched home directory.
+function cursorWorkspaceStorageDir(homeDir: string): string {
+  if (process.platform === 'darwin') {
+    return path.join(homeDir, 'Library', 'Application Support', 'Cursor', 'User', 'workspaceStorage');
+  }
+  return path.join(homeDir, '.config', 'Cursor', 'User', 'workspaceStorage');
+}
+
+// Records a folder as opened in the Cursor IDE, the way `workspace.json` does.
+async function writeIdeWorkspace(homeDir: string, storageId: string, folderPath: string): Promise<void> {
+  const storageDir = path.join(cursorWorkspaceStorageDir(homeDir), storageId);
+  await mkdir(storageDir, { recursive: true });
+  await writeFile(path.join(storageDir, 'workspace.json'), JSON.stringify({ folder: pathToFileURL(folderPath).href }), 'utf8');
+}
+
+// Writes a Cursor IDE chat transcript: a user turn, then an assistant turn with
+// text and a tool call (IDE transcripts never contain tool results).
+async function writeIdeTranscript(homeDir: string, workspacePath: string, sessionId: string, firstUserLine: string): Promise<string> {
+  const transcriptPath = path.join(
+    homeDir, '.cursor', 'projects', toCursorProjectSlug(workspacePath), 'agent-transcripts', sessionId, `${sessionId}.jsonl`
+  );
+  await mkdir(path.dirname(transcriptPath), { recursive: true });
+  const lines = [
+    { role: 'user', message: { content: [{ type: 'text', text: `<external_links>\nsome context\n</external_links>\n<user_query>\n${firstUserLine}\n</user_query>` }] } },
+    { role: 'assistant', message: { content: [
+      { type: 'text', text: 'Looking at the stack.' },
+      { type: 'tool_use', name: 'Shell', input: { command: 'ls stacks', description: 'List stacks' } },
+    ] } },
+  ];
+  await writeFile(transcriptPath, `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`, 'utf8');
+  return transcriptPath;
+}
+
+// Runs a test with XDG_CONFIG_HOME unset, so Linux resolves the IDE's data
+// directory under the patched home directory.
+async function withoutXdgConfigHome(runTest: () => Promise<void>): Promise<void> {
+  const previous = process.env.XDG_CONFIG_HOME;
+  delete process.env.XDG_CONFIG_HOME;
+  try {
+    await runTest();
+  } finally {
+    if (previous !== undefined) {
+      process.env.XDG_CONFIG_HOME = previous;
+    }
+  }
+}
+
+test('Cursor synchronizer lists IDE chats read-only under the folder the IDE opened', { concurrency: false }, async () => {
+  await withCursorHome('cursor-ide-index-', async (homeDir, workspacePath) => {
+    await writeIdeWorkspace(homeDir, 'storage-1', workspacePath);
+    const transcriptPath = await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-1', 'Refactor the VPC stack');
+
+    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+      const processed = await new CursorSessionSynchronizer().synchronize();
+
+      assert.equal(processed, 1);
+      const session = sessionsDb.getSessionById('ide-chat-1');
+      assert.equal(session?.project_path, workspacePath);
+      assert.equal(session?.custom_name, 'Refactor the VPC stack');
+      assert.equal(session?.jsonl_path, transcriptPath);
+      assert.equal(session?.read_only, 1);
+      assert.equal(sessionsService.getSessionDetailsById('ide-chat-1').readOnly, true);
+    }));
+  });
+});
+
+test('Cursor synchronizer skips IDE transcripts it cannot place or that belong to a CLI chat', { concurrency: false }, async () => {
+  await withCursorHome('cursor-ide-skip-', async (homeDir, workspacePath) => {
+    // Two opened folders that encode to the same slug: neither can be trusted.
+    const dashed = path.join(homeDir, 'my-app');
+    const underscored = path.join(homeDir, 'my_app');
+    await mkdir(dashed);
+    await mkdir(underscored);
+    await writeIdeWorkspace(homeDir, 'storage-dashed', dashed);
+    await writeIdeWorkspace(homeDir, 'storage-underscored', underscored);
+    await writeIdeTranscript(homeDir, dashed, 'ambiguous-chat', 'Which folder?');
+
+    // A transcript whose id cursor-agent has a chat for: the CLI chat wins.
+    await writeIdeWorkspace(homeDir, 'storage-workspace', workspacePath);
+    await writeCursorCliChat(homeDir, workspacePath, 'cli-owned-chat', { firstUserLine: 'From the CLI' });
+
+    // A transcript in a folder the IDE never listed.
+    await writeIdeTranscript(homeDir, path.join(homeDir, 'unlisted'), 'unlisted-chat', 'Nowhere');
+
+    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+      await new CursorSessionSynchronizer().synchronize();
+
+      assert.equal(sessionsDb.getSessionById('ambiguous-chat'), null);
+      assert.equal(sessionsDb.getSessionById('unlisted-chat'), null);
+      assert.equal(sessionsDb.getSessionById('cli-owned-chat')?.read_only, 0);
+      assert.equal(path.basename(sessionsDb.getSessionById('cli-owned-chat')?.jsonl_path ?? ''), 'store.db');
+    }));
+  });
+});
+
+test('Cursor synchronizer indexes an IDE chat from its watched transcript', { concurrency: false }, async () => {
+  await withCursorHome('cursor-ide-watch-', async (homeDir, workspacePath) => {
+    await writeIdeWorkspace(homeDir, 'storage-1', workspacePath);
+    const transcriptPath = await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-watch', 'Watch me');
+    const subagentPath = path.join(path.dirname(transcriptPath), 'subagents', 'sub-1.jsonl');
+    await mkdir(path.dirname(subagentPath), { recursive: true });
+    await writeFile(subagentPath, '{}\n', 'utf8');
+
+    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+      const synchronizer = new CursorSessionSynchronizer();
+
+      assert.equal(await synchronizer.synchronizeFile(subagentPath), null);
+      assert.equal(await synchronizer.synchronizeFile(transcriptPath), 'ide-chat-watch');
+      assert.equal(sessionsDb.getSessionById('ide-chat-watch')?.read_only, 1);
+    }));
+  });
+});
+
+test('Cursor history for an IDE chat is read from its transcript', { concurrency: false }, async () => {
+  await withCursorHome('cursor-ide-history-', async (homeDir, workspacePath) => {
+    await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-history', 'Show the history');
+
+    const history = await new CursorSessionsProvider().fetchHistory('ide-chat-history', { projectPath: workspacePath });
+
+    assert.deepEqual(
+      history.messages.map((message) => [message.kind, message.role ?? null, message.content ?? message.toolName]),
+      [
+        ['text', 'user', 'Show the history'],
+        ['text', 'assistant', 'Looking at the stack.'],
+        ['tool_use', null, 'Shell'],
+      ],
+    );
+  });
+});
+
+test('Cursor history hides the pointer a continued chat starts with', { concurrency: false }, () => {
+  const prompt = prependCursorContinuedChatTag('Pick up where we left off', '/tmp/transcript.jsonl');
+  const messages = new CursorSessionsProvider().normalizeCursorBlobs([{
+    id: 'blob-1',
+    sequence: 0,
+    rowid: 0,
+    content: { role: 'user', content: [{ type: 'text', text: `<user_query>\n${prompt}\n</user_query>` }] },
+  }], 'session-1');
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.content, 'Pick up where we left off');
+});
+
+test('Continuing a read-only session starts a linked chat that points at its transcript once', { concurrency: false }, async () => {
+  await withCursorHome('cursor-ide-continue-', async (homeDir, workspacePath) => {
+    await writeIdeWorkspace(homeDir, 'storage-1', workspacePath);
+    const transcriptPath = await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-continue', 'Original question');
+
+    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+      await new CursorSessionSynchronizer().synchronize();
+
+      const continued = await sessionsService.continueReadOnlySession('ide-chat-continue');
+      const row = sessionsDb.getSessionById(continued.sessionId);
+      assert.equal(row?.provider, 'cursor');
+      assert.equal(row?.project_path, workspacePath);
+      assert.equal(row?.forked_from_session_id, 'ide-chat-continue');
+      assert.equal(row?.provider_session_id, null);
+      assert.equal(row?.read_only, 0);
+      assert.equal(continued.sessionName, 'Original question (CLI)');
+
+      assert.equal(sessionsService.resolveContinuedTranscriptPath(continued.sessionId), transcriptPath);
+      sessionsDb.assignProviderSessionId(continued.sessionId, 'new-cli-chat');
+      assert.equal(sessionsService.resolveContinuedTranscriptPath(continued.sessionId), null);
+
+      // The source is untouched, and a writable session cannot be "continued".
+      assert.equal(sessionsDb.getSessionById('ide-chat-continue')?.read_only, 1);
+      await assert.rejects(
+        sessionsService.continueReadOnlySession(continued.sessionId),
+        (error: { code?: string }) => error.code === 'SESSION_NOT_READ_ONLY',
+      );
+    }));
+  });
+});
+
+test('Cursor runtime starts a continued chat as a new chat pointing at the IDE transcript', {
+  concurrency: false,
+  skip: process.platform === 'win32' ? 'uses a shell-script stand-in for cursor-agent' : false,
+}, async () => {
+  await withCursorHome('cursor-runtime-continue-', async (homeDir, workspacePath) => {
+    // A stand-in cursor-agent that records its arguments and ends the run.
+    const binDir = path.join(homeDir, 'bin');
+    const argsFile = path.join(homeDir, 'cursor-agent-args.txt');
+    await mkdir(binDir);
+    await writeFile(path.join(binDir, 'cursor-agent'), [
+      '#!/bin/sh',
+      `printf '%s\\n' "$@" > '${argsFile}'`,
+      `echo '{"type":"result","subtype":"success","session_id":"new-cli-chat","result":"ok"}'`,
+    ].join('\n'), 'utf8');
+    await chmod(path.join(binDir, 'cursor-agent'), 0o755);
+
+    const ws = { userId: null, send: () => {} };
+    const context = {
+      resolveProviderSessionId: () => null,
+      resolveContinuedTranscriptPath: () => '/ide/transcript.jsonl',
+      resolveResumeModel: async () => null,
+      isProviderInstalled: async () => true,
+      normalizeMessage: () => [],
+    };
+
+    const previousPath = process.env.PATH;
+    process.env.PATH = binDir;
+    try {
+      await spawnCursor('Carry on', { sessionId: 'app-session', cwd: workspacePath }, ws, context);
+    } finally {
+      process.env.PATH = previousPath;
+    }
+
+    const args = await readFile(argsFile, 'utf8');
+    assert.doesNotMatch(args, /--resume/);
+    assert.match(args, /<continued_cursor_chat>/);
+    assert.match(args, /\/ide\/transcript\.jsonl/);
+    assert.match(args, /Carry on/);
   });
 });

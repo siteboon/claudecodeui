@@ -161,6 +161,13 @@
       "delete": "Delete queued message"
     }
   },
+  "readOnlySession": {
+    "title": "Cursor IDE chat, read-only",
+    "description": "Cursor's CLI can't continue IDE chats. Start a new CLI chat that picks up from this one; this chat stays as it is.",
+    "continue": "Continue in CLI",
+    "starting": "Starting…",
+    "failed": "Couldn't start the new chat. Try again."
+  },
   "composer": {
     "reasoning": "Reasoning",
     "model": "Model",

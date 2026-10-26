@@ -1136,6 +1136,84 @@ export function resolveCursorChatDirectory(projectPath: string, sessionId: strin
   return chatDirectories.find((directory) => fs.existsSync(path.join(directory, 'store.db'))) ?? chatDirectories[0];
 }
 
+/**
+ * Mirrors how Cursor names `~/.cursor/projects/<slug>` after a workspace path:
+ * non-alphanumerics become `-`, runs of `-` collapse, and edges are trimmed.
+ *
+ * The mapping is lossy (`my-app` and `my_app` share a slug), so it only ever
+ * runs forwards, from a path that is already known. Used by the Cursor
+ * synchronizer to match IDE workspaces and by `resolveCursorTranscriptPath`.
+ */
+export function toCursorProjectSlug(workspacePath: string): string {
+  return workspacePath
+    .replace(/[^a-zA-Z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Resolves the transcript Cursor writes for one chat, CLI or IDE:
+ * `~/.cursor/projects/<slug>/agent-transcripts/<sessionId>/<sessionId>.jsonl`.
+ *
+ * Like `resolveCursorChatDirectory`, the workspace's real path is tried before
+ * the path as given, and the first one with an existing transcript wins (the
+ * real-path form when neither exists). Used by the Cursor synchronizer for
+ * session titles and by the Cursor history reader for IDE chats. Throws when
+ * `sessionId` is not a single directory name.
+ */
+export function resolveCursorTranscriptPath(projectPath: string, sessionId: string): string {
+  const safeSessionId = sanitizeLeafDirectoryName(sessionId, 'cursor session id');
+  const givenPath = path.resolve(projectPath || process.cwd());
+  let realPath = givenPath;
+  try {
+    realPath = fs.realpathSync(givenPath);
+  } catch {
+    // Missing workspace: only the given form can be encoded.
+  }
+
+  const transcriptPaths = [realPath, givenPath].map((workspacePath) => path.join(
+    os.homedir(),
+    '.cursor',
+    'projects',
+    toCursorProjectSlug(workspacePath),
+    'agent-transcripts',
+    safeSessionId,
+    `${safeSessionId}.jsonl`,
+  ));
+  return transcriptPaths.find((transcriptPath) => fs.existsSync(transcriptPath)) ?? transcriptPaths[0];
+}
+
+const CURSOR_CONTINUED_CHAT_TAG_PATTERN = /^\s*<continued_cursor_chat>[\s\S]*?<\/continued_cursor_chat>\s*/;
+
+/**
+ * Prefixes the first prompt of a CLI chat started from a Cursor IDE chat with
+ * a pointer to that chat's transcript, so cursor-agent reads the earlier
+ * conversation itself instead of CloudCLI copying it into the prompt.
+ *
+ * Used by the Cursor runtime; the Cursor history reader removes the block again
+ * with `stripCursorContinuedChatTag`, so the chat shows only what was typed.
+ */
+export function prependCursorContinuedChatTag(prompt: string, transcriptPath: string): string {
+  return [
+    '<continued_cursor_chat>',
+    'This chat continues an earlier Cursor IDE chat. Its transcript is at:',
+    transcriptPath,
+    'It is JSONL, one message per line: user and assistant text plus the tool calls made, without tool results.',
+    'Read it as needed for context, then answer the message below.',
+    '</continued_cursor_chat>',
+    '',
+    prompt,
+  ].join('\n');
+}
+
+/**
+ * Removes the block added by `prependCursorContinuedChatTag` from a stored
+ * user prompt. Text without the block is returned unchanged.
+ */
+export function stripCursorContinuedChatTag(text: string): string {
+  return text.replace(CURSOR_CONTINUED_CHAT_TAG_PATTERN, '');
+}
+
 // ---------------------------
 //----------------- SESSION SYNCHRONIZER FILESYSTEM HELPERS ------------
 /**

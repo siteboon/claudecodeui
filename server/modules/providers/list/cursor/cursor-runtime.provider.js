@@ -13,6 +13,7 @@ import {
   createCompleteMessage,
   createNormalizedMessage,
   flattenPromptForWindowsShell,
+  prependCursorContinuedChatTag,
   resolveCursorChatDirectory,
   stripAnsiSequences
 } from '@/shared/utils.js';
@@ -56,6 +57,11 @@ async function spawnCursor(command, options = {}, ws, context) {
   // promise is created: inside an async executor a rejected `resolveResumeModel`
   // would be swallowed and leave the returned promise pending forever.
   const providerSessionId = context.resolveProviderSessionId(options.sessionId);
+  // A chat started to continue a Cursor IDE chat: its first turn points
+  // cursor-agent at the IDE transcript, which it reads for itself.
+  const continuedTranscriptPath = providerSessionId
+    ? null
+    : context.resolveContinuedTranscriptPath?.(options.sessionId) ?? null;
   const resolvedModel = await context.resolveResumeModel(options.sessionId, options.model);
 
   return new Promise((resolve, reject) => {
@@ -103,7 +109,10 @@ async function spawnCursor(command, options = {}, ws, context) {
       // cursor-agent is a .cmd shim on Windows, so the whole argument must be
       // newline-free or cmd.exe silently truncates it at the first newline.
       const promptWithAttachments = appendFilesInputTag(
-        appendImagesInputTag(command || '', images),
+        appendImagesInputTag(
+          continuedTranscriptPath ? prependCursorContinuedChatTag(command || '', continuedTranscriptPath) : command || '',
+          images
+        ),
         files
       );
       baseArgs.push('-p', flattenPromptForWindowsShell(promptWithAttachments));
