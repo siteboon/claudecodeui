@@ -239,7 +239,7 @@ async function dispatchRun(
         sessionId
       );
     }
-    return { started: false, error: 'A run is already in progress for this session.' };
+    return { started: false, error: RUN_IN_PROGRESS_ERROR };
   }
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
@@ -606,6 +606,20 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * gone away or is busy without `interruptActiveRun`, which the caller reports
  * on the schedule.
  */
+/**
+ * How a detached turn went. `started` and `error` are known as soon as the
+ * run holds the session (or was refused); `done` settles when the turn ends,
+ * with the error, if any, the run itself failed with.
+ */
+export type DetachedTurnResult = {
+  started: boolean;
+  error: string | null;
+  done: Promise<{ started: boolean; error: string | null }>;
+};
+
+/** Why a turn could not start: another run already holds the session. */
+export const RUN_IN_PROGRESS_ERROR = 'A run is already in progress for this session.';
+
 export async function runDetachedChatTurn(
   input: {
     sessionId: string;
@@ -620,21 +634,26 @@ export async function runDetachedChatTurn(
     interruptActiveRun?: boolean;
   },
   dependencies: ChatWebSocketDependencies,
-): Promise<{ started: boolean; error: string | null }> {
+): Promise<DetachedTurnResult> {
+  const refuse = (error: string): DetachedTurnResult => {
+    const result = { started: false, error };
+    return { ...result, done: Promise.resolve(result) };
+  };
+
   const session = sessionsDb.getSessionById(input.sessionId);
   if (!session) {
-    return { started: false, error: 'The session no longer exists.' };
+    return refuse('The session no longer exists.');
   }
 
   const provider = session.provider as LLMProvider;
   if (!dependencies.runtime.hasRuntime(provider)) {
-    return { started: false, error: `Provider "${provider}" is not available.` };
+    return refuse(`Provider "${provider}" is not available.`);
   }
 
   const activeRun = chatRunRegistry.getRun(input.sessionId);
   if (activeRun && activeRun.status === 'running') {
     if (!input.interruptActiveRun) {
-      return { started: false, error: 'A run was already in progress for this session.' };
+      return refuse(RUN_IN_PROGRESS_ERROR);
     }
     // Same shape as `chat.abort`: cancel the provider run and emit the
     // terminal `complete` on its behalf, so every watching client sees the
@@ -648,14 +667,26 @@ export async function runDetachedChatTurn(
     });
   }
 
-  return dispatchRun(
+  // Resolve once the run holds the session, not when it ends: a turn can run
+  // for hours, and a caller that waited for it held up every other message.
+  let markReserved: () => void = () => {};
+  const reserved = new Promise<void>((resolve) => { markReserved = resolve; });
+  const done = dispatchRun(
     null,
     input.userId,
     input.sessionId,
     session,
     { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
     dependencies,
+    {},
+    () => markReserved(),
   );
+
+  const first = await Promise.race([reserved.then(() => 'reserved' as const), done]);
+  if (first === 'reserved') {
+    return { started: true, error: null, done };
+  }
+  return { ...first, done };
 }
 
 export function handleChatConnection(
