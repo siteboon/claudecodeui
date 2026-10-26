@@ -218,3 +218,9 @@ export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPrefer
   codex: 'codexPermissions',
   opencode: 'opencodePermissions',
 };
+
+/**
+ * Window event fired when a session was archived, restored or deleted on
+ * another tab or device, so lists fetched on demand can reload.
+ */
+export const SESSION_ARCHIVE_CHANGED_EVENT = 'cloudcli:session-archive-changed';

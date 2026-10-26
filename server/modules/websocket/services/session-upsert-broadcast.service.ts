@@ -3,7 +3,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
-import type { SessionUpsertedEvent } from '@/shared/types.js';
+import type { SessionArchiveChangedEvent, SessionUpsertedEvent } from '@/shared/types.js';
 
 /**
  * The single producer of the `session_upserted` delta.
@@ -33,9 +33,20 @@ async function buildSessionUpsertedEvent(
 
   const projectPath = row.project_path;
   const project = projectPath ? projectsDb.getProjectPath(projectPath) : null;
+  // The active sidebar does not show archived projects; an upsert would bring
+  // the project back into it.
+  if (project?.isArchived) {
+    return null;
+  }
   const displayName = project?.custom_project_name?.trim()
     ? project.custom_project_name
     : await generateDisplayName(path.basename(projectPath ?? '') || (projectPath ?? ''), projectPath);
+  // Archived or deleted while the name was being worked out: announcing the
+  // row now would put it back after its removal went out.
+  const current = sessionsDb.getSessionById(row.session_id);
+  if (!current || current.isArchived) {
+    return null;
+  }
 
   return {
     kind: 'session_upserted',
@@ -93,15 +104,40 @@ export async function broadcastSessionUpserted(sessionIdOrProviderSessionId: str
 export async function broadcastSessionUpsertedBatch(
   sessionIds: Iterable<string>,
 ): Promise<void> {
-  const payloads: string[] = [];
+  const events: SessionUpsertedEvent[] = [];
   for (const sessionId of sessionIds) {
     const event = await buildSessionUpsertedEvent(sessionId);
     if (event) {
-      payloads.push(JSON.stringify(event));
+      events.push(event);
     }
   }
 
-  sendToConnectedClients(payloads);
+  // Building later events awaits the filesystem; a session archived or
+  // deleted meanwhile must not be put back by its earlier-built upsert.
+  sendToConnectedClients(events
+    .filter((event) => {
+      const current = sessionsDb.getSessionById(event.sessionId);
+      return Boolean(current && !current.isArchived);
+    })
+    .map((event) => JSON.stringify(event)));
+}
+
+/**
+ * Announces that a session was archived, restored or deleted, so other tabs
+ * and devices drop it from (or bring it back to) their lists. The upsert
+ * builder skips archived rows, so without this they kept showing it.
+ */
+export function broadcastSessionArchiveChanged(
+  sessionId: string,
+  state: SessionArchiveChangedEvent['state'],
+): void {
+  const event: SessionArchiveChangedEvent = {
+    kind: 'session_archive_changed',
+    sessionId,
+    state,
+    timestamp: new Date().toISOString(),
+  };
+  sendToConnectedClients([JSON.stringify(event)]);
 }
 
 /** @internal Exported for the broadcast tests, which assert the payload shape directly. */
