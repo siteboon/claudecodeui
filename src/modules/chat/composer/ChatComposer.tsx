@@ -10,7 +10,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
+import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
@@ -269,13 +269,7 @@ export default function ChatComposer({
     : sendByCtrlEnter
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');
-  const submitAriaLabel = canQueueDraft
-    ? hasQueuedDraft
-      ? t('input.queue.append', { defaultValue: 'Add to queued message' })
-      : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
-    : isLoading
-      ? t('input.stop')
-      : t('input.send');
+  const submitAriaLabel = t('input.send');
 
   return (
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
@@ -509,10 +503,11 @@ export default function ChatComposer({
               providerLabel={providerLabel}
             />
 
-            {isLoading || activity?.background ? (
+            {(isLoading || activity?.background) && !isRecording ? (
               <ComposerSendMenu
                 state={isLoading ? 'responding' : 'background'}
                 hasInput={Boolean(input.trim() || attachedFiles.length > 0)}
+                hasText={Boolean(input.trim())}
                 onSelect={(choice) => {
                   if (choice === 'stop') {
                     onAbortSession();
@@ -544,8 +539,6 @@ export default function ChatComposer({
               >
                 {isTranscribing ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
-                ) : canQueueDraft ? (
-                  <ArrowUpIcon className="h-4 w-4" />
                 ) : undefined}
               </PromptInputSubmit>
             )}

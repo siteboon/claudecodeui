@@ -88,6 +88,11 @@ export const sideQuestionStore = {
     const list = getList(event.sessionId);
     const index = list.findIndex((item) => item.id === event.sideQuestionId);
 
+    if (event.phase === 'dismissed') {
+      sideQuestionStore.remove(event.sideQuestionId);
+      return;
+    }
+
     if (event.phase === 'started' || event.phase === 'done') {
       if (event.sideQuestion) upsert(event.sessionId, event.sideQuestion);
       return;
@@ -141,21 +146,46 @@ export function useSideQuestions(sessionId: string | null): SideQuestion[] {
 }
 
 /**
- * Asks a side question: trims the text, refuses an empty question or a
- * missing session, draws the optimistic pending entry, and sends the
- * `chat.btw` frame through the `sendMessage` it was given — the composer's
- * own, never `useWebSocket()` directly, which throws outside a provider and
- * would break the composer's existing tests.
+ * A `crypto.randomUUID` id, or `local_<timestamp>_<random>` when it is
+ * missing — browsers only expose it on HTTPS or localhost, and CloudCLI is
+ * reached over plain `http://` on the tailnet and LANs. Either form matches
+ * the server's `[A-Za-z0-9_-]{1,100}`.
+ */
+function newSideQuestionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Asks a side question: trims the text, refuses an empty question, a missing
+ * session, or a dropped connection (`sendMessage` silently discards a frame
+ * sent while the socket is not open, which would otherwise leave the
+ * optimistic entry `running` forever), draws the optimistic pending entry,
+ * and sends the `chat.btw` frame through the `sendMessage` it was given —
+ * the composer's own, never `useWebSocket()` directly, which throws outside
+ * a provider and would break the composer's existing tests.
  */
 export function useAskSideQuestion(
   sendMessage: (message: unknown) => void,
-): (sessionId: string | null, question: string, options?: { model?: string }) => boolean {
+): (
+  sessionId: string | null,
+  question: string,
+  options?: { model?: string },
+  isConnected?: boolean,
+) => boolean {
   return useCallback(
-    (sessionId: string | null, question: string, options?: { model?: string }): boolean => {
+    (
+      sessionId: string | null,
+      question: string,
+      options?: { model?: string },
+      isConnected = true,
+    ): boolean => {
       const trimmed = question.trim();
-      if (!trimmed || !sessionId) return false;
+      if (!trimmed || !sessionId || !isConnected) return false;
 
-      const sideQuestionId = crypto.randomUUID();
+      const sideQuestionId = newSideQuestionId();
       const createdAt = new Date().toISOString();
       sideQuestionStore.begin({ id: sideQuestionId, sessionId, question: trimmed, createdAt });
 

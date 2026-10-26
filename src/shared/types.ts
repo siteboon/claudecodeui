@@ -521,7 +521,7 @@ export type SideQuestionEvent = {
   kind: 'side_question';
   sessionId: string;
   sideQuestionId: string;
-  phase: 'started' | 'delta' | 'done' | 'error';
+  phase: 'started' | 'delta' | 'done' | 'error' | 'dismissed';
   /** Delta only: the next piece of the answer. */
   text?: string;
   /** Error only. */

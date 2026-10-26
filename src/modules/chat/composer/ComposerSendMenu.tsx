@@ -16,8 +16,10 @@ export type ComposerSendMenuChoice = 'queue' | 'btw' | 'stop' | 'send';
 type ComposerSendMenuProps = {
   /** Whether a turn is still being written, or only background work runs. */
   state: ComposerSendMenuState;
-  /** Queue, BTW and Send anyway need text or an attachment; Stop never does. */
+  /** Queue and Send anyway need text or an attachment; Stop never does. */
   hasInput: boolean;
+  /** BTW cannot carry attachments, so it needs non-whitespace text on its own; defaults to `hasInput` so existing callers and tests, which never had attachment-only input, keep working. */
+  hasText?: boolean;
   onSelect: (choice: ComposerSendMenuChoice) => void;
 };
 
@@ -28,7 +30,7 @@ type ComposerSendMenuProps = {
  * background-send dialog, so a tap on the first row can never stop or
  * override anything.
  */
-export default function ComposerSendMenu({ state, hasInput, onSelect }: ComposerSendMenuProps) {
+export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, onSelect }: ComposerSendMenuProps) {
   const { t } = useTranslation('chat');
   const [isOpen, setIsOpen] = useState(false);
   const close = useCallback(() => setIsOpen(false), []);
@@ -79,7 +81,7 @@ export default function ComposerSendMenu({ state, hasInput, onSelect }: Composer
             onSelect={() => select('queue')}
           />
           <ComposerMenuItemDisabled
-            disabled={!hasInput}
+            disabled={!hasText}
             role="menuitem"
             label={t('sendMenu.btw.label', { defaultValue: 'BTW' })}
             description={t('sendMenu.btw.description', { defaultValue: 'Ask on the side now; the session never sees it' })}
@@ -92,7 +94,6 @@ export default function ComposerSendMenu({ state, hasInput, onSelect }: Composer
             label={lastLabel}
             description={lastDescription}
             onSelect={() => select(lastChoice)}
-            className="text-destructive-foreground"
             destructive
           />
         </ComposerMenuSurface>,

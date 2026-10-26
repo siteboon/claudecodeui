@@ -272,7 +272,7 @@
       "label": "JSON (.json)",
       "description": "Alle Nachrichten, unformatiert, für Tools."
     },
-    "includeSideQuestions": "Seitenafragen mitexportieren"
+    "includeSideQuestions": "Nebenfragen mitexportieren"
   },
   "schedule": {
     "trigger": "Nachricht planen",
@@ -292,8 +292,8 @@
   },
   "sideQuestion": {
     "label": "Übrigens · gehört nicht zur Sitzung",
-    "pending": "Wird seitlich beantwortet",
-    "failed": "Die Seitenafrage ist fehlgeschlagen.",
+    "pending": "Wird nebenbei beantwortet",
+    "failed": "Die Nebenfrage ist fehlgeschlagen.",
     "dismiss": "Entfernen"
   },
   "sendMenu": {
@@ -305,7 +305,7 @@
     },
     "btw": {
       "label": "Übrigens",
-      "description": "Jetzt seitlich fragen; die Sitzung sieht es nicht"
+      "description": "Jetzt nebenbei fragen; die Sitzung sieht es nicht"
     },
     "stop": {
       "label": "Stoppen",

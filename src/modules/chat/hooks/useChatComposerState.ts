@@ -52,6 +52,8 @@ type UseChatComposerStateArgs = {
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
+  /** Whether the chat socket is currently open; a BTW ask while it is not would send nothing and leave the optimistic entry pending forever. */
+  isConnected?: boolean;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -216,6 +218,7 @@ export function useChatComposerState({
   canAbortSession,
   tokenBudget,
   sendMessage,
+  isConnected = true,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -738,14 +741,16 @@ export function useChatComposerState({
     backgroundSendResolverRef.current = null;
   }, []);
 
-  // A side question never touches the session: it is cleared the same way a
-  // sent message is, without the parts (queued draft, session processing)
-  // that belong only to an actual turn.
+  // A side question never touches the session: on a successful ask, the
+  // typed text is cleared the same way a sent message is, without the parts
+  // (queued draft, session processing) that belong only to an actual turn.
+  // BTW cannot carry attachments, so they are left untouched — unlike a real
+  // send, which takes them. Called only when `askSideQuestion` returned
+  // `true`; a refusal (no connection) leaves the text in place too, so the
+  // user does not lose what they typed.
   const clearComposerAfterSideQuestion = useCallback(() => {
     setInput('');
     inputValueRef.current = '';
-    setAttachedFiles([]);
-    setFileErrors(new Map());
     resetCommandMenuState();
     setIsTextareaExpanded(false);
     if (textareaRef.current) {
@@ -898,8 +903,9 @@ export function useChatComposerState({
       if (!queuedSubmission && !submitOptions?.skipCommandInterception && sessionKey) {
         const btwMatch = currentInput.trim().match(/^\/btw(?:\s+([\s\S]*))?$/i);
         if (btwMatch) {
-          askSideQuestion(sessionKey, btwMatch[1] ?? '', { model: currentProviderModel });
-          clearComposerAfterSideQuestion();
+          if (askSideQuestion(sessionKey, btwMatch[1] ?? '', { model: currentProviderModel }, isConnected)) {
+            clearComposerAfterSideQuestion();
+          }
           return;
         }
       }
@@ -1067,8 +1073,9 @@ export function useChatComposerState({
           return;
         }
         if (choice === 'btw') {
-          askSideQuestion(targetSessionId, currentInput, { model: currentProviderModel });
-          clearComposerAfterSideQuestion();
+          if (askSideQuestion(targetSessionId, currentInput, { model: currentProviderModel }, isConnected)) {
+            clearComposerAfterSideQuestion();
+          }
           return;
         }
         if (choice === 'queue') {
@@ -1162,6 +1169,7 @@ export function useChatComposerState({
       currentSessionId,
       editingAnchorId,
       executeCommand,
+      isConnected,
       isLoading,
       onSessionProcessing,
       onSessionEstablished,
@@ -1215,13 +1223,14 @@ export function useChatComposerState({
   const handleSendMenuChoice = useCallback(
     async (choice: 'queue' | 'btw' | 'send'): Promise<void> => {
       if (choice === 'btw') {
-        askSideQuestion(sessionKey, inputValueRef.current, { model: currentProviderModel });
-        clearComposerAfterSideQuestion();
+        if (askSideQuestion(sessionKey, inputValueRef.current, { model: currentProviderModel }, isConnected)) {
+          clearComposerAfterSideQuestion();
+        }
         return;
       }
       await handleSubmit(createFakeSubmitEvent(), undefined, { presetBackgroundChoice: choice });
     },
-    [askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, handleSubmit, sessionKey],
+    [askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, handleSubmit, isConnected, sessionKey],
   );
 
   useEffect(() => {
