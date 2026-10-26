@@ -31,7 +31,8 @@
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "installerIcon": "electron/assets/logo-windows.ico",
-    "uninstallerIcon": "electron/assets/logo-windows.ico"
+    "uninstallerIcon": "electron/assets/logo-windows.ico",
+    "artifactName": "Workbench-Setup-${version}.${ext}"
   },
   "mac": {
     "category": "public.app-category.developer-tools",
@@ -54,5 +55,8 @@
     ]
   },
   "beforeBuild": "electron/workbench/builder-hooks.cjs",
-  "afterAllArtifactBuild": "electron/workbench/builder-hooks.cjs"
+  "afterAllArtifactBuild": "electron/workbench/builder-hooks.cjs",
+  "portable": {
+    "artifactName": "Workbench-Portable-${version}.${ext}"
+  }
 }

@@ -62,8 +62,8 @@
     "update:platform": "./update-platform.sh",
     "dev:desktop": "concurrently --kill-others \"cross-env HOST=127.0.0.1 SERVER_PORT=3001 vite\" \"cross-env WORKBENCH_SERVER_PORT=3001 WORKBENCH_DEV_URL=http://127.0.0.1:5173 electron electron/workbench/main.js\"",
     "desktop:workbench": "electron electron/workbench/main.js",
-    "build:desktop": "npm run build && node electron/workbench/make-builder-config.cjs win && electron-builder --config electron-builder.workbench.generated.json --win",
-    "build:desktop:mac": "npm run build && node electron/workbench/make-builder-config.cjs mac && electron-builder --config electron-builder.workbench.generated.json --mac"
+    "build:desktop": "node electron/workbench/build-desktop.cjs win",
+    "build:desktop:mac": "node electron/workbench/build-desktop.cjs mac"
   },
   "build": {
     "appId": "ai.cloudcli.desktop",
