@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -209,6 +209,32 @@ test('Cursor synchronizer removes rows an older build indexed from transcripts',
       assert.equal(sessionsDb.getSessionById('cli-chat-kept')?.jsonl_path, path.join(chatDir, 'store.db'));
       assert.equal(sessionsDb.getSessionById('ide-chat-stale'), null);
     });
+  });
+});
+
+test('Cursor synchronizer keeps transcript rows when a chats directory is unreadable', { concurrency: false, skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+  await withCursorHome('cursor-sync-unreadable-', async (homeDir, workspacePath) => {
+    const chatDir = await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-hidden');
+    const ideTranscript = path.join(
+      homeDir, '.cursor', 'projects', 'workspace', 'agent-transcripts', 'ide-chat-kept', 'ide-chat-kept.jsonl'
+    );
+    await mkdir(path.dirname(ideTranscript), { recursive: true });
+    await writeFile(ideTranscript, '{"role":"user","message":{"content":[]}}\n', 'utf8');
+
+    const workspaceDir = path.dirname(chatDir);
+    await chmod(workspaceDir, 0o000);
+    try {
+      await withIsolatedDatabase(async () => {
+        sessionsDb.createSession('ide-chat-kept', 'cursor', workspacePath, 'IDE chat', undefined, undefined, ideTranscript);
+
+        await new CursorSessionSynchronizer().synchronize();
+
+        // The scan couldn't see every chat, so cleanup must not run.
+        assert.equal(sessionsDb.getSessionById('ide-chat-kept')?.jsonl_path, ideTranscript);
+      });
+    } finally {
+      await chmod(workspaceDir, 0o755);
+    }
   });
 });
 

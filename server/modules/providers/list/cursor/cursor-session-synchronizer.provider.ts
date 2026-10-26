@@ -20,15 +20,18 @@ type ParsedSession = {
 };
 
 /**
- * Returns directory entries or an empty list when the folder is missing.
+ * Returns directory entries, an empty list when the folder is missing, or
+ * `null` when it exists but can't be read, so callers can tell an incomplete
+ * scan from an empty one.
  */
 async function listDirectoryEntriesSafe(
   directoryPath: string
-): Promise<import('node:fs').Dirent[]> {
+): Promise<import('node:fs').Dirent[] | null> {
   try {
     return await fsp.readdir(directoryPath, { withFileTypes: true });
-  } catch {
-    return [];
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' || code === 'ENOTDIR' ? [] : null;
   }
 }
 
@@ -97,13 +100,26 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
     const indexedSessionIds = new Set<string>();
     let failed = false;
 
-    for (const workspaceEntry of await listDirectoryEntriesSafe(chatsRoot)) {
+    const workspaceEntries = await listDirectoryEntriesSafe(chatsRoot);
+    if (!workspaceEntries) {
+      failed = true;
+      console.error('Failed to read Cursor chats directory', { chatsRoot });
+    }
+
+    for (const workspaceEntry of workspaceEntries ?? []) {
       if (!workspaceEntry.isDirectory()) {
         continue;
       }
 
       const workspaceDir = path.join(chatsRoot, workspaceEntry.name);
-      for (const chatEntry of await listDirectoryEntriesSafe(workspaceDir)) {
+      const chatEntries = await listDirectoryEntriesSafe(workspaceDir);
+      if (!chatEntries) {
+        failed = true;
+        console.error('Failed to read Cursor chats directory', { workspaceDir });
+        continue;
+      }
+
+      for (const chatEntry of chatEntries) {
         if (!chatEntry.isDirectory()) {
           continue;
         }
