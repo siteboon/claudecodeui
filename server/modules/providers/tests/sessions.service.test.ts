@@ -428,6 +428,31 @@ test('a session held for background work is not also reported as a CLI turn', { 
   });
 });
 
+test('a busy process CloudCLI holds is listed as a turn it can interrupt', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('followup-session', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('followup-session', 'claude-native-followup');
+
+    // Background work reported back and the CLI started a turn of its own:
+    // no chat run, no outstanding task, but CloudCLI holds the process.
+    await withClaudeCliRegistry(
+      [{ pid: process.pid, sessionId: 'claude-native-followup', status: 'busy', startedAt: 5_000 }],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false, hasLiveSession: (id: string) => id === 'followup-session' } },
+        async () => {
+          assert.deepEqual(await sessionsService.listRunningSessions(), [{
+            sessionId: 'followup-session',
+            provider: 'claude',
+            startedAt: 5_000,
+            lastSeq: 0,
+            canInterrupt: true,
+          }]);
+        },
+      ),
+    );
+  });
+});
+
 test('an unreadable registry never fails the running-sessions poll', { concurrency: false }, async () => {
   await withIsolatedDatabase(async () => {
     sessionsDb.createAppSession('safe-session', 'claude', '/tmp/running-project');

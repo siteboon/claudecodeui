@@ -38,7 +38,7 @@ type RunningSessionEntry = {
   startedAt: number;
   lastSeq: number;
   background?: true;
-  canInterrupt?: false;
+  canInterrupt?: boolean;
   statusText?: string;
   tasks?: BackgroundTaskSummary[];
 };
@@ -198,15 +198,16 @@ export const sessionsService = {
         continue;
       }
 
+      // A busy process CloudCLI holds is working on a turn the CLI started
+      // itself (background work reporting back); chat.abort reaches it. One
+      // CloudCLI does not own can be reported but not interrupted.
+      const owned = providerRegistry.listProviders().some((provider) => Boolean(provider.runtime.hasLiveSession?.(session.session_id)));
       entries.push({
         sessionId: session.session_id,
         provider: session.provider as LLMProvider,
         startedAt: live.startedAt,
         lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0,
-        // There is no run here to abort: the turn belongs to a CLI process
-        // CloudCLI does not own, so it can be reported but not interrupted.
-        canInterrupt: false,
-        statusText: 'Running in the Claude CLI',
+        ...(owned ? { canInterrupt: true } : { canInterrupt: false, statusText: 'Running in the Claude CLI' }),
       });
       runningById.set(session.session_id, entries[entries.length - 1]);
     }
