@@ -101,8 +101,7 @@ async function writeCursorCliChat(
   }
 
   if (options.firstUserLine) {
-    const slug = workspacePath.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '');
-    const transcriptDir = path.join(homeDir, '.cursor', 'projects', slug, 'agent-transcripts', sessionId);
+    const transcriptDir = path.join(homeDir, '.cursor', 'projects', toCursorProjectSlug(workspacePath), 'agent-transcripts', sessionId);
     await mkdir(transcriptDir, { recursive: true });
     const line = { role: 'user', message: { content: [{ type: 'text', text: `<user_query>\n${options.firstUserLine}\n</user_query>` }] } };
     await writeFile(path.join(transcriptDir, `${sessionId}.jsonl`), `${JSON.stringify(line)}\n`, 'utf8');
