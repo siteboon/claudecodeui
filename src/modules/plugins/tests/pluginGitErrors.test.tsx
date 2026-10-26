@@ -8,8 +8,10 @@ import type { Plugin } from '@/shared/types';
 
 type StubbedReply = { status: number; body: unknown };
 
-// Every plugin route hands its failures to the global error middleware, which
-// answers with the structured AppError envelope.
+/**
+ * Builds the structured AppError envelope every plugin route hands to the global
+ * error middleware, so the fixture matches what the server really returns.
+ */
 const envelope = (code: string, message: string, details: unknown = { gitCommand: 'git clone', exitCode: 128, gitOutput: 'fatal: …' }) => ({
   success: false,
   error: { code, message, details },
@@ -38,8 +40,10 @@ const installedPlugin: Plugin = {
   repoUrl: 'https://git.example.test/acme/private-demo',
 };
 
-// `api.plugins.*` calls the global fetch, so stubbing it drives the real
-// PluginsProvider and settings tab without module mocks.
+/**
+ * Drives the real PluginsProvider and settings tab by stubbing `fetch`, because
+ * `api.plugins.*` goes through the global fetch rather than a module mock.
+ */
 function stubPluginsApi(replies: Record<string, StubbedReply>) {
   vi.stubGlobal(
     'fetch',
