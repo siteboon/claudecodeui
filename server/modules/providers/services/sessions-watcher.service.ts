@@ -16,8 +16,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     rootPath: path.join(os.homedir(), '.claude', 'projects'),
   },
   {
+    // cursor-agent's chat stores, not `~/.cursor/projects`: transcripts there
+    // also come from Cursor IDE chats, which the CLI cannot load or resume.
     provider: 'cursor',
-    rootPath: path.join(os.homedir(), '.cursor', 'projects'),
+    rootPath: path.join(os.homedir(), '.cursor', 'chats'),
   },
   {
     provider: 'codex',
@@ -108,6 +110,11 @@ let watcherRescheduleAfterRefresh = false;
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   if (provider === 'opencode') {
     return path.basename(filePath) === 'opencode.db';
+  }
+
+  if (provider === 'cursor') {
+    // Rewritten by cursor-agent on every turn, unlike the busy store.db.
+    return path.basename(filePath) === 'meta.json';
   }
 
   return filePath.endsWith('.jsonl');

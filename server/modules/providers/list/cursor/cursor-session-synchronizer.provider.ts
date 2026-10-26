@@ -1,13 +1,10 @@
-import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
   extractFirstValidJsonlData,
-  findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
@@ -17,6 +14,9 @@ type ParsedSession = {
   sessionId: string;
   projectPath: string;
   sessionName?: string;
+  storeDbPath: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 /**
@@ -32,180 +32,163 @@ async function listDirectoryEntriesSafe(
   }
 }
 
-/**
- * Returns whether a directory entry is a directory, following symlinks.
- */
-async function isDirectoryEntry(parentDir: string, entry: import('node:fs').Dirent): Promise<boolean> {
-  if (entry.isDirectory()) {
-    return true;
-  }
-  if (!entry.isSymbolicLink()) {
-    return false;
-  }
+async function fileExists(filePath: string): Promise<boolean> {
   try {
-    return (await fsp.stat(path.join(parentDir, entry.name))).isDirectory();
+    return (await fsp.stat(filePath)).isFile();
   } catch {
     return false;
   }
 }
 
 /**
- * Resolves a Cursor project folder name back to the workspace path it encodes.
+ * Mirrors how Cursor names `~/.cursor/projects/<slug>` after a workspace path:
+ * non-alphanumerics become `-`, runs of `-` collapse, and edges are trimmed.
+ */
+function toCursorProjectSlug(workspacePath: string): string {
+  return workspacePath
+    .replace(/[^a-zA-Z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function toIsoTimestamp(value: unknown): string | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? new Date(value).toISOString()
+    : undefined;
+}
+
+/**
+ * Session indexer for Cursor CLI (cursor-agent) chats.
  *
- * Cursor names `~/.cursor/projects/<name>` after the workspace path with every
- * non-alphanumeric character replaced by `-`, so `/Users/me/my_app-2.0`
- * becomes `Users-me-my-app-2-0`. That mapping is lossy, so the name is matched
- * against real directory entries one level at a time, backtracking on
- * ambiguous prefixes. Returns null when the workspace no longer exists, or
- * when several existing paths encode to the same name (e.g. `my-app` and
- * `my_app` side by side), since picking one could file sessions under the
- * wrong project.
- */
-async function resolveEncodedProjectPath(encodedName: string): Promise<string | null> {
-  const matches: string[] = [];
-  await collectEncodedPathMatches(encodedName, path.parse(process.cwd()).root, matches);
-  return matches.length === 1 ? matches[0] : null;
-}
-
-/**
- * Appends every existing directory under `currentDir` whose encoded path equals
- * `encodedRest` to `matches`, stopping once two are found (enough to prove ambiguity).
- */
-async function collectEncodedPathMatches(encodedRest: string, currentDir: string, matches: string[]): Promise<void> {
-  if (encodedRest === '') {
-    matches.push(currentDir);
-    return;
-  }
-
-  for (const entry of await listDirectoryEntriesSafe(currentDir)) {
-    const encodedName = entry.name.replace(/[^A-Za-z0-9]/g, '-');
-    if (encodedRest !== encodedName && !encodedRest.startsWith(`${encodedName}-`)) {
-      continue;
-    }
-    if (!(await isDirectoryEntry(currentDir, entry))) {
-      continue;
-    }
-
-    await collectEncodedPathMatches(
-      encodedRest.slice(encodedName.length + 1),
-      path.join(currentDir, entry.name),
-      matches
-    );
-    if (matches.length > 1) {
-      return;
-    }
-  }
-}
-
-/**
- * Session indexer for Cursor transcript artifacts.
+ * cursor-agent keeps each chat in `~/.cursor/chats/<md5(cwd)>/<id>/` as a
+ * `meta.json` sidecar plus the `store.db` history CloudCLI reads and resumes.
+ * Only these chats are indexed: Cursor IDE chats also leave transcripts under
+ * `~/.cursor/projects`, but have no CLI store, so they can neither be loaded
+ * nor resumed by cursor-agent.
  */
 export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'cursor' as const;
   private readonly cursorHome = path.join(os.homedir(), '.cursor');
 
   /**
-   * Scans Cursor chats and upserts discovered sessions into DB.
+   * Scans every Cursor CLI chat and upserts it into the DB.
+   *
+   * `since` is ignored: there is one small `meta.json` per chat, and chats
+   * created before an upgrade (which older builds never indexed) must still
+   * be found by the first scan afterwards.
    */
-  async synchronize(since?: Date): Promise<number> {
-    const projectsDir = path.join(this.cursorHome, 'projects');
-
+  async synchronize(_since?: Date): Promise<number> {
+    const chatsRoot = path.join(this.cursorHome, 'chats');
     let processed = 0;
 
-    const files = await findFilesRecursivelyCreatedAfter(projectsDir, '.jsonl', since ?? null);
-
-    for (const filePath of files) {
-      const parsed = await this.processSessionFile(filePath);
-      if (!parsed) {
+    for (const workspaceEntry of await listDirectoryEntriesSafe(chatsRoot)) {
+      if (!workspaceEntry.isDirectory()) {
         continue;
       }
 
-      const timestamps = await readFileTimestamps(filePath);
-      sessionsDb.createSession(
-        parsed.sessionId,
-        this.provider,
-        parsed.projectPath,
-        parsed.sessionName,
-        timestamps.createdAt,
-        timestamps.updatedAt,
-        filePath
-      );
-      processed += 1;
+      const workspaceDir = path.join(chatsRoot, workspaceEntry.name);
+      for (const chatEntry of await listDirectoryEntriesSafe(workspaceDir)) {
+        if (!chatEntry.isDirectory()) {
+          continue;
+        }
+
+        if (await this.indexChatDirectory(path.join(workspaceDir, chatEntry.name))) {
+          processed += 1;
+        }
+      }
     }
 
     return processed;
   }
 
   /**
-   * Parses and upserts one Cursor session JSONL file.
+   * Re-indexes the chat a watched `meta.json` belongs to.
    */
   async synchronizeFile(filePath: string): Promise<string | null> {
-    if (!filePath.endsWith('.jsonl')) {
+    if (path.basename(filePath) !== 'meta.json') {
       return null;
     }
 
-    const parsed = await this.processSessionFile(filePath);
+    return this.indexChatDirectory(path.dirname(filePath));
+  }
+
+  private async indexChatDirectory(chatDir: string): Promise<string | null> {
+    const parsed = await this.parseChatDirectory(chatDir);
     if (!parsed) {
       return null;
     }
 
-    const timestamps = await readFileTimestamps(filePath);
+    const fallbackTimestamps = parsed.createdAt && parsed.updatedAt
+      ? null
+      : await readFileTimestamps(parsed.storeDbPath);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
       parsed.sessionName,
-      timestamps.createdAt,
-      timestamps.updatedAt,
-      filePath
+      parsed.createdAt ?? fallbackTimestamps?.createdAt,
+      parsed.updatedAt ?? fallbackTimestamps?.updatedAt,
+      parsed.storeDbPath
     );
   }
 
   /**
-   * Extracts project path from Cursor worker.log.
+   * Reads one chat directory, applying the same rules as cursor-agent's own
+   * session list: a `store.db` must exist, subagent chats are skipped, and the
+   * chat must have a conversation (cursor-agent sets that on the first message).
    */
-  private async extractProjectPathFromWorkerLog(filePath: string): Promise<string | null> {
+  private async parseChatDirectory(chatDir: string): Promise<ParsedSession | null> {
+    const storeDbPath = path.join(chatDir, 'store.db');
+    if (!(await fileExists(storeDbPath))) {
+      return null;
+    }
+
+    let meta: Record<string, unknown>;
     try {
-      const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
-      const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
-      for await (const line of lineReader) {
-        const match = line.match(/workspacePath=(.*)$/);
-        const projectPath = match?.[1]?.trim();
-        if (projectPath) {
-          lineReader.close();
-          fileStream.close();
-          return projectPath;
-        }
-      }
+      meta = JSON.parse(await fsp.readFile(path.join(chatDir, 'meta.json'), 'utf8'));
     } catch {
-      // Missing worker logs are valid for partial or incomplete session data.
+      return null;
     }
 
-    return null;
-  }
-
-  /**
-   * Extracts session metadata from one Cursor JSONL session file.
-   */
-  private async processSessionFile(filePath: string): Promise<ParsedSession | null> {
-    const sessionId = path.basename(filePath, '.jsonl');
-    const grandparentDir = path.dirname(path.dirname(path.dirname(filePath)));
-    const workerLogPath = path.join(grandparentDir, 'worker.log');
-    let projectPath = await this.extractProjectPathFromWorkerLog(workerLogPath);
-
-    // Newer Cursor builds no longer log `workspacePath=` (and most projects have
-    // no worker.log at all), so fall back to decoding the project folder name.
-    // Only top-level transcripts qualify; nested subagent transcripts stay skipped.
-    if (!projectPath && path.dirname(grandparentDir) === path.join(this.cursorHome, 'projects')) {
-      projectPath = await resolveEncodedProjectPath(path.basename(grandparentDir));
+    if (!meta || typeof meta !== 'object' || meta.isSubagent === true || meta.hasConversation !== true) {
+      return null;
     }
 
+    const projectPath = typeof meta.cwd === 'string' && meta.cwd.length > 0 ? meta.cwd : null;
     if (!projectPath) {
       return null;
     }
 
-    return extractFirstValidJsonlData(filePath, (rawData) => {
+    const sessionId = path.basename(chatDir);
+    const title = typeof meta.title === 'string' && meta.title.trim() ? meta.title : undefined;
+
+    return {
+      sessionId,
+      projectPath,
+      sessionName: title
+        ? normalizeSessionName(title, 'Untitled Cursor Session')
+        : await this.readTranscriptSessionName(projectPath, sessionId),
+      storeDbPath,
+      createdAt: toIsoTimestamp(meta.createdAtMs),
+      updatedAt: toIsoTimestamp(meta.updatedAtMs),
+    };
+  }
+
+  /**
+   * Names a chat after the first line the user typed, read from the transcript
+   * cursor-agent writes for every CLI chat under `~/.cursor/projects`.
+   */
+  private async readTranscriptSessionName(projectPath: string, sessionId: string): Promise<string> {
+    const transcriptPath = path.join(
+      this.cursorHome,
+      'projects',
+      toCursorProjectSlug(projectPath),
+      'agent-transcripts',
+      sessionId,
+      `${sessionId}.jsonl`
+    );
+
+    const firstLine = await extractFirstValidJsonlData(transcriptPath, (rawData) => {
       const data = rawData as Record<string, any>;
       if (data.role !== 'user') {
         return null;
@@ -214,17 +197,13 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       const text = typeof data.message?.content?.[0]?.text === 'string' ? data.message.content[0].text : '';
       // Drop Cursor's `<timestamp>…</timestamp>` prefix and `<user_query>` tags
       // so the session name comes from the actual first line the user typed.
-      const firstLine = text
+      return text
         .replace(/<timestamp>[\s\S]*?<\/timestamp>/g, '')
         .replace(/<\/?user_query>/g, '')
         .trim()
         .split('\n')[0];
-
-      return {
-        sessionId,
-        projectPath,
-        sessionName: normalizeSessionName(firstLine, 'Untitled Cursor Session'),
-      };
     });
+
+    return normalizeSessionName(firstLine ?? undefined, 'Untitled Cursor Session');
   }
 }

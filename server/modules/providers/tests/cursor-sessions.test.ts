@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import Database from 'better-sqlite3';
+
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { spawnCursor } from '@/modules/providers/list/cursor/cursor-runtime.provider.js';
 import { CursorSessionSynchronizer } from '@/modules/providers/list/cursor/cursor-session-synchronizer.provider.js';
+import { CursorSessionsProvider } from '@/modules/providers/list/cursor/cursor-sessions.provider.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -37,152 +42,210 @@ async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promis
   }
 }
 
-// Mirrors how Cursor names `~/.cursor/projects/<name>` after a workspace path.
-const encodeCursorProjectName = (workspacePath: string): string =>
-  workspacePath.replace(/^[/\\]+/, '').replace(/[^A-Za-z0-9]/g, '-');
-
-const writeCursorTranscript = async (
-  homeDir: string,
-  projectName: string,
-  sessionId: string,
-  firstUserLine: string
-): Promise<string> => {
-  const transcriptDir = path.join(homeDir, '.cursor', 'projects', projectName, 'agent-transcripts', sessionId);
-  await mkdir(transcriptDir, { recursive: true });
-  const filePath = path.join(transcriptDir, `${sessionId}.jsonl`);
-  const line = {
-    role: 'user',
-    message: { content: [{ type: 'text', text: `<user_query>\n${firstUserLine}\n</user_query>` }] },
-  };
-  await writeFile(filePath, `${JSON.stringify(line)}\n`, 'utf8');
-  return filePath;
-};
-
-test('Cursor synchronizer resolves the workspace from the project folder name when worker.log is missing', { concurrency: false }, async () => {
-  // realpath so the encoded name matches the path the resolver walks (macOS tmpdir is a symlink).
-  const tempRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cursor-session-sync-')));
-  // `my_app-2.0` encodes to `my-app-2-0`; the sibling `my` folder forces the
-  // resolver to backtrack out of a matching but wrong prefix.
-  const workspacePath = path.join(tempRoot, 'code', 'my_app-2.0');
+/**
+ * Runs a test against a temp home holding a real workspace directory. The
+ * temp root is resolved because cursor-agent hashes physical paths and the
+ * macOS tmpdir is a symlink.
+ */
+async function withCursorHome(
+  prefix: string,
+  runTest: (homeDir: string, workspacePath: string) => Promise<void>
+): Promise<void> {
+  const homeDir = await realpath(await mkdtemp(path.join(os.tmpdir(), prefix)));
+  const workspacePath = path.join(homeDir, 'workspace');
   await mkdir(workspacePath, { recursive: true });
-  await mkdir(path.join(tempRoot, 'code', 'my'), { recursive: true });
-  const restoreHomeDir = patchHomeDir(tempRoot);
+  const restoreHomeDir = patchHomeDir(homeDir);
 
   try {
-    await writeCursorTranscript(tempRoot, encodeCursorProjectName(workspacePath), 'cursor-folder-1', 'Refactor the login flow');
+    await runTest(homeDir, workspacePath);
+  } finally {
+    restoreHomeDir();
+    await rm(homeDir, { recursive: true, force: true });
+  }
+}
+
+const cursorChatDir = (homeDir: string, workspacePath: string, sessionId: string): string =>
+  path.join(homeDir, '.cursor', 'chats', createHash('md5').update(workspacePath).digest('hex'), sessionId);
+
+// Writes the files cursor-agent leaves for one CLI chat: meta.json, store.db
+// (with one user message blob) and, optionally, its transcript.
+async function writeCursorCliChat(
+  homeDir: string,
+  workspacePath: string,
+  sessionId: string,
+  options: { meta?: Record<string, unknown>; firstUserLine?: string; withStore?: boolean } = {}
+): Promise<string> {
+  const chatDir = cursorChatDir(homeDir, workspacePath, sessionId);
+  await mkdir(chatDir, { recursive: true });
+  await writeFile(path.join(chatDir, 'meta.json'), JSON.stringify({
+    schemaVersion: 1,
+    createdAtMs: Date.UTC(2026, 9, 20, 12),
+    updatedAtMs: Date.UTC(2026, 9, 21, 12),
+    hasConversation: true,
+    cwd: workspacePath,
+    ...options.meta,
+  }), 'utf8');
+
+  if (options.withStore !== false) {
+    const db = new Database(path.join(chatDir, 'store.db'));
+    try {
+      db.exec('CREATE TABLE blobs (id TEXT PRIMARY KEY, data BLOB)');
+      const message = { role: 'user', content: [{ type: 'text', text: `<user_query>\n${options.firstUserLine ?? 'Hello'}\n</user_query>` }] };
+      db.prepare('INSERT INTO blobs (id, data) VALUES (?, ?)').run('ab'.repeat(32), Buffer.from(JSON.stringify(message)));
+    } finally {
+      db.close();
+    }
+  }
+
+  if (options.firstUserLine) {
+    const slug = workspacePath.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '');
+    const transcriptDir = path.join(homeDir, '.cursor', 'projects', slug, 'agent-transcripts', sessionId);
+    await mkdir(transcriptDir, { recursive: true });
+    const line = { role: 'user', message: { content: [{ type: 'text', text: `<user_query>\n${options.firstUserLine}\n</user_query>` }] } };
+    await writeFile(path.join(transcriptDir, `${sessionId}.jsonl`), `${JSON.stringify(line)}\n`, 'utf8');
+  }
+
+  return chatDir;
+}
+
+test('Cursor synchronizer indexes CLI chats from their meta.json', { concurrency: false }, async () => {
+  await withCursorHome('cursor-sync-cli-', async (homeDir, workspacePath) => {
+    const chatDir = await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-1', { firstUserLine: 'Refactor the login flow' });
 
     await withIsolatedDatabase(async () => {
       const processed = await new CursorSessionSynchronizer().synchronize();
 
       assert.equal(processed, 1);
-      const session = sessionsDb.getSessionById('cursor-folder-1');
+      const session = sessionsDb.getSessionById('cli-chat-1');
       assert.equal(session?.project_path, workspacePath);
       assert.equal(session?.custom_name, 'Refactor the login flow');
+      assert.equal(session?.jsonl_path, path.join(chatDir, 'store.db'));
     });
-  } finally {
-    restoreHomeDir();
-    await rm(tempRoot, { recursive: true, force: true });
-  }
+  });
 });
 
-test('Cursor synchronizer prefers workspacePath from worker.log when present', { concurrency: false }, async () => {
-  const tempRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cursor-session-sync-log-')));
-  const loggedWorkspace = path.join(tempRoot, 'logged-workspace');
-  await mkdir(loggedWorkspace, { recursive: true });
-  const restoreHomeDir = patchHomeDir(tempRoot);
-
-  try {
-    const projectName = 'unrelated-folder-name';
-    await writeCursorTranscript(tempRoot, projectName, 'cursor-log-1', 'Hello');
-    await writeFile(
-      path.join(tempRoot, '.cursor', 'projects', projectName, 'worker.log'),
-      `[info] Starting worker workspacePath=${loggedWorkspace}\n`,
-      'utf8'
-    );
+test('Cursor synchronizer prefers the title cursor-agent stores in meta.json', { concurrency: false }, async () => {
+  await withCursorHome('cursor-sync-title-', async (homeDir, workspacePath) => {
+    await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-title', {
+      meta: { title: 'Named in the CLI' },
+      firstUserLine: 'First line',
+    });
 
     await withIsolatedDatabase(async () => {
       await new CursorSessionSynchronizer().synchronize();
 
-      assert.equal(sessionsDb.getSessionById('cursor-log-1')?.project_path, loggedWorkspace);
+      assert.equal(sessionsDb.getSessionById('cli-chat-title')?.custom_name, 'Named in the CLI');
     });
-  } finally {
-    restoreHomeDir();
-    await rm(tempRoot, { recursive: true, force: true });
-  }
+  });
 });
 
-test('Cursor synchronizer skips transcripts whose workspace no longer exists', { concurrency: false }, async () => {
-  const tempRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cursor-session-sync-gone-')));
-  const restoreHomeDir = patchHomeDir(tempRoot);
+test('Cursor synchronizer skips chats cursor-agent itself would not list', { concurrency: false }, async () => {
+  await withCursorHome('cursor-sync-skip-', async (homeDir, workspacePath) => {
+    await writeCursorCliChat(homeDir, workspacePath, 'no-store', { withStore: false });
+    await writeCursorCliChat(homeDir, workspacePath, 'empty-chat', { meta: { hasConversation: false } });
+    await writeCursorCliChat(homeDir, workspacePath, 'subagent-chat', { meta: { isSubagent: true } });
+    await writeCursorCliChat(homeDir, workspacePath, 'no-cwd', { meta: { cwd: undefined } });
 
-  try {
-    const deletedWorkspace = path.join(tempRoot, 'deleted-workspace');
-    await writeCursorTranscript(tempRoot, encodeCursorProjectName(deletedWorkspace), 'cursor-gone-1', 'Hello');
+    // A Cursor IDE chat: a transcript under ~/.cursor/projects with no CLI chat store.
+    const ideTranscriptDir = path.join(homeDir, '.cursor', 'projects', 'workspace', 'agent-transcripts', 'ide-chat');
+    await mkdir(ideTranscriptDir, { recursive: true });
+    await writeFile(path.join(ideTranscriptDir, 'ide-chat.jsonl'), '{"role":"user","message":{"content":[]}}\n', 'utf8');
 
     await withIsolatedDatabase(async () => {
       const processed = await new CursorSessionSynchronizer().synchronize();
 
       assert.equal(processed, 0);
-      assert.equal(sessionsDb.getSessionById('cursor-gone-1'), null);
+      for (const sessionId of ['no-store', 'empty-chat', 'subagent-chat', 'no-cwd', 'ide-chat']) {
+        assert.equal(sessionsDb.getSessionById(sessionId), null, sessionId);
+      }
     });
-  } finally {
-    restoreHomeDir();
-    await rm(tempRoot, { recursive: true, force: true });
-  }
+  });
 });
 
-test('Cursor synchronizer skips transcripts whose folder name matches more than one workspace', { concurrency: false }, async () => {
-  const tempRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cursor-session-sync-ambiguous-')));
-  // Both encode to `my-app`, so the folder name alone cannot tell them apart.
-  await mkdir(path.join(tempRoot, 'my-app'), { recursive: true });
-  await mkdir(path.join(tempRoot, 'my_app'), { recursive: true });
-  const restoreHomeDir = patchHomeDir(tempRoot);
-
-  try {
-    await writeCursorTranscript(
-      tempRoot, encodeCursorProjectName(path.join(tempRoot, 'my-app')), 'cursor-ambiguous-1', 'Hello'
-    );
+test('Cursor synchronizer finds chats created before the last scan', { concurrency: false }, async () => {
+  await withCursorHome('cursor-sync-since-', async (homeDir, workspacePath) => {
+    await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-old');
 
     await withIsolatedDatabase(async () => {
-      const processed = await new CursorSessionSynchronizer().synchronize();
-
-      assert.equal(processed, 0);
-      assert.equal(sessionsDb.getSessionById('cursor-ambiguous-1'), null);
-    });
-  } finally {
-    restoreHomeDir();
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-});
-
-test('Cursor synchronizer does not index nested subagent transcripts via the folder-name fallback', { concurrency: false }, async () => {
-  const tempRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cursor-session-sync-sub-')));
-  const workspacePath = path.join(tempRoot, 'workspace');
-  await mkdir(workspacePath, { recursive: true });
-  const restoreHomeDir = patchHomeDir(tempRoot);
-
-  try {
-    const projectName = encodeCursorProjectName(workspacePath);
-    await writeCursorTranscript(tempRoot, projectName, 'cursor-parent-1', 'Parent task');
-    const subagentDir = path.join(
-      tempRoot, '.cursor', 'projects', projectName, 'agent-transcripts', 'cursor-parent-1', 'subagents'
-    );
-    await mkdir(subagentDir, { recursive: true });
-    await writeFile(
-      path.join(subagentDir, 'cursor-subagent-1.jsonl'),
-      `${JSON.stringify({ role: 'user', message: { content: [{ type: 'text', text: 'Subtask' }] } })}\n`,
-      'utf8'
-    );
-
-    await withIsolatedDatabase(async () => {
-      const processed = await new CursorSessionSynchronizer().synchronize();
+      const processed = await new CursorSessionSynchronizer().synchronize(new Date(Date.now() + 60_000));
 
       assert.equal(processed, 1);
-      assert.ok(sessionsDb.getSessionById('cursor-parent-1'));
-      assert.equal(sessionsDb.getSessionById('cursor-subagent-1'), null);
+      assert.ok(sessionsDb.getSessionById('cli-chat-old'));
     });
+  });
+});
+
+test('Cursor synchronizer re-indexes a chat when its meta.json changes', { concurrency: false }, async () => {
+  await withCursorHome('cursor-sync-file-', async (homeDir, workspacePath) => {
+    const chatDir = await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-watch');
+
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new CursorSessionSynchronizer();
+
+      assert.equal(await synchronizer.synchronizeFile(path.join(chatDir, 'store.db')), null);
+      assert.equal(await synchronizer.synchronizeFile(path.join(chatDir, 'meta.json')), 'cli-chat-watch');
+    });
+  });
+});
+
+test('Cursor history loads for a project opened through a symlink', { concurrency: false }, async () => {
+  await withCursorHome('cursor-history-link-', async (homeDir, workspacePath) => {
+    await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-link', { firstUserLine: 'Linked hello' });
+    const linkedPath = path.join(homeDir, 'linked-workspace');
+    await symlink(workspacePath, linkedPath);
+
+    const history = await new CursorSessionsProvider().fetchHistory('cli-chat-link', { projectPath: linkedPath });
+
+    assert.equal(history.total, 1);
+    assert.equal(history.messages[0]?.content, 'Linked hello');
+  });
+});
+
+// Empties PATH so a broken guard cannot launch a real cursor-agent, which would
+// see the real home directory rather than the patched one.
+async function runCursorWithoutBinary(workspacePath: string, providerSessionId: string) {
+  const sent: Array<Record<string, any>> = [];
+  const ws = { userId: null, send: (message: Record<string, any>) => sent.push(message) };
+  const context = {
+    resolveProviderSessionId: () => providerSessionId,
+    resolveResumeModel: async () => null,
+    isProviderInstalled: async () => false,
+    normalizeMessage: () => [],
+  };
+
+  const previousPath = process.env.PATH;
+  process.env.PATH = '';
+  try {
+    const error = await spawnCursor('Continue please', { sessionId: 'app-session', cwd: workspacePath }, ws, context)
+      .then(() => null, (rejection: unknown) => rejection as Error);
+    return { error, sent };
   } finally {
-    restoreHomeDir();
-    await rm(tempRoot, { recursive: true, force: true });
+    process.env.PATH = previousPath;
   }
+}
+
+test('Cursor runtime refuses to resume a session with no CLI chat store', { concurrency: false }, async () => {
+  await withCursorHome('cursor-runtime-guard-', async (_homeDir, workspacePath) => {
+    await withIsolatedDatabase(async () => {
+      const { error, sent } = await runCursorWithoutBinary(workspacePath, 'ide-chat-id');
+
+      assert.match(error?.message ?? '', /cannot be continued/);
+      assert.ok(sent.some((message) => message.kind === 'error' && /cannot be continued/.test(message.content)));
+    });
+  });
+});
+
+test('Cursor runtime resumes a session that has a CLI chat store', { concurrency: false }, async () => {
+  await withCursorHome('cursor-runtime-resume-', async (homeDir, workspacePath) => {
+    await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-resume');
+
+    await withIsolatedDatabase(async () => {
+      const { error, sent } = await runCursorWithoutBinary(workspacePath, 'cli-chat-resume');
+
+      // Past the guard, the spawn itself fails because PATH has no cursor-agent.
+      assert.ok(error);
+      assert.doesNotMatch(error.message, /cannot be continued/);
+      assert.ok(!sent.some((message) => /cannot be continued/.test(String(message.content))));
+    });
+  });
 });
