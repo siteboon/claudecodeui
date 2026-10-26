@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 
 import type * as PluginModuleLoader from '@/modules/plugins/pluginModuleLoader';
 import { ThemeProvider } from '@/shared/context/ThemeContext';
@@ -203,8 +203,12 @@ describe('PluginHostLayer mounts resident plugins once and tears them down exact
     settle.resolve?.();
     await waitFor(() => expect(calls.unmount).toBe(1));
 
-    // Settling late must not produce a second teardown.
-    await waitFor(() => expect(calls.unmount).toBe(1));
+    // Settling late must not produce a second teardown. A second `waitFor` here
+    // would pass on its very first poll — the count is already 1 — and so could
+    // never observe a duplicate queued in the meantime. Flushing microtasks and
+    // zero-delay timers drains that window, then one assertion covers it.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(calls.unmount).toBe(1);
   });
 
   it('never calls unmount for a mount that rejected', async () => {
