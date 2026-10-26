@@ -182,6 +182,9 @@ export const sessionsService = {
           canInterrupt: false,
           tasks,
         });
+        // CloudCLI's own held process registers as busy with the CLI too; it
+        // must not come back below as a turn CloudCLI cannot interrupt.
+        runningById.set(sessionId, entries[entries.length - 1]);
       }
     }
 
