@@ -22,7 +22,6 @@ import {
   SESSION_MESSAGES_PAGE_SIZE,
 } from '@/modules/chat/utils/sessionMessagePagination';
 import type { SessionMessagesRequestOptions } from '@/modules/chat/utils/sessionMessagePagination';
-import type { SideQuestion } from '@/shared/types';
 
 // ─── NormalizedMessage (mirrors server/adapters/types.js) ────────────────────
 
@@ -82,7 +81,6 @@ type SessionHistoryPage = {
   total: number;
   hasMore: boolean;
   tokenUsage?: unknown;
-  sideQuestions?: SideQuestion[];
 };
 
 function enqueueHistoryMutation<T>(
@@ -124,11 +122,6 @@ async function requestSessionHistoryPage(
     ...(
       data && typeof data === 'object' && 'tokenUsage' in data
         ? { tokenUsage: data.tokenUsage }
-        : {}
-    ),
-    ...(
-      Array.isArray(data.sideQuestions)
-        ? { sideQuestions: data.sideQuestions }
         : {}
     ),
   };

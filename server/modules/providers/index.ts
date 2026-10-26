@@ -17,3 +17,8 @@ export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
 // the provider routes' side-question endpoints, and by server/index.ts to
 // recover rows a dead process left running.
 export { createSideQuestionsService, sideQuestionsService } from './services/side-questions.service.js';
+
+// toSideQuestion: used by the websocket module's `chat.btw` handler, which
+// needs the same row-to-wire mapping to attach an existing row to its
+// "already exists" refusal.
+export { toSideQuestion } from './services/side-questions.service.js';

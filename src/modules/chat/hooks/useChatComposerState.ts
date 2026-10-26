@@ -761,6 +761,20 @@ export function useChatComposerState({
     }
   }, [resetCommandMenuState, setInput]);
 
+  // Shared by the `/btw` command, the background-send dialog's BTW choice and
+  // the send menu's BTW row: all three ask the same way and clear the
+  // composer the same way on success, and do nothing extra when the ask was
+  // refused (no connection) — the caller's own `return` right after is what
+  // actually ends that branch either way.
+  const askSideQuestionAndClear = useCallback(
+    (sessionId: string | null, text: string) => {
+      if (askSideQuestion(sessionId, text, { model: currentProviderModel }, isConnected)) {
+        clearComposerAfterSideQuestion();
+      }
+    },
+    [askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected],
+  );
+
   // Persist a message to send "when this finishes" and show it as the queued
   // card. Used while a turn is in flight and when the user chooses to queue
   // behind background work. Attachments must already be uploaded.
@@ -903,9 +917,7 @@ export function useChatComposerState({
       if (!queuedSubmission && !submitOptions?.skipCommandInterception && sessionKey) {
         const btwMatch = currentInput.trim().match(/^\/btw(?:\s+([\s\S]*))?$/i);
         if (btwMatch) {
-          if (askSideQuestion(sessionKey, btwMatch[1] ?? '', { model: currentProviderModel }, isConnected)) {
-            clearComposerAfterSideQuestion();
-          }
+          askSideQuestionAndClear(sessionKey, btwMatch[1] ?? '');
           return;
         }
       }
@@ -1073,9 +1085,7 @@ export function useChatComposerState({
           return;
         }
         if (choice === 'btw') {
-          if (askSideQuestion(targetSessionId, currentInput, { model: currentProviderModel }, isConnected)) {
-            clearComposerAfterSideQuestion();
-          }
+          askSideQuestionAndClear(targetSessionId, currentInput);
           return;
         }
         if (choice === 'queue') {
@@ -1161,15 +1171,12 @@ export function useChatComposerState({
     [
       selectedSession,
       askBeforeSendingOverBackgroundWork,
-      askSideQuestion,
-      clearComposerAfterSideQuestion,
-      currentProviderModel,
+      askSideQuestionAndClear,
       attachedFiles,
       buildSendOptions,
       currentSessionId,
       editingAnchorId,
       executeCommand,
-      isConnected,
       isLoading,
       onSessionProcessing,
       onSessionEstablished,
@@ -1223,14 +1230,12 @@ export function useChatComposerState({
   const handleSendMenuChoice = useCallback(
     async (choice: 'queue' | 'btw' | 'send'): Promise<void> => {
       if (choice === 'btw') {
-        if (askSideQuestion(sessionKey, inputValueRef.current, { model: currentProviderModel }, isConnected)) {
-          clearComposerAfterSideQuestion();
-        }
+        askSideQuestionAndClear(sessionKey, inputValueRef.current);
         return;
       }
       await handleSubmit(createFakeSubmitEvent(), undefined, { presetBackgroundChoice: choice });
     },
-    [askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, handleSubmit, isConnected, sessionKey],
+    [askSideQuestionAndClear, handleSubmit, sessionKey],
   );
 
   useEffect(() => {

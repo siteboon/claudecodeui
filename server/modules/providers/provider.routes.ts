@@ -10,12 +10,6 @@ import { providerSkillsService } from '@/modules/providers/services/skills.servi
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sideQuestionsService } from '@/modules/providers/services/side-questions.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
-// Only this route needs the websocket module: it broadcasts `dismissed` to
-// every connected chat client the same way the `chat.btw` handler broadcasts
-// started/delta/done/error. Safe to import directly (no cycle back here) —
-// provider.routes.ts is only ever imported by server/index.ts, never by
-// anything the websocket module's own dependency chain pulls in.
-import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/index.js';
 import type {
   CustomProviderModelEffort,
   CustomProviderModelInput,
@@ -24,10 +18,9 @@ import type {
   McpTransport,
   ProviderSkillCreateFile,
   ProviderSkillCreateInput,
-  SideQuestionEvent,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
-import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
+import { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
 
 const router = express.Router();
 
@@ -62,10 +55,6 @@ const parseSessionId = (value: unknown): string => {
 
   return sessionId;
 };
-
-// Same shape the `chat.btw` websocket frame accepts, so a dismiss can target
-// any id the frame was allowed to create.
-const SIDE_QUESTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
 const parseSideQuestionId = (value: unknown): string => {
   const sideQuestionId = readPathParam(value, 'sideQuestionId').trim();
@@ -943,21 +932,6 @@ router.get(
   }),
 );
 
-/**
- * Broadcasts a side-question event to every connected chat client, mirroring
- * `broadcastSideQuestionEvent` in the websocket module's chat gateway so a
- * dismiss through this route reaches another tab the same way started/delta/
- * done/error already do.
- */
-function broadcastSideQuestionEvent(event: SideQuestionEvent): void {
-  const payload = JSON.stringify(event);
-  connectedClients.forEach((client) => {
-    if (client.readyState === WS_OPEN_STATE) {
-      client.send(payload);
-    }
-  });
-}
-
 // Declared before the generic `/sessions/:sessionId` routes below, like every
 // other session-specific route in this file.
 router.delete(
@@ -965,7 +939,9 @@ router.delete(
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
     const sideQuestionId = parseSideQuestionId(req.params.sideQuestionId);
-    const deleted = sideQuestionsService.dismiss(sessionId, sideQuestionId, broadcastSideQuestionEvent);
+    // `dismiss` broadcasts the `dismissed` event itself, through the same
+    // connected-clients fan-out the `chat.btw` handler uses.
+    const deleted = sideQuestionsService.dismiss(sessionId, sideQuestionId);
     if (!deleted) {
       throw new AppError('Side question not found.', {
         code: 'SIDE_QUESTION_NOT_FOUND',

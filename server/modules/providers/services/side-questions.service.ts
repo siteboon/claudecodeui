@@ -1,4 +1,5 @@
 import { sideQuestionsDb, type SideQuestionRow } from '@/modules/database/index.js';
+import { broadcastToConnectedClients } from '@/modules/websocket/index.js';
 import type {
   LLMProvider,
   SideQuestion,
@@ -27,8 +28,13 @@ type AskInput = {
   model: string | null;
 };
 
-/** Maps a database row (snake_case) to the wire/client shape (camelCase). */
-function toSideQuestion(row: SideQuestionRow): SideQuestion {
+/**
+ * Maps a database row (snake_case) to the wire/client shape (camelCase).
+ *
+ * Exported for the websocket module's `chat.btw` handler, which needs the
+ * same mapping to attach an existing row to the "already exists" refusal.
+ */
+export function toSideQuestion(row: SideQuestionRow): SideQuestion {
   return {
     id: row.id,
     sessionId: row.session_id,
@@ -40,6 +46,15 @@ function toSideQuestion(row: SideQuestionRow): SideQuestion {
     createdAt: row.created_at,
     finishedAt: row.finished_at,
   };
+}
+
+/**
+ * Broadcasts a side-question event to every connected chat client. The
+ * default `notify` for `ask`/`dismiss` below; tests inject their own to
+ * assert on the events without a real websocket.
+ */
+function broadcastSideQuestionEvent(event: SideQuestionEvent): void {
+  broadcastToConnectedClients(JSON.stringify(event));
 }
 
 /**
@@ -68,7 +83,7 @@ export function createSideQuestionsService(dependencies: SideQuestionsServiceDep
   async function ask(
     input: AskInput,
     runtime: SideQuestionRuntime,
-    notify: (event: SideQuestionEvent) => void,
+    notify: (event: SideQuestionEvent) => void = broadcastSideQuestionEvent,
   ): Promise<void> {
     const row = db.create({
       id: input.sideQuestionId,
@@ -155,14 +170,15 @@ export function createSideQuestionsService(dependencies: SideQuestionsServiceDep
    * did not exist, so one session can never stop or erase another's
    * question just by guessing its id.
    *
-   * `notify`, when given, is told about a successful dismiss (`phase:
-   * 'dismissed'`) so every connected client — not just the asker — drops the
-   * id instead of leaving it pending until a full reload.
+   * `notify` is told about a successful dismiss (`phase: 'dismissed'`) so
+   * every connected client — not just the asker — drops the id instead of
+   * leaving it pending until a full reload. Defaults to broadcasting on the
+   * websocket; tests inject their own to assert on the event instead.
    */
   function dismiss(
     sessionId: string,
     id: string,
-    notify?: (event: SideQuestionEvent) => void,
+    notify: (event: SideQuestionEvent) => void = broadcastSideQuestionEvent,
   ): boolean {
     const row = db.getById(id);
     if (!row || row.session_id !== sessionId) {
@@ -172,7 +188,7 @@ export function createSideQuestionsService(dependencies: SideQuestionsServiceDep
     controllers.get(id)?.abort();
     const deleted = db.delete(sessionId, id);
     if (deleted) {
-      notify?.({
+      notify({
         kind: 'side_question',
         sessionId,
         sideQuestionId: id,

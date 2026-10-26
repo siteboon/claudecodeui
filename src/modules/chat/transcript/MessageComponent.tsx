@@ -44,6 +44,21 @@ type MessageComponentProps = {
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
+/** Used by MessageComponent's side-question row, for both its question and answer form. */
+function SideQuestionDismissButton({ label, onDismiss }: { label: string; onDismiss: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onDismiss}
+      title={label}
+      aria-label={label}
+      className="rounded p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100"
+    >
+      <XIcon className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
 /**
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
  * transcript entry — user turn, assistant turn, or a tool call and its result.
@@ -120,15 +135,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 {t('sideQuestion.label')}
               </span>
               {!isExporting && (
-                <button
-                  type="button"
-                  onClick={handleDismissSideQuestion}
-                  title={t('sideQuestion.dismiss')}
-                  aria-label={t('sideQuestion.dismiss')}
-                  className="rounded p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100"
-                >
-                  <XIcon className="h-3.5 w-3.5" />
-                </button>
+                <SideQuestionDismissButton label={t('sideQuestion.dismiss')} onDismiss={handleDismissSideQuestion} />
               )}
             </div>
           )}
@@ -147,15 +154,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
           <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>{formattedTime}</span>
             {isAnswerRow && !isExporting && (
-              <button
-                type="button"
-                onClick={handleDismissSideQuestion}
-                title={t('sideQuestion.dismiss')}
-                aria-label={t('sideQuestion.dismiss')}
-                className="rounded p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100"
-              >
-                <XIcon className="h-3.5 w-3.5" />
-              </button>
+              <SideQuestionDismissButton label={t('sideQuestion.dismiss')} onDismiss={handleDismissSideQuestion} />
             )}
           </div>
         </div>

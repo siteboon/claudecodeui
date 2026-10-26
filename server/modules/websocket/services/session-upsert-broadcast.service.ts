@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
-import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
+import { broadcastToConnectedClients } from '@/modules/websocket/services/websocket-state.service.js';
 import type { SessionUpsertedEvent } from '@/shared/types.js';
 
 /**
@@ -63,25 +63,11 @@ async function buildSessionUpsertedEvent(
   };
 }
 
-function sendToConnectedClients(payloads: string[]): void {
-  if (payloads.length === 0) {
-    return;
-  }
-
-  connectedClients.forEach((client) => {
-    if (client.readyState === WS_OPEN_STATE) {
-      for (const payload of payloads) {
-        client.send(payload);
-      }
-    }
-  });
-}
-
 /** Announces one session. Used by the chat run registry when a run reports its provider-native id. */
 export async function broadcastSessionUpserted(sessionIdOrProviderSessionId: string): Promise<void> {
   const event = await buildSessionUpsertedEvent(sessionIdOrProviderSessionId);
   if (event) {
-    sendToConnectedClients([JSON.stringify(event)]);
+    broadcastToConnectedClients(JSON.stringify(event));
   }
 }
 
@@ -101,7 +87,7 @@ export async function broadcastSessionUpsertedBatch(
     }
   }
 
-  sendToConnectedClients(payloads);
+  broadcastToConnectedClients(payloads);
 }
 
 /** @internal Exported for the broadcast tests, which assert the payload shape directly. */

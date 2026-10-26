@@ -1,6 +1,7 @@
 import { getConnection } from '@/modules/database/connection.js';
+import type { SideQuestionStatus } from '@/shared/types.js';
 
-export type SideQuestionStatus = 'running' | 'done' | 'error';
+export type { SideQuestionStatus };
 
 export type SideQuestionRow = {
   id: string;

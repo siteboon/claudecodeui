@@ -1,6 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import { errorMessage } from '@/shared/utils.js';
 import type {
   AnyRecord,
   BackgroundTaskSummary,
@@ -36,13 +37,6 @@ const SIDE_QUESTION_SYSTEM_PROMPT_APPEND =
 // Not measured: say so here until it is, rather than presenting a guess as
 // a measured number.
 const HISTORY_CHAR_BUDGET = 100_000;
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return String(error ?? 'The side question failed for an unknown reason.');
-}
 
 /**
  * The live-tasks note placed above the question in the fork's prompt.

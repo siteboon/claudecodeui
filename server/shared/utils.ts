@@ -160,6 +160,20 @@ export function getGitErrorDetails(error: unknown): string {
   return `${details?.message ?? ''} ${details?.stderr ?? ''} ${details?.stdout ?? ''}`.trim();
 }
 
+/**
+ * Extracts a human-readable message from any thrown value.
+ *
+ * Used by the provider runtime service and the Claude side-question provider
+ * to turn a caught error into the `error` field of a `SideQuestionOutcome`
+ * without duplicating the same `instanceof Error` check in both places.
+ */
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return String(error ?? 'The side question failed for an unknown reason.');
+}
+
 // ---------------------------
 //----------------- WORKSPACE PATH VALIDATION UTILITIES ------------
 /**
@@ -1408,3 +1422,13 @@ export function findApplicationRoot(startDirectory: string): string {
     ? path.dirname(parentDirectory)
     : parentDirectory;
 }
+
+// ---------------------------
+//----------------- SIDE-QUESTION ID VALIDATION ------------
+/**
+ * Shape a `chat.btw` side-question id must satisfy end to end: the websocket
+ * frame that creates one and the route that dismisses it both check against
+ * this same pattern, so a dismiss can target any id the frame was allowed to
+ * create.
+ */
+export const SIDE_QUESTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;

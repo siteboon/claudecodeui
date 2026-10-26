@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { SendHorizonal } from 'lucide-react';
 
-import { cn } from '@/shared/utils';
 import { useComposerMenuAnchor } from '@/modules/chat/hooks/useComposerMenuAnchor';
 import {
+  ComposerMenuItem,
   ComposerMenuSeparator,
   ComposerMenuSurface,
 } from '@/modules/chat/composer/ComposerMenuPrimitives';
@@ -73,23 +73,26 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
 
       {isOpen && anchor && createPortal(
         <ComposerMenuSurface anchor={anchor} menuRef={menuRef} ariaLabel={triggerLabel}>
-          <ComposerMenuItemDisabled
+          <ComposerMenuItem
             disabled={!hasInput}
+            isSelected={false}
             role="menuitem"
             label={t('sendMenu.queue.label', { defaultValue: 'Queue' })}
             description={queueDescription}
             onSelect={() => select('queue')}
           />
-          <ComposerMenuItemDisabled
+          <ComposerMenuItem
             disabled={!hasText}
+            isSelected={false}
             role="menuitem"
             label={t('sendMenu.btw.label', { defaultValue: 'BTW' })}
             description={t('sendMenu.btw.description', { defaultValue: 'Ask on the side now; the session never sees it' })}
             onSelect={() => select('btw')}
           />
           <ComposerMenuSeparator />
-          <ComposerMenuItemDisabled
+          <ComposerMenuItem
             disabled={state === 'background' && !hasInput}
+            isSelected={false}
             role="menuitem"
             label={lastLabel}
             description={lastDescription}
@@ -100,52 +103,5 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
         document.body,
       )}
     </>
-  );
-}
-
-/**
- * A plain menu row cannot be disabled (`ComposerMenuItem` has no such prop,
- * and the model/permission menus never need one), so this wraps it with a
- * real `disabled`/`aria-disabled` button and the destructive styling the
- * send menu's Stop and Send-anyway rows need.
- */
-function ComposerMenuItemDisabled({
-  disabled,
-  role,
-  label,
-  description,
-  onSelect,
-  className,
-  destructive,
-}: {
-  disabled?: boolean;
-  role: 'menuitem';
-  label: string;
-  description: string;
-  onSelect: () => void;
-  className?: string;
-  destructive?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role={role}
-      disabled={disabled}
-      aria-disabled={disabled}
-      onClick={disabled ? undefined : onSelect}
-      className={cn(
-        'flex w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors',
-        disabled
-          ? 'cursor-not-allowed opacity-50'
-          : 'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-        destructive ? 'text-destructive' : 'text-foreground/90',
-        className,
-      )}
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block truncate leading-5">{label}</span>
-        <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">{description}</span>
-      </span>
-    </button>
   );
 }

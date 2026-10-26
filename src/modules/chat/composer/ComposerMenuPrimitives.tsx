@@ -51,7 +51,11 @@ export function ComposerMenuSeparator() {
   return <div className="my-1 h-px bg-border" aria-hidden />;
 }
 
-/** Used by chat's ComposerModelMenu and ComposerPermissionMenu to render one selectable row with its checked state. */
+/**
+ * Used by chat's ComposerModelMenu and ComposerPermissionMenu to render one
+ * selectable row with its checked state, and by ComposerSendMenu for rows
+ * that can be disabled or need the destructive (Stop / Send anyway) styling.
+ */
 export function ComposerMenuItem({
   label,
   description,
@@ -61,6 +65,8 @@ export function ComposerMenuItem({
   role = 'menuitemradio',
   trailing,
   className,
+  disabled = false,
+  destructive = false,
 }: {
   label: ReactNode;
   description?: ReactNode;
@@ -70,17 +76,25 @@ export function ComposerMenuItem({
   role?: 'menuitemradio' | 'menuitem';
   trailing?: ReactNode;
   className?: string;
+  /** Row cannot be selected; dimmed and marked `disabled`/`aria-disabled`. Defaults off for the model/permission/schedule menus. */
+  disabled?: boolean;
+  /** Destructive styling (red text) for rows like Stop or Send anyway. Defaults off for the model/permission/schedule menus. */
+  destructive?: boolean;
 }) {
   return (
     <button
       type="button"
       role={role}
       aria-checked={role === 'menuitemradio' ? isSelected : undefined}
-      onClick={onSelect}
+      disabled={disabled}
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? undefined : onSelect}
       className={cn(
         'flex w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors',
-        'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
-        isSelected ? 'text-foreground' : 'text-foreground/90',
+        disabled
+          ? 'cursor-not-allowed opacity-50'
+          : 'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+        destructive ? 'text-destructive' : isSelected ? 'text-foreground' : 'text-foreground/90',
         className,
       )}
     >

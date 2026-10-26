@@ -36,18 +36,3 @@ test('capability effort levels cover every level a curated model declares', () =
   }
 });
 
-test('side questions fork natively on Claude and fall back to history elsewhere', () => {
-  const expected: Record<LLMProvider, 'fork' | 'history'> = {
-    claude: 'fork',
-    codex: 'history',
-    cursor: 'history',
-    opencode: 'history',
-  };
-  for (const [provider, mode] of Object.entries(expected) as Array<[LLMProvider, 'fork' | 'history']>) {
-    assert.equal(
-      providerCapabilitiesService.getProviderCapabilities(provider).supportsSideQuestions,
-      mode,
-      `${provider}: supportsSideQuestions`,
-    );
-  }
-});

@@ -2,8 +2,13 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
-import { sessionsDb, sideQuestionsDb, type SideQuestionRow } from '@/modules/database/index.js';
-import { providerModelsService, sessionsService, sideQuestionsService } from '@/modules/providers/index.js';
+import { sessionsDb, sideQuestionsDb } from '@/modules/database/index.js';
+import {
+  providerModelsService,
+  sessionsService,
+  sideQuestionsService,
+  toSideQuestion,
+} from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
@@ -20,15 +25,9 @@ import type {
   ProviderRuntimeWriter,
   SideQuestion,
   SideQuestionEvent,
-  SideQuestionOutcome,
-  SideQuestionRequest,
-  SideQuestionSink,
+  SideQuestionRuntime,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
-
-// Same shape the `chat.btw` frame's id must satisfy end to end (the route
-// that dismisses a side question re-checks it too, in provider.routes.ts).
-const SIDE_QUESTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
+import { parseIncomingJsonObject, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -73,7 +72,7 @@ export function filterImagesToUploadStore(
 }
 
 /** Application boundary for dispatching provider runs and approvals. */
-export type ProviderRuntimeGateway = {
+export type ProviderRuntimeGateway = SideQuestionRuntime & {
   hasRuntime(provider: string): boolean;
   run(
     provider: LLMProvider,
@@ -87,12 +86,6 @@ export type ProviderRuntimeGateway = {
   hasBackgroundWork(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
   getPendingApprovalsForSession(sessionId: string): unknown[];
-  /** Dispatches one side question (`chat.btw`) to the provider's runtime, native fork or history fallback. */
-  askSideQuestion(
-    provider: LLMProvider,
-    request: SideQuestionRequest,
-    sink: SideQuestionSink,
-  ): Promise<SideQuestionOutcome>;
 };
 
 type ChatWebSocketDependencies = {
@@ -348,38 +341,6 @@ function sendSideQuestionError(
 }
 
 /**
- * Maps a side-question row (snake_case) to the wire shape, the same mapping
- * `side-questions.service.ts` keeps privately — duplicated here because the
- * only thing `chat.btw` needs is this one lookup, not the whole service.
- */
-function toSideQuestionWire(row: SideQuestionRow): SideQuestion {
-  return {
-    id: row.id,
-    sessionId: row.session_id,
-    question: row.question,
-    answer: row.answer,
-    status: row.status,
-    error: row.error,
-    model: row.model,
-    createdAt: row.created_at,
-    finishedAt: row.finished_at,
-  };
-}
-
-/**
- * Broadcasts a side-question event to every connected chat client, not just
- * the asking socket, so another tab or a reconnected tab sees it too.
- */
-function broadcastSideQuestionEvent(event: SideQuestionEvent): void {
-  const payload = JSON.stringify(event);
-  connectedClients.forEach((client) => {
-    if (client.readyState === WS_OPEN_STATE) {
-      client.send(payload);
-    }
-  });
-}
-
-/**
  * Handles `chat.btw`: asks a question on the side while a turn runs, or while
  * only background work runs. Unlike `chat.send`, it never calls
  * `chatRunRegistry.startRun`, so it never competes with (or waits behind) the
@@ -434,7 +395,7 @@ function handleChatBtw(
       sessionId,
       sideQuestionId,
       'A side question with that id already exists.',
-      existingRow.session_id === sessionId ? toSideQuestionWire(existingRow) : undefined,
+      existingRow.session_id === sessionId ? toSideQuestion(existingRow) : undefined,
     );
     return;
   }
@@ -461,7 +422,6 @@ function handleChatBtw(
         model,
       },
       dependencies.runtime,
-      broadcastSideQuestionEvent,
     )
     .catch((error: unknown) => {
       console.error('[Chat] side question "ask" rejected unexpectedly', { sessionId, sideQuestionId, error });

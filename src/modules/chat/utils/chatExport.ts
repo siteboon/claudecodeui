@@ -29,10 +29,7 @@ export type TranscriptExportInput = {
 
 /** True when the export should drop the BTW aside rows and the rows that pair with them. */
 function isSideQuestionRow(message: ChatMessage): boolean {
-  return Boolean(
-    message.btw
-    || (typeof message.id === 'string' && /^btw-[qa]-/.test(message.id)),
-  );
+  return Boolean(message.btw);
 }
 
 const EXTENSIONS: Record<TranscriptExportFormat, string> = {

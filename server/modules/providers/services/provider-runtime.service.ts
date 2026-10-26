@@ -1,3 +1,4 @@
+import { errorMessage } from '@/shared/utils.js';
 import { askClaudeSideQuestionFromHistory } from '@/modules/providers/list/claude/claude-side-question.provider.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
@@ -39,13 +40,6 @@ type ProviderRuntimeServiceDependencies = {
    */
   createQuery?: ProviderRuntimeContext['createQuery'];
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return String(error ?? 'The side question failed for an unknown reason.');
-}
 
 const defaultDependencies: ProviderRuntimeServiceDependencies = {
   listProviders: () => providerRegistry.listProviders(),
@@ -147,35 +141,19 @@ export function createProviderRuntimeService(
       request: SideQuestionRequest,
       sink: SideQuestionSink,
     ): Promise<SideQuestionOutcome> {
-      let provider: IProvider;
       try {
-        provider = dependencies.resolveProvider(providerName);
-      } catch (error) {
-        return { status: 'error', error: errorMessage(error), answer: '' };
-      }
+        const provider = dependencies.resolveProvider(providerName);
+        const context: ProviderRuntimeContext = {
+          ...createRuntimeContext(provider),
+          createQuery: dependencies.createQuery,
+        };
 
-      const context: ProviderRuntimeContext = {
-        ...createRuntimeContext(provider),
-        createQuery: dependencies.createQuery,
-      };
-
-      if (provider.runtime.askSideQuestion) {
-        try {
+        if (provider.runtime.askSideQuestion) {
           return await provider.runtime.askSideQuestion(request, sink, context);
-        } catch (error) {
-          return { status: 'error', error: errorMessage(error), answer: '' };
         }
-      }
 
-      // No native fork: fall back to Claude reading the session's own history.
-      let history: NormalizedMessage[];
-      try {
-        history = await dependencies.fetchSessionHistory(request.appSessionId);
-      } catch (error) {
-        return { status: 'error', error: errorMessage(error), answer: '' };
-      }
-
-      try {
+        // No native fork: fall back to Claude reading the session's own history.
+        const history = await dependencies.fetchSessionHistory(request.appSessionId);
         return await askClaudeSideQuestionFromHistory(request, history, sink, {
           createQuery: dependencies.createQuery,
         });
