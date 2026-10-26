@@ -204,9 +204,16 @@ export default function PluginHostLayer({ selectedProject, selectedSession }: Pl
           console.error(`[Plugin:${plugin.name}] Resident mount failed:`, error);
         } finally {
           // Both outcomes converge here, so a mount that resolves after teardown
-          // is torn down exactly once, and a rejected one is never unmounted.
+          // is torn down exactly once.
           record.mountSettled = true;
-          if (!active) teardown(record);
+          // A rejected mount is finalized immediately, even while the layer is
+          // still active. `onContextChange` can be called before `mount()` throws,
+          // and nothing else would ever drain those callbacks: the effect only
+          // re-runs when the resident set changes, so the container and the
+          // callback of a failed mount would survive until the whole layer went
+          // away, and a later context update would notify a plugin that never
+          // finished mounting.
+          if (!active || !record.mountSucceeded) teardown(record);
         }
       })();
     }

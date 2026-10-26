@@ -233,6 +233,43 @@ describe('PluginHostLayer mounts resident plugins once and tears them down exact
     expect(errorSpy).toHaveBeenCalled();
   });
 
+  it('finalizes a rejected mount while the layer is still active', async () => {
+    // A plugin can register its context callback before `mount()` throws, and
+    // nothing re-runs this effect while the resident set is unchanged. Unless the
+    // failure itself is finalized, that callback and its container outlive the
+    // mount and the next context update reaches a plugin that never came up.
+    const callbacks: Array<ReturnType<typeof vi.fn>> = [];
+    loadPluginModule.mockResolvedValue({
+      mount: async (_container: HTMLElement, host: HostLike) => {
+        const callback = vi.fn();
+        callbacks.push(callback);
+        host.onContextChange(callback);
+        throw new Error('plugin exploded');
+      },
+      unmount: vi.fn(),
+    });
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const tree = (selectedProject: unknown) => (
+      <ThemeProvider>
+        <PluginHostLayer selectedProject={selectedProject as never} selectedSession={null} />
+      </ThemeProvider>
+    );
+
+    const { container, rerender } = renderLayer([residentPlugin('broken-resident')], project('p1'));
+    await waitFor(() => expect(callbacks).toHaveLength(1));
+    await waitFor(() => expect(errorSpy).toHaveBeenCalled());
+
+    // The layer is still mounted here — this is the active-layer case.
+    await waitFor(() =>
+      expect(container.querySelector('[data-cloudcli-resident-plugin="broken-resident"]')).toBeNull(),
+    );
+
+    // A context update must not reach the callback of the failed mount.
+    rerender(tree(project('p2')));
+    expect(callbacks[0]).not.toHaveBeenCalled();
+  });
+
   it('skips a module that does not export mount()', async () => {
     loadPluginModule.mockResolvedValue({});
 
