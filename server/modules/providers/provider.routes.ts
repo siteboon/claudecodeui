@@ -8,6 +8,7 @@ import { providerModelsService } from '@/modules/providers/services/provider-mod
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
+import { sideQuestionsService } from '@/modules/providers/services/side-questions.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type {
   CustomProviderModelEffort,
@@ -53,6 +54,22 @@ const parseSessionId = (value: unknown): string => {
   }
 
   return sessionId;
+};
+
+// Same shape the `chat.btw` websocket frame accepts, so a dismiss can target
+// any id the frame was allowed to create.
+const SIDE_QUESTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
+
+const parseSideQuestionId = (value: unknown): string => {
+  const sideQuestionId = readPathParam(value, 'sideQuestionId').trim();
+  if (!SIDE_QUESTION_ID_PATTERN.test(sideQuestionId)) {
+    throw new AppError('Invalid sideQuestionId.', {
+      code: 'INVALID_SIDE_QUESTION_ID',
+      statusCode: 400,
+    });
+  }
+
+  return sideQuestionId;
 };
 
 /** A workflow run id as the harness mints one (`wf_16fbf852-274`). */
@@ -919,6 +936,24 @@ router.get(
   }),
 );
 
+// Declared before the generic `/sessions/:sessionId` routes below, like every
+// other session-specific route in this file.
+router.delete(
+  '/sessions/:sessionId/side-questions/:sideQuestionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const sideQuestionId = parseSideQuestionId(req.params.sideQuestionId);
+    const deleted = sideQuestionsService.dismiss(sessionId, sideQuestionId);
+    if (!deleted) {
+      throw new AppError('Side question not found.', {
+        code: 'SIDE_QUESTION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+    res.json(createApiSuccessResponse({ deleted: true }));
+  }),
+);
+
 // Must stay registered after the static and session-specific routes so their
 // literals never match the generic `:sessionId` parameter.
 router.get(
@@ -983,7 +1018,11 @@ router.get(
       limit,
       offset,
     });
-    res.json(createApiSuccessResponse(result));
+    // The session's whole side-question list, on every page: side questions
+    // are not part of the paged transcript, and the client wants to draw
+    // every one of them regardless of which page it is looking at.
+    const sideQuestions = sideQuestionsService.listForSession(sessionId);
+    res.json(createApiSuccessResponse({ ...result, sideQuestions }));
   }),
 );
 

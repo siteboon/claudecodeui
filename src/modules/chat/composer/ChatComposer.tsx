@@ -37,6 +37,7 @@ import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessageP
 import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
 import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
 import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
+import ComposerSendMenu from '@/modules/chat/composer/ComposerSendMenu';
 
 type MentionableFile = {
   name: string;
@@ -84,6 +85,8 @@ type ChatComposerProps = {
   onCancelScheduledMessage: (id: string) => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
+  /** Handle send menu choices (queue, btw, send). */
+  onSendMenuChoice?: (choice: 'queue' | 'btw' | 'send') => void;
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
   fileErrors: Map<string, string>;
@@ -159,6 +162,7 @@ export default function ChatComposer({
   onCancelScheduledMessage,
   onEditQueuedDraft,
   onDeleteQueuedDraft,
+  onSendMenuChoice,
   attachedFiles,
   onRemoveAttachment,
   fileErrors,
@@ -505,41 +509,46 @@ export default function ChatComposer({
               providerLabel={providerLabel}
             />
 
-            <PromptInputSubmit
-              onClick={
-                canQueueDraft
-                  ? (e: MouseEvent<HTMLButtonElement>) => {
-                      e.preventDefault();
-                      onSubmit(e);
-                    }
-                  : isLoading
-                    ? onAbortSession
-                    : isRecording
-                      ? (e: MouseEvent<HTMLButtonElement>) => {
-                          e.preventDefault();
-                          voiceStop({ send: true });
-                        }
-                      : undefined
-              }
-              disabled={
-                isLoading
-                  ? false
-                  : isRecording
+            {isLoading || activity?.background ? (
+              <ComposerSendMenu
+                state={isLoading ? 'responding' : 'background'}
+                hasInput={Boolean(input.trim() || attachedFiles.length > 0)}
+                onSelect={(choice) => {
+                  if (choice === 'stop') {
+                    onAbortSession();
+                    return;
+                  }
+                  onSendMenuChoice?.(choice);
+                }}
+              />
+            ) : (
+              <PromptInputSubmit
+                onClick={
+                  isRecording
+                    ? (e: MouseEvent<HTMLButtonElement>) => {
+                        e.preventDefault();
+                        voiceStop({ send: true });
+                      }
+                    : undefined
+                }
+                disabled={
+                  isRecording
                     ? false
                     : isTranscribing
                       ? true
                       : !input.trim() && attachedFiles.length === 0
-              }
-              aria-label={submitAriaLabel}
-              title={submitAriaLabel}
-              className="h-10 w-10 sm:h-10 sm:w-10"
-            >
-              {isTranscribing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : canQueueDraft ? (
-                <ArrowUpIcon className="h-4 w-4" />
-              ) : undefined}
-            </PromptInputSubmit>
+                }
+                aria-label={submitAriaLabel}
+                title={submitAriaLabel}
+                className="h-10 w-10 sm:h-10 sm:w-10"
+              >
+                {isTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : canQueueDraft ? (
+                  <ArrowUpIcon className="h-4 w-4" />
+                ) : undefined}
+              </PromptInputSubmit>
+            )}
           </div>
 
           <div

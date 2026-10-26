@@ -29,6 +29,7 @@ import {
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import { askClaudeSideQuestion } from '@/modules/providers/list/claude/claude-side-question.provider.js';
 import {
   createNotificationEvent,
   notifyBackgroundWorkCompleted,
@@ -1599,6 +1600,24 @@ function reconnectSessionWriter(sessionId, newRawWs) {
   return true;
 }
 
+/**
+ * Forks the session named by `request.providerSessionId` to answer a side
+ * question read-only. `liveTasks` comes from this runtime's own background
+ * work tracker, keyed by the app session id (`request.appSessionId`), so the
+ * fork's prompt can say which of the session's own tasks are still running.
+ *
+ * @param {import('@/shared/types.js').SideQuestionRequest} request
+ * @param {import('@/shared/types.js').SideQuestionSink} sink
+ * @param {import('@/shared/types.js').ProviderRuntimeContext} context
+ * @returns {Promise<import('@/shared/types.js').SideQuestionOutcome>}
+ */
+async function askSideQuestion(request, sink, context) {
+  return askClaudeSideQuestion(request, sink, {
+    createQuery: context.createQuery,
+    liveTasks: backgroundWork.outstanding(request.appSessionId),
+  });
+}
+
 export const claudeRuntime = {
   run: queryClaudeSDK,
   abort: abortClaudeSDKSession,
@@ -1608,6 +1627,7 @@ export const claudeRuntime = {
   },
   listBackgroundWork: listClaudeSDKBackgroundWork,
   stopBackgroundTask: stopClaudeSDKTask,
+  askSideQuestion,
 };
 
 // Export public API

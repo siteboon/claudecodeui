@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground,SideQuestionEvent } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
+import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
 import { collectRunningBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
@@ -189,6 +190,14 @@ export function useChatRealtimeHandlers({
               content: String(msg.error || 'Request failed'),
             } as NormalizedMessage);
           }
+          return;
+        }
+
+        case 'side_question': {
+          // A side question never touches the session's transcript: it goes
+          // to the side-question store, for whichever session it names, and
+          // never falls through to the message-kind handling below.
+          sideQuestionStore.applyEvent(msg as unknown as SideQuestionEvent);
           return;
         }
 

@@ -1,11 +1,11 @@
-import { memo, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranchIcon, PencilIcon } from 'lucide-react';
+import { GitBranchIcon, PencilIcon, XIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
-import { LLMProviderLogo } from '@/shared/ui';
+import { LLMProviderLogo, Shimmer } from '@/shared/ui';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
 import ChatMessageImages from '@/modules/chat/transcript/ChatMessageImages';
 import ChatMessageFiles from '@/modules/chat/transcript/ChatMessageFiles';
@@ -16,6 +16,7 @@ import MessageModelLabel from '@/modules/chat/transcript/MessageModelLabel';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
+import { useDismissSideQuestion } from '@/modules/chat/hooks/useSideQuestions';
 
 type MessageComponentProps = {
   message: ChatMessage;
@@ -49,12 +50,21 @@ const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
  */
 const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
-  const isGrouped = prevMessage && prevMessage.type === message.type &&
-    ((prevMessage.type === 'assistant') ||
-      (prevMessage.type === 'user') ||
-      (prevMessage.type === 'tool') ||
-      (prevMessage.type === 'error'));
+  // A side question never groups with its neighbours: it is drawn as its own
+  // tinted aside regardless of what came before or after it.
+  const isGrouped = Boolean(prevMessage) && !message.btw && !prevMessage?.btw && prevMessage?.type === message.type &&
+    ((prevMessage?.type === 'assistant') ||
+      (prevMessage?.type === 'user') ||
+      (prevMessage?.type === 'tool') ||
+      (prevMessage?.type === 'error'));
   const messageRef = useRef<HTMLDivElement | null>(null);
+  const dismissSideQuestion = useDismissSideQuestion();
+  const handleDismissSideQuestion = useCallback(() => {
+    if (!message.btw) {
+      return;
+    }
+    void dismissSideQuestion(message.btw.sessionId, message.btw.sideQuestionId);
+  }, [dismissSideQuestion, message.btw]);
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(
     () => {
@@ -89,6 +99,68 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
   if (shouldHideThinkingMessage) {
     return null;
+  }
+
+  if (message.btw) {
+    // A side question is drawn in place, as a tinted aside rather than the
+    // ordinary user/assistant layout: it never had edit, fork or grouping
+    // affordances, because the session itself never saw it.
+    const isAnswerRow = message.type === 'assistant';
+    const isPendingAnswer = isAnswerRow && message.btw.status === 'running' && !String(message.content || '').trim();
+    return (
+      <div
+        ref={messageRef}
+        data-message-timestamp={message.timestamp || undefined}
+        className="chat-message btw-side-question w-full px-3 sm:px-0"
+      >
+        <div className="w-full rounded-lg border-l-2 border-primary/60 bg-primary/5 px-3 py-2 dark:bg-primary/10">
+          {!isAnswerRow && (
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t('sideQuestion.label')}
+              </span>
+              {!isExporting && (
+                <button
+                  type="button"
+                  onClick={handleDismissSideQuestion}
+                  title={t('sideQuestion.dismiss')}
+                  aria-label={t('sideQuestion.dismiss')}
+                  className="rounded p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100"
+                >
+                  <XIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+          <div dir="auto" className="text-sm text-gray-700 dark:text-gray-300">
+            {isPendingAnswer ? (
+              <Shimmer>{t('sideQuestion.pending')}</Shimmer>
+            ) : (
+              <Markdown
+                breaks
+                className="prose prose-sm max-w-none font-serif dark:prose-invert"
+              >
+                {formattedMessageContent}
+              </Markdown>
+            )}
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>{formattedTime}</span>
+            {isAnswerRow && !isExporting && (
+              <button
+                type="button"
+                onClick={handleDismissSideQuestion}
+                title={t('sideQuestion.dismiss')}
+                aria-label={t('sideQuestion.dismiss')}
+                className="rounded p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

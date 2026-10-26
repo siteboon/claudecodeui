@@ -14,6 +14,7 @@ import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
     providerRuntimeService,
+    sideQuestionsService,
 } from '@/modules/providers/index.js';
 import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -333,6 +334,11 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        // A side question left `running` by a dead process must read as
+        // failed, not as pending forever: nothing is streaming into it any
+        // more, and no client will ever see it finish on its own.
+        sideQuestionsService.recoverInterrupted();
 
         // Configure Web Push (VAPID keys)
         configureWebPush();

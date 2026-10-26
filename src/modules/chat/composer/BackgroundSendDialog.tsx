@@ -59,6 +59,9 @@ export default function BackgroundSendDialog({ prompt, onResolve }: BackgroundSe
           <Button type="button" variant="default" onClick={() => onResolve('queue')}>
             {t('claudeStatus.backgroundTask.prompt.queue', { defaultValue: 'Queue' })}
           </Button>
+          <Button type="button" variant="outline" onClick={() => onResolve('btw')}>
+            {t('claudeStatus.backgroundTask.prompt.btw', { defaultValue: 'BTW' })}
+          </Button>
           <Button type="button" variant="destructive" onClick={() => onResolve('send')}>
             {t('claudeStatus.backgroundTask.prompt.sendAnyway', { defaultValue: 'Send anyway' })}
           </Button>

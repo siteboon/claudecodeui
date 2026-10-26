@@ -12,3 +12,8 @@ export { sessionsService } from './services/sessions.service.js';
 
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
+
+// sideQuestionsService: used by the websocket module's `chat.btw` handler and
+// the provider routes' side-question endpoints, and by server/index.ts to
+// recover rows a dead process left running.
+export { createSideQuestionsService, sideQuestionsService } from './services/side-questions.service.js';

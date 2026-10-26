@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
+import { providerModelsService, sessionsService, sideQuestionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
@@ -18,8 +18,17 @@ import type {
   LLMProvider,
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
+  SideQuestion,
+  SideQuestionEvent,
+  SideQuestionOutcome,
+  SideQuestionRequest,
+  SideQuestionSink,
 } from '@/shared/types.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+
+// Same shape the `chat.btw` frame's id must satisfy end to end (the route
+// that dismisses a side question re-checks it too, in provider.routes.ts).
+const SIDE_QUESTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -78,6 +87,12 @@ export type ProviderRuntimeGateway = {
   hasBackgroundWork(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
   getPendingApprovalsForSession(sessionId: string): unknown[];
+  /** Dispatches one side question (`chat.btw`) to the provider's runtime, native fork or history fallback. */
+  askSideQuestion(
+    provider: LLMProvider,
+    request: SideQuestionRequest,
+    sink: SideQuestionSink,
+  ): Promise<SideQuestionOutcome>;
 };
 
 type ChatWebSocketDependencies = {
@@ -303,6 +318,121 @@ async function dispatchRun(
   }
 
   return { started: true, error: failure };
+}
+
+/**
+ * Reports a `chat.btw` refusal to the asking socket only, in the same `kind`
+ * other side-question events use, so the client does not need a second
+ * error shape for "this side question never started".
+ *
+ * `sideQuestion` carries the existing row on a duplicate id, so the asker
+ * upserts its real state instead of marking a good answer failed.
+ */
+function sendSideQuestionError(
+  ws: WebSocket,
+  sessionId: string,
+  sideQuestionId: string,
+  error: string,
+  sideQuestion?: SideQuestion,
+): void {
+  const event: SideQuestionEvent = {
+    kind: 'side_question',
+    sessionId,
+    sideQuestionId,
+    phase: 'error',
+    error,
+    sideQuestion,
+    timestamp: new Date().toISOString(),
+  };
+  sendJson(ws, event);
+}
+
+/**
+ * Broadcasts a side-question event to every connected chat client, not just
+ * the asking socket, so another tab or a reconnected tab sees it too.
+ */
+function broadcastSideQuestionEvent(event: SideQuestionEvent): void {
+  const payload = JSON.stringify(event);
+  connectedClients.forEach((client) => {
+    if (client.readyState === WS_OPEN_STATE) {
+      client.send(payload);
+    }
+  });
+}
+
+/**
+ * Handles `chat.btw`: asks a question on the side while a turn runs, or while
+ * only background work runs. Unlike `chat.send`, it never calls
+ * `chatRunRegistry.startRun`, so it never competes with (or waits behind) the
+ * session's main turn.
+ *
+ * The provider-native session id and project path come from the session row,
+ * never from the client; only the question, its id and the model come from
+ * the frame.
+ */
+function handleChatBtw(
+  ws: WebSocket,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies,
+): void {
+  const sideQuestionId = typeof data.sideQuestionId === 'string' ? data.sideQuestionId : '';
+  const idLooksValid = SIDE_QUESTION_ID_PATTERN.test(sideQuestionId);
+  const rawSessionId = typeof data.sessionId === 'string' ? data.sessionId.trim() : '';
+
+  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.btw');
+  if (!resolved) {
+    // resolveSendTarget already sent its own protocol_error; a valid-looking
+    // id additionally gets the side-question-shaped refusal the client reads
+    // to clear a pending pair it drew optimistically.
+    if (idLooksValid) {
+      sendSideQuestionError(ws, rawSessionId, sideQuestionId, 'chat.btw could not be started for that session.');
+    }
+    return;
+  }
+
+  const { sessionId, session, provider } = resolved;
+
+  if (!idLooksValid) {
+    sendSideQuestionError(ws, sessionId, sideQuestionId, 'sideQuestionId must be 1 to 100 characters of [A-Za-z0-9_-].');
+    return;
+  }
+
+  const question = typeof data.question === 'string' ? data.question.trim() : '';
+  if (!question) {
+    sendSideQuestionError(ws, sessionId, sideQuestionId, 'chat.btw requires a non-empty question.');
+    return;
+  }
+
+  const existing = sideQuestionsService.listForSession(sessionId).find((item) => item.id === sideQuestionId);
+  if (existing) {
+    sendSideQuestionError(
+      ws,
+      sessionId,
+      sideQuestionId,
+      'A side question with that id already exists.',
+      existing,
+    );
+    return;
+  }
+
+  const options = (data.options ?? {}) as AnyRecord;
+  const model = typeof options.model === 'string' && options.model.trim() ? options.model.trim() : null;
+
+  // Not awaited: the frame is accepted as soon as the question is admitted,
+  // and the answer streams in through started/delta/done/error broadcasts.
+  void sideQuestionsService.ask(
+    {
+      sessionId,
+      provider,
+      providerSessionId: session.provider_session_id,
+      projectPath: session.project_path,
+      sideQuestionId,
+      question,
+      model,
+    },
+    dependencies.runtime,
+    broadcastSideQuestionEvent,
+  );
 }
 
 /**
@@ -579,6 +709,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *
  * Inbound protocol (client to server):
  * - `chat.send`                { sessionId, content, options? }
+ * - `chat.btw`                 { sessionId, sideQuestionId, question, options?: { model? } }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
@@ -587,7 +718,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * Outbound protocol (server to client): every frame is `kind`-based — either
  * a provider `NormalizedMessage` (with `seq`) or a gateway event
  * (`chat_subscribed`, `session_upserted`, `loading_progress`,
- * `protocol_error`).
+ * `protocol_error`, `side_question`).
  */
 /**
  * Runs a turn for a session with no client attached.
@@ -680,6 +811,9 @@ export function handleChatConnection(
           return;
         case 'chat.send':
           await handleChatSend(ws, userId, data, dependencies);
+          return;
+        case 'chat.btw':
+          handleChatBtw(ws, data, dependencies);
           return;
         case 'chat.abort':
           await handleChatAbort(ws, data, dependencies);
