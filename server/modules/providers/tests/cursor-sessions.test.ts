@@ -215,6 +215,32 @@ test('Cursor synchronizer removes rows an older build indexed from transcripts',
   });
 });
 
+test('Cursor synchronizer keeps transcript rows when a chats directory is unreadable', { concurrency: false, skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+  await withCursorHome('cursor-sync-unreadable-', async (homeDir, workspacePath) => {
+    const chatDir = await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-hidden');
+    const ideTranscript = path.join(
+      homeDir, '.cursor', 'projects', 'workspace', 'agent-transcripts', 'ide-chat-kept', 'ide-chat-kept.jsonl'
+    );
+    await mkdir(path.dirname(ideTranscript), { recursive: true });
+    await writeFile(ideTranscript, '{"role":"user","message":{"content":[]}}\n', 'utf8');
+
+    const workspaceDir = path.dirname(chatDir);
+    await chmod(workspaceDir, 0o000);
+    try {
+      await withIsolatedDatabase(async () => {
+        sessionsDb.createSession('ide-chat-kept', 'cursor', workspacePath, 'IDE chat', undefined, undefined, ideTranscript);
+
+        await new CursorSessionSynchronizer().synchronize();
+
+        // The scan couldn't see every chat, so cleanup must not run.
+        assert.equal(sessionsDb.getSessionById('ide-chat-kept')?.jsonl_path, ideTranscript);
+      });
+    } finally {
+      await chmod(workspaceDir, 0o755);
+    }
+  });
+});
+
 test('Cursor history loads for a project opened through a symlink', { concurrency: false }, async () => {
   await withCursorHome('cursor-history-link-', async (homeDir, workspacePath) => {
     await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-link', { firstUserLine: 'Linked hello' });

@@ -27,15 +27,18 @@ type ParsedSession = {
 const IDE_WORKSPACES_CACHE_MS = 30_000;
 
 /**
- * Returns directory entries or an empty list when the folder is missing.
+ * Returns directory entries, an empty list when the folder is missing, or
+ * `null` when it exists but can't be read, so callers can tell an incomplete
+ * scan from an empty one.
  */
 async function listDirectoryEntriesSafe(
   directoryPath: string
-): Promise<import('node:fs').Dirent[]> {
+): Promise<import('node:fs').Dirent[] | null> {
   try {
     return await fsp.readdir(directoryPath, { withFileTypes: true });
-  } catch {
-    return [];
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' || code === 'ENOTDIR' ? [] : null;
   }
 }
 
@@ -116,13 +119,26 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
     let processed = 0;
     let failed = false;
 
-    for (const workspaceEntry of await listDirectoryEntriesSafe(chatsRoot)) {
+    const workspaceEntries = await listDirectoryEntriesSafe(chatsRoot);
+    if (!workspaceEntries) {
+      failed = true;
+      console.error('Failed to read Cursor chats directory', { chatsRoot });
+    }
+
+    for (const workspaceEntry of workspaceEntries ?? []) {
       if (!workspaceEntry.isDirectory()) {
         continue;
       }
 
       const workspaceDir = path.join(chatsRoot, workspaceEntry.name);
-      for (const chatEntry of await listDirectoryEntriesSafe(workspaceDir)) {
+      const chatEntries = await listDirectoryEntriesSafe(workspaceDir);
+      if (!chatEntries) {
+        failed = true;
+        console.error('Failed to read Cursor chats directory', { workspaceDir });
+        continue;
+      }
+
+      for (const chatEntry of chatEntries) {
         if (!chatEntry.isDirectory()) {
           continue;
         }
@@ -148,7 +164,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       }
 
       const transcriptsDir = path.join(this.cursorHome, 'projects', slug, 'agent-transcripts');
-      for (const transcriptEntry of await listDirectoryEntriesSafe(transcriptsDir)) {
+      for (const transcriptEntry of (await listDirectoryEntriesSafe(transcriptsDir)) ?? []) {
         if (!transcriptEntry.isDirectory() || cliChatIds.has(transcriptEntry.name)) {
           continue;
         }
@@ -234,7 +250,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   private async hasCliChat(sessionId: string): Promise<boolean> {
     const chatsRoot = path.join(this.cursorHome, 'chats');
-    for (const workspaceEntry of await listDirectoryEntriesSafe(chatsRoot)) {
+    for (const workspaceEntry of (await listDirectoryEntriesSafe(chatsRoot)) ?? []) {
       if (!workspaceEntry.isDirectory()) {
         continue;
       }
@@ -266,7 +282,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
 
     const storageDir = path.join(resolveCursorUserDirectory(), 'workspaceStorage');
     const folderBySlug = new Map<string, string | null>();
-    for (const entry of await listDirectoryEntriesSafe(storageDir)) {
+    for (const entry of (await listDirectoryEntriesSafe(storageDir)) ?? []) {
       if (!entry.isDirectory()) {
         continue;
       }
