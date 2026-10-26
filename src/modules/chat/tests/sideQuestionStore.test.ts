@@ -10,6 +10,7 @@ import {
   useSideQuestions,
 } from '@/modules/chat/hooks/useSideQuestions';
 import type { SideQuestion, SideQuestionEvent } from '@/shared/types';
+import type * as SharedApiModule from '@/shared/api';
 
 /**
  * A BTW side question lives beside the transcript, in one module-level store
@@ -21,7 +22,7 @@ import type { SideQuestion, SideQuestionEvent } from '@/shared/types';
 const dismissSideQuestion = vi.fn();
 
 vi.mock('@/shared/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api')>();
+  const actual = await importOriginal<typeof SharedApiModule>();
   return {
     ...actual,
     api: {

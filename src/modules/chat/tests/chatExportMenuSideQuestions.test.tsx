@@ -5,6 +5,8 @@ import { beforeEach, describe, it, vi } from 'vitest';
 
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
 import type { ChatMessage } from '@/shared/types';
+import type * as ReactI18nextModule from 'react-i18next';
+import type * as ChatExportModule from '@/modules/chat/utils/chatExport';
 
 /**
  * The export leaves BTW asides out unless the operator asks for them, and the
@@ -19,12 +21,12 @@ import type { ChatMessage } from '@/shared/types';
 const downloadTranscriptExport = vi.fn();
 
 vi.mock('react-i18next', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('react-i18next')>()),
+  ...(await importOriginal<typeof ReactI18nextModule>()),
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }));
 
 vi.mock('@/modules/chat/utils/chatExport', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/modules/chat/utils/chatExport')>();
+  const actual = await importOriginal<typeof ChatExportModule>();
   return { ...actual, downloadTranscriptExport: (...args: unknown[]) => downloadTranscriptExport(...args) };
 });
 

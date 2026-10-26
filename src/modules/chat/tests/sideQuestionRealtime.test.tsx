@@ -8,6 +8,7 @@ import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
 import type { NormalizedMessage, ProjectSession, ServerEvent, SideQuestion } from '@/shared/types';
+import type * as SharedApiModule from '@/shared/api';
 
 /**
  * A side question never touches the session's transcript: its live events go
@@ -20,7 +21,7 @@ import type { NormalizedMessage, ProjectSession, ServerEvent, SideQuestion } fro
 const sessionMessages = vi.fn();
 
 vi.mock('@/shared/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api')>();
+  const actual = await importOriginal<typeof SharedApiModule>();
   return {
     ...actual,
     api: {

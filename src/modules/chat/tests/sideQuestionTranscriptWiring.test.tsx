@@ -7,6 +7,7 @@ import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
 import type { ChatMessage, NormalizedMessage, Project, ProjectSession, SideQuestion } from '@/shared/types';
+import type * as SharedApiModule from '@/shared/api';
 
 /**
  * The store and the merge are only useful if the transcript the operator sees
@@ -19,7 +20,7 @@ import type { ChatMessage, NormalizedMessage, Project, ProjectSession, SideQuest
 const sessionMessages = vi.fn();
 
 vi.mock('@/shared/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/shared/api')>();
+  const actual = await importOriginal<typeof SharedApiModule>();
   return {
     ...actual,
     api: {
