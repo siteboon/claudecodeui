@@ -243,7 +243,8 @@ export type GatewayEventKind =
   | 'chat_subscribed'
   | 'session_upserted'
   | 'loading_progress'
-  | 'protocol_error';
+  | 'protocol_error'
+  | 'side_question';
 
 /**
  * Complete set of `kind` values emitted to websocket clients.
@@ -253,6 +254,96 @@ export type GatewayEventKind =
  * `GatewayEventKind` values.
  */
 export type ServerEventKind = MessageKind | GatewayEventKind;
+
+// ---------------------------
+//----------------- SIDE QUESTION TYPES ------------
+/**
+ * Status of a side question being answered on the side in parallel.
+ */
+export type SideQuestionStatus = 'running' | 'done' | 'error';
+
+/**
+ * A question asked while a session runs, with its answer accumulated as it streams.
+ *
+ * Side questions run independently on the provider's runtime and are never
+ * part of the main conversation history. The client can inspect their state
+ * in real time and dismiss them if needed.
+ */
+export type SideQuestion = {
+  id: string;
+  sessionId: string;        // app session id
+  question: string;
+  answer: string;           // '' until text arrives; partial while running
+  status: SideQuestionStatus;
+  error: string | null;
+  model: string | null;
+  createdAt: string;        // ISO
+  finishedAt: string | null;
+};
+
+/**
+ * Real-time event for side question state changes, broadcast to all chat clients.
+ *
+ * `started` and `done` include the whole row; `delta` carries incremental text;
+ * `error` marks failure and may carry the existing row on a duplicate id or null
+ * on other refusals. Every event is broadcast to every connected chat client
+ * so side-by-side tabs stay in sync.
+ */
+export type SideQuestionEvent = {
+  kind: 'side_question';
+  sessionId: string;            // app session id
+  sideQuestionId: string;
+  phase: 'started' | 'delta' | 'done' | 'error';
+  text?: string;                // delta only: the next piece of the answer
+  error?: string;               // error only
+  sideQuestion?: SideQuestion;  // started, done, and error when a row exists: the whole row
+  timestamp: string;            // ISO, when the server sent it
+};
+
+/**
+ * Request payload for asking a side question on the provider runtime.
+ *
+ * `appSessionId` is the user-facing session being asked about; `providerSessionId`
+ * is the provider's own native session id needed for context (or null). `projectPath`
+ * is the working directory for read-only tools. `model` is what the client asked for;
+ * the history fallback ignores it and uses the provider's default instead.
+ */
+export type SideQuestionRequest = {
+  appSessionId: string;
+  providerSessionId: string | null;
+  projectPath: string | null;
+  question: string;
+  model: string | null;     // what the client asked for; the history fallback ignores it
+  signal: AbortSignal;
+};
+
+/**
+ * Output callback for receiving streamed text of a side question answer.
+ *
+ * Implementations call `delta(text)` each time a piece of the answer arrives.
+ */
+export type SideQuestionSink = { delta(text: string): void };
+
+/**
+ * Result of asking a side question on the provider runtime.
+ *
+ * `status: 'done'` carries the complete final answer; `status: 'error'` carries
+ * what text was delivered before failure plus the error message.
+ */
+export type SideQuestionOutcome =
+  | { status: 'done'; answer: string }
+  | { status: 'error'; error: string; answer: string };
+
+/**
+ * Side-question capability of a provider runtime.
+ *
+ * The service layer calls this method on the runtime to ask a question on the
+ * side while a session is active, using either a native fork or history fallback.
+ * It never rejects: all failures are returned as error outcomes.
+ */
+export type SideQuestionRuntime = {
+  askSideQuestion(provider: LLMProvider, request: SideQuestionRequest, sink: SideQuestionSink): Promise<SideQuestionOutcome>;
+};
 
 /** The owning project as it appears inside a `session_upserted` delta. */
 export type SessionUpsertedProject = {

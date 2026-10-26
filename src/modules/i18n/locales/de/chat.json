@@ -271,7 +271,8 @@
     "json": {
       "label": "JSON (.json)",
       "description": "Alle Nachrichten, unformatiert, für Tools."
-    }
+    },
+    "includeSideQuestions": "Seitenafragen mitexportieren"
   },
   "schedule": {
     "trigger": "Nachricht planen",
@@ -288,6 +289,32 @@
     "failed": "Nicht gesendet – {{reason}}",
     "cancel": "Geplante Nachricht abbrechen",
     "dismiss": "Fehlerhinweis ausblenden"
+  },
+  "sideQuestion": {
+    "label": "Übrigens · gehört nicht zur Sitzung",
+    "pending": "Wird seitlich beantwortet",
+    "failed": "Die Seitenafrage ist fehlgeschlagen.",
+    "dismiss": "Entfernen"
+  },
+  "sendMenu": {
+    "trigger": "Sendeoptionen",
+    "queue": {
+      "label": "In Warteschlange stellen",
+      "descriptionResponding": "Senden, wenn dieser Durchlauf endet",
+      "descriptionBackground": "Senden, wenn die Hintergrundarbeit endet"
+    },
+    "btw": {
+      "label": "Übrigens",
+      "description": "Jetzt seitlich fragen; die Sitzung sieht es nicht"
+    },
+    "stop": {
+      "label": "Stoppen",
+      "description": "Die Antwort beenden, die gerade geschrieben wird"
+    },
+    "sendAnyway": {
+      "label": "Trotzdem senden",
+      "description": "Jetzt senden; das beendet die Hintergrundarbeit"
+    }
   },
   "modelLibrary": {
     "effortLevels": "Reasoning-Stufen",

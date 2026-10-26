@@ -42,6 +42,11 @@ type ProviderCapabilities = {
    * Whether a session's transcript can be branched into an independent one.
    */
   supportsSessionForking: boolean;
+  /**
+   * How side questions are supported: 'fork' for native fork capability,
+   * 'history' for the history-fallback path using the session's messages.
+   */
+  supportsSideQuestions: 'fork' | 'history';
 };
 
 /**
@@ -66,6 +71,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSideQuestions: 'fork',
   },
   cursor: {
     provider: 'cursor',
@@ -80,6 +86,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: [],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSideQuestions: 'history',
   },
   codex: {
     provider: 'codex',
@@ -98,6 +105,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSideQuestions: 'history',
   },
   opencode: {
     provider: 'opencode',
@@ -117,6 +125,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSideQuestions: 'history',
   },
 };
 

@@ -257,6 +257,21 @@ CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
 );
 `;
 
+export const SIDE_QUESTIONS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS side_questions (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    error TEXT,
+    model TEXT,
+    created_at TEXT NOT NULL,
+    finished_at TEXT,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;

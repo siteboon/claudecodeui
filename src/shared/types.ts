@@ -418,6 +418,8 @@ export type ChatMessage = {
   memoryCitations?: MemoryCitation[];
   /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
   toolStatus?: string;
+  /** Set when this row is the question or answer half of a BTW side question pair, so it draws and behaves apart from the session's own transcript (no edit, fork or retry; never a grouping, last-message or fork anchor). The session id is carried here because `ChatMessage` otherwise has none of its own, and the dismiss control's DELETE needs it. */
+  btw?: { sideQuestionId: string; sessionId: string; status: SideQuestionStatus };
   [key: string]: unknown;
 };
 
@@ -488,6 +490,46 @@ export type ToolResult = {
 type QuestionOption = {
   label: string;
   description?: string;
+};
+
+// ---------------------------
+
+//----------------- BTW SIDE QUESTIONS ------------
+
+/** Where a BTW side question stands: `running` while the fork is still answering, `done` once it finished, `error` if the fork failed or the question was refused. */
+export type SideQuestionStatus = 'running' | 'done' | 'error';
+
+/** A side question asked beside a session's own transcript — answered by a fork of the session's provider that never joins the session itself. Same shape on client and server. */
+export type SideQuestion = {
+  id: string;
+  /** App session id the question was asked beside. */
+  sessionId: string;
+  question: string;
+  /** '' until text arrives; partial while `running`. */
+  answer: string;
+  status: SideQuestionStatus;
+  error: string | null;
+  model: string | null;
+  /** ISO timestamp. */
+  createdAt: string;
+  /** ISO timestamp, set once the fork reaches `done` or `error`. */
+  finishedAt: string | null;
+};
+
+/** One `side_question` chat socket event broadcast to every connected chat client as a side question's fork progresses, so another tab or a reconnected one sees it too. */
+export type SideQuestionEvent = {
+  kind: 'side_question';
+  sessionId: string;
+  sideQuestionId: string;
+  phase: 'started' | 'delta' | 'done' | 'error';
+  /** Delta only: the next piece of the answer. */
+  text?: string;
+  /** Error only. */
+  error?: string;
+  /** Carried on `started`, `done`, and `error` when a row exists: the whole row, so a tab that missed deltas still ends with the full answer. */
+  sideQuestion?: SideQuestion;
+  /** ISO, when the server sent it. */
+  timestamp: string;
 };
 
 // ---------------------------
@@ -783,8 +825,8 @@ export type QueuedDraft = {
   options?: QueuedSendOptions;
 };
 
-/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, or do nothing. */
-export type BackgroundSendChoice = 'send' | 'queue' | 'cancel';
+/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, ask a BTW side question instead, or do nothing. */
+export type BackgroundSendChoice = 'send' | 'queue' | 'btw' | 'cancel';
 
 /** An open background-work send prompt, listing the session's own background tasks as display strings. */
 export type BackgroundSendPrompt = {
