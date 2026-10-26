@@ -260,6 +260,14 @@ export default function ChatComposer({
 
   const hasQueuedDraft = Boolean(queuedDraft);
   const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
+  // With only background work left the main button would be a greyed-out Send;
+  // until something is typed it stops that work instead.
+  const canStopBackgroundWork = Boolean(activity?.background)
+    && !isLoading
+    && !isRecording
+    && !isTranscribing
+    && !input.trim()
+    && attachedFiles.length === 0;
   const submitHint = canQueueDraft
     ? hasQueuedDraft
       ? t('input.hintText.appendQueued', { defaultValue: 'Enter to add to the queued message' })
@@ -271,7 +279,7 @@ export default function ChatComposer({
     ? hasQueuedDraft
       ? t('input.queue.append', { defaultValue: 'Add to queued message' })
       : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
-    : isLoading
+    : isLoading || canStopBackgroundWork
       ? t('input.stop')
       : t('input.send');
 
@@ -381,7 +389,7 @@ export default function ChatComposer({
 
         <PromptInput
           onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void}
-          status={isLoading ? 'streaming' : 'ready'}
+          status={isLoading || canStopBackgroundWork ? 'streaming' : 'ready'}
           className={[
             isTextareaExpanded ? 'chat-input-expanded' : '',
             hasActivityIndicator ? 'rounded-t-none' : '',
@@ -521,15 +529,17 @@ export default function ChatComposer({
                     }
                   : isLoading
                     ? onAbortSession
-                    : isRecording
-                      ? (e: MouseEvent<HTMLButtonElement>) => {
-                          e.preventDefault();
-                          voiceStop({ send: true });
-                        }
-                      : undefined
+                    : canStopBackgroundWork
+                      ? onStopBackgroundWork
+                      : isRecording
+                        ? (e: MouseEvent<HTMLButtonElement>) => {
+                            e.preventDefault();
+                            voiceStop({ send: true });
+                          }
+                        : undefined
               }
               disabled={
-                isLoading
+                isLoading || canStopBackgroundWork
                   ? false
                   : isRecording
                     ? false
