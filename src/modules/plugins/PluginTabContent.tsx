@@ -33,6 +33,7 @@ type PluginModule = {
   unmount?: (container: HTMLElement) => void;
 };
 
+/** Projects the app's theme, project and session into the shape a tab-mounted plugin receives. */
 function buildContext(
   isDarkMode: boolean,
   selectedProject: Project | null,

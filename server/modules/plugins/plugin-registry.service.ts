@@ -29,6 +29,9 @@ function sanitizeRepoUrl(raw) {
 const ALLOWED_TYPES = ['react', 'module'];
 const ALLOWED_SLOTS = ['tab'];
 
+/**
+ * Returns the plugins root, creating it on first use so install and scan never race a missing directory.
+ */
 export function getPluginsDir() {
   if (!fs.existsSync(PLUGINS_DIR)) {
     fs.mkdirSync(PLUGINS_DIR, { recursive: true });
@@ -36,6 +39,10 @@ export function getPluginsDir() {
   return PLUGINS_DIR;
 }
 
+/**
+ * Reads the stored enable/config map, falling back to an empty object so a corrupt
+ * file resets plugin state instead of crashing startup.
+ */
 export function getPluginsConfig() {
   try {
     if (fs.existsSync(PLUGINS_CONFIG_PATH)) {
@@ -47,6 +54,10 @@ export function getPluginsConfig() {
   return {};
 }
 
+/**
+ * Persists the enable/config map, writing owner-only (0600) so per-plugin config
+ * cannot leak to other local users.
+ */
 export function savePluginsConfig(config) {
   const dir = path.dirname(PLUGINS_CONFIG_PATH);
   if (!fs.existsSync(dir)) {
@@ -55,6 +66,11 @@ export function savePluginsConfig(config) {
   fs.writeFileSync(PLUGINS_CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
+/**
+ * Checks one plugin manifest against the required fields and the allowed
+ * type/slot/entry shapes, returning `{ valid, error }` instead of throwing so a
+ * single bad plugin is skipped during a scan rather than failing the whole list.
+ */
 export function validateManifest(manifest) {
   if (!manifest || typeof manifest !== 'object') {
     return { valid: false, error: 'Manifest must be a JSON object' };
@@ -155,6 +171,11 @@ function runBuildIfNeeded(dir, packageJsonPath, onSuccess, onError) {
   });
 }
 
+/**
+ * Lists the plugins installed on disk, merging each validated manifest with the
+ * stored enable/config state. A plugin with an invalid or duplicate manifest is
+ * logged and skipped so one broken install cannot hide the others.
+ */
 export function scanPlugins() {
   const pluginsDir = getPluginsDir();
   const config = getPluginsConfig();
@@ -238,6 +259,10 @@ export function scanPlugins() {
   return plugins;
 }
 
+/**
+ * Resolves one installed plugin name to its directory on disk, or `null` when no
+ * plugin by that name is present.
+ */
 export function getPluginDir(name) {
   const plugins = scanPlugins();
   const plugin = plugins.find(p => p.name === name);
@@ -245,6 +270,11 @@ export function getPluginDir(name) {
   return path.join(getPluginsDir(), plugin.dirName);
 }
 
+/**
+ * Resolves a request path inside a plugin to a real file, or `null` when the file is
+ * missing or escapes the plugin directory — the realpath check is what stops both
+ * `..` traversal and symlinks pointing outside the plugin.
+ */
 export function resolvePluginAssetPath(name, assetPath) {
   const pluginDir = getPluginDir(name);
   if (!pluginDir) return null;
@@ -263,6 +293,11 @@ export function resolvePluginAssetPath(name, assetPath) {
   return realResolved;
 }
 
+/**
+ * Clones a plugin from a git URL into the plugins directory. The URL is validated
+ * before spawning and the resolved target is re-checked against the plugins root, so
+ * a crafted URL cannot pick where we write. Rejects with the reason on failure.
+ */
 export function installPluginFromGit(url) {
   return new Promise((resolve, reject) => {
     if (typeof url !== 'string' || !url.trim()) {
@@ -392,6 +427,11 @@ export function installPluginFromGit(url) {
   });
 }
 
+/**
+ * Fast-forward-only update of an installed plugin. A plain `pull` would merge and
+ * silently diverge a user's plugin from upstream, so a diverged checkout is reported
+ * as an error instead.
+ */
 export function updatePluginFromGit(name) {
   return new Promise((resolve, reject) => {
     const pluginDir = getPluginDir(name);
@@ -461,6 +501,11 @@ export function updatePluginFromGit(name) {
   });
 }
 
+/**
+ * Deletes an installed plugin, retrying briefly because Windows can hold file
+ * handles open just past process exit. Throws when the plugin is not installed or
+ * the directory still cannot be removed.
+ */
 export async function uninstallPlugin(name) {
   const pluginDir = getPluginDir(name);
   if (!pluginDir) {

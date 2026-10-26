@@ -53,6 +53,9 @@ function stubPluginsApi(replies: Record<string, StubbedReply>) {
   );
 }
 
+/**
+ * Renders the plugin settings tab inside a real provider so the surfaced git errors are what the UI shows.
+ */
 function renderPluginSettings() {
   render(
     <PluginsProvider>

@@ -26,11 +26,26 @@ type ResidentPluginModule = {
   unmount?: (container: HTMLElement) => void;
 };
 
+/** One resident plugin's mount state, owned by the effect instance that created it. */
+type ResidentMountRecord = {
+  container: HTMLElement;
+  module: ResidentPluginModule | null;
+  /** Callbacks this mount registered through `onContextChange`, so cleanup can drop them all. */
+  callbacks: Set<(context: ResidentPluginContext) => void>;
+  /** True once `mount()` has resolved or rejected — only then is `unmount()` meaningful. */
+  mountSettled: boolean;
+  /** True once `mount()` resolved, so a rejected mount is never asked to unmount. */
+  mountSucceeded: boolean;
+  /** True only after teardown has run, so `unmount()` can never run twice. */
+  finalized: boolean;
+};
+
 type PluginHostLayerProps = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
 };
 
+/** Projects the app's theme, project and session into the shape a resident plugin receives. */
 function buildResidentContext(
   isDarkMode: boolean,
   selectedProject: Project | null,
@@ -110,8 +125,34 @@ export default function PluginHostLayer({ selectedProject, selectedSession }: Pl
 
     const contextCallbacks = contextCallbacksRef.current;
     const residentPlugins = pluginsRef.current.filter((plugin) => plugin.enabled && plugin.alwaysMount);
-    const mounted: Array<{ container: HTMLElement; module: ResidentPluginModule | null }> = [];
+    const mounted: ResidentMountRecord[] = [];
     let active = true;
+
+    // Exact-once teardown for one mount. Two callers can reach it — the effect
+    // cleanup, and the mount promise settling after the effect was already torn
+    // down — so it must be safe to call twice and must not tear down a mount
+    // that has not finished.
+    const teardown = (record: ResidentMountRecord) => {
+      if (record.finalized) return;
+
+      // Drop callbacks before the early return below, so a context update racing
+      // the teardown cannot reach a plugin that is on its way out.
+      for (const callback of record.callbacks) contextCallbacks.delete(callback);
+      record.callbacks.clear();
+
+      // Still mounting: the mount's `finally` calls teardown again once it
+      // settles. Unmounting now would race the in-flight mount.
+      if (!record.mountSettled) return;
+
+      record.finalized = true;
+      // A mount that rejected leaves nothing to unmount, and calling it anyway
+      // is what surfaced earlier as an unmount of a mount that never completed.
+      if (record.mountSucceeded) {
+        try { record.module?.unmount?.(record.container); } catch { /* plugin error — isolate it */ }
+      }
+      record.module = null;
+      record.container.remove();
+    };
 
     for (const plugin of residentPlugins) {
       // One detached container per plugin, so two resident plugins can never
@@ -120,9 +161,13 @@ export default function PluginHostLayer({ selectedProject, selectedSession }: Pl
       container.dataset.cloudcliResidentPlugin = plugin.name;
       host.appendChild(container);
 
-      const record: { container: HTMLElement; module: ResidentPluginModule | null } = {
+      const record: ResidentMountRecord = {
         container,
         module: null,
+        callbacks: new Set(),
+        mountSettled: false,
+        mountSucceeded: false,
+        finalized: false,
       };
       mounted.push(record);
 
@@ -130,8 +175,17 @@ export default function PluginHostLayer({ selectedProject, selectedSession }: Pl
         plugin.name,
         () => contextRef.current,
         (callback) => {
+          // A callback registered after teardown would outlive its mount, so it
+          // is never added; the plugin still gets a working unsubscribe.
+          if (!active) return () => {};
+          // Registered in both sets on purpose: `contextCallbacks` is what the
+          // context effect notifies, `record.callbacks` is what teardown drains.
           contextCallbacks.add(callback);
-          return () => { contextCallbacks.delete(callback); };
+          record.callbacks.add(callback);
+          return () => {
+            record.callbacks.delete(callback);
+            contextCallbacks.delete(callback);
+          };
         },
       );
 
@@ -141,28 +195,25 @@ export default function PluginHostLayer({ selectedProject, selectedSession }: Pl
           if (typeof pluginModule.mount !== 'function') {
             throw new Error('module does not export mount()');
           }
+          if (!active) return;
 
           record.module = pluginModule;
           await pluginModule.mount(container, hostApi);
-
-          // A plugin that finished mounting after the layer was torn down must
-          // not leave its listeners behind.
-          if (!active) {
-            try { record.module?.unmount?.(container); } catch { /* plugin error — isolate it */ }
-            record.module = null;
-          }
+          record.mountSucceeded = true;
         } catch (error) {
           console.error(`[Plugin:${plugin.name}] Resident mount failed:`, error);
+        } finally {
+          // Both outcomes converge here, so a mount that resolves after teardown
+          // is torn down exactly once, and a rejected one is never unmounted.
+          record.mountSettled = true;
+          if (!active) teardown(record);
         }
       })();
     }
 
     return () => {
       active = false;
-      for (const record of mounted) {
-        try { record.module?.unmount?.(record.container); } catch { /* plugin error — isolate it */ }
-        record.container.remove();
-      }
+      for (const record of mounted) teardown(record);
     };
   }, [residentKey]);
 
