@@ -313,6 +313,67 @@ for (const operation of ['remove', 'enqueue'] as const) {
   });
 }
 
+/**
+ * Rewrites the notification turn into a `queued_command` attachment, the shape
+ * that is at times the only record of a background task's report.
+ */
+async function useQueuedCommandAttachmentNotification(parentPath: string): Promise<void> {
+  const lines = (await readFile(parentPath, 'utf8')).split('\n').filter(Boolean);
+  const rewritten = lines.map((line) => {
+    const row = JSON.parse(line) as Record<string, any>;
+    if (!line.includes('task-notification')) {
+      return line;
+    }
+
+    return JSON.stringify({
+      type: 'attachment',
+      uuid: row.uuid,
+      parentUuid: row.parentUuid,
+      isSidechain: false,
+      timestamp: row.timestamp,
+      sessionId: row.sessionId,
+      attachment: {
+        type: 'queued_command',
+        commandMode: 'task-notification',
+        prompt: row.message.content[0].text,
+        timestamp: row.timestamp,
+      },
+    });
+  });
+  await writeFile(parentPath, `${rewritten.join('\n')}\n`, 'utf8');
+}
+
+test('Claude history folds a queued_command attachment notification onto the agent card', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-attachment-notification-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    await useQueuedCommandAttachmentNotification(parentPath);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+      });
+      const agentRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+      );
+
+      assert.equal(agentRow?.toolResult?.content, 'The repo has two packages.');
+      assert.equal(agentRow?.subagent?.status, 'completed');
+
+      const strayNotification = history.messages.find(
+        (message) => typeof message.content === 'string' && message.content.includes('<task-notification>'),
+      );
+      assert.equal(strayNotification, undefined, 'a folded notification must never also render on its own');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Claude history keeps rows that have no uuid when a queue-operation notification is folded', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-uuidless-row-'));
 
