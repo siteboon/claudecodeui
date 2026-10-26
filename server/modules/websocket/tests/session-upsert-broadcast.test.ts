@@ -139,7 +139,7 @@ test('a closed socket is skipped', async () => {
 
 test('archiving, restoring and deleting a session tell every other client', async () => {
   await withIsolatedDatabase(async () => {
-    const { sessionsService } = await import('@/modules/providers/services/sessions.service.js');
+    const { sessionsService } = await import('@/modules/providers/index.js');
     sessionsDb.createAppSession('app-archive', 'claude', '/workspace/demo');
 
     const connection = new FakeConnection();
