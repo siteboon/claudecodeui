@@ -86,7 +86,12 @@ export function useProviderAuthStatus(
     }));
   }, []);
 
+  const requestGenerationsRef = useRef<Record<string, number>>({});
+
   const checkProviderAuthStatus = useCallback(async (provider: LLMProvider): Promise<ProviderAuthStatus> => {
+    const generation = (requestGenerationsRef.current[provider] ?? 0) + 1;
+    requestGenerationsRef.current[provider] = generation;
+
     setProviderLoading(provider);
 
     try {
@@ -100,13 +105,17 @@ export function useProviderAuthStatus(
           loading: false,
           error: FALLBACK_STATUS_ERROR,
         };
-        setProviderStatus(provider, status);
+        if (requestGenerationsRef.current[provider] === generation) {
+          setProviderStatus(provider, status);
+        }
         return status;
       }
 
       const payload = (await response.json()) as ProviderAuthStatusApiResponse;
       const status = toProviderAuthStatus(payload.data);
-      setProviderStatus(provider, status);
+      if (requestGenerationsRef.current[provider] === generation) {
+        setProviderStatus(provider, status);
+      }
       return status;
     } catch (caughtError) {
       console.error(`Error checking ${provider} auth status:`, caughtError);
@@ -117,7 +126,9 @@ export function useProviderAuthStatus(
         loading: false,
         error: toErrorMessage(caughtError),
       };
-      setProviderStatus(provider, status);
+      if (requestGenerationsRef.current[provider] === generation) {
+        setProviderStatus(provider, status);
+      }
       return status;
     }
   }, [setProviderLoading, setProviderStatus]);

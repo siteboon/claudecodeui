@@ -89,7 +89,11 @@ export async function loadProviderPlugins(): Promise<void> {
       if (!provider?.id || !meta?.capabilities) {
         throw new Error('provider factory must return { provider, meta } with provider.id and meta.capabilities');
       }
-      if (typeof provider.id !== 'string' || !/^[a-z0-9_-]+$/.test(provider.id)) {
+      if (
+        typeof provider.id !== 'string'
+        || !/^[a-z0-9_-]+$/.test(provider.id)
+        || Object.prototype.hasOwnProperty.call(Object.prototype, provider.id)
+      ) {
         throw new Error(`invalid provider id "${provider.id}": must be lowercase alphanumeric, dashes or underscores`);
       }
       if (provider.id === 'plain-shell') {
