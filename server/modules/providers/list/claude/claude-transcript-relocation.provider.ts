@@ -5,7 +5,7 @@ import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from 'node
 
 import type { IProviderTranscriptRelocation } from '@/shared/interfaces.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, normalizeProjectPath } from '@/shared/utils.js';
 
 /**
  * Longest encoded folder name the Claude SDK writes verbatim. Past it the SDK
@@ -44,7 +44,8 @@ async function isDirectory(candidatePath: string): Promise<boolean> {
  *
  * Only rows that actually name the old folder are re-serialized; every other
  * line is copied through byte for byte, so nothing else in the user's
- * transcript is rewritten.
+ * transcript is rewritten. A row names it when its cwd normalizes to it, the
+ * way the synchronizer files a session (a trailing slash, for instance).
  */
 function rewriteTranscriptCwd(content: string, oldProjectPath: string, newProjectPath: string): string {
   return content
@@ -64,7 +65,7 @@ function rewriteTranscriptCwd(content: string, oldProjectPath: string, newProjec
       if (
         typeof row !== 'object'
         || row === null
-        || (row as { cwd?: unknown }).cwd !== oldProjectPath
+        || normalizeProjectPath((row as { cwd?: unknown }).cwd as string) !== oldProjectPath
       ) {
         return line;
       }

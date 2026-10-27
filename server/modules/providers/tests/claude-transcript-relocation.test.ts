@@ -181,3 +181,22 @@ test('an in-place rewrite that cannot be swapped in undoes the others', async ()
     assert.equal(JSON.parse(await readFile(stuck, 'utf8')).cwd, oldProjectPath);
   });
 });
+
+test('a cwd recorded in another form of the old folder is rewritten too', async () => {
+  await withClaudeProjectsRoot(async (root) => {
+    const oldProjectPath = '/home/u/alpha';
+    const newProjectPath = '/home/u/beta';
+    const oldDirectory = path.join(root, encodeClaudeProjectDirName(oldProjectPath));
+    // The synchronizer normalizes the cwd before filing the session, so this
+    // one belongs to the old project and would drag the session back to it.
+    const transcriptPath = await writeTranscript(oldDirectory, 'session-a', `${oldProjectPath}/`);
+
+    const [moved] = await new ClaudeTranscriptRelocationProvider().relocateTranscripts({
+      sessions: [{ sessionId: 'a', jsonlPath: transcriptPath }],
+      oldProjectPath,
+      newProjectPath,
+    });
+
+    assert.equal(JSON.parse(await readFile(moved.jsonlPath, 'utf8')).cwd, newProjectPath);
+  });
+});
