@@ -9,6 +9,7 @@ import {
   getStoredAuthToken,
   isAuthTokenExpired,
   storeAuthToken,
+  storeRefreshedAuthToken,
   TOKEN_EXPIRY_SKEW_MS,
 } from '@/shared/authToken';
 
@@ -82,6 +83,31 @@ test('storeAuthToken: a non-token value is rejected and does not overwrite the s
   assert.equal(storeAuthToken(''), false);
   assert.equal(storeAuthToken({ token: 'x' }), false);
   assert.equal(localStorage.getItem('auth-token'), 'existing');
+});
+
+// Value: protects=a refreshed token never resurrects or overwrites a session; fails_when=the guard is dropped or only checks that some token exists; why_new=storeAuthToken has no notion of the sending token; seam=none; no_claim=none beyond protects
+test('storeRefreshedAuthToken: only replaces the token the request was sent with', () => {
+  const now = Math.floor(Date.now() / 1000);
+  const sent = makeToken({ iat: now - 60, exp: now + 600 });
+  const refreshed = makeToken({ iat: now, exp: now + 660 });
+  const newerSignIn = makeToken({ iat: now + 1, exp: now + 661 });
+
+  const cases: Array<{ name: string; stored: string | null; sentWith: string | null; expected: string | null }> = [
+    { name: 'still signed in with the sending token', stored: sent, sentWith: sent, expected: refreshed },
+    { name: 'signed out while the request was in flight', stored: null, sentWith: sent, expected: null },
+    { name: 'signed in again while the request was in flight', stored: newerSignIn, sentWith: sent, expected: newerSignIn },
+    { name: 'the request carried no token', stored: null, sentWith: null, expected: null },
+  ];
+
+  for (const { name, stored, sentWith, expected } of cases) {
+    localStorage.clear();
+    if (stored) {
+      localStorage.setItem('auth-token', stored);
+    }
+
+    assert.equal(storeRefreshedAuthToken(refreshed, sentWith), expected === refreshed, name);
+    assert.equal(localStorage.getItem('auth-token'), expected, name);
+  }
 });
 
 test('getStoredAuthToken: an expired token is dropped and the expiry is announced once', () => {
