@@ -1195,7 +1195,15 @@ export async function buildLookupMap(
         continue;
       }
 
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      } catch {
+        // A row can be half-written while the CLI is streaming into the file.
+        // Skip it rather than abandoning every later entry in the file.
+        continue;
+      }
+
       const key = parsed[keyField];
       const value = parsed[valueField];
 
@@ -1221,26 +1229,37 @@ export async function extractFirstValidJsonlData<T>(
   filePath: string,
   extractor: (parsedJson: unknown) => T | null | undefined
 ): Promise<T | null> {
-  try {
-    const fileStream = fs.createReadStream(filePath);
-    const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+  const fileStream = fs.createReadStream(filePath);
+  const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
+  try {
     for await (const line of lineReader) {
       const trimmed = line.trim();
       if (!trimmed) {
         continue;
       }
 
-      const parsed = JSON.parse(trimmed);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        // A row can be half-written while the CLI is streaming into the file.
+        // Skip it rather than giving up before a later valid row.
+        continue;
+      }
+
       const extracted = extractor(parsed);
       if (extracted) {
-        lineReader.close();
-        fileStream.close();
         return extracted;
       }
     }
   } catch {
     // Ignore malformed or missing artifacts so full scans keep progressing.
+  } finally {
+    // Close on every exit (match, no match, or stream error) so a malformed
+    // artifact cannot leak the file descriptor across repeated watcher scans.
+    lineReader.close();
+    fileStream.close();
   }
 
   return null;
