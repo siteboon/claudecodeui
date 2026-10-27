@@ -176,6 +176,12 @@ function formatCommand(command: string, args: string[]): string {
   return [command, ...args].map(quote).join(' ');
 }
 
+/**
+ * Resolves the display label for a provider, checking built-in names then plugin metadata.
+ *
+ * @param provider - Provider ID to look up.
+ * @returns Human-readable label for the provider.
+ */
 function getProviderLabel(provider: LLMProvider): string {
   const labels: Record<LLMProvider, string> = {
     claude: 'Claude Code',
@@ -359,6 +365,12 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
     return lookup;
   };
 
+  /**
+   * Resolves the update command and arguments for a provider, checking plugin metadata first.
+   *
+   * @param provider - Provider ID to check update command for.
+   * @returns Command and args object, or null if the provider is not updatable.
+   */
   const resolveUpdateCommand = (provider: LLMProvider): { command: string; args: string[] } | null => {
     const pluginUpdater = pluginProvidersStore.get(provider)?.meta.cliUpdater;
     if (pluginUpdater) {

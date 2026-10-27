@@ -1,7 +1,6 @@
 import express, { type Request, type Response } from 'express';
 
-import { providerRegistry } from '@/modules/providers/provider.registry.js';
-import { pluginProvidersStore } from '@/modules/providers/plugin-providers.store.js';
+import { pluginProvidersStore, providerRegistry } from './index.js';
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
@@ -863,7 +862,10 @@ router.get(
   }),
 );
 
-// Providers loaded from plugins, with what the UI needs to show them (built-ins are hard-coded there).
+/**
+ * GET /api/providers/registry
+ * Returns providers loaded from plugins, with what the UI needs to show them (built-ins are hard-coded there).
+ */
 router.get(
   '/registry',
   asyncHandler(async (_req: Request, res: Response) => {

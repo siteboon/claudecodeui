@@ -32,6 +32,11 @@ export type PluginProviderInfo = {
 
 const CACHE_KEY = 'cloudcli.pluginProviders';
 
+/**
+ * Reads cached plugin providers from localStorage for fast initial render.
+ *
+ * @returns Cached array of plugin provider info or an empty array if missing.
+ */
 const readCache = (): PluginProviderInfo[] => {
   try {
     const cached = JSON.parse(window.localStorage.getItem(CACHE_KEY) ?? '[]');
@@ -47,6 +52,11 @@ let pluginProviders: PluginProviderInfo[] = typeof window === 'undefined' ? [] :
 let loadRequest: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
+/**
+ * Loads registered plugin providers from the server registry endpoint.
+ *
+ * @returns A promise that resolves when the registry fetch and state update finish.
+ */
 export function loadPluginProviders(): Promise<void> {
   if (loadRequest) {
     return loadRequest;
@@ -78,6 +88,12 @@ export function loadPluginProviders(): Promise<void> {
   return loadRequest;
 }
 
+/**
+ * Subscribes a listener callback to changes in the registered plugin providers.
+ *
+ * @param listener - Function invoked whenever plugin providers are updated.
+ * @returns Unsubscribe function to remove the listener.
+ */
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => {
@@ -85,12 +101,28 @@ const subscribe = (listener: () => void) => {
   };
 };
 
+/**
+ * Gets a snapshot of current plugin providers for useSyncExternalStore.
+ *
+ * @returns Current array of plugin providers.
+ */
 const getSnapshot = () => pluginProviders;
 
+/**
+ * Returns all currently loaded plugin providers.
+ *
+ * @returns Array of loaded plugin provider info objects.
+ */
 export function getPluginProviders(): PluginProviderInfo[] {
   return pluginProviders;
 }
 
+/**
+ * Looks up a registered plugin provider by its provider ID.
+ *
+ * @param id - Provider identifier string.
+ * @returns Matching plugin provider info or undefined if not found.
+ */
 export function getPluginProvider(id: string | null | undefined): PluginProviderInfo | undefined {
   return id ? pluginProviders.find((provider) => provider.id === id) : undefined;
 }

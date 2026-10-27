@@ -75,14 +75,30 @@ export type PluginProviderEntry = {
 const pluginProviders = new Map<string, PluginProviderEntry>();
 
 export const pluginProvidersStore = {
+  /**
+   * Registers a provider plugin entry into the in-memory store.
+   *
+   * @param entry - The plugin provider entry containing provider instance and metadata.
+   */
   register(entry: PluginProviderEntry): void {
     pluginProviders.set(entry.provider.id, entry);
   },
 
+  /**
+   * Retrieves a plugin provider entry by its provider ID.
+   *
+   * @param providerId - The unique provider identifier.
+   * @returns The registered PluginProviderEntry, or undefined if not found.
+   */
   get(providerId: string): PluginProviderEntry | undefined {
     return pluginProviders.get(providerId);
   },
 
+  /**
+   * Lists all currently registered plugin provider entries.
+   *
+   * @returns Array of registered PluginProviderEntry objects.
+   */
   list(): PluginProviderEntry[] {
     return Array.from(pluginProviders.values());
   },

@@ -21,6 +21,12 @@ const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
 
 const DEFAULT_PROVIDER: LLMProvider = 'claude';
 
+/**
+ * Reads the active selected provider from persisted user preferences,
+ * validating against both built-in providers and registered plugin providers.
+ *
+ * @returns The selected LLMProvider, falling back to DEFAULT_PROVIDER ('claude').
+ */
 export function readSelectedProvider(): LLMProvider {
   const stored = readUserPreference<string | null>('selectedProvider', null);
   return PROVIDERS.includes(stored as LLMProvider) || getPluginProvider(stored)
@@ -28,6 +34,11 @@ export function readSelectedProvider(): LLMProvider {
     : DEFAULT_PROVIDER;
 }
 
+/**
+ * Persists the user's selected provider to preferences.
+ *
+ * @param provider - The LLMProvider to set as active.
+ */
 export function writeSelectedProvider(provider: LLMProvider): void {
   writeUserPreference('selectedProvider', provider);
 }
