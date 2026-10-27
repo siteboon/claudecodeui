@@ -29,6 +29,15 @@ export const appConfigDb = {
     }
   },
 
+  /** Returns a stored value and lets database errors fail the caller. */
+  getStrict(key: string): string | null {
+    const db = getConnection();
+    const row = db
+      .prepare('SELECT value FROM app_config WHERE key = ?')
+      .get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  },
+
   /** Inserts or updates a config key (upsert). */
   set(key: string, value: string): void {
     const db = getConnection();

@@ -12,13 +12,20 @@ type AuthDependencies = {
     hasUsers(): boolean;
     createUser(username: string, passwordHash: string): AuthUser;
     getUserByUsername(username: string): AuthLoginUser | undefined;
+    getUserAuthById(userId: number): AuthLoginUser | undefined;
+    updatePasswordHash(userId: number, passwordHash: string): void;
     updateLastLogin(userId: number): void;
+  };
+  authConfig: {
+    setTokenGeneration(value: string): void;
   };
   transaction: {
     begin(): void;
     commit(): void;
     rollback(): void;
   };
+  isPlatform: boolean;
+  createTokenGeneration(): string;
   hashPassword(password: string): Promise<string>;
   comparePassword(password: string, passwordHash: string): Promise<boolean>;
   generateToken(user: AuthUser): string;
@@ -65,6 +72,7 @@ export function createAuthService(dependencies: AuthDependencies) {
         );
       }
 
+      const passwordHash = await dependencies.hashPassword(password);
       dependencies.transaction.begin();
       try {
         if (dependencies.users.hasUsers()) {
@@ -74,7 +82,6 @@ export function createAuthService(dependencies: AuthDependencies) {
           });
         }
 
-        const passwordHash = await dependencies.hashPassword(password);
         const user = dependencies.users.createUser(username, passwordHash);
         const token = dependencies.generateToken(user);
         dependencies.transaction.commit();
@@ -128,6 +135,69 @@ export function createAuthService(dependencies: AuthDependencies) {
 
     getCurrentUser(user: unknown) {
       return { user };
+    },
+
+    async changePassword(userInput: unknown, currentPasswordInput: unknown, newPasswordInput: unknown) {
+      if (dependencies.isPlatform) {
+        throw new AppError('Password changes are not available in platform mode', {
+          code: 'AUTH_PASSWORD_CHANGE_UNAVAILABLE',
+          statusCode: 403,
+        });
+      }
+
+      const currentPassword = typeof currentPasswordInput === 'string' ? currentPasswordInput : '';
+      const newPassword = typeof newPasswordInput === 'string' ? newPasswordInput : '';
+      if (!currentPassword || !newPassword) {
+        throw new AppError('Current password and new password are required', {
+          code: 'AUTH_PASSWORDS_REQUIRED',
+          statusCode: 400,
+        });
+      }
+      if (newPassword.length < 6) {
+        throw new AppError('New password must be at least 6 characters', {
+          code: 'AUTH_PASSWORD_TOO_SHORT',
+          statusCode: 400,
+        });
+      }
+      if (
+        typeof userInput !== 'object'
+        || userInput === null
+        || !('id' in userInput)
+        || (typeof userInput.id !== 'number' && typeof userInput.id !== 'bigint')
+      ) {
+        throw new AppError('Authenticated user is required', {
+          code: 'AUTH_USER_REQUIRED',
+          statusCode: 401,
+        });
+      }
+
+      const user = dependencies.users.getUserAuthById(numericUserId(userInput.id));
+      if (!user) {
+        throw new AppError('Invalid token. User not found.', {
+          code: 'AUTH_TOKEN_INVALID',
+          statusCode: 401,
+        });
+      }
+      if (!(await dependencies.comparePassword(currentPassword, user.password_hash))) {
+        throw new AppError('Current password is incorrect', {
+          code: 'AUTH_CURRENT_PASSWORD_INCORRECT',
+          statusCode: 401,
+        });
+      }
+
+      const passwordHash = await dependencies.hashPassword(newPassword);
+      const nextTokenGeneration = dependencies.createTokenGeneration();
+      dependencies.transaction.begin();
+      try {
+        dependencies.users.updatePasswordHash(numericUserId(user.id), passwordHash);
+        dependencies.authConfig.setTokenGeneration(nextTokenGeneration);
+        dependencies.transaction.commit();
+      } catch (error) {
+        dependencies.transaction.rollback();
+        throw error;
+      }
+
+      return { success: true, message: 'Password updated. Please sign in again.' };
     },
 
     refreshSession(user: unknown) {
