@@ -559,6 +559,9 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         if (!stats.isDirectory()) {
           throw createFileTreeError('Path is not a directory', 400, 'NOT_A_DIRECTORY');
         }
+        // The check above is on the path as given; a symlinked folder inside
+        // the project can still lead out of it.
+        resolveDirectoryInsideProject(await fileSystem.realpath(projectRoot), await fileSystem.realpath(directoryPath));
 
         // `depth` counts levels of entries, so 1 is the directory's own listing.
         const levels = Math.min(Math.max(options.depth ?? 1, 1), MAXIMUM_FILE_TREE_DEPTH + 1);

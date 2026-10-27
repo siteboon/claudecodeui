@@ -343,6 +343,7 @@ test('listProjectFiles lists one directory on demand and marks its subdirectorie
   const readDirectories: string[] = [];
   const fileSystem = createFakeFileSystem({
     access: async () => undefined,
+    realpath: async (candidatePath) => candidatePath,
     stat: async (candidatePath) => createStats(directoryPaths.has(candidatePath), 0o755),
     openDirectory: createDirectoryReader((directoryPath) => {
       readDirectories.push(directoryPath);
@@ -633,6 +634,26 @@ test('a file in another folder of the workspace can be read, but never written t
     );
   } finally {
     await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
+    await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('an on-demand listing does not follow a symlink out of the project', async () => {
+  // Beside this file rather than in the system temp directory, which is a
+  // read-only root.
+  const projectRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-lazy-project-'));
+  const outsideDirectory = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-lazy-outside-'));
+
+  try {
+    await fsPromises.writeFile(path.join(outsideDirectory, 'secret.txt'), 'secret', 'utf8');
+    await fsPromises.symlink(outsideDirectory, path.join(projectRoot, 'escape'));
+
+    await assert.rejects(
+      createRealFileSystemService(projectRoot).listProjectFiles('project-1', { path: 'escape' }),
+      (error: unknown) => error instanceof AppError && error.code === 'PATH_OUTSIDE_PROJECT',
+    );
+  } finally {
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
   }
 });
