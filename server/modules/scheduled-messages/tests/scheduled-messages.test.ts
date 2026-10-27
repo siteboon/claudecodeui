@@ -653,10 +653,11 @@ test('a repeat interval outside 5 minutes to a week is refused', async () => {
 
 test('a repeat cancelled while the message ahead of it is sent does not go', async () => {
   await withIsolatedDatabase(async (userId) => {
-    sessionsDb.createAppSession('second-session', 'claude', tmpdir(), 'Second session');
+    // Both in one session, so the second is sent only after the first one's
+    // turn, in which the user cancels it.
     const past = new Date(Date.now() - 1_000).toISOString();
     scheduledMessagesService.schedule({ userId, sessionId: SESSION_ID, content: 'first', scheduledFor: past, repeatEveryMinutes: 15 });
-    const second = scheduledMessagesService.schedule({ userId, sessionId: 'second-session', content: 'second', scheduledFor: past, repeatEveryMinutes: 15 });
+    const second = scheduledMessagesService.schedule({ userId, sessionId: SESSION_ID, content: 'second', scheduledFor: new Date(Date.now() - 500).toISOString(), repeatEveryMinutes: 15 });
 
     const runs: string[] = [];
     const runtime = {
