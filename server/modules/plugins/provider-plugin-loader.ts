@@ -89,6 +89,9 @@ export async function loadProviderPlugins(): Promise<void> {
       if (!provider?.id || !meta?.capabilities) {
         throw new Error('provider factory must return { provider, meta } with provider.id and meta.capabilities');
       }
+      if (meta.capabilities.provider !== provider.id) {
+        throw new Error(`capabilities.provider "${meta.capabilities.provider}" does not match provider id "${provider.id}"`);
+      }
       if (
         typeof provider.id !== 'string'
         || !/^[a-z0-9_-]+$/.test(provider.id)
