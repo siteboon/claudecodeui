@@ -1,7 +1,4 @@
-import { useEffect } from 'react';
-
 import type { SidebarProjectListProps } from '@/shared/types';
-import { getPageTitle } from '@/shared/utils';
 import SidebarProjectItem from '@/modules/sidebar/SidebarProjectItem';
 import SidebarProjectsState from '@/modules/sidebar/SidebarProjectsState';
 
@@ -51,7 +48,6 @@ export default function SidebarProjectList({
   onDeleteSelectedSessions,
   t,
 }: SidebarProjectListProps) {
-  const pageTitle = getPageTitle(selectedProject, selectedSession);
   const state = (
     <SidebarProjectsState
       isLoading={isLoading}
@@ -61,10 +57,6 @@ export default function SidebarProjectList({
       t={t}
     />
   );
-
-  useEffect(() => {
-    document.title = pageTitle;
-  }, [pageTitle]);
 
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
 
