@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { closeConnection } from '@/modules/database/index.js';
 import { createSideQuestionsService } from '@/modules/providers/services/side-questions.service.js';
 import type { SideQuestionEvent } from '@/shared/types.js';
 
@@ -14,21 +14,24 @@ import type { SideQuestionEvent } from '@/shared/types.js';
  * report false instead of acting on a row it does not own.
  */
 
-const SESSION_ID = 'btw-dismiss-session';
-const OTHER_SESSION_ID = 'btw-dismiss-other-session';
+const SESSION_ID = 'side-question-dismiss-session';
+const OTHER_SESSION_ID = 'side-question-dismiss-other-session';
 
-async function withIsolatedDatabase(runTest: (projectPath: string) => void | Promise<void>): Promise<void> {
+/**
+ * Side questions live in server memory, so these run with no database
+ * initialised. DATABASE_PATH points at an empty temp file: a service that
+ * wrongly reaches for the database fails on a missing table instead of
+ * opening the operator's real database.
+ */
+async function withoutDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(tmpdir(), 'side-questions-dismiss-'));
 
   closeConnection();
-  process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
-  await initializeDatabase();
+  process.env.DATABASE_PATH = path.join(tempDirectory, 'never-initialised.db');
 
   try {
-    sessionsDb.createAppSession(SESSION_ID, 'claude', tempDirectory, 'Dismiss session');
-    sessionsDb.createAppSession(OTHER_SESSION_ID, 'claude', tempDirectory, 'Other dismiss session');
-    await runTest(tempDirectory);
+    await runTest();
   } finally {
     closeConnection();
     if (previousDatabasePath === undefined) {
@@ -41,7 +44,7 @@ async function withIsolatedDatabase(runTest: (projectPath: string) => void | Pro
 }
 
 test('dismiss broadcasts a dismissed event on success', { timeout: 5000 }, async () => {
-  await withIsolatedDatabase(async () => {
+  await withoutDatabase(async () => {
     const service = createSideQuestionsService();
     const events: SideQuestionEvent[] = [];
     const runtime = {
@@ -71,11 +74,12 @@ test('dismiss broadcasts a dismissed event on success', { timeout: 5000 }, async
     assert.ok(dismissedEvent, 'a dismissed event was broadcast');
     assert.equal(dismissedEvent?.sessionId, SESSION_ID);
     assert.equal(dismissedEvent?.sideQuestionId, 'sq-1');
+    assert.equal(service.getById('sq-1'), null, 'the dismissed question is gone from memory');
   });
 });
 
-test('dismiss by another session\'s id aborts nothing and keeps the row', { timeout: 5000 }, async () => {
-  await withIsolatedDatabase(async () => {
+test('dismiss by another session\'s id aborts nothing and keeps the question', { timeout: 5000 }, async () => {
+  await withoutDatabase(async () => {
     const service = createSideQuestionsService();
     const events: SideQuestionEvent[] = [];
     let aborted = false;
@@ -109,8 +113,9 @@ test('dismiss by another session\'s id aborts nothing and keeps the row', { time
     assert.equal(dismissed, false, 'the wrong session\'s dismiss reports false');
     assert.equal(aborted, false, 'the other session\'s running question is never aborted');
     assert.deepEqual(events, [], 'nothing is broadcast for a no-op dismiss');
+    assert.equal(service.getById('sq-2')?.sessionId, OTHER_SESSION_ID, 'the other session keeps its question');
 
-    assert.equal(service.dismiss(OTHER_SESSION_ID, 'sq-2'), true, 'the owning session can still dismiss it');
+    assert.equal(service.dismiss(OTHER_SESSION_ID, 'sq-2', () => {}), true, 'the owning session can still dismiss it');
     assert.equal(aborted, true, 'its own session can abort it');
   });
 });

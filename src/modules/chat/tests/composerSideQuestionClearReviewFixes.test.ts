@@ -9,7 +9,7 @@ import { clearQueuedMessage } from '@/shared/chatDrafts';
 import type { PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
 
 /**
- * A review fix in `useChatComposerState`: after a successful BTW the composer
+ * A review fix in `useChatComposerState`: after a successful side question the composer
  * clears only the typed text, never the attachments, and only when the ask
  * actually returned true. A disconnected ask (the hook's new `isConnected`
  * arg) must leave both the text and the frame untouched.
@@ -40,6 +40,7 @@ const render = (isConnected: boolean) => {
       ]]) as SessionActivityMap,
       canAbortSession: true,
       tokenBudget: null,
+      supportsSideQuestions: true,
       sendMessage: (message) => { sent.push(message as Frame); },
       isConnected,
       scrollToBottom: () => undefined,
@@ -63,26 +64,26 @@ afterEach(() => {
   localStorage.clear();
 });
 
-test('BTW while disconnected keeps the typed text and sends no frame', async () => {
+test('A side question while disconnected keeps the typed text and sends no frame', async () => {
   const { view, of } = render(false);
 
   await act(async () => { view.result.current.setInput('are we there yet?'); });
-  await act(async () => { await view.result.current.handleSendMenuChoice('btw'); });
+  await act(async () => { await view.result.current.handleSendMenuChoice('sideQuestion'); });
 
-  assert.equal(of('chat.btw').length, 0, 'no chat.btw frame is sent');
+  assert.equal(of('chat.side_question').length, 0, 'no chat.side_question frame is sent');
   assert.equal(view.result.current.input, 'are we there yet?', 'the typed text stays in the composer');
 });
 
-test('BTW while connected clears the text but keeps an attached file', async () => {
+test('A side question while connected clears the text but keeps an attached file', async () => {
   const { view, of } = render(true);
   const file = new File(['content'], 'note.txt', { type: 'text/plain' });
 
   await act(async () => { view.result.current.setInput('what does this flag do?'); });
   await act(async () => { view.result.current.setAttachedFiles([file]); });
 
-  await act(async () => { await view.result.current.handleSendMenuChoice('btw'); });
+  await act(async () => { await view.result.current.handleSendMenuChoice('sideQuestion'); });
 
-  assert.equal(of('chat.btw').length, 1, 'the ask went through');
+  assert.equal(of('chat.side_question').length, 1, 'the ask went through');
   assert.equal(view.result.current.input, '', 'the text is cleared');
   assert.equal(view.result.current.attachedFiles.length, 1, 'the attached file is kept');
   assert.equal(view.result.current.attachedFiles[0]?.name, 'note.txt');

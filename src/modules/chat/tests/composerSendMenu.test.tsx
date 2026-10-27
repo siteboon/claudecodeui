@@ -18,11 +18,16 @@ import ComposerSendMenu from '@/modules/chat/composer/ComposerSendMenu';
  */
 
 type SendMenuState = 'responding' | 'background';
-type SendMenuChoice = 'queue' | 'btw' | 'stop' | 'send';
+type SendMenuChoice = 'queue' | 'sideQuestion' | 'stop' | 'send';
 
-const renderMenu = (state: SendMenuState, hasInput: boolean) => {
+// Every test but the capability-gate ones draws the menu for a provider that
+// answers side questions; the component's default is false until the
+// capability matrix has loaded.
+const renderMenu = (state: SendMenuState, hasInput: boolean, supportsSideQuestions = true) => {
   const onSelect = vi.fn<(choice: SendMenuChoice) => void>();
-  const view = render(<ComposerSendMenu state={state} hasInput={hasInput} onSelect={onSelect} />);
+  const view = render(
+    <ComposerSendMenu state={state} hasInput={hasInput} supportsSideQuestions={supportsSideQuestions} onSelect={onSelect} />,
+  );
   return { ...view, onSelect };
 };
 
@@ -36,7 +41,7 @@ const open = () => {
 const items = (menu: HTMLElement) => Array.from(menu.querySelectorAll<HTMLElement>('[role^="menuitem"]'));
 const labelOf = (item: HTMLElement) => {
   const text = item.textContent ?? '';
-  for (const label of ['Queue', 'BTW', 'Stop', 'Send anyway']) {
+  for (const label of ['Queue', 'Side question', 'Stop', 'Send anyway']) {
     if (text.startsWith(label)) return label;
   }
   return text;
@@ -72,57 +77,57 @@ test('the trigger is the send-options button, and the menu is closed until it is
   assert.ok(screen.queryByRole('menu') === null, 'the menu is closed');
 });
 
-test('while a turn is written the menu offers Queue, BTW and then Stop, Stop last and red', () => {
+test('while a turn is written the menu offers Queue, Side question and then Stop, Stop last and red', () => {
   renderMenu('responding', true);
   const menu = open();
 
-  assert.deepEqual(items(menu).map(labelOf), ['Queue', 'BTW', 'Stop']);
+  assert.deepEqual(items(menu).map(labelOf), ['Queue', 'Side question', 'Stop']);
   const stop = item(menu, 'Stop');
   assert.ok(looksDestructive(stop), 'Stop is drawn as the destructive choice');
   assert.ok(!looksDestructive(item(menu, 'Queue')), 'Queue is not');
-  assert.ok(!looksDestructive(item(menu, 'BTW')), 'BTW is not');
-  assert.equal(separatorsBetween(menu, item(menu, 'BTW'), stop).length, 1, 'a separator sets Stop apart');
+  assert.ok(!looksDestructive(item(menu, 'Side question')), 'Side question is not');
+  assert.equal(separatorsBetween(menu, item(menu, 'Side question'), stop).length, 1, 'a separator sets Stop apart');
   assert.match(item(menu, 'Queue').textContent ?? '', /Send when this turn ends/);
-  assert.match(item(menu, 'BTW').textContent ?? '', /Ask on the side now; the session never sees it/);
+  assert.match(item(menu, 'Side question').textContent ?? '', /Ask on the side now; the session never sees it/);
   assert.match(stop.textContent ?? '', /End the response being written/);
 });
 
-test('while only background work runs the menu offers Queue, BTW and then Send anyway, Send anyway last and red', () => {
+test('while only background work runs the menu offers Queue, Side question and then Send anyway, Send anyway last and red', () => {
   renderMenu('background', true);
   const menu = open();
 
-  assert.deepEqual(items(menu).map(labelOf), ['Queue', 'BTW', 'Send anyway']);
+  assert.deepEqual(items(menu).map(labelOf), ['Queue', 'Side question', 'Send anyway']);
   const sendAnyway = item(menu, 'Send anyway');
   assert.ok(looksDestructive(sendAnyway), 'Send anyway is drawn as the destructive choice');
   assert.ok(!looksDestructive(item(menu, 'Queue')));
-  assert.ok(!looksDestructive(item(menu, 'BTW')));
-  assert.equal(separatorsBetween(menu, item(menu, 'BTW'), sendAnyway).length, 1, 'a separator sets Send anyway apart');
+  assert.ok(!looksDestructive(item(menu, 'Side question')));
+  assert.equal(separatorsBetween(menu, item(menu, 'Side question'), sendAnyway).length, 1, 'a separator sets Send anyway apart');
   assert.match(item(menu, 'Queue').textContent ?? '', /Send when the background work ends/);
   assert.match(sendAnyway.textContent ?? '', /Send now; this stops the background work/);
 });
 
-test('without input, Queue and BTW are disabled while a turn is written, and Stop stays enabled', () => {
+test('without input, Queue and Side question are disabled while a turn is written, and Stop stays enabled', () => {
   const { onSelect } = renderMenu('responding', false);
   const menu = open();
 
   assert.ok(isDisabled(item(menu, 'Queue')));
-  assert.ok(isDisabled(item(menu, 'BTW')));
+  assert.ok(isDisabled(item(menu, 'Side question')));
   assert.ok(!isDisabled(item(menu, 'Stop')), 'stopping needs no input');
 
   fireEvent.click(item(menu, 'Queue'));
-  fireEvent.click(item(menu, 'BTW'));
+  fireEvent.click(item(menu, 'Side question'));
   assert.equal(onSelect.mock.calls.length, 0, 'a disabled row does nothing');
 
   fireEvent.click(item(menu, 'Stop'));
   assert.deepEqual(onSelect.mock.calls.map((args) => args.map((arg) => (typeof arg === 'string' ? arg : typeof arg))), [['stop']], 'Stop works with an empty composer');
 });
 
-test('without input, Queue, BTW and Send anyway are all disabled while background work runs', () => {
+test('without input, Queue, Side question and Send anyway are all disabled while background work runs', () => {
   const { onSelect } = renderMenu('background', false);
   const menu = open();
 
   assert.ok(isDisabled(item(menu, 'Queue')));
-  assert.ok(isDisabled(item(menu, 'BTW')));
+  assert.ok(isDisabled(item(menu, 'Side question')));
   assert.ok(isDisabled(item(menu, 'Send anyway')));
 
   fireEvent.click(item(menu, 'Send anyway'));
@@ -140,10 +145,10 @@ test('with input, every row is enabled', () => {
 
 const choicesFor: Array<[SendMenuState, string, SendMenuChoice]> = [
   ['responding', 'Queue', 'queue'],
-  ['responding', 'BTW', 'btw'],
+  ['responding', 'Side question', 'sideQuestion'],
   ['responding', 'Stop', 'stop'],
   ['background', 'Queue', 'queue'],
-  ['background', 'BTW', 'btw'],
+  ['background', 'Side question', 'sideQuestion'],
   ['background', 'Send anyway', 'send'],
 ];
 
@@ -159,3 +164,40 @@ for (const [state, label, choice] of choicesFor) {
     unmount();
   });
 }
+
+// The capability gate: a provider that cannot answer side questions (Cursor,
+// or any provider before the capability matrix has loaded) gets no
+// side-question row at all, not a disabled one.
+test('without side-question support, a turn being written offers only Queue and Stop', () => {
+  renderMenu('responding', true, false);
+  const menu = open();
+
+  assert.deepEqual(items(menu).map(labelOf), ['Queue', 'Stop']);
+  assert.ok(looksDestructive(item(menu, 'Stop')), 'Stop is still last and red');
+});
+
+test('without side-question support, background work offers only Queue and Send anyway', () => {
+  renderMenu('background', true, false);
+  const menu = open();
+
+  assert.deepEqual(items(menu).map(labelOf), ['Queue', 'Send anyway']);
+  assert.ok(looksDestructive(item(menu, 'Send anyway')), 'Send anyway is still last and red');
+});
+
+test('with side-question support, both states carry the side-question row', () => {
+  for (const state of ['responding', 'background'] as const) {
+    const { unmount } = renderMenu(state, true, true);
+    const menu = open();
+
+    assert.ok(items(menu).map(labelOf).includes('Side question'), `the ${state} menu has the row`);
+    unmount();
+  }
+});
+
+test('without the supportsSideQuestions prop, the menu has no side-question row', () => {
+  const onSelect = vi.fn<(choice: SendMenuChoice) => void>();
+  render(<ComposerSendMenu state="responding" hasInput onSelect={onSelect} />);
+  const menu = open();
+
+  assert.deepEqual(items(menu).map(labelOf), ['Queue', 'Stop'], 'the default is false until the matrix loads');
+});

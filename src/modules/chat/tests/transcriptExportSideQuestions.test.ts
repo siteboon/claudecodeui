@@ -8,7 +8,7 @@ import type { TranscriptExportFormat } from '@/modules/chat/utils/chatExport';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 
 /**
- * A BTW aside is drawn in the transcript but is not part of the session, so an
+ * A side-question aside is drawn in the transcript but is not part of the session, so an
  * export leaves it out unless the operator asks for it: the file then matches
  * what the session itself saw.
  */
@@ -23,20 +23,20 @@ const sessionQuestion: ChatMessage = {
   timestamp: '2026-10-26T10:00:00.000Z',
 };
 
-const btwQuestion: ChatMessage = {
-  id: 'btw-q-q1',
+const sideQuestionRow: ChatMessage = {
+  id: 'side-question-q-q1',
   type: 'user',
   content: 'Side question zebra-marker',
   timestamp: '2026-10-26T10:00:30.000Z',
-  btw: { sideQuestionId: 'q1', sessionId: 'session-1', status: 'done' },
+  sideQuestion: { sideQuestionId: 'q1', sessionId: 'session-1', status: 'done' },
 };
 
-const btwAnswer: ChatMessage = {
-  id: 'btw-a-q1',
+const sideAnswerRow: ChatMessage = {
+  id: 'side-question-a-q1',
   type: 'assistant',
   content: 'Side answer okapi-marker',
   timestamp: '2026-10-26T10:00:30.000Z',
-  btw: { sideQuestionId: 'q1', sessionId: 'session-1', status: 'done' },
+  sideQuestion: { sideQuestionId: 'q1', sessionId: 'session-1', status: 'done' },
 };
 
 const sessionAnswer: ChatMessage = {
@@ -47,7 +47,7 @@ const sessionAnswer: ChatMessage = {
 };
 
 const base = {
-  messages: [sessionQuestion, btwQuestion, btwAnswer, sessionAnswer],
+  messages: [sessionQuestion, sideQuestionRow, sideAnswerRow, sessionAnswer],
   sessionTitle: 'Build question',
   provider: 'claude' as const,
   createDiff,
@@ -56,7 +56,7 @@ const base = {
 const FORMATS: TranscriptExportFormat[] = ['markdown', 'html', 'json'];
 
 describe('transcript export and side questions', () => {
-  it.each(FORMATS)('%s drops btw rows by default and keeps them when asked', async (format) => {
+  it.each(FORMATS)('%s drops side-question rows by default and keeps them when asked', async (format) => {
     const plain = await buildTranscriptExport(format, base, exportedAt);
     assert.ok(plain.includes('Session question about the build'), 'the session question is exported');
     assert.ok(plain.includes('Session answer about the build'), 'the session answer is exported');

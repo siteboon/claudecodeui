@@ -9,7 +9,7 @@ import type * as ReactI18nextModule from 'react-i18next';
 import type * as ChatExportModule from '@/modules/chat/utils/chatExport';
 
 /**
- * The export leaves BTW asides out unless the operator asks for them, and the
+ * The export leaves side-question asides out unless the operator asks for them, and the
  * menu is where they ask: one option, off until it is turned on.
  *
  * Assumptions, kept minimal: labels render as their i18n keys (mocked below);

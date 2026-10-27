@@ -1,15 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  askClaudeSideQuestion,
-  askClaudeSideQuestionFromHistory,
-} from '@/modules/providers/list/claude/claude-side-question.provider.js';
+import { askClaudeSideQuestion } from '@/modules/providers/list/claude/claude-side-question.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type {
   AnyRecord,
   BackgroundTaskSummary,
-  NormalizedMessage,
   ProviderRuntimeContext,
   SideQuestionOutcome,
   SideQuestionRequest,
@@ -469,89 +465,4 @@ test('a createQuery that throws resolves to an error outcome instead of rejectin
     liveTasks: [],
   });
   assert.equal(settled.status, 'error');
-});
-
-function historyMessage(role: 'user' | 'assistant', content: string, index: number, kind: NormalizedMessage['kind'] = 'text'): NormalizedMessage {
-  return {
-    id: `m${index}`,
-    sessionId: APP_SESSION_ID,
-    timestamp: new Date(1_700_000_000_000 + index * 1000).toISOString(),
-    provider: 'codex',
-    kind,
-    role,
-    content,
-  };
-}
-
-function startHistory(history: NormalizedMessage[], request: Partial<SideQuestionRequest> = {}) {
-  const { createQuery, script } = createScriptedQuery();
-  const { deltas, sink } = createSink();
-  const outcome = askClaudeSideQuestionFromHistory(createRequest({ model: 'gpt-5-codex', ...request }), history, sink, { createQuery });
-  return { script, deltas, outcome };
-}
-
-test('the history path is read-only, does not resume, and ignores the request model', { timeout: 5000 }, async () => {
-  const { script, deltas, outcome } = startHistory([historyMessage('user', 'hi', 1)]);
-  await waitFor(() => script.calls.length === 1);
-  const { options } = script.calls[0]!;
-
-  assert.equal(options.resume, undefined);
-  assert.equal(options.forkSession, undefined);
-  assert.equal(options.model, undefined, 'another provider model id never reaches Claude');
-  assert.equal(options.persistSession, false);
-  assert.deepEqual(options.tools, ['Read', 'Grep', 'Glob']);
-  assert.deepEqual(options.allowedTools, ['Read', 'Grep', 'Glob']);
-  assert.equal(options.permissionMode, 'dontAsk');
-  assert.deepEqual(options.settingSources, []);
-  assert.equal(options.maxTurns, 4);
-  assert.equal(options.mcpServers, undefined);
-  assert.equal(options.hooks, undefined);
-  assert.equal(options.canUseTool, undefined);
-
-  script.emit(streamText('Answer from history'));
-  script.emit(assistantText('Answer from history'));
-  script.emit(result('success', 'Answer from history'));
-  assert.deepEqual(await outcome, { status: 'done', answer: 'Answer from history' });
-  assert.deepEqual(deltas, ['Answer from history']);
-});
-
-test('the history prompt is the text transcript in order, then the question', { timeout: 5000 }, async () => {
-  const { script, outcome } = startHistory([
-    historyMessage('user', 'FIRST-USER-LINE', 1),
-    historyMessage('assistant', 'TOOL-CALL-CONTENT', 2, 'tool_use'),
-    historyMessage('assistant', 'SECOND-ASSISTANT-LINE', 3),
-    historyMessage('assistant', 'THINKING-CONTENT', 4, 'thinking'),
-  ]);
-  await waitFor(() => script.promptMessages.length >= 1);
-  const text = script.promptMessages.map(promptText).join('\n');
-
-  const first = text.indexOf('FIRST-USER-LINE');
-  const second = text.indexOf('SECOND-ASSISTANT-LINE');
-  const question = text.indexOf(QUESTION);
-  assert.ok(first >= 0 && second > first && question > second, 'transcript in order, question last');
-  assert.equal(text.includes('TOOL-CALL-CONTENT'), false, 'only text messages are kept');
-  assert.equal(text.includes('THINKING-CONTENT'), false, 'only text messages are kept');
-
-  script.emit(assistantText('ok'));
-  script.emit(result('success', 'ok'));
-  await outcome;
-});
-
-test('the history prompt keeps the newest text and drops the oldest past the budget', { timeout: 5000 }, async () => {
-  const { script, outcome } = startHistory([
-    historyMessage('user', `OLDEST-MARKER ${'a'.repeat(60_000)}`, 1),
-    historyMessage('assistant', `MIDDLE-MARKER ${'b'.repeat(30_000)}`, 2),
-    historyMessage('user', `NEWEST-MARKER ${'c'.repeat(30_000)}`, 3),
-  ]);
-  await waitFor(() => script.promptMessages.length >= 1);
-  const text = script.promptMessages.map(promptText).join('\n');
-
-  assert.equal(text.includes('OLDEST-MARKER'), false, 'the oldest end is trimmed');
-  assert.ok(text.includes('NEWEST-MARKER'), 'the newest message survives');
-  assert.ok(text.includes(QUESTION), 'the question is never trimmed');
-  assert.ok(text.length <= 100_000 + QUESTION.length + 2_000, `prompt stays near the budget (was ${text.length})`);
-
-  script.emit(assistantText('ok'));
-  script.emit(result('success', 'ok'));
-  await outcome;
 });

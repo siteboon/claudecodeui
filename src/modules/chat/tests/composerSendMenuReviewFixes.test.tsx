@@ -11,13 +11,13 @@ import ComposerSendMenu from '@/modules/chat/composer/ComposerSendMenu';
  *
  * - The destructive row (Stop / Send anyway) lost `text-destructive-foreground`
  *   and renders `text-destructive` instead, in both states.
- * - A new `hasText` prop, defaulting to `hasInput`, alone gates BTW: an
+ * - A new `hasText` prop, defaulting to `hasInput`, alone gates the side question: an
  *   attachment-only composer (`hasInput` true, `hasText` false) still enables
- *   Queue but disables BTW.
+ *   Queue but disables the side question.
  */
 
 type SendMenuState = 'responding' | 'background';
-type SendMenuChoice = 'queue' | 'btw' | 'stop' | 'send';
+type SendMenuChoice = 'queue' | 'sideQuestion' | 'stop' | 'send';
 
 const open = () => {
   fireEvent.click(screen.getByRole('button', { name: 'Send options' }));
@@ -27,7 +27,7 @@ const open = () => {
 const items = (menu: HTMLElement) => Array.from(menu.querySelectorAll<HTMLElement>('[role^="menuitem"]'));
 const labelOf = (item: HTMLElement) => {
   const text = item.textContent ?? '';
-  for (const label of ['Queue', 'BTW', 'Stop', 'Send anyway']) {
+  for (const label of ['Queue', 'Side question', 'Stop', 'Send anyway']) {
     if (text.startsWith(label)) return label;
   }
   return text;
@@ -60,16 +60,16 @@ for (const [state, destructiveLabel] of [
   });
 }
 
-test('hasText false with hasInput true disables BTW but leaves Queue enabled', () => {
+test('hasText false with hasInput true disables Side question but leaves Queue enabled', () => {
   const onSelect = vi.fn<(choice: SendMenuChoice) => void>();
-  render(<ComposerSendMenu state="responding" hasInput hasText={false} onSelect={onSelect} />);
+  render(<ComposerSendMenu state="responding" hasInput hasText={false} supportsSideQuestions onSelect={onSelect} />);
   const menu = open();
 
-  assert.ok(isDisabled(item(menu, 'BTW')), 'BTW is disabled without text');
+  assert.ok(isDisabled(item(menu, 'Side question')), 'Side question is disabled without text');
   assert.ok(!isDisabled(item(menu, 'Queue')), 'Queue stays enabled on an attachment alone');
 
-  fireEvent.click(item(menu, 'BTW'));
-  assert.equal(onSelect.mock.calls.length, 0, 'a disabled BTW does nothing');
+  fireEvent.click(item(menu, 'Side question'));
+  assert.equal(onSelect.mock.calls.length, 0, 'a disabled Side question does nothing');
 
   fireEvent.click(item(menu, 'Queue'));
   assert.equal(onSelect.mock.calls.length, 1);

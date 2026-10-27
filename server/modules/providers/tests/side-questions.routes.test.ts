@@ -8,13 +8,14 @@ import test from 'node:test';
 
 import express, { type NextFunction, type Request, type Response } from 'express';
 
-import { closeConnection, initializeDatabase, sessionsDb, sideQuestionsDb } from '@/modules/database/index.js';
+import { closeConnection, getConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
-import type { SideQuestion } from '@/shared/types.js';
+import { sideQuestionsService } from '@/modules/providers/services/side-questions.service.js';
+import type { SideQuestion, SideQuestionOutcome, SideQuestionRuntime } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
-const SESSION_ID = 'btw-routes-session';
-const OTHER_SESSION_ID = 'btw-routes-other-session';
+const SESSION_ID = 'side-question-routes-session';
+const OTHER_SESSION_ID = 'side-question-routes-other-session';
 
 async function withProviderServer(run: (baseUrl: string) => Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -24,6 +25,10 @@ async function withProviderServer(run: (baseUrl: string) => Promise<void>): Prom
   process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
   await writeFile(process.env.DATABASE_PATH, '');
   await initializeDatabase();
+  // The sessions table is still needed for the session rows below. A
+  // `side_questions` table is not: should one exist, drop it, so a route
+  // that still reads it fails here instead of passing on a stale schema.
+  getConnection().exec('DROP TABLE IF EXISTS side_questions');
 
   const app = express().use(express.json()).use('/api/providers', providerRouter);
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
@@ -50,17 +55,60 @@ async function withProviderServer(run: (baseUrl: string) => Promise<void>): Prom
     await new Promise<void>((resolve, reject) => {
       server.close((error) => error ? reject(error) : resolve());
     });
-    closeConnection();
-    if (previousDatabasePath === undefined) {
-      delete process.env.DATABASE_PATH;
-    } else {
-      process.env.DATABASE_PATH = previousDatabasePath;
+    try {
+      // The routes use the process-wide service, whose memory outlives one
+      // test; clear both sessions so the next test starts empty. After the
+      // server closed, so a throw here cannot leave the file hanging, and
+      // before the connection closes, so nothing reopens the real database.
+      for (const sessionId of [SESSION_ID, OTHER_SESSION_ID]) {
+        for (const sideQuestion of sideQuestionsService.listForSession(sessionId)) {
+          sideQuestionsService.dismiss(sessionId, sideQuestion.id, () => {});
+        }
+      }
+    } finally {
+      closeConnection();
+      if (previousDatabasePath === undefined) {
+        delete process.env.DATABASE_PATH;
+      } else {
+        process.env.DATABASE_PATH = previousDatabasePath;
+      }
+      await rm(tempDirectory, { recursive: true, force: true });
     }
-    await rm(tempDirectory, { recursive: true, force: true });
   }
 }
 
 const tick = () => new Promise((resolve) => { setTimeout(resolve, 5); });
+
+/**
+ * Puts a side question into the process-wide service the routes read. With
+ * an `answer` it finishes as done at once; without one it stays running
+ * until a dismiss aborts it.
+ */
+async function seed(
+  sideQuestionId: string,
+  sessionId: string,
+  question: string,
+  model: string | null,
+  answer?: string,
+): Promise<void> {
+  const runtime: SideQuestionRuntime = {
+    askSideQuestion: (_provider, request) => new Promise<SideQuestionOutcome>((resolve) => {
+      if (answer !== undefined) {
+        resolve({ status: 'done', answer });
+        return;
+      }
+      request.signal.addEventListener('abort', () => resolve({ status: 'error', error: 'aborted', answer: '' }));
+    }),
+  };
+  const asking = sideQuestionsService.ask(
+    { sessionId, provider: 'claude', providerSessionId: null, projectPath: null, sideQuestionId, question, model },
+    runtime,
+    () => {},
+  );
+  if (answer !== undefined) {
+    await asking;
+  }
+}
 
 type HistoryPayload = {
   success: boolean;
@@ -74,11 +122,10 @@ type HistoryPayload = {
 
 test('the history route keeps its response and adds the session\'s side questions', { timeout: 5000 }, async () => {
   await withProviderServer(async (baseUrl) => {
-    sideQuestionsDb.create({ id: 'sq-a', sessionId: SESSION_ID, question: 'first', model: null });
+    await seed('sq-a', SESSION_ID, 'first', null);
     await tick();
-    sideQuestionsDb.create({ id: 'sq-b', sessionId: SESSION_ID, question: 'second', model: 'claude-opus-5' });
-    sideQuestionsDb.finish('sq-b', { status: 'done', answer: 'answered' });
-    sideQuestionsDb.create({ id: 'sq-other', sessionId: OTHER_SESSION_ID, question: 'elsewhere', model: null });
+    await seed('sq-b', SESSION_ID, 'second', 'claude-opus-5', 'answered');
+    await seed('sq-other', OTHER_SESSION_ID, 'elsewhere', null);
 
     const response = await fetch(`${baseUrl}/api/providers/sessions/${SESSION_ID}/messages`);
     const payload = await response.json() as HistoryPayload;
@@ -104,8 +151,8 @@ test('the history route keeps its response and adds the session\'s side question
 
 test('the history route returns the whole side-question list on every page', { timeout: 5000 }, async () => {
   await withProviderServer(async (baseUrl) => {
-    sideQuestionsDb.create({ id: 'sq-a', sessionId: SESSION_ID, question: 'first', model: null });
-    sideQuestionsDb.create({ id: 'sq-b', sessionId: SESSION_ID, question: 'second', model: null });
+    await seed('sq-a', SESSION_ID, 'first', null);
+    await seed('sq-b', SESSION_ID, 'second', null);
 
     const response = await fetch(`${baseUrl}/api/providers/sessions/${SESSION_ID}/messages?limit=1&offset=3`);
     const payload = await response.json() as HistoryPayload;
@@ -127,8 +174,8 @@ test('the history route returns an empty side-question list for a session withou
 
 test('DELETE removes a side question and answers deleted: true', { timeout: 5000 }, async () => {
   await withProviderServer(async (baseUrl) => {
-    sideQuestionsDb.create({ id: 'sq-a', sessionId: SESSION_ID, question: 'first', model: null });
-    sideQuestionsDb.create({ id: 'sq-b', sessionId: SESSION_ID, question: 'second', model: null });
+    await seed('sq-a', SESSION_ID, 'first', null);
+    await seed('sq-b', SESSION_ID, 'second', null);
 
     const response = await fetch(`${baseUrl}/api/providers/sessions/${SESSION_ID}/side-questions/sq-a`, {
       method: 'DELETE',
@@ -138,8 +185,8 @@ test('DELETE removes a side question and answers deleted: true', { timeout: 5000
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.deepEqual(payload.data, { deleted: true });
-    assert.equal(sideQuestionsDb.getById('sq-a'), null);
-    assert.ok(sideQuestionsDb.getById('sq-b'), 'only the named one goes');
+    assert.equal(sideQuestionsService.getById('sq-a'), null);
+    assert.ok(sideQuestionsService.getById('sq-b'), 'only the named one goes');
     // The session itself is untouched by the more specific route.
     assert.ok(sessionsDb.getSessionById(SESSION_ID));
   });
@@ -157,15 +204,37 @@ test('DELETE of an unknown side question is a 404', { timeout: 5000 }, async () 
   });
 });
 
-test('DELETE through another session\'s id is a 404 and keeps the row', { timeout: 5000 }, async () => {
+test('DELETE through another session\'s id is a 404 and keeps the question', { timeout: 5000 }, async () => {
   await withProviderServer(async (baseUrl) => {
-    sideQuestionsDb.create({ id: 'sq-a', sessionId: SESSION_ID, question: 'first', model: null });
+    await seed('sq-a', SESSION_ID, 'first', null);
 
     const response = await fetch(`${baseUrl}/api/providers/sessions/${OTHER_SESSION_ID}/side-questions/sq-a`, {
       method: 'DELETE',
     });
 
     assert.equal(response.status, 404);
-    assert.ok(sideQuestionsDb.getById('sq-a'));
+    assert.ok(sideQuestionsService.getById('sq-a'));
   });
+});
+
+test('the database has no side_questions table: side questions live in memory only', { timeout: 5000 }, async () => {
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'side-questions-schema-'));
+  closeConnection();
+  process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
+  try {
+    await initializeDatabase();
+    const tables = getConnection()
+      .prepare("SELECT name FROM sqlite_master WHERE name LIKE '%side_question%'")
+      .all() as Array<{ name: string }>;
+    assert.deepEqual(tables.map((table) => table.name), []);
+  } finally {
+    closeConnection();
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
+    }
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
 });

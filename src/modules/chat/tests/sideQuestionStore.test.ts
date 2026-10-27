@@ -13,7 +13,7 @@ import type { SideQuestion, SideQuestionEvent } from '@/shared/types';
 import type * as SharedApiModule from '@/shared/api';
 
 /**
- * A BTW side question lives beside the transcript, in one module-level store
+ * A side question lives beside the transcript, in one module-level store
  * per page. The server's list is the truth once it has a row; a question asked
  * from this tab exists locally before the server stores it, so it has to
  * survive a history refresh that raced the ask — but only while it runs.
@@ -259,7 +259,7 @@ describe('useSideQuestions', () => {
 });
 
 describe('useAskSideQuestion', () => {
-  it('trims, begins the pending entry and sends the chat.btw frame through the sendMessage it was given', () => {
+  it('trims, begins the pending entry and sends the chat.side_question frame through the sendMessage it was given', () => {
     const sendMessage = vi.fn();
     const { result } = renderHook(() => useAskSideQuestion(sendMessage));
 
@@ -275,7 +275,7 @@ describe('useAskSideQuestion', () => {
     // The server accepts 1 to 100 characters of [A-Za-z0-9_-] and refuses the rest.
     assert.match(frame.sideQuestionId as string, /^[A-Za-z0-9_-]{1,100}$/);
     assert.deepEqual(frame, {
-      type: 'chat.btw',
+      type: 'chat.side_question',
       sessionId: 'session-1',
       sideQuestionId: frame.sideQuestionId,
       question: 'why is this slow?',
@@ -298,7 +298,7 @@ describe('useAskSideQuestion', () => {
     });
 
     const frame = sendMessage.mock.calls[0][0] as { type: string; question: string; options?: { model?: string } };
-    assert.equal(frame.type, 'chat.btw');
+    assert.equal(frame.type, 'chat.side_question');
     assert.equal(frame.question, 'why?');
     assert.equal(frame.options?.model, undefined);
   });

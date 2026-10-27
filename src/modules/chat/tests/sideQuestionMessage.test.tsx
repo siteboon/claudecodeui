@@ -21,24 +21,24 @@ const SESSION_ID = 'session-7';
 const TIMESTAMP = '2026-10-26T12:00:00.000Z';
 
 const question = (status: SideQuestionStatus, overrides: Partial<ChatMessage> = {}): ChatMessage => ({
-  id: `btw-q-${SIDE_QUESTION_ID}`,
+  id: `side-question-q-${SIDE_QUESTION_ID}`,
   type: 'user',
   content: 'what does this flag do?',
   timestamp: TIMESTAMP,
   // An anchor is what would make the edit and fork controls appear on an
   // ordinary user row; a side question must not show them even so.
   transcriptAnchorId: 'anchor-1',
-  btw: { sideQuestionId: SIDE_QUESTION_ID, sessionId: SESSION_ID, status },
+  sideQuestion: { sideQuestionId: SIDE_QUESTION_ID, sessionId: SESSION_ID, status },
   ...overrides,
 });
 
 const answer = (status: SideQuestionStatus, content: string, overrides: Partial<ChatMessage> = {}): ChatMessage => ({
-  id: `btw-a-${SIDE_QUESTION_ID}`,
+  id: `side-question-a-${SIDE_QUESTION_ID}`,
   type: 'assistant',
   content,
   timestamp: TIMESTAMP,
   isStreaming: status === 'running',
-  btw: { sideQuestionId: SIDE_QUESTION_ID, sessionId: SESSION_ID, status },
+  sideQuestion: { sideQuestionId: SIDE_QUESTION_ID, sessionId: SESSION_ID, status },
   ...overrides,
 });
 
@@ -92,7 +92,7 @@ afterEach(() => {
 test('the question carries the aside label', () => {
   renderRows([question('done'), answer('done', 'It skips the cache.')]);
 
-  assert.ok(screen.getByText('BTW · not part of the session'));
+  assert.ok(screen.getByText('Side question · not part of the session'));
   assert.ok(screen.getByText('what does this flag do?'));
   assert.ok(screen.getByText('It skips the cache.'));
 });
@@ -120,7 +120,7 @@ test('a failed side question shows its error', () => {
   assert.ok(error.closest('em'), 'the error is set apart in italics');
   assert.ok(screen.queryByText('Answering on the side') === null, 'no pending shimmer on a failed side question');
   // Markdown alone already draws the italics; these make the test about the aside.
-  assert.ok(screen.queryByText('BTW · not part of the session') !== null, 'a failed pair is still marked as an aside');
+  assert.ok(screen.queryByText('Side question · not part of the session') !== null, 'a failed pair is still marked as an aside');
   assert.ok(screen.queryAllByRole('button', { name: 'Dismiss' }).length > 0, 'and can still be dismissed');
 });
 
@@ -132,19 +132,19 @@ test('no edit or fork control on either row of a side question', () => {
 });
 
 test('an ordinary user row with the same anchor does show them (so the test above can fail)', () => {
-  renderRows([question('done', { btw: undefined, id: 'plain-1' })]);
+  renderRows([question('done', { sideQuestion: undefined, id: 'plain-1' })]);
 
   assert.ok(screen.getByRole('button', { name: 'Edit and resend' }));
   assert.ok(screen.getByRole('button', { name: 'Fork from here' }));
-  assert.ok(screen.queryByText('BTW · not part of the session') === null, 'an ordinary row carries no aside label');
+  assert.ok(screen.queryByText('Side question · not part of the session') === null, 'an ordinary row carries no aside label');
 });
 
 test('the pair is one aside: a single label and a single dismiss control, both on the question', () => {
   const { container } = renderRows([question('done'), answer('done', 'It skips the cache.')]);
 
-  assert.equal(screen.getAllByText('BTW · not part of the session').length, 1, 'one label for the pair');
+  assert.equal(screen.getAllByText('Side question · not part of the session').length, 1, 'one label for the pair');
   assert.equal(screen.getAllByRole('button', { name: 'Dismiss' }).length, 1, 'one dismiss control for the pair');
-  const rows = container.querySelectorAll('.btw-side-question');
+  const rows = container.querySelectorAll('.side-question');
   assert.equal(rows.length, 2, 'drawn as two rows');
   assert.ok(rows[0]?.querySelector('button[aria-label="Dismiss"]'), 'the control sits on the question row, which starts the aside');
 });

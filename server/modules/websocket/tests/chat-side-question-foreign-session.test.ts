@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, sessionsDb, sideQuestionsDb } from '@/modules/database/index.js';
+import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { sideQuestionsService } from '@/modules/providers/index.js';
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
@@ -18,8 +19,8 @@ import type { SideQuestionOutcome, SideQuestionRequest, SideQuestionSink } from 
  * simulated DB error) must also not reach Node as an unhandled rejection.
  */
 
-const SESSION_ID = 'btw-foreign-session-asker';
-const OTHER_SESSION_ID = 'btw-foreign-session-other';
+const SESSION_ID = 'side-question-foreign-session-asker';
+const OTHER_SESSION_ID = 'side-question-foreign-session-other';
 const SHARED_ID = 'sq-shared';
 
 type Frame = Record<string, unknown>;
@@ -38,9 +39,9 @@ function createFakeSocket() {
 
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 30); });
 
-test('a sideQuestionId that exists in another session is refused, not crashed, and leaks no row', { timeout: 5000 }, async () => {
+test('a sideQuestionId that exists in another session is refused, not crashed, and leaks nothing', { timeout: 5000 }, async () => {
   const previousDatabasePath = process.env.DATABASE_PATH;
-  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'chat-btw-foreign-'));
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'chat-side-question-foreign-'));
   closeConnection();
   process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
   await initializeDatabase();
@@ -53,9 +54,21 @@ test('a sideQuestionId that exists in another session is refused, not crashed, a
   try {
     sessionsDb.createAppSession(SESSION_ID, 'claude', tempDirectory, 'Asker session');
     sessionsDb.createAppSession(OTHER_SESSION_ID, 'claude', tempDirectory, 'Other session');
-    // A row that already exists under a different session, with the id the
-    // asker is about to reuse.
-    sideQuestionsDb.create({ id: SHARED_ID, sessionId: OTHER_SESSION_ID, question: 'owned elsewhere', model: null });
+    // A side question that already exists under a different session, with
+    // the id the asker is about to reuse.
+    await sideQuestionsService.ask(
+      {
+        sessionId: OTHER_SESSION_ID,
+        provider: 'claude',
+        providerSessionId: null,
+        projectPath: null,
+        sideQuestionId: SHARED_ID,
+        question: 'owned elsewhere',
+        model: null,
+      },
+      { askSideQuestion: async () => ({ status: 'done', answer: 'the other session\'s answer' }) },
+      () => {},
+    );
 
     const runtime = {
       hasRuntime: (provider: string) => provider === 'claude',
@@ -73,7 +86,7 @@ test('a sideQuestionId that exists in another session is refused, not crashed, a
 
     asker.emit(
       'message',
-      JSON.stringify({ type: 'chat.btw', sessionId: SESSION_ID, sideQuestionId: SHARED_ID, question: 'mine too?' }),
+      JSON.stringify({ type: 'chat.side_question', sessionId: SESSION_ID, sideQuestionId: SHARED_ID, question: 'mine too?' }),
     );
     await settle();
 
@@ -81,20 +94,32 @@ test('a sideQuestionId that exists in another session is refused, not crashed, a
     assert.equal(refusal?.phase, 'error', 'the reused id is refused, not inserted');
     assert.equal(refusal?.sideQuestion, undefined, 'the other session\'s row is never attached to this refusal');
 
-    const otherRow = sideQuestionsDb.getById(SHARED_ID);
-    assert.equal(otherRow?.session_id, OTHER_SESSION_ID, 'the other session still owns the row, untouched');
+    const other = sideQuestionsService.getById(SHARED_ID);
+    assert.equal(other?.sessionId, OTHER_SESSION_ID, 'the other session still owns it, untouched');
+    assert.equal(other?.question, 'owned elsewhere');
+    assert.equal(other?.answer, 'the other session\'s answer');
+    assert.deepEqual(sideQuestionsService.listForSession(SESSION_ID), [], 'nothing was created for the asker');
 
     assert.deepEqual(unhandledRejections, [], 'the duplicate id never reaches ask, so nothing rejects unhandled');
   } finally {
     process.off('unhandledRejection', onUnhandled);
     connectedClients.clear();
     chatRunRegistry.clearAll();
-    closeConnection();
-    if (previousDatabasePath === undefined) {
-      delete process.env.DATABASE_PATH;
-    } else {
-      process.env.DATABASE_PATH = previousDatabasePath;
+    try {
+      // The process-wide service keeps its memory past this test; clear it.
+      for (const sessionId of [SESSION_ID, OTHER_SESSION_ID]) {
+        for (const sideQuestion of sideQuestionsService.listForSession(sessionId)) {
+          sideQuestionsService.dismiss(sessionId, sideQuestion.id, () => {});
+        }
+      }
+    } finally {
+      closeConnection();
+      if (previousDatabasePath === undefined) {
+        delete process.env.DATABASE_PATH;
+      } else {
+        process.env.DATABASE_PATH = previousDatabasePath;
+      }
+      await rm(tempDirectory, { recursive: true, force: true });
     }
-    await rm(tempDirectory, { recursive: true, force: true });
   }
 });

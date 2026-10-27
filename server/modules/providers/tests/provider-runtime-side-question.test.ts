@@ -17,7 +17,6 @@ import type { IProvider, IProviderRuntime } from '@/shared/interfaces.js';
 import type {
   AnyRecord,
   LLMProvider,
-  NormalizedMessage,
   ProviderRuntimeContext,
   SideQuestionOutcome,
   SideQuestionRequest,
@@ -25,11 +24,11 @@ import type {
 } from '@/shared/types.js';
 
 /**
- * The runtime dispatcher answers a side question either through the
- * provider's own `askSideQuestion` (Claude forks its session) or, for a
- * provider without one, through Claude reading that session's history. The
- * Claude runtime's own method hands the fork the session's live background
- * tasks, looked up by the app session id.
+ * The runtime dispatcher answers a side question only through the provider's
+ * own `askSideQuestion`: each provider answers with its own model, and a
+ * provider without one gets an error outcome, never a Claude answer from its
+ * history. The Claude runtime's own method hands the fork the session's live
+ * background tasks, looked up by the app session id.
  */
 
 type Scripted = {
@@ -191,23 +190,9 @@ function createService(
   });
 }
 
-const historyText = (role: 'user' | 'assistant', content: string, index: number): NormalizedMessage => ({
-  id: `h${index}`,
-  sessionId: 'app-btw-session',
-  timestamp: new Date(1_700_000_000_000 + index * 1000).toISOString(),
-  provider: 'codex',
-  kind: 'text',
-  role,
-  content,
-});
-
 const assistantText = (text: string) => ({
   type: 'assistant', parent_tool_use_id: null,
   message: { role: 'assistant', content: [{ type: 'text', text }] },
-});
-const streamText = (text: string) => ({
-  type: 'stream_event', parent_tool_use_id: null,
-  event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } },
 });
 const success = (text: string) => ({ type: 'result', subtype: 'success', result: text, duration_ms: 1, num_turns: 1 });
 
@@ -222,14 +207,7 @@ test('a provider whose runtime forks natively is asked directly, with the runtim
       return native;
     },
   }));
-  let historyFetched = false;
-  const service = createService([provider], {
-    createQuery,
-    async fetchSessionHistory() {
-      historyFetched = true;
-      return [];
-    },
-  });
+  const service = createService([provider], { createQuery });
 
   const request = createRequest({ model: 'claude-opus-5' });
   const { deltas, sink } = createSink();
@@ -247,66 +225,55 @@ test('a provider whose runtime forks natively is asked directly, with the runtim
   assert.deepEqual(deltas, ['native answer'], 'a delta sent through the received sink reaches the caller');
   assert.equal(calls[0]!.context.createQuery, createQuery, 'the createQuery override reaches the runtime');
   assert.equal(typeof calls[0]!.context.resolveProviderSessionId, 'function');
-  assert.equal(historyFetched, false, 'the native fork needs no history');
 });
 
-test('a provider without a native fork is answered by Claude from its history', { timeout: 5000 }, async () => {
+test('a provider without askSideQuestion gets an error outcome; Claude is never called and no history is read', { timeout: 5000 }, async () => {
   const { createQuery, script } = createScriptedQuery();
-  const fetched: string[] = [];
-  const provider = createProvider('codex', createRuntime());
-  const service = createService([provider], {
-    createQuery,
-    async fetchSessionHistory(appSessionId) {
-      fetched.push(appSessionId);
-      return [historyText('user', 'HISTORY-USER-LINE', 1), historyText('assistant', 'HISTORY-ASSISTANT-LINE', 2)];
+  let historyFetched = false;
+  // The history dependency is gone from the service's contract; it is passed
+  // here only so a service that still reads history is caught doing it.
+  const historySpy = {
+    async fetchSessionHistory() {
+      historyFetched = true;
+      return [];
     },
-  });
+  } as object;
+  const service = createService([createProvider('codex', createRuntime())], { createQuery, ...historySpy });
 
   const { deltas, sink } = createSink();
   const pending = service.askSideQuestion('codex', createRequest(), sink);
-  await waitFor(() => script.calls.length === 1 && script.promptMessages.length >= 1);
+  // Race the outcome against any sign of a Claude call or a history read, so
+  // a service that still falls back fails here at once instead of hanging on
+  // a scripted query nobody answers.
+  const touched = (async () => {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (script.calls.length > 0 || historyFetched) {
+        return null;
+      }
+      await settle();
+    }
+    return null;
+  })();
+  try {
+    const outcome = await Promise.race([pending, touched]);
 
-  assert.deepEqual(fetched, ['app-btw-session']);
-  const { options } = script.calls[0]!;
-  assert.equal(options.resume, undefined, 'there is no Claude session to resume');
-  assert.equal(options.forkSession, undefined);
-  assert.equal(options.model, undefined, "the request's codex model is not sent to Claude");
-  const text = script.promptMessages.map(promptText).join('\n');
-  assert.ok(text.includes('HISTORY-USER-LINE') && text.includes('HISTORY-ASSISTANT-LINE'));
-  assert.ok(text.includes('Which test covers this?'));
-
-  script.emit(streamText('See the history.'));
-  script.emit(assistantText('See the history.'));
-  script.emit(success('See the history.'));
-
-  assert.deepEqual(await pending, { status: 'done', answer: 'See the history.' });
-  assert.deepEqual(deltas, ['See the history.']);
-});
-
-test('a failing history fetch is an error outcome, not a rejection', { timeout: 5000 }, async () => {
-  const { createQuery, script } = createScriptedQuery();
-  const service = createService([createProvider('codex', createRuntime())], {
-    createQuery,
-    async fetchSessionHistory() {
-      throw new Error('history unavailable');
-    },
-  });
-
-  const { sink } = createSink();
-  const outcome = await service.askSideQuestion('codex', createRequest(), sink);
-
-  assert.equal(outcome.status, 'error');
-  assert.equal(script.calls.length, 0, 'no query is started without a history');
+    assert.equal(historyFetched, false, 'no history is fetched');
+    assert.equal(script.calls.length, 0, 'Claude is never asked in its place');
+    assert.ok(outcome, 'the outcome resolves without waiting on any model');
+    assert.equal(outcome.status, 'error');
+    assert.equal(outcome.answer, '');
+    assert.ok(outcome.status === 'error' && /codex/i.test(outcome.error), 'the error names the provider');
+    assert.ok(outcome.status === 'error' && /side question/i.test(outcome.error), 'the error says side questions are missing');
+    assert.deepEqual(deltas, []);
+  } finally {
+    // Release a query a falling-back service may have started.
+    script.end();
+  }
 });
 
 test('an unknown provider is an error outcome, not a rejection', { timeout: 5000 }, async () => {
   const { createQuery, script } = createScriptedQuery();
-  const service = createService([createProvider('codex', createRuntime())], {
-    createQuery,
-    async fetchSessionHistory() {
-      return [];
-    },
-  });
+  const service = createService([createProvider('codex', createRuntime())], { createQuery });
 
   const outcome = await service.askSideQuestion('nope' as LLMProvider, createRequest(), createSink().sink);
 
@@ -320,11 +287,7 @@ test('a native askSideQuestion that throws is an error outcome, not a rejection'
       throw new Error('runtime blew up');
     },
   }));
-  const service = createService([provider], {
-    async fetchSessionHistory() {
-      return [];
-    },
-  });
+  const service = createService([provider]);
 
   const outcome = await service.askSideQuestion('claude', createRequest(), createSink().sink);
 

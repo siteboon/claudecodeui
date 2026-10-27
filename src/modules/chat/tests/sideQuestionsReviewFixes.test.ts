@@ -39,7 +39,7 @@ test('useAskSideQuestion refuses when disconnected: no frame sent, no optimistic
   });
 
   assert.equal(returned, false, 'the ask is refused');
-  assert.equal(sendMessage.mock.calls.length, 0, 'no chat.btw frame is sent');
+  assert.equal(sendMessage.mock.calls.length, 0, 'no chat.side_question frame is sent');
   assert.deepEqual(sideQuestionStore.forSession(SESSION_ID), [], 'nothing optimistic is stored');
 });
 

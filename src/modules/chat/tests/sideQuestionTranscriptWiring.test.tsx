@@ -12,7 +12,7 @@ import type * as SharedApiModule from '@/shared/api';
 /**
  * The store and the merge are only useful if the transcript the operator sees
  * runs through them: a history page that carries side questions has to come
- * out of `useChatSessionState` with the BTW pairs in place by time among the
+ * out of `useChatSessionState` with the side-question pairs in place by time among the
  * session's own rows, and a later refresh of the newest page — what a reload
  * or a reconnect does — has to keep feeding the store.
  */
@@ -71,7 +71,7 @@ afterEach(clearStore);
 
 // Strings only: comparing message objects would print the whole transcript on failure.
 const labels = (messages: ChatMessage[]) => messages
-  .map((m) => (m.btw ? `btw:${String(m.content)}` : String(m.content ?? '')))
+  .map((m) => (m.sideQuestion ? `aside:${String(m.content)}` : String(m.content ?? '')))
   .filter((label) => label !== '');
 
 const renderSessionState = () => {
@@ -110,14 +110,14 @@ describe('side questions in the transcript', () => {
     await waitFor(() => assert.deepEqual(labels(hook.result.current.state.chatMessages), [
       'first prompt',
       'first answer',
-      'btw:side question q1',
-      'btw:side answer q1',
+      'aside:side question q1',
+      'aside:side answer q1',
       'second prompt',
       'second answer',
     ]));
 
-    const btwIds = hook.result.current.state.chatMessages.filter((m) => m.btw).map((m) => String(m.id));
-    assert.deepEqual(btwIds, ['btw-q-q1', 'btw-a-q1']);
+    const asideIds = hook.result.current.state.chatMessages.filter((m) => m.sideQuestion).map((m) => String(m.id));
+    assert.deepEqual(asideIds, ['side-question-q-q1', 'side-question-a-q1']);
   });
 
   it('a refresh of the newest page puts its sideQuestions into the store too', async () => {

@@ -135,3 +135,47 @@ test('while only background work runs the send button is the menu, ending in Sen
     .map((row) => row.textContent ?? '');
   assert.ok(labels.at(-1)?.startsWith('Send anyway'), `Send anyway is last, got: ${labels.join(' | ')}`);
 });
+
+// The capability gate has to travel: every component defaults
+// `supportsSideQuestions` to false, so a composer that never hands the flag on
+// would silently drop side questions for every provider. These pin that
+// `ChatComposer` passes it to its send menu and its background-send dialog.
+const PROMPT = { work: ['Agent Survey the repo'] };
+
+const menuLabels = () => Array.from(screen.getByRole('menu').querySelectorAll<HTMLElement>('[role^="menuitem"]'))
+  .map((row) => row.textContent ?? '');
+
+for (const [state, overrides] of [
+  ['while a turn is written', { isLoading: true }],
+  ['while only background work runs', { activity: BACKGROUND }],
+] as const) {
+  test(`${state}, supportsSideQuestions true reaches the menu as a side-question row`, () => {
+    render(<UiPreferencesProvider><ChatComposer {...props({ ...overrides, supportsSideQuestions: true })} /></UiPreferencesProvider>);
+    fireEvent.click(screen.getByRole('button', { name: 'Send options' }));
+
+    assert.ok(menuLabels().some((label) => label.startsWith('Side question')), `got: ${menuLabels().join(' | ')}`);
+  });
+
+  test(`${state}, supportsSideQuestions false leaves the side-question row out of the menu`, () => {
+    render(<UiPreferencesProvider><ChatComposer {...props({ ...overrides, supportsSideQuestions: false })} /></UiPreferencesProvider>);
+    fireEvent.click(screen.getByRole('button', { name: 'Send options' }));
+
+    assert.equal(menuLabels().length, 2, `only the two session choices, got: ${menuLabels().join(' | ')}`);
+    assert.ok(!menuLabels().some((label) => label.startsWith('Side question')));
+  });
+}
+
+test('supportsSideQuestions true reaches the background-send dialog as a side-question button', () => {
+  render(<UiPreferencesProvider><ChatComposer {...props({ activity: BACKGROUND, backgroundSendPrompt: PROMPT, supportsSideQuestions: true })} /></UiPreferencesProvider>);
+
+  assert.ok(screen.queryByRole('button', { name: 'Side question' }) !== null, 'the dialog offers the side question');
+});
+
+test('supportsSideQuestions false leaves the side-question button out of the background-send dialog', () => {
+  render(<UiPreferencesProvider><ChatComposer {...props({ activity: BACKGROUND, backgroundSendPrompt: PROMPT, supportsSideQuestions: false })} /></UiPreferencesProvider>);
+
+  const names = Array.from(screen.getByRole('dialog').querySelectorAll('button'))
+    .map((button) => button.textContent?.trim() ?? '')
+    .filter((name) => name !== '');
+  assert.deepEqual(names, ['Cancel', 'Queue', 'Send anyway']);
+});
