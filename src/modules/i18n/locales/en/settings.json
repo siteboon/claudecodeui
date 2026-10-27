@@ -847,5 +847,33 @@
     "teamManagementDescription": "Multiple users, role-based access, and shared projects for your team.",
     "licensed": "Licensed under AGPL-3.0",
     "proCta": "Available with CloudCLI Pro"
+  },
+  "browserView": {
+    "title": "Browser live view",
+    "openPanel": "Open browser live view",
+    "closePanel": "Close live view panel (viewing only)",
+    "resizeHandle": "Resize live view panel",
+    "sessionSelect": "Select browser session",
+    "noSessions": "No browser sessions yet",
+    "noSessionsHint": "Ask the agent to open a browser; its session appears here and streams live.",
+    "statusIdle": "Idle",
+    "statusConnecting": "Connecting",
+    "statusLive": "Live",
+    "statusPaused": "Paused",
+    "statusReconnecting": "Reconnecting",
+    "statusStopped": "Stopped",
+    "statusError": "Error",
+    "waitingFirstFrame": "Waiting for the first frame…",
+    "pausedHint": "Viewing is paused while the panel is hidden.",
+    "frameAlt": "Live browser view",
+    "observeHint": "Observing — take control to type or click",
+    "takeControl": "Take control of this browser",
+    "stopControlling": "Stop controlling (Esc)",
+    "controllingHint": "You are controlling the agent's browser: clicks, typing, scrolling, and paste are sent to the page. Press Esc to stop.",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "stopBrowser": "Stop browser session",
+    "stopBrowserHint": "Stops the agent's browser session for everyone. Closing this panel only stops viewing.",
+    "unauthorized": "Authentication expired. Reopen the panel to reconnect."
   }
 }

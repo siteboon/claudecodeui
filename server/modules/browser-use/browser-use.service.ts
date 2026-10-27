@@ -12,6 +12,7 @@ import { providerMcpService } from '@/modules/providers/index.js';
 import { getModuleDirectory } from '@/shared/utils.js';
 
 import { getBrowserUseRuntime } from './browser-use-runtime.js';
+import { browserViewService } from './browser-view.service.js';
 
 const require = createRequire(import.meta.url);
 const __dirname = getModuleDirectory(import.meta.url);
@@ -357,6 +358,9 @@ function ownerSessions(ownerId: string): BrowserUseSession[] {
 async function closeHandle(sessionId: string): Promise<void> {
   const handle = handles.get(sessionId);
   handles.delete(sessionId);
+  // Streaming viewers must hear about the closed browser before the handle map
+  // entry is gone, so they get a stopped state instead of a frozen frame.
+  await browserViewService.handleSessionClosed(sessionId).catch(() => undefined);
   await handle?.context?.close?.().catch(() => undefined);
   await handle?.browser?.close().catch(() => undefined);
 }
@@ -541,8 +545,13 @@ export const browserUseService = {
     let browser: any | undefined;
     let context: any | undefined;
     let page: any;
+    // channel: 'chromium' runs the full Chromium binary in new-headless mode.
+    // Playwright's default headless shell has no running compositor, which
+    // starves the live view's CDP screencast of frames and breaks smooth
+    // capture; the new headless mode schedules frames like a real browser.
     const launchOptions = {
       headless: true,
+      channel: 'chromium',
       args: ['--disable-dev-shm-usage'],
     };
     const contextOptions = {
@@ -591,6 +600,24 @@ export const browserUseService = {
       throw new Error('Browser session not found.');
     }
     return session;
+  },
+
+  /**
+   * Used by the browser-view streaming service to reach the live Playwright
+   * context and active page behind a ready agent session, together with the
+   * session record for viewer metadata. Null when the session is not streaming
+   * material (not found or not ready).
+   */
+  async getAgentStreamTarget(sessionId: string) {
+    const session = await this.getAgentSession(sessionId);
+    if (session.status !== 'ready') {
+      return null;
+    }
+    const handle = handles.get(sessionId);
+    if (!handle?.context || !handle?.page) {
+      return null;
+    }
+    return { session, context: handle.context, page: handle.page };
   },
 
   async agentNavigate(sessionId: string, rawUrl: string) {
@@ -752,6 +779,7 @@ export const browserUseService = {
     if (!handle?.context || !handle?.page) {
       throw new Error('Browser runtime handle is not available.');
     }
+    const previousPage = handle.page;
     const action = input.action || 'list';
     if (action === 'new') {
       const page = await handle.context.newPage();
@@ -775,6 +803,11 @@ export const browserUseService = {
       handles.set(sessionId, { ...handle, page: handle.context.pages()[0] || await handle.context.newPage() });
     }
     const updatedHandle = handles.get(sessionId);
+    // Tab operations can replace the active page; live viewers reattach their
+    // capture to whatever page automation now targets.
+    if (updatedHandle && updatedHandle.page !== previousPage) {
+      await browserViewService.handleActivePageChanged(sessionId).catch(() => undefined);
+    }
     await captureSession(session, updatedHandle?.page || handle.page);
     return {
       session: publicSession(session),

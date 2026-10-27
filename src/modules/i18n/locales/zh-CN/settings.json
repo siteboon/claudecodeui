@@ -609,5 +609,33 @@
     "installAriaLabel": "插件 git 仓库 URL",
     "tab": "标签",
     "runningStatus": "运行中"
+  },
+  "browserView": {
+    "title": "浏览器实时画面",
+    "openPanel": "打开浏览器实时画面",
+    "closePanel": "关闭实时画面（仅停止观看）",
+    "resizeHandle": "调整实时画面宽度",
+    "sessionSelect": "选择浏览器会话",
+    "noSessions": "暂无浏览器会话",
+    "noSessionsHint": "让 Agent 打开浏览器后，会话会出现在这里并实时直播。",
+    "statusIdle": "空闲",
+    "statusConnecting": "连接中",
+    "statusLive": "直播中",
+    "statusPaused": "已暂停",
+    "statusReconnecting": "重连中",
+    "statusStopped": "已停止",
+    "statusError": "错误",
+    "waitingFirstFrame": "等待第一帧画面…",
+    "pausedHint": "面板隐藏时暂停观看。",
+    "frameAlt": "浏览器实时画面",
+    "observeHint": "观察模式 — 接管后可输入或点击",
+    "takeControl": "接管此浏览器",
+    "stopControlling": "停止接管（Esc）",
+    "controllingHint": "你正在控制 Agent 的浏览器：点击、输入、滚动和粘贴都会发送到页面。按 Esc 停止。",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏",
+    "stopBrowser": "停止浏览器会话",
+    "stopBrowserHint": "停止 Agent 的浏览器会话（对所有人生效）。关闭此面板仅停止观看。",
+    "unauthorized": "登录已过期，请重新打开面板重连。"
   }
 }
