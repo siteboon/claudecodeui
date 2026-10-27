@@ -101,7 +101,11 @@ const agentRoutes = createAgentModule({
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
 // A completed run stays subscribable while its session's background work
 // (agents, workflows, backgrounded commands) is still reporting through it.
-chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackgroundWork(sessionId));
+// A completed run stays registered while its session still has background
+// work or a live provider process: a turn that process starts streams through
+// this run, and a tab needs it to attach to.
+chatRunRegistry.setRetentionGuard((sessionId) =>
+  providerRuntimeService.hasBackgroundWork(sessionId) || providerRuntimeService.hasLiveProcess(sessionId));
 
 createWebSocketServer(server, {
     verifyClient: {

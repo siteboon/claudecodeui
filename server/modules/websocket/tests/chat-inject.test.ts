@@ -34,6 +34,9 @@ async function withGateway(
   }) => Promise<void>,
   // Whether the runtime has a live turn to take the message.
   runtimeAccepts = true,
+  // Whether the session's provider process is still up (held for background work).
+  liveProcess = false,
+  runs: string[] = [],
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'chat-inject-'));
@@ -54,6 +57,8 @@ async function withGateway(
       {
         runtime: {
           hasRuntime: () => true,
+          hasLiveProcess: () => liveProcess,
+          run: async (_provider: string, command: string) => { runs.push(command); },
           inject: async (provider: string, sessionId: string, text: string, attachments: unknown) => {
             injects.push({ provider, sessionId, text, attachments });
             return runtimeAccepts;
@@ -150,4 +155,35 @@ test('chat.inject on a running Codex turn goes to the Codex runtime', async () =
     assert.deepEqual(injects, [{ provider: 'codex', sessionId: SESSION_ID, text: 'also say BANANA', attachments: { images: [], files: [] } }]);
     assert.equal(socket.frames.at(-1)?.accepted, true);
   });
+});
+
+test('chat.send for a session whose process is still up goes into that process, not a new run', async () => {
+  const runs: string[] = [];
+  await withGateway(async ({ socket, injects }) => {
+    socket.emit('message', JSON.stringify({
+      type: 'chat.send',
+      sessionId: SESSION_ID,
+      content: 'how are the agents doing?',
+      options: { model: 'claude-sonnet-5-5', permissionMode: 'default' },
+    }));
+    await settle();
+
+    assert.equal(runs.length, 0, 'no new process: it would end the background work');
+    assert.equal(injects.length, 1);
+    assert.equal(injects[0].text, 'how are the agents doing?');
+    assert.deepEqual(injects[0].attachments, { images: [], files: [], model: 'claude-sonnet-5-5', permissionMode: 'default' });
+    assert.equal(socket.frames.filter((frame) => frame.kind === 'protocol_error').length, 0);
+  }, true, true, runs);
+});
+
+test('chat.send with no live process starts a new run as before', async () => {
+  const runs: string[] = [];
+  await withGateway(async ({ socket, injects }) => {
+    socket.emit('message', JSON.stringify({ type: 'chat.send', sessionId: SESSION_ID, content: 'hello' }));
+    await settle();
+
+    assert.equal(injects.length, 0);
+    assert.deepEqual(runs, ['hello']);
+    assert.equal(socket.frames.filter((frame) => frame.kind === 'protocol_error').length, 0);
+  }, true, false, runs);
 });

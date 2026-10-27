@@ -60,8 +60,14 @@ export interface IProviderRuntime {
   inject?(
     sessionId: string,
     text: string,
-    attachments: { images: unknown[]; files: unknown[] },
+    attachments: { images: unknown[]; files: unknown[]; model?: string; permissionMode?: string },
   ): Promise<boolean>;
+  /**
+   * Whether the session's own provider process is still up and taking input
+   * (in a turn, or held open for background work). A message for it goes into
+   * that process instead of starting a new one, which would end that work.
+   */
+  hasLiveProcess?(sessionId: string): boolean;
 }
 
 /**

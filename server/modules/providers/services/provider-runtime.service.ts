@@ -101,11 +101,15 @@ export function createProviderRuntimeService(
       providerName: LLMProvider,
       sessionId: string,
       text: string,
-      attachments: { images: unknown[]; files: unknown[] },
+      attachments: { images: unknown[]; files: unknown[]; model?: string; permissionMode?: string },
     ): Promise<boolean> {
       // A runtime without mid-turn input cannot take the message.
       const { runtime } = dependencies.resolveProvider(providerName);
       return Boolean(await runtime.inject?.(sessionId, text, attachments));
+    },
+
+    hasLiveProcess(sessionId: string): boolean {
+      return dependencies.listProviders().some((provider) => provider.runtime.hasLiveProcess?.(sessionId) ?? false);
     },
 
     hasBackgroundWork(sessionId: string): boolean {

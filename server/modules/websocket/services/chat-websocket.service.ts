@@ -78,8 +78,10 @@ export type ProviderRuntimeGateway = {
     provider: LLMProvider,
     sessionId: string,
     text: string,
-    attachments: { images: unknown[]; files: unknown[] },
+    attachments: { images: unknown[]; files: unknown[]; model?: string; permissionMode?: string },
   ): Promise<boolean>;
+  /** Whether a provider process for the session is still up and taking input. */
+  hasLiveProcess?(sessionId: string): boolean;
   /** Whether a provider runtime still holds background work for the session after its turn ended. */
   hasBackgroundWork(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
@@ -227,27 +229,6 @@ async function dispatchRun(
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
-
-  const run = chatRunRegistry.startRun({
-    appSessionId: sessionId,
-    provider,
-    providerSessionId: session.provider_session_id,
-    connection: ws,
-    userId,
-  });
-
-  if (!run) {
-    if (ws) {
-      sendProtocolError(
-        ws,
-        'RUN_IN_PROGRESS',
-        `Session "${sessionId}" already has a run in progress.`,
-        sessionId
-      );
-    }
-    return { started: false, error: 'A run is already in progress for this session.' };
-  }
-
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
 
@@ -270,6 +251,47 @@ async function dispatchRun(
   const uniqueAttachments = verifiedAttachments.filter(
     (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
   );
+
+  // The session's own provider process may still be up: held open for
+  // background work (agents, commands, a cron) the CLI keeps running. The
+  // message goes into that process, as it would in the terminal — a new
+  // process would end that work. Edits rewind the conversation and always
+  // start fresh.
+  if (!beforeRun && Object.keys(extraRuntimeOptions).length === 0 && dependencies.runtime.hasLiveProcess?.(sessionId)) {
+    const accepted = await dependencies.runtime.inject(provider, sessionId, command, {
+      images: uniqueAttachments.filter(isImageAttachmentDescriptor),
+      files: uniqueAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+      model: typeof clientOptions.model === 'string' ? clientOptions.model : undefined,
+      permissionMode: typeof clientOptions.permissionMode === 'string' ? clientOptions.permissionMode : undefined,
+    });
+    if (accepted) {
+      // The turn it starts streams through the session's existing run.
+      if (ws) {
+        chatRunRegistry.attachConnection(sessionId, ws);
+      }
+      return { started: true, error: null };
+    }
+  }
+
+  const run = chatRunRegistry.startRun({
+    appSessionId: sessionId,
+    provider,
+    providerSessionId: session.provider_session_id,
+    connection: ws,
+    userId,
+  });
+
+  if (!run) {
+    if (ws) {
+      sendProtocolError(
+        ws,
+        'RUN_IN_PROGRESS',
+        `Session "${sessionId}" already has a run in progress.`,
+        sessionId
+      );
+    }
+    return { started: false, error: 'A run is already in progress for this session.' };
+  }
 
   // The provider runtimes receive the stable app session id. When their
   // CLI/SDK needs the provider-native id for resume, they resolve it from the

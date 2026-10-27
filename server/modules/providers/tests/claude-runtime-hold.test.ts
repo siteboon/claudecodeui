@@ -33,6 +33,8 @@ type Scripted = {
   stopped: string[];
   /** Every message the CLI read from its stdin, in order. */
   received: Array<Record<string, unknown>>;
+  /** Models switched to on the live process (`setModel`). */
+  models: string[];
 };
 
 /** A stand-in for the SDK query: yields what the test emits, and reads the held prompt to notice its release. */
@@ -42,6 +44,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
   let released = false;
   const stopped: string[] = [];
   const received: Array<Record<string, unknown>> = [];
+  const models: string[] = [];
 
   const script: Scripted = {
     emit: (message) => { queue.push(message); wake?.(); },
@@ -49,6 +52,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     released: () => released,
     stopped,
     received,
+    models,
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
@@ -75,6 +79,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     return Object.assign(iterator, {
       interrupt: async () => {},
       stopTask: async (taskId: string) => { stopped.push(taskId); },
+      setModel: async (model?: string) => { models.push(model ?? ''); },
     });
   };
 
@@ -472,5 +477,16 @@ test('Stop with no background work ends the process as before', async () => {
     await waitFor(() => script.received.length === 1);
     assert.equal(await abortClaudeSDKSession(SESSION_ID), true);
     await waitFor(() => script.released());
+  });
+});
+
+test('a message into the live process brings a newly picked model along, once', async () => {
+  await withRun(async ({ script, sent }) => {
+    await holdForBackgroundCommand(script, sent);
+
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'switch please', { model: 'claude-sonnet-5-5' }), true);
+    assert.deepEqual(script.models, ['claude-sonnet-5-5']);
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'again', { model: 'claude-sonnet-5-5' }), true);
+    assert.deepEqual(script.models, ['claude-sonnet-5-5'], 'unchanged model is not set again');
   });
 });

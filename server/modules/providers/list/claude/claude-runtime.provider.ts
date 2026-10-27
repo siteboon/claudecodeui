@@ -137,9 +137,13 @@ const BACKGROUND_RESULT_STATUS = 'Working on a background result';
 // Each entry names its query instance so a superseded run is never fed.
 const sessionInjectors = new Map<string, {
   instance: ClaudeQuery;
-  inject: (text: string, images?: unknown, files?: unknown) => Promise<boolean>;
+  inject: (text: string, images?: unknown, files?: unknown, settings?: InjectSettings) => Promise<boolean>;
   isHeld: () => boolean;
+  isReleased: () => boolean;
 }>();
+
+/** Composer settings a message sent into a live process brings along; applied to that process first. */
+type InjectSettings = { model?: string; permissionMode?: string };
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
@@ -1307,9 +1311,27 @@ async function queryClaudeSDK(
     // turns — the process held open for background work — it starts a turn,
     // reported as running again, and the background work keeps going. Refused
     // once stdin is closing; the client then sends a new run or queues.
-    const injectInput = async (text: string, images?: unknown, files?: unknown) => {
+    const injectInput = async (text: string, images?: unknown, files?: unknown, settings: InjectSettings = {}) => {
       if (heldPrompt.isReleased()) {
         return false;
+      }
+      // A model or permission mode picked in the composer since the process
+      // started applies from this message on, as /model does in the terminal.
+      const controls = queryInstance as unknown as {
+        setModel?(model?: string): Promise<void>;
+        setPermissionMode?(mode: string): Promise<void>;
+      } | null;
+      try {
+        if (settings.model && settings.model !== sdkOptions.model && controls?.setModel) {
+          await controls.setModel(settings.model);
+          sdkOptions.model = settings.model;
+        }
+        if (settings.permissionMode && settings.permissionMode !== sdkOptions.permissionMode && controls?.setPermissionMode) {
+          await controls.setPermissionMode(settings.permissionMode);
+          sdkOptions.permissionMode = settings.permissionMode;
+        }
+      } catch (error) {
+        console.warn('[Claude] Could not apply composer settings to the live process:', (error as Error)?.message || error);
       }
       const [message] = await buildPromptMessages(text, images, files, options.cwd);
       if (!heldPrompt.push({ ...message, priority: 'next' })) {
@@ -1323,7 +1345,7 @@ async function queryClaudeSDK(
     // Track the query instance for abort capability
     if (sessionKey()) {
       addSession(sessionKey(), queryInstance, ws, releasePromptStream);
-      sessionInjectors.set(sessionKey(), { instance: queryInstance, inject: injectInput, isHeld: () => heldForBackgroundWork });
+      sessionInjectors.set(sessionKey(), { instance: queryInstance, inject: injectInput, isHeld: () => heldForBackgroundWork, isReleased: () => heldPrompt.isReleased() });
     }
 
     // Ends a turn: tells the client, then holds or releases the process.
@@ -1406,7 +1428,7 @@ async function queryClaudeSDK(
 
         capturedSessionId = message.session_id;
         addSession(sessionKey(), queryInstance, ws, releasePromptStream);
-        sessionInjectors.set(sessionKey(), { instance: queryInstance, inject: injectInput, isHeld: () => heldForBackgroundWork });
+        sessionInjectors.set(sessionKey(), { instance: queryInstance, inject: injectInput, isHeld: () => heldForBackgroundWork, isReleased: () => heldPrompt.isReleased() });
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -1756,13 +1778,27 @@ async function stopClaudeSDKTask(sessionId: string, taskId: string) {
 async function injectClaudeSDKMessage(
   sessionId: string,
   text: string,
-  attachments: { images?: unknown; files?: unknown } = {},
+  attachments: { images?: unknown; files?: unknown; model?: string; permissionMode?: string } = {},
 ): Promise<boolean> {
   const entry = sessionInjectors.get(sessionId);
   if (!entry || getSession(sessionId)?.instance !== entry.instance) {
     return false;
   }
-  return entry.inject(text, attachments.images, attachments.files);
+  return entry.inject(text, attachments.images, attachments.files, {
+    model: attachments.model,
+    permissionMode: attachments.permissionMode,
+  });
+}
+
+/**
+ * Whether the session's own Claude process is still up and reading input:
+ * in a turn, or held open for background work (agents, commands, a cron).
+ * A message for such a session belongs in that process, as in the terminal;
+ * a new process would end the work it runs.
+ */
+function hasLiveClaudeProcess(sessionId: string): boolean {
+  const entry = sessionInjectors.get(sessionId);
+  return Boolean(entry && getSession(sessionId)?.instance === entry.instance && !entry.isReleased());
 }
 
 /**
@@ -1845,6 +1881,7 @@ export const claudeRuntime = {
   listBackgroundWork: listClaudeSDKBackgroundWork,
   stopBackgroundTask: stopClaudeSDKTask,
   inject: injectClaudeSDKMessage,
+  hasLiveProcess: hasLiveClaudeProcess,
 };
 
 // Export public API
