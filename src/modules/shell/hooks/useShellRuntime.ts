@@ -19,6 +19,7 @@ type UseShellRuntimeOptions = {
   isRestarting: boolean;
   onProcessComplete?: ((exitCode: number) => void) | null;
   onOutputRef?: MutableRefObject<(() => void) | null>;
+  inputTransformRef?: MutableRefObject<((data: string) => string) | null>;
 };
 
 type UseShellRuntimeResult = {
@@ -35,6 +36,10 @@ type UseShellRuntimeResult = {
   disconnectFromShell: (options?: { suppressAutoConnect?: boolean }) => void;
 };
 
+/**
+ * Combines the Shell's terminal and its socket connection, and restarts or
+ * disconnects them when the project, session or restart state changes.
+ */
 export function useShellRuntime({
   selectedProject,
   selectedSession,
@@ -46,6 +51,7 @@ export function useShellRuntime({
   isRestarting,
   onProcessComplete,
   onOutputRef,
+  inputTransformRef,
 }: UseShellRuntimeOptions): UseShellRuntimeResult {
   const { isDarkMode } = useTheme();
   const terminalContainerRef = useRef<HTMLDivElement>(null);
@@ -98,6 +104,7 @@ export function useShellRuntime({
     minimal,
     isRestarting,
     closeSocket,
+    inputTransformRef,
   });
 
   const {
