@@ -151,7 +151,7 @@
       "ctrlEnter": "Ctrl+Enter para enviar • Shift+Enter para nova linha • Tab para alternar modos • / para slash commands",
       "enter": "Enter para enviar • Shift+Enter para nova linha • Tab para alternar modos • / para slash commands",
       "queue": "Enter para enfileirar sua próxima mensagem",
-      "updateQueued": "Enter para atualizar mensagem enfileirada"
+      "appendQueued": "Enter para adicionar à mensagem enfileirada"
     },
     "clickToChangeMode": "Clique para alterar modo de permissão (ou pressione Tab na entrada)",
     "showAllCommands": "Mostrar todos os comandos",
@@ -159,7 +159,8 @@
     "scrollToBottom": "Rolar para o final",
     "queue": {
       "sendNext": "Enfileirar próxima mensagem",
-      "update": "Atualizar mensagem enfileirada",
+      "append": "Adicionar à mensagem enfileirada",
+      "notCombinable": "Falha ao enfileirar a mensagem: um slash command é executado sozinho, então não pode ser combinado com a mensagem enfileirada. Envie-o depois que a mensagem enfileirada for enviada.",
       "label": "Enfileirado",
       "willSend": "Enviará quando isto terminar",
       "edit": "Editar mensagem enfileirada",
@@ -173,6 +174,8 @@
     "loadingModels": "Carregando modelos…",
     "modelMenu": "Selecionar modelo e nível de raciocínio",
     "permissionHeading": "Como as ações do {{provider}} devem ser aprovadas?",
+    "permissionCycleHint": "Pressione Tab no campo de mensagem para alternar o modo",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Substituindo uma mensagem anterior",
       "filesNotReverted": "arquivos que o agente já alterou não são revertidos",
