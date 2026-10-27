@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 
 import type { IProviderTranscriptRelocation } from '@/shared/interfaces.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
@@ -118,6 +119,10 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
     const inPlaceRewrites: Array<{ temporaryPath: string; jsonlPath: string }> = [];
     // Session folders already moved, which a failure moves back.
     const movedDirectories: Array<{ sourcePath: string; targetPath: string }> = [];
+    // Originals set aside under a `.tmp` name, which a failure puts back. The
+    // session watcher and the full scan both skip `.tmp`, so one that cannot be
+    // deleted at the end is never indexed back under the old project.
+    const parkedOriginals: Array<{ originalPath: string; parkedPath: string }> = [];
 
     try {
       for (const session of input.sessions) {
@@ -164,7 +169,35 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
         moved.push({ sessionId: session.sessionId, jsonlPath: targetPath });
         sourcePaths.push(session.jsonlPath);
       }
+
+      // Only once every copy exists: a transcript that failed to copy must still be
+      // readable where the database says it is.
+      for (const sourcePath of sourcePaths) {
+        const parkedPath = `${sourcePath}.${randomUUID()}.tmp`;
+        await rename(sourcePath, parkedPath);
+        parkedOriginals.push({ originalPath: sourcePath, parkedPath });
+      }
+
+      for (const { temporaryPath, jsonlPath } of inPlaceRewrites) {
+        const parkedPath = `${jsonlPath}.${randomUUID()}.tmp`;
+        await copyFile(jsonlPath, parkedPath, constants.COPYFILE_EXCL);
+        parkedOriginals.push({ originalPath: jsonlPath, parkedPath });
+        // A rename over the original is atomic, so a reader sees either the old
+        // transcript or the rewritten one, never a half-written file.
+        await rename(temporaryPath, jsonlPath);
+        writtenPaths.splice(writtenPaths.indexOf(temporaryPath), 1);
+      }
     } catch (error) {
+      for (const { originalPath, parkedPath } of parkedOriginals) {
+        try {
+          await rename(parkedPath, originalPath);
+        } catch (cleanupError) {
+          console.warn(
+            `[claude-transcript-relocation] Failed to put ${originalPath} back:`,
+            (cleanupError as Error).message,
+          );
+        }
+      }
       for (const directory of movedDirectories) {
         try {
           await rename(directory.targetPath, directory.sourcePath);
@@ -200,28 +233,12 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
       throw error;
     }
 
-    // A rename over the original is atomic, so a reader sees either the old
-    // transcript or the rewritten one, never a half-written file.
-    for (const { temporaryPath, jsonlPath } of inPlaceRewrites) {
+    for (const { parkedPath } of parkedOriginals) {
       try {
-        await rename(temporaryPath, jsonlPath);
+        await unlink(parkedPath);
       } catch (error) {
         console.warn(
-          `[claude-transcript-relocation] Failed to rewrite ${jsonlPath}:`,
-          (error as Error).message,
-        );
-        await unlink(temporaryPath).catch(() => undefined);
-      }
-    }
-
-    // Only once every copy exists: a transcript that failed to copy must still be
-    // readable where the database says it is.
-    for (const sourcePath of sourcePaths) {
-      try {
-        await unlink(sourcePath);
-      } catch (error) {
-        console.warn(
-          `[claude-transcript-relocation] Failed to remove ${sourcePath}:`,
+          `[claude-transcript-relocation] Failed to remove ${parkedPath}:`,
           (error as Error).message,
         );
       }
