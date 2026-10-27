@@ -62,11 +62,8 @@ function rewriteTranscriptCwd(content: string, oldProjectPath: string, newProjec
         return line;
       }
 
-      if (
-        typeof row !== 'object'
-        || row === null
-        || normalizeProjectPath((row as { cwd?: unknown }).cwd as string) !== oldProjectPath
-      ) {
+      const cwd = typeof row === 'object' && row !== null ? (row as { cwd?: unknown }).cwd : undefined;
+      if (typeof cwd !== 'string' || normalizeProjectPath(cwd) !== oldProjectPath) {
         return line;
       }
 

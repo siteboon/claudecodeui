@@ -2,14 +2,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { providerRuntimeService, sessionsService } from '@/modules/providers/index.js';
-import { chatRunRegistry } from '@/modules/websocket/index.js';
+import { sessionsService } from '@/modules/providers/index.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
 import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
 
-// Projects with a relocation under way. A second one would read the same rows,
-// and its rollback would put them back over the first one's finished move.
-const relocatingProjectIds = new Set<string>();
+// One relocation at a time, server-wide. A second one of the same project would
+// read the same rows, and one into the path another is leaving would make that
+// one's rollback collide with it; either rollback would leave rows that no
+// longer match the disk. Moves are rare enough that waiting costs nothing.
+let relocationInProgress = false;
 
 type RelocateProjectResult = {
   projectId: string;
@@ -64,17 +65,18 @@ export async function relocateProject(
   projectId: string,
   requestedPath: string,
 ): Promise<RelocateProjectResult> {
-  if (relocatingProjectIds.has(projectId)) {
-    throw new AppError('This project is already being moved', {
+  if (relocationInProgress) {
+    throw new AppError('Another project folder is being moved', {
       code: 'PROJECT_RELOCATION_IN_PROGRESS',
       statusCode: 409,
+      details: 'Try again in a moment.',
     });
   }
-  relocatingProjectIds.add(projectId);
+  relocationInProgress = true;
   try {
     return await relocateUnguarded(projectId, requestedPath);
   } finally {
-    relocatingProjectIds.delete(projectId);
+    relocationInProgress = false;
   }
 }
 
@@ -137,9 +139,8 @@ async function relocateUnguarded(
   const sessionRows = sessionsDb.getSessionsByProjectPathIncludingArchived(previousPath);
   // A run still writing its transcript would lose what it appends during the
   // copy, and then re-create the transcript under the old folder.
-  if (sessionRows.some((row) => (
-    chatRunRegistry.isProcessing(row.session_id) || providerRuntimeService.hasBackgroundWork(row.session_id)
-  ))) {
+  const runningSessionIds = new Set(sessionsService.listRunningSessions().map((entry) => entry.sessionId));
+  if (sessionRows.some((row) => runningSessionIds.has(row.session_id))) {
     throw new AppError('A conversation in this project is still running', {
       code: 'PROJECT_SESSION_RUNNING',
       statusCode: 409,

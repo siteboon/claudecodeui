@@ -6,8 +6,7 @@ import test from 'node:test';
 
 import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { relocateProject } from '@/modules/projects/services/project-relocate.service.js';
-import { providerRuntimeService, sessionsService } from '@/modules/providers/index.js';
-import { chatRunRegistry } from '@/modules/websocket/index.js';
+import { sessionsService } from '@/modules/providers/index.js';
 import { WORKSPACES_ROOT } from '@/shared/utils.js';
 
 type RelocateFixture = {
@@ -290,26 +289,24 @@ test('relocateProject keeps the project with its transcripts when they cannot be
 });
 
 test('relocateProject refuses while a conversation in the project is running', async (t) => {
-  for (const busy of ['run', 'background work'] as const) {
-    await withRelocateFixture(async (fixture) => {
-      await rename(fixture.oldProjectPath, fixture.newProjectPath);
-      const isSession = (sessionId: string) => sessionId === SESSION_ID;
-      t.mock.method(chatRunRegistry, 'isProcessing', (sessionId: string) => busy === 'run' && isSession(sessionId));
-      t.mock.method(providerRuntimeService, 'hasBackgroundWork', (sessionId: string) => busy === 'background work' && isSession(sessionId));
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+    // A live turn or background work the stopped turn left going.
+    t.mock.method(sessionsService, 'listRunningSessions', () => [
+      { sessionId: SESSION_ID, provider: 'claude', startedAt: 0, lastSeq: 0 },
+    ]);
 
-      await assert.rejects(
-        () => relocateProject(fixture.projectId, fixture.newProjectPath),
-        { statusCode: 409, code: 'PROJECT_SESSION_RUNNING' },
-      );
+    await assert.rejects(
+      () => relocateProject(fixture.projectId, fixture.newProjectPath),
+      { statusCode: 409, code: 'PROJECT_SESSION_RUNNING' },
+    );
 
-      assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
-      assert.equal(JSON.parse(await readFile(fixture.transcriptPath, 'utf8')).cwd, fixture.oldProjectPath);
-      t.mock.restoreAll();
-    });
-  }
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
+    assert.equal(JSON.parse(await readFile(fixture.transcriptPath, 'utf8')).cwd, fixture.oldProjectPath);
+  });
 });
 
-test('relocateProject refuses a second move of the same project while one is under way', async () => {
+test('relocateProject refuses a second move while one is under way', async () => {
   await withRelocateFixture(async (fixture) => {
     await rename(fixture.oldProjectPath, fixture.newProjectPath);
 
