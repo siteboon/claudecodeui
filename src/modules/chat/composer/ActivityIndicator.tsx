@@ -9,6 +9,8 @@ import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils
 type ActivityIndicatorProps = {
   activity: SessionActivity | null;
   onAbort?: () => void;
+  /** Opens the agents panel; makes the background-work tab a button that does. */
+  onOpenBackgroundWork?: () => void;
   isInputFocused?: boolean;
 };
 
@@ -55,7 +57,7 @@ function describeBackgroundTasks(allTasks: BackgroundTaskSummary[], t: TFunction
  * Rendered by chat's ChatComposer above the input so the user can see and
  * interrupt the in-flight turn without leaving the composer.
  */
-export default function ActivityIndicator({ activity, onAbort, isInputFocused = false }: ActivityIndicatorProps) {
+export default function ActivityIndicator({ activity, onAbort, onOpenBackgroundWork, isInputFocused = false }: ActivityIndicatorProps) {
   const { t } = useTranslation('chat');
   const [renderedActivity, setRenderedActivity] = useState<SessionActivity | null>(activity);
   const [isExiting, setIsExiting] = useState(false);
@@ -117,6 +119,24 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
       : 'border-border/50 shadow-[0_-1px_1px_hsl(var(--foreground)/0.04),1px_0_1px_hsl(var(--foreground)/0.03),-1px_0_1px_hsl(var(--foreground)/0.03)]',
   ].join(' ');
 
+  const tabContent = (
+    <>
+      <span
+        className={`h-1.5 w-1.5 shrink-0 animate-pulse rounded-full ${
+          isBackground
+            ? 'bg-purple-500 dark:bg-purple-400'
+            : isHeldElsewhere ? 'bg-amber-500 dark:bg-amber-400' : 'bg-primary'
+        }`}
+        aria-hidden
+      />
+      <Shimmer className="shrink-0 font-medium">{`${label}…`}</Shimmer>
+      {detail && (
+        <span className="min-w-0 truncate text-muted-foreground" title={detail}>{detail}</span>
+      )}
+      <span className="shrink-0 tabular-nums text-muted-foreground/60">{elapsedLabel}</span>
+    </>
+  );
+
   return (
     <div
       className={`pointer-events-none bg-transparent ${
@@ -124,21 +144,19 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
       }`}
     >
       <div className="flex items-end justify-between gap-2">
-        <div className={`${tabSurfaceClassName} min-w-0 max-w-full gap-2`}>
-          <span
-            className={`h-1.5 w-1.5 shrink-0 animate-pulse rounded-full ${
-              isBackground
-                ? 'bg-purple-500 dark:bg-purple-400'
-                : isHeldElsewhere ? 'bg-amber-500 dark:bg-amber-400' : 'bg-primary'
-            }`}
-            aria-hidden
-          />
-          <Shimmer className="shrink-0 font-medium">{`${label}…`}</Shimmer>
-          {detail && (
-            <span className="min-w-0 truncate text-muted-foreground" title={detail}>{detail}</span>
-          )}
-          <span className="shrink-0 tabular-nums text-muted-foreground/60">{elapsedLabel}</span>
-        </div>
+        {isBackground && onOpenBackgroundWork ? (
+          // The work it names is listed, live, in the agents panel.
+          <button
+            type="button"
+            onClick={onOpenBackgroundWork}
+            title={t('claudeStatus.showBackgroundWork', 'Show the agents panel')}
+            className={`${tabSurfaceClassName} pointer-events-auto min-w-0 max-w-full gap-2 text-left hover:bg-accent`}
+          >
+            {tabContent}
+          </button>
+        ) : (
+          <div className={`${tabSurfaceClassName} min-w-0 max-w-full gap-2`}>{tabContent}</div>
+        )}
 
         {renderedActivity.canInterrupt && onAbort && (
           <button

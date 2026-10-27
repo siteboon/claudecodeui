@@ -8,12 +8,16 @@ import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { isClaudeSDKSessionActive } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
+import type { IProviderBackgroundWork } from '@/shared/interfaces.js';
 import type {
   BackgroundTaskSummary,
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
+  SessionBackgroundWork,
+  SessionTranscriptRef,
+  SubagentTimelinePage,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
 import { AppError, sliceTailPage } from '@/shared/utils.js';
@@ -165,6 +169,29 @@ function resolveProjectDisplayName(
  * class, keeping normalization/history call sites decoupled from implementation
  * file layout.
  */
+/**
+ * The background-work reader of a session's provider, and where the session's
+ * transcript is. Throws when the session is unknown; either half is null when
+ * the provider keeps no background work or the session has no transcript.
+ */
+function resolveBackgroundWorkReader(sessionId: string): {
+  reader: IProviderBackgroundWork | null;
+  transcript: SessionTranscriptRef | null;
+} {
+  const session = sessionsDb.getSessionById(sessionId);
+  if (!session) {
+    throw new AppError(`Session "${sessionId}" was not found.`, {
+      code: 'SESSION_NOT_FOUND',
+      statusCode: 404,
+    });
+  }
+  const reader = providerRegistry.resolveProvider(session.provider as LLMProvider).backgroundWork ?? null;
+  const transcript = session.jsonl_path && session.provider_session_id
+    ? { sessionId, providerSessionId: session.provider_session_id, jsonlPath: session.jsonl_path }
+    : null;
+  return { reader, transcript };
+}
+
 export const sessionsService = {
   /**
    * Lists provider ids that can load session history and normalize live messages.
@@ -588,6 +615,36 @@ export const sessionsService = {
         sessionId,
       })),
     };
+  },
+
+  /**
+   * Reads what a chat has going on the side — its subagents and heartbeats —
+   * for the agents panel. A chat whose provider keeps no such work, or that
+   * has no transcript yet, has none.
+   */
+  async readBackgroundWork(sessionId: string): Promise<SessionBackgroundWork> {
+    const { reader, transcript } = resolveBackgroundWorkReader(sessionId);
+    if (!reader || !transcript) {
+      return { processLive: false, subagents: [], heartbeats: [] };
+    }
+    return reader.readSessionWork(transcript);
+  },
+
+  /**
+   * Reads one subagent's timeline for the agents panel: the newest entries,
+   * or only what changed since `cursor`. Not found covers a provider without
+   * background work and a chat that has no such agent alike.
+   */
+  async readSubagentTimeline(sessionId: string, agentId: string, cursor?: string): Promise<SubagentTimelinePage> {
+    const { reader, transcript } = resolveBackgroundWorkReader(sessionId);
+    const page = reader && transcript ? await reader.readSubagentTimeline(transcript, agentId, cursor) : null;
+    if (!page) {
+      throw new AppError(`Subagent "${agentId}" was not found.`, {
+        code: 'SUBAGENT_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+    return page;
   },
 
   /**

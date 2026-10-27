@@ -89,6 +89,26 @@ const parseWorkflowAgentId = (value: unknown): string => {
   return agentId;
 };
 
+/** A subagent id as the CLI names its transcript (`agent-<id>.jsonl`): letters, digits, `_` and `-`. */
+const SUBAGENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+// The id names a file in the chat's transcript folder, so nothing outside
+// this shape may reach the filesystem.
+const parseSubagentId = (value: unknown): string => {
+  const agentId = readPathParam(value, 'agentId');
+  if (!SUBAGENT_ID_PATTERN.test(agentId)) {
+    throw new AppError('Invalid subagent id.', {
+      code: 'INVALID_SUBAGENT_ID',
+      statusCode: 400,
+    });
+  }
+  return agentId;
+};
+
+/** A timeline cursor is opaque to the route; one too long to be real is ignored, which reads the newest entries. */
+const parseTimelineCursor = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.length > 0 && value.length <= 64 ? value : undefined;
+
 const readOptionalQueryString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') {
     return undefined;
@@ -1080,6 +1100,33 @@ router.get(
     const runId = parseWorkflowRunId(req.params.runId);
     const agentId = parseWorkflowAgentId(req.params.agentId);
     const result = await sessionsService.readWorkflowAgentActivity(sessionId, runId, agentId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+/**
+ * What a chat has going on the side — its subagents and heartbeats — for the
+ * agents panel, which polls it while any of them runs.
+ */
+router.get(
+  '/sessions/:sessionId/background-work',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.readBackgroundWork(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+/**
+ * One subagent's timeline for the agents panel: the newest entries, or with
+ * `cursor` only what changed since the read that returned it.
+ */
+router.get(
+  '/sessions/:sessionId/subagents/:agentId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const agentId = parseSubagentId(req.params.agentId);
+    const result = await sessionsService.readSubagentTimeline(sessionId, agentId, parseTimelineCursor(req.query.cursor));
     res.json(createApiSuccessResponse(result));
   }),
 );

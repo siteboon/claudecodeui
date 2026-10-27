@@ -258,6 +258,79 @@ export type SessionActivitySnapshot = {
 
 // ---------------------------
 
+//----------------- SESSION BACKGROUND WORK ------------
+
+/**
+ * One subagent of a chat as the agents panel lists it, from the server's
+ * background-work route. `status` reads like the transcript's agent cards;
+ * `stoppable` says the chat's live process runs it, so `chat.stop-task` with
+ * its `agentId` can stop it. `lastActivity` is its newest step in one line.
+ */
+export type SessionSubagent = {
+  agentId: string;
+  /** The call that launched it, which its card in the transcript is keyed by. */
+  toolUseId?: string;
+  description: string;
+  agentType?: string;
+  model?: string;
+  status: BackgroundTaskStatus;
+  background: boolean;
+  /** 1 for an agent the chat launched itself, 2 and up for one another agent launched. */
+  depth: number;
+  startedAt?: string;
+  lastActivityAt?: string;
+  lastActivity?: string;
+  activityCount: number;
+  /** How often SendMessage brought it back after it had stopped or finished. */
+  resumeCount: number;
+  /** The one-line summary of its latest report. */
+  summary?: string;
+  stoppable: boolean;
+};
+
+/**
+ * One prompt a chat's Claude process sends itself on a schedule (a
+ * `CronCreate` job), as the agents panel lists it. It fires only while that
+ * process is up; `nextFireAt` is epoch ms, absent when unknown.
+ */
+export type SessionHeartbeat = {
+  id: string;
+  /** Five-field cron expression in the server machine's local time. */
+  schedule: string;
+  humanSchedule?: string;
+  prompt: string;
+  recurring: boolean;
+  createdAt?: string;
+  lastFiredAt?: string;
+  fireCount: number;
+  nextFireAt?: number;
+};
+
+/** What a chat has going on the side, as the agents panel shows it. */
+export type SessionBackgroundWork = {
+  /** Whether the chat's Claude process is up: heartbeats fire and agents run only while it is. */
+  processLive: boolean;
+  subagents: SessionSubagent[];
+  heartbeats: SessionHeartbeat[];
+};
+
+/**
+ * A stretch of one subagent's timeline: the newest entries on a first read,
+ * only those added or changed since on a read that passes the previous
+ * `cursor` back. `reset` means the entries replace whatever is held.
+ */
+export type SubagentTimelinePage = {
+  agent: SessionSubagent;
+  /** The task the agent was given, when its transcript has it. */
+  prompt?: string;
+  cursor: string;
+  reset: boolean;
+  entries: Array<SubagentActivity & { index: number }>;
+  activityCount: number;
+};
+
+// ---------------------------
+
 //----------------- REALTIME TRANSPORT ------------
 
 /**
@@ -354,7 +427,7 @@ export type SubagentInfo = {
   name?: string;
   type?: string;
   description?: string;
-  /** `stopped` is a background agent whose session process ended before it reported: no outcome exists and none is coming. */
+  /** `stopped` is a background agent whose session process ended before it reported, or that the user stopped: no outcome exists and none is coming. */
   status: BackgroundTaskStatus;
   model?: string;
   /** Total entries the agent recorded, which exceeds the received timeline when a long run was truncated for transport. */

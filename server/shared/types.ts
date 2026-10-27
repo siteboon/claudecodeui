@@ -608,7 +608,8 @@ export type SubagentActivity = {
  * carries one — and `completed` when the provider reported nothing. A failed
  * tool call *inside* the agent is not a failed agent, so it is never inferred
  * from the transcript. A background agent whose session process ended before
- * it reported is `stopped`: no outcome exists and none is coming.
+ * it reported, or that the user stopped, is `stopped`: no outcome exists and
+ * none is coming.
  */
 export type SubagentInfo = {
   /** Provider-native agent id — Claude `agentId`, Codex `agent_thread_id`. */
@@ -724,6 +725,111 @@ export type FetchHistoryResult = {
   offset: number;
   limit: number | null;
   tokenUsage?: unknown;
+};
+
+// ---------------------------
+//----------------- SESSION BACKGROUND WORK TYPES ------------
+/**
+ * Where one chat's transcript lives, which is all a background-work reader
+ * needs to find the chat's agents and heartbeats on disk. `sessionId` is the
+ * app-facing id (what the runtime keys its live process by),
+ * `providerSessionId` the provider-native one the transcript rows carry.
+ */
+export type SessionTranscriptRef = {
+  sessionId: string;
+  providerSessionId: string;
+  jsonlPath: string;
+};
+
+/**
+ * One subagent of a chat as the agents panel lists it, read from the chat's
+ * transcript, the agent's own transcript and sidecar file, and — while the
+ * chat's Claude process is up — the tasks that process reports running.
+ *
+ * `status` reads like the transcript's agent cards: `running` only while a
+ * live process can still be running the agent, `stopped` for one that ended
+ * without reporting (its process exited, or the user stopped it). An agent
+ * that SendMessage resumed counts from its latest start: a report from before
+ * the resume does not settle it. `stoppable` is true while the live process
+ * runs the agent, which is the only time `chat.stop-task` can reach it.
+ */
+export type SessionSubagent = {
+  agentId: string;
+  /** The call that launched the agent, which its card in the transcript is keyed by. */
+  toolUseId?: string;
+  description: string;
+  /** Claude's agent preset (`Explore`, `general-purpose`, a custom agent's name). */
+  agentType?: string;
+  model?: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  /** Launched in the background (the default) rather than blocking the turn that started it. */
+  background: boolean;
+  /** 1 for an agent the chat launched itself, 2 and up for one another agent launched. */
+  depth: number;
+  /** When it started: its transcript's first row, else its launch (ISO). */
+  startedAt?: string;
+  /** When it last recorded a step (ISO). */
+  lastActivityAt?: string;
+  /** Its newest step in one line: a tool call and what it acts on, or the start of what it wrote. */
+  lastActivity?: string;
+  /** Steps it has recorded so far. */
+  activityCount: number;
+  /** How often SendMessage brought it back after it had stopped or finished. */
+  resumeCount: number;
+  /** The one-line summary of its latest report, once it reported. */
+  summary?: string;
+  stoppable: boolean;
+};
+
+/**
+ * One prompt a chat's Claude process sends itself on a schedule — a
+ * `CronCreate` job. The CLI keeps such jobs in the process and restores them
+ * from the transcript when the chat resumes, so they fire only while that
+ * process is up.
+ */
+export type SessionHeartbeat = {
+  id: string;
+  /** Five-field cron expression in the machine's local time. */
+  schedule: string;
+  /** The CLI's wording of the schedule, when it is not just the expression again. */
+  humanSchedule?: string;
+  /** The prompt it sends, capped for transport. */
+  prompt: string;
+  recurring: boolean;
+  createdAt?: string;
+  lastFiredAt?: string;
+  fireCount: number;
+  /** When it fires next (epoch ms): the CLI's own word while it is still ahead, else worked out from the schedule. */
+  nextFireAt?: number;
+};
+
+/** A chat's background work as the agents panel shows it. */
+export type SessionBackgroundWork = {
+  /** Whether the chat's Claude process is up (in a turn, or held open): heartbeats fire and agents run only while it is. */
+  processLive: boolean;
+  subagents: SessionSubagent[];
+  heartbeats: SessionHeartbeat[];
+};
+
+/**
+ * A stretch of one subagent's timeline for the panel that follows it live.
+ *
+ * The first read returns the newest entries. A read that passes back the
+ * `cursor` the previous one returned gets only the entries added or changed
+ * since — a tool call whose result has landed is a change — so a running
+ * agent can be polled without resending what the page already holds.
+ */
+export type SubagentTimelinePage = {
+  agent: SessionSubagent;
+  /** The task the agent was given: the first prompt in its transcript, capped for transport. */
+  prompt?: string;
+  cursor: string;
+  /** The entries replace whatever the caller holds: a first read, a read too far behind, or a rewritten transcript. */
+  reset: boolean;
+  /** Entries with their positions in the whole timeline. */
+  entries: Array<SubagentActivity & { index: number }>;
+  /** Length of the whole timeline. */
+  activityCount: number;
 };
 
 // ---------------------------

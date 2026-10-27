@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
@@ -14,6 +14,7 @@ import type {
   Project,
   ProjectSession,
   SessionEstablishedContext,
+  SessionHeartbeat,
   SessionNavigationOptions,
 } from '@/shared/types';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
@@ -22,6 +23,7 @@ import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSideChat } from '@/modules/chat/hooks/useSideChat';
+import { useAgentsPanel } from '@/modules/chat/hooks/useAgentsPanel';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import {
   useProcessingSessions,
@@ -31,6 +33,8 @@ import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 import SideChatPanel from '@/modules/chat/sideChat/SideChatPanel';
+import AgentsPanel from '@/modules/chat/agentsPanel/AgentsPanel';
+import SidePanelFrame from '@/modules/chat/sidePanels/SidePanelFrame';
 
 type ChatInterfaceProps = {
   isActive: boolean;
@@ -195,6 +199,32 @@ function ChatInterface({
     effort: currentProviderEffort,
   });
 
+  // The agents panel beside the transcript: the chat's subagents and
+  // heartbeats, each agent's steps live. Only Claude chats keep such work.
+  const agentsPanel = useAgentsPanel({
+    sessionId: currentSessionId || selectedSession?.id || null,
+    enabled: provider === 'claude',
+    runningTasks: sessionActivity?.tasks,
+    subscribe,
+  });
+  const { open: showAgentsPanel, refresh: refreshAgentsPanel } = agentsPanel;
+  const { ask: askSideChat } = sideChat;
+  // Which of the two right-hand panels is in front while both are open: the
+  // one the user opened last.
+  const [frontSidePanel, setFrontSidePanel] = useState<'agents' | 'side-chat'>('agents');
+
+  const openAgentsPanel = useCallback((agentId?: string) => {
+    showAgentsPanel(agentId);
+    setFrontSidePanel('agents');
+  }, [showAgentsPanel]);
+  const openAgentsPanelList = useCallback(() => openAgentsPanel(), [openAgentsPanel]);
+
+  // A /btw question opens the side chat, and brings it in front.
+  const askSideQuestion = useCallback((question: string) => {
+    setFrontSidePanel('side-chat');
+    void askSideChat(question);
+  }, [askSideChat]);
+
   const {
     input,
     setInput,
@@ -262,7 +292,7 @@ function ChatInterface({
     tokenBudget,
     sendMessage,
     subscribe,
-    onSideQuestion: sideChat.ask,
+    onSideQuestion: askSideQuestion,
     sendByCtrlEnter,
     onSessionProcessing,
     onSessionEstablished: handleSessionEstablished,
@@ -334,6 +364,26 @@ function ChatInterface({
   }, [setInput, textareaRef]);
 
   usePaletteOpsRegister({ insertComposerText });
+
+  // Stops one agent through the chat's live process, as the strip's ✕ does,
+  // and re-reads the panel once the stop has had a moment to land.
+  const handleStopAgent = useCallback((agentId: string) => {
+    const sessionId = selectedSession?.id || currentSessionId;
+    if (!sessionId) {
+      return;
+    }
+    sendMessage({ type: 'chat.stop-task', sessionId, taskId: agentId });
+    window.setTimeout(() => void refreshAgentsPanel(), 800);
+  }, [refreshAgentsPanel, currentSessionId, selectedSession?.id, sendMessage]);
+
+  // Nothing but Claude itself can delete a heartbeat (the job lives in its
+  // process), so Stop puts the request into the message box for the user to send.
+  const handleStopHeartbeat = useCallback((heartbeat: SessionHeartbeat) => {
+    insertComposerText(t('agentsPanel.stopHeartbeatMessage', {
+      id: heartbeat.id,
+      defaultValue: 'Please delete the heartbeat {{id}} with CronDelete.',
+    }));
+  }, [insertComposerText, t]);
 
   useEffect(() => {
     if (!canAbortSession) {
@@ -508,6 +558,8 @@ function ChatInterface({
               revealMessage={revealMessage}
               backgroundTasks={sessionActivity?.tasks}
               sendMessage={sendMessage}
+              onOpenAgentsPanel={provider === 'claude' ? openAgentsPanelList : undefined}
+              agentsRunning={agentsPanel.runningAgentCount}
               loadAllMessages={loadAllMessages}
               allMessagesLoaded={allMessagesLoaded}
               isLoadingAllMessages={isLoadingAllMessages}
@@ -550,6 +602,7 @@ function ChatInterface({
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
           activity={sessionActivity}
+          onOpenBackgroundWork={provider === 'claude' ? openAgentsPanelList : undefined}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
@@ -621,22 +674,62 @@ function ChatInterface({
         </div>
       </div>
 
-      {sideChat.isOpen && (
-        <SideChatPanel
-          entries={sideChat.entries}
-          busy={sideChat.busy}
-          onAsk={sideChat.ask}
-          onStop={sideChat.stop}
-          onClear={sideChat.clear}
-          onClose={sideChat.close}
-          model={sideChat.model}
-          modelOptions={currentProviderModelOptions}
-          onSelectModel={sideChat.setModel}
-          effort={sideChat.effort}
-          effortOptions={currentProviderEffortOptions}
-          onSelectEffort={sideChat.setEffort}
-          modelsLoading={providerModelsLoading}
-        />
+      {(sideChat.isOpen || agentsPanel.isOpen) && (
+        <SidePanelFrame
+          tabs={sideChat.isOpen && agentsPanel.isOpen ? [
+            {
+              id: 'agents',
+              label: t('agentsPanel.title', 'Agents'),
+              badge: agentsPanel.runningAgentCount,
+              active: frontSidePanel === 'agents',
+              onSelect: () => setFrontSidePanel('agents'),
+            },
+            {
+              id: 'side-chat',
+              label: t('agentsPanel.sideChatTab', 'Side chat'),
+              active: frontSidePanel === 'side-chat',
+              onSelect: () => setFrontSidePanel('side-chat'),
+            },
+          ] : null}
+        >
+          {agentsPanel.isOpen && (
+            <div className={sideChat.isOpen && frontSidePanel !== 'agents' ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
+              <AgentsPanel
+                sessionId={currentSessionId || selectedSession?.id || null}
+                work={agentsPanel.work}
+                workReadAt={agentsPanel.workReadAt}
+                error={agentsPanel.error}
+                selectedAgentId={agentsPanel.selectedAgentId}
+                onSelectAgent={agentsPanel.selectAgent}
+                onStopAgent={handleStopAgent}
+                onStopHeartbeat={handleStopHeartbeat}
+                onClose={agentsPanel.close}
+                onFileOpen={onFileOpen}
+                createDiff={createDiff}
+                selectedProject={selectedProject}
+              />
+            </div>
+          )}
+          {sideChat.isOpen && (
+            <div className={agentsPanel.isOpen && frontSidePanel !== 'side-chat' ? 'hidden' : 'flex min-h-0 flex-1 flex-col'}>
+              <SideChatPanel
+                entries={sideChat.entries}
+                busy={sideChat.busy}
+                onAsk={sideChat.ask}
+                onStop={sideChat.stop}
+                onClear={sideChat.clear}
+                onClose={sideChat.close}
+                model={sideChat.model}
+                modelOptions={currentProviderModelOptions}
+                onSelectModel={sideChat.setModel}
+                effort={sideChat.effort}
+                effortOptions={currentProviderEffortOptions}
+                onSelectEffort={sideChat.setEffort}
+                modelsLoading={providerModelsLoading}
+              />
+            </div>
+          )}
+        </SidePanelFrame>
       )}
       </div>
 

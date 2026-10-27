@@ -96,6 +96,12 @@ const activeSessions = new Map<string, ActiveSession>();
 // entry lives exactly as long as the map entry it shadows: cleared when the
 // session is removed, and reset when a newer run takes the key over.
 const backgroundWork = createBackgroundWorkTracker();
+// The ids of the background tasks each live process says it has running, from
+// its latest `background_tasks_changed` (a level signal: every payload is the
+// whole set). Unlike the tracker it lists an agent that SendMessage resumed,
+// which no `task_started` of this process names. Keyed and cleared like
+// `backgroundWork`; absent until the process first reports a set.
+const liveBackgroundTaskIds = new Map<string, Set<string>>();
 const pendingToolApprovals = new Map<string, ToolApprovalResolver>();
 // Sessions cancelled via abort-session. The abort handler already sent the
 // terminal `complete` (aborted: true) to the client, so the run loop must not
@@ -443,6 +449,7 @@ function addSession(
     // Whatever the superseded process had outstanding dies with it and will
     // never report, so the new run starts from an empty task set.
     backgroundWork.clear(sessionId);
+    liveBackgroundTaskIds.delete(sessionId);
   }
   const carried = superseding ? null : existing;
   activeSessions.set(sessionId, {
@@ -501,6 +508,7 @@ function removeSession(sessionId: string) {
   activeSessions.delete(sessionId);
   // No process, no background work: anything still tracked was killed with it.
   backgroundWork.clear(sessionId);
+  liveBackgroundTaskIds.delete(sessionId);
   // See addSession: a page cached while the process was up still says
   // `running` for any agent that never reported back.
   sessionHistoryCache.invalidate(sessionId);
@@ -907,6 +915,21 @@ export function createBackgroundWorkTracker() {
       }));
     }
   };
+}
+
+/**
+ * Keeps the set of background tasks a live process last said it has running.
+ * Ambient tasks — housekeeping and live-update watchers nobody launched — are
+ * left out, as the SDK asks hosts to.
+ */
+function recordLiveBackgroundTasks(sessionKey: string, tasks: unknown) {
+  const ids = new Set<string>();
+  for (const task of Array.isArray(tasks) ? tasks as AnyRecord[] : []) {
+    if (typeof task?.task_id === 'string' && task.ambient !== true) {
+      ids.add(task.task_id);
+    }
+  }
+  liveBackgroundTaskIds.set(sessionKey, ids);
 }
 
 /**
@@ -1511,6 +1534,16 @@ async function queryClaudeSDK(
         sawTaskEventThisTurn = true;
       }
       backgroundWork.apply(sessionKey()!, message);
+      // A superseded process winding down reports its tasks gone; the set
+      // under this key belongs to the run that took over.
+      if (
+        message.type === 'system'
+        && message.subtype === 'background_tasks_changed'
+        && sessionKey()
+        && !supersededInstances.has(queryInstance)
+      ) {
+        recordLiveBackgroundTasks(sessionKey()!, message.tasks);
+      }
 
       // A task the user stopped gets no follow-up turn from the CLI — only its
       // `stopped` notification — so when that was the last outstanding task
@@ -1754,14 +1787,16 @@ function listClaudeSDKBackgroundWork(): Array<{ sessionId: string; tasks: Backgr
 /**
  * Stops one outstanding background task through the SDK, which then emits a
  * `task_notification` with status `stopped` — the same event that drops the
- * task from the tracker and settles its card.
+ * task from the tracker and settles its card. A task the process lists as
+ * running without having started it (an agent SendMessage resumed) can be
+ * stopped too.
  * @param {string} sessionId - Session identifier
  * @param {string} taskId - The task's `task_id` as reported on `task_started`
  * @returns {Promise<boolean>} False when no live process is tracking the task
  */
 async function stopClaudeSDKTask(sessionId: string, taskId: string) {
   const session = getSession(sessionId);
-  if (!session || !backgroundWork.has(sessionId, taskId)) {
+  if (!session || !(backgroundWork.has(sessionId, taskId) || liveBackgroundTaskIds.get(sessionId)?.has(taskId))) {
     return false;
   }
   await session.instance.stopTask!(taskId);
@@ -1824,6 +1859,30 @@ function isClaudeSDKSessionActive(sessionId: string) {
 function getClaudeSDKSessionStartTime(sessionId: string) {
   const session = getSession(sessionId);
   return session && session.status === 'active' ? session.startTime : null;
+}
+
+/**
+ * What the agents panel needs from the live process behind a session: whether
+ * one is up and taking input, when its run started (a launch older than that
+ * belongs to a process that has exited), and the tasks it runs — the whole set
+ * from its last `background_tasks_changed`, null when it never sent one (a CLI
+ * that predates it), and the tracker's own besides.
+ *
+ * Used by the Claude background-work provider to settle each row it lists.
+ * @param {string} sessionId - Session identifier (app id or provider-native id)
+ */
+function getClaudeSDKLiveWork(sessionId: string): {
+  processLive: boolean;
+  runStartedAt: number | null;
+  reportedTaskIds: Set<string> | null;
+  trackedTaskIds: Set<string>;
+} {
+  return {
+    processLive: hasLiveClaudeProcess(sessionId),
+    runStartedAt: getClaudeSDKSessionStartTime(sessionId),
+    reportedTaskIds: liveBackgroundTaskIds.get(sessionId) ?? null,
+    trackedTaskIds: new Set(backgroundWork.outstanding(sessionId).map((task) => task.taskId)),
+  };
 }
 
 /**
@@ -1893,6 +1952,7 @@ export {
   injectClaudeSDKMessage,
   isClaudeSDKSessionActive,
   getClaudeSDKSessionStartTime,
+  getClaudeSDKLiveWork,
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,

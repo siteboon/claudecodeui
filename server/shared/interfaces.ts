@@ -18,6 +18,9 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  SessionBackgroundWork,
+  SessionTranscriptRef,
+  SubagentTimelinePage,
   UpsertProviderMcpServerInput,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
@@ -91,6 +94,35 @@ export interface IProvider {
    * its absence is what makes "fork session" unavailable.
    */
   readonly fork?: IProviderFork;
+  /**
+   * The agents panel's reader. Present only for providers whose chats launch
+   * background agents or schedule heartbeats; its absence leaves the panel
+   * empty for that provider's chats.
+   */
+  readonly backgroundWork?: IProviderBackgroundWork;
+}
+
+// ---------------------------
+//----------------- PROVIDER BACKGROUND WORK INTERFACE ------------
+/**
+ * Background-work contract for one provider: what a chat has going on the
+ * side — the subagents it launched, the heartbeats it scheduled — and one
+ * agent's timeline as it grows, for the agents panel beside the chat.
+ */
+export interface IProviderBackgroundWork {
+  /** Lists a chat's subagents and heartbeats, each with where it stands now. */
+  readSessionWork(session: SessionTranscriptRef): Promise<SessionBackgroundWork>;
+
+  /**
+   * Reads one subagent's timeline: the newest entries without a cursor, only
+   * what changed since with the cursor a previous read returned. Returns
+   * `null` when the chat has no such agent.
+   */
+  readSubagentTimeline(
+    session: SessionTranscriptRef,
+    agentId: string,
+    cursor?: string,
+  ): Promise<SubagentTimelinePage | null>;
 }
 
 // ---------------------------

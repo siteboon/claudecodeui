@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useMemo } from 'react';
+import { Bot } from 'lucide-react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { BackgroundTaskSummary,
@@ -81,6 +82,10 @@ type ChatMessagesPaneProps = {
   onForkFromMessage?: (message: ChatMessage) => void;
   /** Fetches the whole transcript for an export, which otherwise only sees the loaded page. */
   onLoadFullTranscript?: () => Promise<ChatMessage[]>;
+  /** Opens the agents panel beside the transcript; absent for chats whose provider keeps no background work. */
+  onOpenAgentsPanel?: () => void;
+  /** Agents the chat has running, drawn on the panel's button. */
+  agentsRunning?: number;
 };
 
 /**
@@ -130,6 +135,8 @@ function ChatMessagesPane({
   revealMessage,
   backgroundTasks,
   sendMessage,
+  onOpenAgentsPanel,
+  agentsRunning = 0,
   loadAllMessages,
   allMessagesLoaded,
   isLoadingAllMessages,
@@ -207,7 +214,24 @@ function ChatMessagesPane({
               onLoadAll={loadAllMessages}
             />
           </div>
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
+            {onOpenAgentsPanel && (
+              <button
+                type="button"
+                onClick={() => onOpenAgentsPanel()}
+                title={t('agentsPanel.open', 'Show this chat\'s agents and heartbeats')}
+                aria-label={t('agentsPanel.open', 'Show this chat\'s agents and heartbeats')}
+                className="flex h-8 items-center gap-1.5 rounded-lg border border-border/50 bg-background/95 px-2 text-muted-foreground backdrop-blur hover:bg-accent hover:text-foreground"
+              >
+                <Bot className="h-4 w-4" />
+                {agentsRunning > 0 && (
+                  <span className="flex items-center gap-1 text-[11px] tabular-nums text-purple-600 dark:text-purple-300">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
+                    {agentsRunning}
+                  </span>
+                )}
+              </button>
+            )}
             <ChatExportMenu
               messages={chatMessages}
               sessionTitle={selectedSession?.summary || selectedSession?.title}

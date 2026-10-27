@@ -12,7 +12,7 @@ import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/datab
 import providerRouter from '@/modules/providers/provider.routes.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
-import type { BackgroundTaskSummary, WorkflowAgentActivity } from '@/shared/types.js';
+import type { BackgroundTaskSummary, SessionBackgroundWork, SubagentTimelinePage, WorkflowAgentActivity } from '@/shared/types.js';
 import { AppError, IS_PLATFORM } from '@/shared/utils.js';
 
 async function withProviderServer(
@@ -594,5 +594,68 @@ test('the workflow agent route reads an agent\'s timeline and status from its ru
     const missing = await missingResponse.json() as { error: { code: string } };
     assert.equal(missingResponse.status, 404);
     assert.equal(missing.error.code, 'WORKFLOW_AGENT_NOT_FOUND');
+  });
+});
+
+const AGENTS_SESSION_ID = 'claude-agents-routes-session';
+const PANEL_AGENT_ID = 'a1b2c3d4e5f6a7b8c';
+
+test('the background-work routes list a chat\'s agents and heartbeats and read one agent\'s timeline', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    await mkdir(path.join(workspacePath, AGENTS_SESSION_ID, 'subagents'), { recursive: true });
+    const sessionPath = path.join(workspacePath, `${AGENTS_SESSION_ID}.jsonl`);
+    const row = (fields: Record<string, unknown>) => JSON.stringify({ sessionId: AGENTS_SESSION_ID, timestamp: '2026-10-27T12:00:00.000Z', ...fields });
+    await writeFile(sessionPath, [
+      row({ type: 'user', uuid: 'u1', message: { role: 'user', content: 'start an agent and a heartbeat' } }),
+      row({ type: 'user', uuid: 'u2', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_agent', content: 'Async agent launched successfully.' }] }, toolUseResult: { isAsync: true, status: 'async_launched', agentId: PANEL_AGENT_ID, description: 'Survey the repo' } }),
+      row({ type: 'assistant', uuid: 'a1', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_cron', name: 'CronCreate', input: { cron: '17 3 * * *', prompt: 'probe heartbeat' } }] } }),
+      row({ type: 'user', uuid: 'u3', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_cron', content: 'Scheduled recurring job 79b5e0b4' }] }, toolUseResult: { id: '79b5e0b4', humanSchedule: 'Every day at 3:17 AM', recurring: true, durable: false, nextFireAt: 4102444800000 } }),
+    ].join('\n') + '\n', 'utf8');
+    await writeFile(path.join(workspacePath, AGENTS_SESSION_ID, 'subagents', `agent-${PANEL_AGENT_ID}.jsonl`), [
+      row({ type: 'user', uuid: 's1', isSidechain: true, message: { role: 'user', content: 'Survey the repo.' } }),
+      row({ type: 'assistant', uuid: 's2', isSidechain: true, message: { role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'text', text: 'The repo has two apps.' }] } }),
+    ].join('\n') + '\n', 'utf8');
+    const now = new Date().toISOString();
+    sessionsDb.createSession(AGENTS_SESSION_ID, 'claude', workspacePath, 'Agents session', now, now, sessionPath);
+
+    const workResponse = await fetch(`${baseUrl}/api/providers/sessions/${AGENTS_SESSION_ID}/background-work`);
+    const work = (await workResponse.json() as { data: SessionBackgroundWork }).data;
+    assert.equal(workResponse.status, 200);
+    assert.equal(work.processLive, false);
+    assert.deepEqual(work.subagents.map((agent) => [agent.agentId, agent.description, agent.status, agent.lastActivity]), [
+      [PANEL_AGENT_ID, 'Survey the repo', 'stopped', 'The repo has two apps.'],
+    ]);
+    assert.deepEqual(work.heartbeats.map((heartbeat) => [heartbeat.id, heartbeat.humanSchedule, heartbeat.nextFireAt]), [
+      ['79b5e0b4', 'Every day at 3:17 AM', 4102444800000],
+    ]);
+
+    const timelineUrl = (agentId: string, cursor?: string) =>
+      `${baseUrl}/api/providers/sessions/${AGENTS_SESSION_ID}/subagents/${agentId}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`;
+    const timelineResponse = await fetch(timelineUrl(PANEL_AGENT_ID));
+    const timeline = (await timelineResponse.json() as { data: SubagentTimelinePage }).data;
+    assert.equal(timelineResponse.status, 200);
+    assert.equal(timeline.reset, true);
+    assert.deepEqual(timeline.entries.map((entry) => [entry.index, entry.content]), [[0, 'The repo has two apps.']]);
+    const nextResponse = await fetch(timelineUrl(PANEL_AGENT_ID, timeline.cursor));
+    const next = (await nextResponse.json() as { data: SubagentTimelinePage }).data;
+    assert.deepEqual([next.reset, next.entries.length], [false, 0]);
+
+    // The id names a file in the chat's folder: nothing but the CLI's shape gets through.
+    for (const agentId of ['..%2F..%2Fsecret', 'agent.jsonl', 'a'.repeat(65)]) {
+      const response = await fetch(timelineUrl(agentId));
+      const payload = await response.json() as { error: { code: string } };
+      assert.equal(response.status, 400, agentId);
+      assert.equal(payload.error.code, 'INVALID_SUBAGENT_ID');
+    }
+    const missing = await fetch(timelineUrl('a0000000000000000'));
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json() as { error: { code: string } }).error.code, 'SUBAGENT_NOT_FOUND');
+
+    // A provider that keeps no background work has none to list.
+    sessionsDb.createSession('codex-agents-routes-session', 'codex', workspacePath, 'Codex session', now, now, null);
+    const codex = await fetch(`${baseUrl}/api/providers/sessions/codex-agents-routes-session/background-work`);
+    assert.deepEqual((await codex.json() as { data: SessionBackgroundWork }).data, { processLive: false, subagents: [], heartbeats: [] });
+    const unknown = await fetch(`${baseUrl}/api/providers/sessions/no-such-session/background-work`);
+    assert.equal(unknown.status, 404);
   });
 });

@@ -13,6 +13,11 @@ type SubagentTimelineProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  /**
+   * Draw the newest entries and offer the earlier ones above them, for a
+   * timeline followed live (the agents panel) rather than read from the top.
+   */
+  newestLast?: boolean;
 };
 
 /**
@@ -47,12 +52,13 @@ SubagentNote.displayName = 'SubagentNote';
  * Rendered by SubagentPanel and WorkflowPanel for an agent's recorded
  * timeline — tool calls through the same router the main thread uses, prose
  * and reasoning as notes — with a "show more" step for long runs and a note
- * for the entries the backend left out of a truncated one.
+ * for the entries the backend left out of a truncated one. The agents panel
+ * renders it `newestLast`, following a running agent's latest steps.
  *
  * Only mount it while its panel is open: a run of a hundred tools is a
  * hundred tool renderers.
  */
-export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, createDiff, selectedProject }: SubagentTimelineProps) => {
+export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, createDiff, selectedProject, newestLast = false }: SubagentTimelineProps) => {
   const isExporting = useIsExportingTranscript();
   // Raised by the "show more" step so a long run can be inspected in full
   // without paying for it up front.
@@ -62,20 +68,43 @@ export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, cre
   // The backend truncates very long timelines for transport; say so rather
   // than implying the agent stopped where the list does.
   const untransmittedCount = Math.max(0, (activityCount ?? activity.length) - activity.length);
-  const visibleEntries = activity.slice(0, effectiveRenderLimit);
+  // Positions are counted in `activity` either way, so an entry keeps its key
+  // as newer ones push the newest-last window along.
+  const firstVisible = newestLast ? Math.max(0, activity.length - effectiveRenderLimit) : 0;
+  const visibleEntries = newestLast ? activity.slice(firstVisible) : activity.slice(0, effectiveRenderLimit);
   const hiddenCount = activity.length - visibleEntries.length;
+
+  const showMore = hiddenCount > 0 && (
+    <button
+      type="button"
+      onClick={() => setRenderLimit((previous) => previous + INITIALLY_RENDERED_ACTIVITIES * 4)}
+      className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+    >
+      {newestLast
+        ? `Show ${hiddenCount} earlier ${hiddenCount === 1 ? 'step' : 'steps'}`
+        : `Show ${hiddenCount} more ${hiddenCount === 1 ? 'step' : 'steps'}`}
+    </button>
+  );
+  const untransmittedNote = untransmittedCount > 0 && hiddenCount === 0 && (
+    <div className="text-[11px] text-muted-foreground/60">
+      {untransmittedCount} earlier {untransmittedCount === 1 ? 'step is' : 'steps are'} not included
+    </div>
+  );
 
   return (
     <>
+      {newestLast && untransmittedNote}
+      {newestLast && showMore}
+
       {visibleEntries.length > 0 && (
         <div className="border-l border-border/60 pl-2">
-          {visibleEntries.map((entry, index) => (
+          {visibleEntries.map((entry, offset) => (
             entry.kind === 'tool' ? (
               // Rendered through the same router the main thread uses, so a
               // subagent's shell command or diff looks exactly like one the
               // top-level agent ran.
               <ToolRenderer
-                key={entry.toolId ?? `activity-${index}`}
+                key={entry.toolId ?? `activity-${firstVisible + offset}`}
                 toolName={entry.toolName || 'UnknownTool'}
                 toolInput={entry.toolInput}
                 toolResult={entry.toolResult}
@@ -86,27 +115,14 @@ export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, cre
                 selectedProject={selectedProject}
               />
             ) : (
-              <SubagentNote key={`activity-${index}`} activity={entry} />
+              <SubagentNote key={`activity-${firstVisible + offset}`} activity={entry} />
             )
           ))}
         </div>
       )}
 
-      {hiddenCount > 0 && (
-        <button
-          type="button"
-          onClick={() => setRenderLimit((previous) => previous + INITIALLY_RENDERED_ACTIVITIES * 4)}
-          className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-        >
-          Show {hiddenCount} more {hiddenCount === 1 ? 'step' : 'steps'}
-        </button>
-      )}
-
-      {untransmittedCount > 0 && hiddenCount === 0 && (
-        <div className="text-[11px] text-muted-foreground/60">
-          {untransmittedCount} earlier {untransmittedCount === 1 ? 'step is' : 'steps are'} not included
-        </div>
-      )}
+      {!newestLast && showMore}
+      {!newestLast && untransmittedNote}
     </>
   );
 });

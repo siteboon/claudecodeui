@@ -304,7 +304,8 @@
     },
     "providers": {
       "assistant": "Assistant"
-    }
+    },
+    "showBackgroundWork": "Show the agents panel"
   },
   "projectSelection": {
     "startChatWithProvider": "Select a project to start chatting with {{provider}}"
@@ -416,5 +417,51 @@
     "customModelsOnlyHint": "Hide the built-in {{provider}} models from every model picker and make your first model the default. Built-in models stay listed until you add a model.",
     "builtInModelsHidden": "Hidden from model pickers while “Use only my models” is on.",
     "customModelsOnlyFailed": "Unable to change this setting."
+  },
+  "agentsPanel": {
+    "title": "Agents",
+    "open": "Show this chat's agents and heartbeats",
+    "close": "Close the agents panel",
+    "sideChatTab": "Side chat",
+    "reading": "Reading this chat's agents…",
+    "readFailed": "Could not read this chat's agents: {{reason}}",
+    "runningCount_one": "{{count}} running · you can keep chatting",
+    "runningCount_other": "{{count}} running · you can keep chatting",
+    "nothingRunning": "Nothing running",
+    "empty": "No subagents or heartbeats in this chat yet. When Claude starts agents, each one shows here with its live steps.",
+    "heartbeats": "Heartbeats",
+    "heartbeatOnce": "once",
+    "heartbeatPaused": "waiting",
+    "heartbeatNext": "next {{time}}",
+    "heartbeatFired_one": "fired once · last {{time}}",
+    "heartbeatFired_other": "fired {{count}} times · last {{time}}",
+    "heartbeatNotFired": "not fired yet",
+    "heartbeatsWaiting": "Claude is not running in this chat, so these wait: they fire only while it runs.",
+    "heartbeatsShareSchedule": "More than one heartbeat runs on {{schedule}}. One may be left over.",
+    "stopHeartbeat": "Stop…",
+    "stopHeartbeatHint": "Puts a message asking Claude to delete this heartbeat into the message box",
+    "stopHeartbeatMessage": "Please delete the heartbeat {{id}} with CronDelete.",
+    "running": "Running · {{count}}",
+    "finished": "Finished · {{count}}",
+    "showAllFinished": "Show all {{count}}",
+    "stopAgent": "Stop this agent",
+    "back": "Back to all agents",
+    "steps_one": "{{count}} step",
+    "steps_other": "{{count}} steps",
+    "started": "started {{time}}",
+    "resumed_one": "resumed once",
+    "resumed_other": "resumed {{count}} times",
+    "task": "Task",
+    "report": "Report",
+    "working": "Working · you can keep chatting",
+    "readingSteps": "Reading the agent's steps…",
+    "stepsUnavailable": "Steps unavailable: {{reason}}",
+    "nothingYet": "Nothing recorded yet",
+    "status": {
+      "running": "running",
+      "completed": "done",
+      "failed": "failed",
+      "stopped": "stopped"
+    }
   }
 }

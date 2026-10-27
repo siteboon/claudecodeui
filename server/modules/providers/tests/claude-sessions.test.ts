@@ -547,7 +547,9 @@ async function dropSubagentTranscript(projectDirectory: string): Promise<void> {
   await rm(path.join(projectDirectory, SESSION_ID, 'subagents'), { recursive: true, force: true });
 }
 
-for (const reported of ['completed', 'failed'] as const) {
+// The CLI writes `killed` for an agent the user stopped and `stopped` for one
+// its session ended under; neither failed.
+for (const [reported, expected] of [['completed', 'completed'], ['failed', 'failed'], ['killed', 'stopped'], ['stopped', 'stopped']] as const) {
   test(`Claude history settles a ${reported} background agent from its notification when its transcript is missing`, { concurrency: false }, async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-transcriptless-agent-'));
 
@@ -577,7 +579,7 @@ for (const reported of ['completed', 'failed'] as const) {
         );
 
         assert.equal(agentRow?.toolResult?.content, 'The repo has two packages.');
-        assert.equal(agentRow?.subagent?.status, reported);
+        assert.equal(agentRow?.subagent?.status, expected);
         assert.equal(agentRow?.subagent?.id, AGENT_ID);
         assert.equal(agentRow?.subagent?.description, 'Survey the repo');
         assert.equal(agentRow?.subagent?.model, 'claude-opus-5');

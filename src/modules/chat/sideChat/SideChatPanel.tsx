@@ -37,9 +37,10 @@ type SideChatPanelProps = {
 const MAX_FILES = 5;
 
 /**
- * Rendered by ChatInterface beside the transcript while the /btw side chat is
- * open: questions about this chat, answered from its context, never added to
- * it. Its control bar mirrors the main one — attach, model, send / stop.
+ * Rendered by ChatInterface in the side-panel frame beside the transcript
+ * while the /btw side chat is open: questions about this chat, answered from
+ * its context, never added to it. Its control bar mirrors the main one —
+ * attach, model, send / stop.
  */
 export default function SideChatPanel({
   entries,
@@ -112,10 +113,7 @@ export default function SideChatPanel({
   };
 
   return (
-    <aside
-      aria-label="Side chat"
-      className="fixed inset-0 z-40 flex flex-col bg-background lg:static lg:z-auto lg:w-[400px] lg:shrink-0 lg:border-l lg:border-border xl:w-[440px]"
-    >
+    <section aria-label="Side chat" className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-start gap-3 border-b border-border px-4 py-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-muted">
           <MessageCircleQuestion className="h-4 w-4" />
@@ -250,6 +248,6 @@ export default function SideChatPanel({
           </PromptInputFooter>
         </PromptInput>
       </div>
-    </aside>
+    </section>
   );
 }

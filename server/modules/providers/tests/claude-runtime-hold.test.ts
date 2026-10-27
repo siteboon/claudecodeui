@@ -8,6 +8,7 @@ import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-s
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
   abortClaudeSDKSession,
+  getClaudeSDKLiveWork,
   injectClaudeSDKMessage,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
@@ -154,10 +155,11 @@ test('stopping the last outstanding task releases the held process', async () =>
     script.emit(taskStarted('wf1', 'toolu_wf', 'local_workflow'));
     script.emit(ack('toolu_wf', 'Workflow launched in background. Task ID: wf1', { status: 'async_launched', taskId: 'wf1', taskType: 'local_workflow' }));
     script.emit(result());
-    await settle();
+    // The first run in the file pays for warming up, so a fixed settle can
+    // be too short when other test files load the machine.
+    await waitFor(() => sent.some((message) => message.kind === 'complete'));
 
     // The turn is over for the client, the process is held for the workflow.
-    assert.ok(sent.some((message) => message.kind === 'complete'));
     assert.deepEqual(listClaudeSDKBackgroundWork().map((entry) => [entry.sessionId, entry.tasks.map((task) => task.taskId)]), [[SESSION_ID, ['wf1']]]);
     assert.equal(script.released(), false, 'stdin stays open while the workflow runs');
 
@@ -172,6 +174,41 @@ test('stopping the last outstanding task releases the held process', async () =>
     assert.equal(script.released(), true, 'the process is let go once nothing is outstanding');
     void done;
   });
+});
+
+test('a task the process lists as running can be stopped although no task_started named it', async () => {
+  await withRun(async ({ script }) => {
+    script.emit(init());
+    // SendMessage resumed an agent: the CLI lists it among its running tasks,
+    // but no start event of this process names it.
+    script.emit({ type: 'system', subtype: 'background_tasks_changed', session_id: NATIVE_ID, tasks: [
+      { task_id: 'a-resumed', task_type: 'local_agent', description: 'Resumed one' },
+      { task_id: 'w-ambient', task_type: 'local_bash', description: 'Watcher', ambient: true },
+    ] });
+    await settle();
+
+    const live = getClaudeSDKLiveWork(SESSION_ID);
+    assert.equal(live.processLive, true);
+    assert.deepEqual([...(live.reportedTaskIds ?? [])], ['a-resumed'], 'ambient tasks are not work');
+    assert.deepEqual(listClaudeSDKBackgroundWork(), [], 'the tracker knows nothing of it');
+    assert.equal(await stopClaudeSDKTask(SESSION_ID, 'a-resumed'), true);
+    assert.deepEqual(script.stopped, ['a-resumed']);
+    assert.equal(await stopClaudeSDKTask(SESSION_ID, 'w-ambient'), false);
+
+    // Every payload is the whole set.
+    script.emit({ type: 'system', subtype: 'background_tasks_changed', session_id: NATIVE_ID, tasks: [] });
+    await settle();
+    assert.deepEqual([...(getClaudeSDKLiveWork(SESSION_ID).reportedTaskIds ?? [])], []);
+    script.emit(result());
+    await settle();
+  });
+
+  assert.deepEqual(getClaudeSDKLiveWork(SESSION_ID), {
+    processLive: false,
+    runStartedAt: null,
+    reportedTaskIds: null,
+    trackedTaskIds: new Set(),
+  }, 'gone with the process');
 });
 
 test('a task that reported completed keeps the hold for the turn that relays its result', async () => {

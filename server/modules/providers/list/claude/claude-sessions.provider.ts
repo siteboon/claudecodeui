@@ -98,12 +98,89 @@ type ClaudeSubagentTranscript = {
 };
 
 /**
- * Flattens one subagent transcript into the shared activity timeline.
+ * What one subagent transcript row adds to the agent's timeline: its tool
+ * calls, prose and reasoning in order, the results of calls an earlier row
+ * made, and when and on which model it was written.
+ */
+type ClaudeSubagentRowReading = {
+  activities: SubagentActivity[];
+  toolResults: Array<{ toolId: string; result: NonNullable<SubagentActivity['toolResult']> }>;
+  model?: string;
+  timestamp?: string;
+};
+
+/**
+ * Reads one subagent transcript row the way the timeline shows it, or null
+ * for a row that is not one of the agent's turns.
  *
  * Assistant prose and reasoning are kept alongside the tool calls so the
  * transcript can replay what the agent actually did rather than listing tool
  * names with no narrative.
+ *
+ * Used here to flatten a whole transcript for history, and by the Claude
+ * background-work provider, which folds the same rows into a running agent's
+ * timeline as they are appended — so the agents panel and the transcript's
+ * card show the same steps.
  */
+export function readClaudeSubagentRow(entry: AnyRecord): ClaudeSubagentRowReading | null {
+  if (isClaudeNonTurnMessageRow(entry)) {
+    return null;
+  }
+  const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
+  const reading: ClaudeSubagentRowReading = { activities: [], toolResults: [], timestamp };
+
+  if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
+    if (typeof entry.message.model === 'string') {
+      reading.model = entry.message.model;
+    }
+
+    for (const part of entry.message.content as AnyRecord[]) {
+      if (part.type === 'tool_use') {
+        reading.activities.push({
+          kind: 'tool',
+          toolId: String(part.id ?? ''),
+          toolName: String(part.name ?? 'Tool'),
+          toolInput: part.input,
+          timestamp,
+        });
+        continue;
+      }
+      if (part.type === 'text' && typeof part.text === 'string' && part.text.trim()) {
+        reading.activities.push({ kind: 'text', content: part.text, timestamp });
+        continue;
+      }
+      if (part.type === 'thinking' && typeof part.thinking === 'string' && part.thinking.trim()) {
+        reading.activities.push({ kind: 'thinking', content: part.thinking, timestamp });
+      }
+    }
+  }
+
+  if (entry.message?.role === 'user' && Array.isArray(entry.message?.content)) {
+    for (const part of entry.message.content as AnyRecord[]) {
+      if (part.type !== 'tool_result') {
+        continue;
+      }
+
+      reading.toolResults.push({
+        toolId: String(part.tool_use_id ?? ''),
+        result: {
+          content: typeof part.content === 'string'
+            ? part.content
+            : Array.isArray(part.content)
+              ? part.content
+                .map((contentPart: AnyRecord) => contentPart?.text || '')
+                .join('\n')
+              : JSON.stringify(part.content),
+          isError: Boolean(part.is_error),
+        },
+      });
+    }
+  }
+
+  return reading;
+}
+
+/** Flattens one subagent transcript into the shared activity timeline. */
 async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSubagentTranscript> {
   const activity: SubagentActivity[] = [];
   const transcript: ClaudeSubagentTranscript = { activity };
@@ -122,66 +199,26 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
       }
 
       try {
-        const entry = JSON.parse(line) as AnyRecord;
-        if (isClaudeNonTurnMessageRow(entry)) {
+        const reading = readClaudeSubagentRow(JSON.parse(line) as AnyRecord);
+        if (!reading) {
           continue;
         }
-        const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
-        if (timestamp && !transcript.startedAt) {
-          transcript.startedAt = timestamp;
+        if (reading.timestamp && !transcript.startedAt) {
+          transcript.startedAt = reading.timestamp;
         }
-
-        if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
-          if (typeof entry.message.model === 'string') {
-            transcript.model = entry.message.model;
-          }
-
-          for (const part of entry.message.content as AnyRecord[]) {
-            if (part.type === 'tool_use') {
-              const tool: SubagentActivity = {
-                kind: 'tool',
-                toolId: String(part.id ?? ''),
-                toolName: String(part.name ?? 'Tool'),
-                toolInput: part.input,
-                timestamp,
-              };
-              activity.push(tool);
-              if (tool.toolId) {
-                toolsById.set(tool.toolId, tool);
-              }
-              continue;
-            }
-            if (part.type === 'text' && typeof part.text === 'string' && part.text.trim()) {
-              activity.push({ kind: 'text', content: part.text, timestamp });
-              continue;
-            }
-            if (part.type === 'thinking' && typeof part.thinking === 'string' && part.thinking.trim()) {
-              activity.push({ kind: 'thinking', content: part.thinking, timestamp });
-            }
+        if (reading.model) {
+          transcript.model = reading.model;
+        }
+        for (const entry of reading.activities) {
+          activity.push(entry);
+          if (entry.kind === 'tool' && entry.toolId) {
+            toolsById.set(entry.toolId, entry);
           }
         }
-
-        if (entry.message?.role === 'user' && Array.isArray(entry.message?.content)) {
-          for (const part of entry.message.content as AnyRecord[]) {
-            if (part.type !== 'tool_result') {
-              continue;
-            }
-
-            const tool = toolsById.get(String(part.tool_use_id ?? ''));
-            if (!tool) {
-              continue;
-            }
-
-            tool.toolResult = {
-              content: typeof part.content === 'string'
-                ? part.content
-                : Array.isArray(part.content)
-                  ? part.content
-                    .map((contentPart: AnyRecord) => contentPart?.text || '')
-                    .join('\n')
-                  : JSON.stringify(part.content),
-              isError: Boolean(part.is_error),
-            };
+        for (const { toolId, result } of reading.toolResults) {
+          const tool = toolsById.get(toolId);
+          if (tool) {
+            tool.toolResult = result;
           }
         }
       } catch {
@@ -196,18 +233,41 @@ async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSub
   return transcript;
 }
 
+/**
+ * What Claude's sidecar `.meta.json` says about one subagent. `finished` and
+ * `stoppedByUser` are set once the agent completed or was stopped;
+ * `requestShape` is `background` for an agent launched in the background.
+ */
 type ClaudeSubagentMeta = {
   agentType?: string;
   description?: string;
+  toolUseId?: string;
+  spawnDepth?: number;
+  requestShape?: string;
+  model?: string;
+  finished?: boolean;
+  stoppedByUser?: boolean;
 };
 
-/** Reads the sidecar `.meta.json` Claude writes next to a subagent transcript. */
-async function readClaudeSubagentMeta(metaPath: string): Promise<ClaudeSubagentMeta> {
+/**
+ * Reads the sidecar `.meta.json` Claude writes next to a subagent transcript.
+ *
+ * Used here for an agent's type and description in history, and by the Claude
+ * background-work provider, which also reads how the agent was launched and
+ * whether it has finished.
+ */
+export async function readClaudeSubagentMeta(metaPath: string): Promise<ClaudeSubagentMeta> {
   try {
     const parsed = JSON.parse(await fsp.readFile(metaPath, 'utf8')) as AnyRecord;
     return {
       agentType: typeof parsed.agentType === 'string' ? parsed.agentType : undefined,
       description: typeof parsed.description === 'string' ? parsed.description : undefined,
+      toolUseId: typeof parsed.toolUseId === 'string' ? parsed.toolUseId : undefined,
+      spawnDepth: typeof parsed.spawnDepth === 'number' ? parsed.spawnDepth : undefined,
+      requestShape: typeof parsed.requestShape === 'string' ? parsed.requestShape : undefined,
+      model: typeof parsed.model === 'string' ? parsed.model : undefined,
+      finished: parsed.finished === true,
+      stoppedByUser: parsed.stoppedByUser === true,
     };
   } catch {
     return {};
@@ -356,7 +416,12 @@ type ClaudeTaskNotification = {
   result: string;
 };
 
-function readTaggedValue(content: string, tagName: string): string {
+/**
+ * The trimmed text inside the first `<tagName>…</tagName>` of a task
+ * notification, or '' when the tag is absent. Used here and by the Claude
+ * background-work provider, which reads the same notifications.
+ */
+export function readTaggedValue(content: string, tagName: string): string {
   const match = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`).exec(content);
   return match ? match[1].trim() : '';
 }
@@ -379,8 +444,11 @@ function readTaggedValue(content: string, tagName: string): string {
  * loses the majority of them: across the 919 transcripts this was measured on,
  * 31 of 56 background agent launches report *only* through a queue-operation
  * record, and their result and status were invisible to every consumer.
+ *
+ * Used here and by the Claude background-work provider, which settles the
+ * agents panel's rows from the same reports.
  */
-function readTaskNotificationTexts(message: AnyRecord): string[] {
+export function readTaskNotificationTexts(message: AnyRecord): string[] {
   if (message.type === 'queue-operation') {
     return typeof message.content === 'string' ? [message.content] : [];
   }
@@ -838,8 +906,13 @@ async function getSessionMessages(
       if (launch === 'agent') {
         const agentId = String(message.toolUseResult.agentId);
         const subagent = subagentsById.get(agentId);
+        // An agent the user stopped (`killed`) or whose session ended under
+        // it (`stopped`) did not fail: it has no outcome, as the agents panel
+        // says too.
         const status: SubagentInfo['status'] = notification
-          ? notification.status === 'completed' ? 'completed' : 'failed'
+          ? notification.status === 'completed'
+            ? 'completed'
+            : notification.status === 'killed' || notification.status === 'stopped' ? 'stopped' : 'failed'
           : unreportedStatus;
 
         if (subagent && subagent.activity.length > 0) {

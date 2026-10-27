@@ -292,6 +292,14 @@ export const api = {
   // when its row in the workflow card is opened.
   workflowAgentActivity: (sessionId: string, runId: string, agentId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
+  // What a chat has going on the side — its subagents and heartbeats — for
+  // the agents panel beside the chat.
+  sessionBackgroundWork: (sessionId: string) =>
+    get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/background-work`),
+  // One subagent's timeline for the agents panel: the newest entries, or with
+  // the cursor a previous read returned only what changed since.
+  subagentTimeline: (sessionId: string, agentId: string, cursor?: string) =>
+    get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(agentId)}${cursor ? query({ cursor }) : ''}`),
 
   // Scheduled messages: send a message to a session at a future time.
   scheduledMessages: {
