@@ -103,14 +103,14 @@
     "permissionMode": "Modalità permessi",
     "modes": {
       "default": "Modalità predefinita",
-      "auto": "Auto Mode",
+      "auto": "Modalità automatica",
       "acceptEdits": "Accetta modifiche",
       "bypassPermissions": "Ignora permessi",
       "plan": "Modalità piano"
     },
     "descriptions": {
       "default": "Solo i comandi attendibili (ls, cat, grep, git status, ecc.) vengono eseguiti automaticamente. Gli altri comandi vengono saltati. Può scrivere nell'area di lavoro.",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "Un classificatore basato su un modello decide a ogni chiamata di uno strumento se approvarla o negarla. Senza interventi, ma più sicura di Ignora permessi: i rifiuti possono comunque capitare.",
       "acceptEdits": "Tutti i comandi vengono eseguiti automaticamente nell'area di lavoro. Modalità completamente automatica con esecuzione sandboxed.",
       "bypassPermissions": "Accesso completo al sistema senza restrizioni. Tutti i comandi vengono eseguiti automaticamente con accesso completo a disco e rete. Usa con cautela.",
       "plan": "Modalità pianificazione - nessun comando viene eseguito"
@@ -127,12 +127,17 @@
     "stop": "Ferma",
     "hintText": {
       "ctrlEnter": "Ctrl+Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi",
-      "enter": "Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi"
+      "enter": "Invio per inviare • Shift+Invio per nuova riga • Tab per cambiare modalità • / per comandi",
+      "appendQueued": "Invio per aggiungere al messaggio in coda"
     },
     "clickToChangeMode": "Clicca per cambiare modalità permessi (o premi Tab nell'input)",
     "showAllCommands": "Mostra tutti i comandi",
     "clearInput": "Cancella input",
-    "scrollToBottom": "Scorri in basso"
+    "scrollToBottom": "Scorri in basso",
+    "queue": {
+      "append": "Aggiungi al messaggio in coda",
+      "notCombinable": "Impossibile mettere in coda il messaggio: un comando con / viene eseguito da solo, quindi non può essere unito al messaggio in coda. Invialo dopo che il messaggio in coda è stato inviato."
+    }
   },
   "providerSelection": {
     "title": "Scegli il tuo assistente AI",
@@ -242,6 +247,9 @@
     "answeredBy": "Risposto da {{model}}"
   },
   "composer": {
+    "permissionHeading": "Come approvare le azioni di {{provider}}?",
+    "permissionCycleHint": "Premi Tab nel campo di testo per cambiare modalità",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Sostituzione di un messaggio precedente",
       "filesNotReverted": "i file già modificati non vengono ripristinati",
