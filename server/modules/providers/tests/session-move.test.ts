@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { closeConnection, getConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 
@@ -118,8 +118,7 @@ test('a session that has not run moves for any provider; one with a transcript n
     const targetId = createTargetProject(path.join(directory, 'target'));
 
     sessionsDb.createAppSession('fresh', 'opencode', source, 'Fresh');
-    const getConnectionModule = await import('@/modules/database/connection.js');
-    getConnectionModule.getConnection()
+    getConnection()
       .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE session_id = 'fresh'")
       .run();
     await sessionsService.moveSessionToProject('fresh', targetId);
@@ -129,7 +128,7 @@ test('a session that has not run moves for any provider; one with a transcript n
     assert.ok(new Date(moved?.updated_at ?? 0).getFullYear() > 2020, 'a move bumps updated_at');
 
     // The bump is skipped once the row has moved on to another project.
-    getConnectionModule.getConnection()
+    getConnection()
       .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE session_id = 'fresh'")
       .run();
     sessionsDb.touchMovedSession('fresh', source);
@@ -156,7 +155,7 @@ test('a Codex rollout that cannot be rewritten leaves the session where it was',
     const now = new Date().toISOString();
     sessionsDb.createSession('codex-gone', 'codex', source, 'Gone', now, now, path.join(directory, 'missing.jsonl'));
     // An old timestamp, so a wrong bump cannot coincide with it.
-    (await import('@/modules/database/connection.js')).getConnection()
+    getConnection()
       .prepare("UPDATE sessions SET updated_at = '2020-01-01 00:00:00' WHERE session_id = 'codex-gone'")
       .run();
     const updatedBefore = sessionsDb.getSessionById('codex-gone')?.updated_at;
