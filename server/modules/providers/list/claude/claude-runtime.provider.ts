@@ -123,6 +123,38 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 // forever. The timer resets on every message, so it measures silence, not total time.
 const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
+// The CLI counts CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS from the end of the turn,
+// whether or not stdin is still held, so passing the silence ceiling above killed
+// any background Workflow or Agent that simply ran longer than 30 minutes. The CLI
+// gets a separate hard limit instead; the silence timer above stays the normal
+// release. CLOUDCLI_BG_HARD_CEILING_MS overrides it (0 = never).
+export const CLI_BG_HARD_CEILING_MS = (() => {
+  const configured = Number.parseInt(process.env.CLOUDCLI_BG_HARD_CEILING_MS ?? '', 10);
+  return Number.isInteger(configured) && configured >= 0 ? configured : 6 * 60 * 60 * 1000;
+})();
+
+/**
+ * Whether the silence timer may let a held process go.
+ *
+ * Silence is not the same as idle: a Workflow's agents can work for longer than
+ * the silence ceiling without the parent session's stream carrying anything, and
+ * releasing then let the CLI kill them on the spot (its own ceiling had long
+ * passed). While the tracker still lists outstanding tasks the hold is kept, up
+ * to the hard ceiling.
+ *
+ */
+export function shouldReleaseOnSilence({ outstanding, heldSinceMs, nowMs, hardCeilingMs }: {
+  outstanding: boolean;
+  heldSinceMs: number;
+  nowMs: number;
+  hardCeilingMs: number;
+}): boolean {
+  if (!outstanding) {
+    return true;
+  }
+  return hardCeilingMs > 0 && nowMs - heldSinceMs >= hardCeilingMs;
+}
+
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 // Ultracode is a session-scoped setting rather than an SDK effort level: it pairs xhigh
@@ -294,7 +326,7 @@ export function buildClaudeSdkEnv(hostEnv: NodeJS.ProcessEnv = process.env): Nod
   return {
     CLAUDE_CODE_ARTIFACT: '1',
     ...hostEnv,
-    CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(BG_WAIT_CEILING_MS),
+    CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(CLI_BG_HARD_CEILING_MS),
   };
 }
 
@@ -1040,6 +1072,9 @@ async function queryClaudeSDK(
   // stream exists; the finally block calls it no matter how the run ends.
   let releasePromptStream: () => void = () => {};
   let idleReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+  // Ends a hold at the hard ceiling even while the work keeps reporting,
+  // which resets the silence countdown every time.
+  let hardCeilingTimer: ReturnType<typeof setTimeout> | null = null;
   // The client is told the turn is over as soon as `result` lands, even though
   // the process lingers, so the UI never waits out the idle hold.
   let turnCompleteSent = false;
@@ -1055,6 +1090,8 @@ async function queryClaudeSDK(
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
+  // When the current hold began, for the hard ceiling in shouldReleaseOnSilence.
+  let holdStartedAt = 0;
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
@@ -1080,6 +1117,15 @@ async function queryClaudeSDK(
     }
     idleReleaseTimer = setTimeout(() => {
       idleReleaseTimer = null;
+      if (!shouldReleaseOnSilence({
+        outstanding: Boolean(sessionKey()) && backgroundWork.hasOutstanding(sessionKey()),
+        heldSinceMs: holdStartedAt,
+        nowMs: Date.now(),
+        hardCeilingMs: CLI_BG_HARD_CEILING_MS,
+      })) {
+        scheduleRelease();
+        return;
+      }
       releasePromptStream();
     }, BG_WAIT_CEILING_MS);
     // Never let the hold keep the server process alive on its own.
@@ -1408,6 +1454,23 @@ async function queryClaudeSDK(
         backgroundWorkPending = false;
         sawTaskEventThisTurn = false;
         if (holdForTurn) {
+          if (!heldForBackgroundWork) {
+            const startedAt = Date.now();
+            holdStartedAt = startedAt;
+            if (hardCeilingTimer) {
+              clearTimeout(hardCeilingTimer);
+              hardCeilingTimer = null;
+            }
+            if (CLI_BG_HARD_CEILING_MS > 0) {
+              hardCeilingTimer = setTimeout(() => {
+                hardCeilingTimer = null;
+                if (heldForBackgroundWork && holdStartedAt === startedAt) {
+                  releasePromptStream();
+                }
+              }, CLI_BG_HARD_CEILING_MS);
+              hardCeilingTimer.unref?.();
+            }
+          }
           heldForBackgroundWork = true;
           scheduleRelease();
         } else {
@@ -1500,6 +1563,10 @@ async function queryClaudeSDK(
     if (idleReleaseTimer) {
       clearTimeout(idleReleaseTimer);
       idleReleaseTimer = null;
+    }
+    if (hardCeilingTimer) {
+      clearTimeout(hardCeilingTimer);
+      hardCeilingTimer = null;
     }
     releasePromptStream();
   }
