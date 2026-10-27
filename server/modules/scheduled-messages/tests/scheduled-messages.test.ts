@@ -650,3 +650,29 @@ test('a repeat interval outside 5 minutes to a week is refused', async () => {
     }
   });
 });
+
+test('a repeat cancelled while the message ahead of it is sent does not go', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionsDb.createAppSession('second-session', 'claude', tmpdir(), 'Second session');
+    const past = new Date(Date.now() - 1_000).toISOString();
+    scheduledMessagesService.schedule({ userId, sessionId: SESSION_ID, content: 'first', scheduledFor: past, repeatEveryMinutes: 15 });
+    const second = scheduledMessagesService.schedule({ userId, sessionId: 'second-session', content: 'second', scheduledFor: past, repeatEveryMinutes: 15 });
+
+    const runs: string[] = [];
+    const runtime = {
+      hasRuntime: () => true,
+      hasBackgroundWork: () => false,
+      run: async (_provider: string, command: string) => {
+        runs.push(command);
+        if (command === 'first') {
+          // The user cancels the other repeat while this one is being sent.
+          scheduledMessagesDb.cancel(userId, second.id);
+        }
+      },
+      abort: async () => true,
+    } as never;
+
+    await dispatchDueScheduledMessages(runtime);
+    assert.deepEqual(runs, ['first']);
+  });
+});

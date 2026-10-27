@@ -136,6 +136,14 @@ export const scheduledMessagesDb = {
       .run(reason.slice(0, 500), id);
   },
 
+  /** The message's current status, or null once it is gone. */
+  getStatus(id: string): ScheduledMessageRow['status'] | null {
+    const row = getConnection()
+      .prepare('SELECT status FROM scheduled_messages WHERE id = ?')
+      .get(id) as { status: ScheduledMessageRow['status'] } | undefined;
+    return row?.status ?? null;
+  },
+
   clearFailure(id: string): void {
     getConnection()
       .prepare(

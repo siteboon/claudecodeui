@@ -105,6 +105,11 @@ async function sendClaimedMessage(
   now: Date,
 ): Promise<void> {
   const repeating = Boolean(row.repeat_every_minutes);
+  // A claimed repeat stays pending, so it can be cancelled while the messages
+  // ahead of it in this pass are being sent; the copy claimed then is stale.
+  if (repeating && scheduledMessagesDb.getStatus(row.id) !== 'pending') {
+    return;
+  }
   // A repeating message is a monitor, not a deadline: aborting whatever the
   // session is doing every interval would kill its turn or background work.
   // It skips this slot and tries again at the next one.
