@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowUpIcon, ChevronDownIcon } from 'lucide-react';
+import { ChevronUpIcon } from 'lucide-react';
 
 import { useComposerMenuAnchor } from '@/modules/chat/hooks/useComposerMenuAnchor';
 import { Button } from '@/shared/ui/Button';
@@ -76,10 +76,9 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
         aria-expanded={isOpen}
         aria-label={triggerLabel}
         title={triggerLabel}
-        className="relative h-10 w-10 shrink-0 rounded-lg"
+        className="h-10 w-10 shrink-0 rounded-lg"
       >
-        <ArrowUpIcon className="h-4 w-4" />
-        <ChevronDownIcon aria-hidden className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5" />
+        <ChevronUpIcon className="h-5 w-5" />
       </Button>
 
       {isOpen && anchor && createPortal(
