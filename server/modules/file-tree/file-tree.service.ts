@@ -385,24 +385,28 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     targetPath: string,
     options: ReadOptions = {},
   ): Promise<{ resolvedPath: string; outsideProject: boolean }> {
-    if (path.isAbsolute(targetPath)) {
-      const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
-      if (readOnlyPath) {
-        return { resolvedPath: readOnlyPath, outsideProject: false };
-      }
-
-      const workspacePath = await resolvePathUnderRoots(targetPath, [dependencies.workspace.rootPath]);
-      if (workspacePath) {
-        return workspacePath;
-      }
-    }
-
+    // The project first, so its own files read (and save) exactly as before,
+    // whichever form of path names them.
     try {
-      return { resolvedPath: resolvePathInsideProject(projectRoot, targetPath), outsideProject: false };
+      const resolvedPath = resolvePathInsideProject(projectRoot, targetPath);
+      return { resolvedPath, outsideProject: false };
     } catch (error) {
       if (!path.isAbsolute(targetPath) || readErrorCode(error) !== 'PATH_OUTSIDE_PROJECT') {
         throw error;
       }
+    }
+
+    // Files the viewer may read without asking: the read-only roots and the
+    // workspace. Saving refuses anything the check above did not place in the
+    // project, so they open read-only; and the workspace root defaults to the
+    // home directory, so credential files stay refused.
+    const unconfirmed = await dependencies.workspace.resolveReadOnlyRootPath(targetPath)
+      ?? await resolvePathUnderRoots(targetPath, [dependencies.workspace.rootPath]);
+    if (unconfirmed) {
+      if (isCredentialPath(path.resolve(targetPath)) || isCredentialPath(unconfirmed)) {
+        throw createFileTreeError('This file is in a credentials folder and cannot be opened here', 403, 'PATH_PROTECTED');
+      }
+      return { resolvedPath: unconfirmed, outsideProject: true };
     }
 
     // Anything else on disk can be read after the user confirms it in the

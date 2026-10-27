@@ -565,10 +565,20 @@ test('a file in another folder of the workspace can be read, but never written t
     );
     assert.equal(await fsPromises.readFile(reportPath, 'utf8'), 'what the run found');
 
-    // A link inside the workspace does not open what lies outside it.
+    // A link inside the workspace does not open what lies outside it without
+    // the user confirming, as for any other file outside the project.
     await assert.rejects(
       service.readTextFile('project-1', path.join(workspaceRoot, 'escape', 'secret.txt')),
-      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+      (error: unknown) => (error as AppError).code === 'OUTSIDE_PROJECT_CONFIRM',
+    );
+
+    // The workspace root is the home directory by default; its credential
+    // folders stay refused.
+    await fsPromises.mkdir(path.join(workspaceRoot, '.ssh'));
+    await fsPromises.writeFile(path.join(workspaceRoot, '.ssh', 'id_ed25519'), 'key', 'utf8');
+    await assert.rejects(
+      service.readTextFile('project-1', path.join(workspaceRoot, '.ssh', 'id_ed25519')),
+      (error: unknown) => (error as AppError).code === 'PATH_PROTECTED',
     );
   } finally {
     await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
@@ -655,5 +665,23 @@ test('a relative path that escapes the project is refused outright, not offered 
     );
   } finally {
     await fsPromises.rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('a project file read by its absolute path stays the project\'s, editable and unguarded', async () => {
+  const workspaceRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-workspace-'));
+  const projectRoot = path.join(workspaceRoot, 'app');
+
+  try {
+    await fsPromises.mkdir(projectRoot);
+    const envPath = path.join(projectRoot, '.env');
+    await fsPromises.writeFile(envPath, 'PORT=1', 'utf8');
+    const service = createRealFileSystemService(projectRoot, workspaceRoot);
+
+    const opened = await service.readTextFile('project-1', envPath);
+    assert.equal(opened.content, 'PORT=1');
+    assert.equal(opened.outsideProject, false, 'the project\'s own files keep Save');
+  } finally {
+    await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
   }
 });
