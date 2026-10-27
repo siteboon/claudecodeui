@@ -101,6 +101,14 @@ export type ProviderModelsDefinition = {
    * library offers the same levels on every machine. Adapter catalogs omit it.
    */
   EFFORT_LEVELS?: string[];
+  /**
+   * The user's "use only my models" flag for this provider, set by the
+   * Providers service on merged catalogs. While it is true and at least one
+   * custom model exists, `OPTIONS` holds only custom models and `DEFAULT` is
+   * the first of them; with no custom models the built-ins are listed anyway.
+   * Adapter catalogs omit it.
+   */
+  CUSTOM_MODELS_ONLY?: boolean;
 };
 
 /**
@@ -226,16 +234,17 @@ export type MessageKind =
  * Event kinds added by the chat gateway layer on top of provider message kinds.
  *
  * These are app-level realtime events (subscription acks, sidebar deltas,
- * project loading progress, protocol failures) that are not produced by any
- * provider adapter. Together with `MessageKind` they form the complete set of
- * `kind` values a websocket client can receive, so the frontend only ever
- * needs one kind-based switch.
+ * project loading progress, protocol failures, scheduled-message changes) that
+ * are not produced by any provider adapter. Together with `MessageKind` they
+ * form the complete set of `kind` values a websocket client can receive, so
+ * the frontend only ever needs one kind-based switch.
  */
 export type GatewayEventKind =
   | 'chat_subscribed'
   | 'session_upserted'
   | 'loading_progress'
-  | 'protocol_error';
+  | 'protocol_error'
+  | 'scheduled_messages_changed';
 
 /**
  * Complete set of `kind` values emitted to websocket clients.
@@ -961,6 +970,26 @@ export type CreateCredentialResult = {
   id: number | bigint;
   credentialName: string;
   credentialType: string;
+};
+
+// ---------------------------
+//----------------- CHAT DRAFT QUEUE TYPES ------------
+/**
+ * A chat message queued to be sent when its session is next idle, in the shape
+ * the composer submits it and `session_drafts.queued_message` stores it.
+ *
+ * `content` is the message text, `attachments` the JSON-safe descriptors
+ * returned by POST /api/assets/files, and `options` the composer's send options
+ * (model, effort, permission mode, ...) captured when it was queued. A session
+ * has at most one: a message queued while another is waiting is merged into it
+ * by the drafts repository. The User module accepts it, the Database module
+ * stores and merges it, and the Scheduled Messages dispatcher sends it (read
+ * through `readQueuedChatMessage`).
+ */
+export type QueuedChatMessage = {
+  content: string;
+  options?: Record<string, unknown>;
+  attachments: unknown[];
 };
 
 // ---------------------------

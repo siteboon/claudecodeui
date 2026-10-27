@@ -181,6 +181,11 @@
         "label": "Taille de police",
         "description": "Taille de police de l'éditeur en pixels"
       }
+    },
+    "keepProjectsExpanded": {
+      "section": "Barre latérale",
+      "label": "Garder les projets dépliés",
+      "description": "Ouvrir plusieurs projets ensemble et les retrouver dépliés après rechargement."
     }
   },
   "mcpForm": {
@@ -572,12 +577,6 @@
       "name": "Invites planifiées",
       "badge": "non officiel",
       "description": "Planifiez des invites d'espace de travail, consultez l'historique des exécutions et gérez les tâches locales récurrentes.",
-      "install": "Installer"
-    },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "non officiel",
-      "description": "Surveillez les sessions Claude Code longues pour détecter les blocages et exposez les contrôles de processus.",
       "install": "Installer"
     },
     "prismCloudCLI": {

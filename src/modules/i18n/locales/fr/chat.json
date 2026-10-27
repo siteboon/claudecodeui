@@ -128,12 +128,17 @@
     "stop": "Arrêter",
     "hintText": {
       "ctrlEnter": "Ctrl+Entrée pour envoyer • Maj+Entrée pour nouvelle ligne • Tab pour changer de mode • / pour les commandes slash",
-      "enter": "Entrée pour envoyer • Maj+Entrée pour nouvelle ligne • Tab pour changer de mode • / pour les commandes slash"
+      "enter": "Entrée pour envoyer • Maj+Entrée pour nouvelle ligne • Tab pour changer de mode • / pour les commandes slash",
+      "appendQueued": "Entrée pour ajouter au message en file d'attente"
     },
     "clickToChangeMode": "Cliquez pour changer le mode de permission (ou appuyez sur Tab dans la saisie)",
     "showAllCommands": "Afficher toutes les commandes",
     "clearInput": "Effacer la saisie",
-    "scrollToBottom": "Défiler vers le bas"
+    "scrollToBottom": "Défiler vers le bas",
+    "queue": {
+      "append": "Ajouter au message en file d'attente",
+      "notCombinable": "Impossible de mettre le message en file d'attente : une commande slash s'exécute à part et ne peut donc pas être combinée avec le message en file d'attente. Envoyez-la une fois le message en file d'attente envoyé."
+    }
   },
   "providerSelection": {
     "title": "Choisissez votre assistant IA",
@@ -152,7 +157,8 @@
       "opencode": "Prêt à utiliser OpenCode avec {{model}}. Commencez à taper votre message ci-dessous.",
       "default": "Sélectionnez un fournisseur ci-dessus pour commencer"
     },
-    "pressToSearch": "Appuyez sur <kbd>{{shortcut}}</kbd> pour rechercher sessions, fichiers et commits"
+    "pressToSearch": "Appuyez sur <kbd>{{shortcut}}</kbd> pour rechercher sessions, fichiers et commits",
+    "chooseModelDescriptionCustomOnly": "Seuls vos modèles sont affichés pour {{providers, list}}"
   },
   "session": {
     "continue": {
@@ -243,6 +249,9 @@
     "answeredBy": "Répondu par {{model}}"
   },
   "composer": {
+    "permissionHeading": "Comment approuver les actions de {{provider}} ?",
+    "permissionCycleHint": "Appuyez sur Tab dans la zone de saisie pour changer de mode",
+    "permissionTriggerLabel": "{{mode}} : {{heading}}",
     "editing": {
       "title": "Remplacement d’un message précédent",
       "filesNotReverted": "les fichiers déjà modifiés ne sont pas restaurés",
@@ -285,6 +294,10 @@
   "modelLibrary": {
     "effortLevels": "Niveaux de raisonnement",
     "effortLevelsHint": "Sélectionnez les niveaux d'effort de raisonnement acceptés par ce modèle. Sans sélection, aucun niveau ne pourra être choisi pour ce modèle dans le compositeur.",
-    "effortSummary": "Raisonnement : {{levels}}"
+    "effortSummary": "Raisonnement : {{levels}}",
+    "customModelsOnly": "Utiliser uniquement mes modèles",
+    "customModelsOnlyHint": "Masque les modèles intégrés de {{provider}} dans tous les sélecteurs de modèle et fait de votre premier modèle le modèle par défaut. Les modèles intégrés restent affichés tant que vous n'avez ajouté aucun modèle.",
+    "builtInModelsHidden": "Masqués dans les sélecteurs de modèle tant que « Utiliser uniquement mes modèles » est activé.",
+    "customModelsOnlyFailed": "Impossible de modifier ce paramètre."
   }
 }

@@ -207,6 +207,11 @@
         "label": "Font Size",
         "description": "Editor font size in pixels"
       }
+    },
+    "keepProjectsExpanded": {
+      "section": "Sidebar",
+      "label": "Keep projects expanded",
+      "description": "Open several projects together and remember them after reloading."
     }
   },
   "mcpForm": {
@@ -632,12 +637,6 @@
       "name": "Scheduled Prompts",
       "badge": "unofficial",
       "description": "Schedule workspace prompts, review run history, and manage recurring local tasks.",
-      "install": "Install"
-    },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "unofficial",
-      "description": "Watch long-running Claude Code sessions for hangs and expose process controls.",
       "install": "Install"
     },
     "prismCloudCLI": {

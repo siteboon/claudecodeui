@@ -129,7 +129,7 @@
       "ctrlEnter": "Ctrl+Enter לשליחה • Shift+Enter לשורה חדשה • Tab להחלפת מצב • / לפקודות סלאש",
       "enter": "Enter לשליחה • Shift+Enter לשורה חדשה • Tab להחלפת מצב • / לפקודות סלאש",
       "queue": "Enter להוספת ההודעה הבאה לתור",
-      "updateQueued": "Enter לעדכון ההודעה שבתור"
+      "appendQueued": "Enter להוספה להודעה שבתור"
     },
     "clickToChangeMode": "לחיצה להחלפת מצב ההרשאות (או Tab בשדה הקלט)",
     "showAllCommands": "הצגת כל הפקודות",
@@ -137,7 +137,8 @@
     "scrollToBottom": "גלילה לסוף",
     "queue": {
       "sendNext": "הוספת ההודעה הבאה לתור",
-      "update": "עדכון ההודעה שבתור",
+      "append": "הוספה להודעה שבתור",
+      "notCombinable": "לא ניתן להוסיף את ההודעה לתור: פקודת סלאש פועלת בנפרד, ולכן אי אפשר לשלב אותה עם ההודעה שבתור. יש לשלוח אותה אחרי שההודעה שבתור תישלח.",
       "label": "בתור",
       "willSend": "תישלח כשזה יסתיים",
       "edit": "עריכת ההודעה שבתור",
@@ -151,6 +152,8 @@
     "loadingModels": "טוען מודלים…",
     "modelMenu": "בחירת מודל ורמת חשיבה",
     "permissionHeading": "איך לאשר פעולות של {{provider}}?",
+    "permissionCycleHint": "לחיצה על Tab בשדה הקלט מחליפה מצב",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "החלפת הודעה קודמת",
       "filesNotReverted": "קבצים שהסוכן כבר שינה לא משוחזרים",
@@ -177,6 +180,7 @@
     "pressToSearch": "<kbd>{{shortcut}}</kbd> לחיפוש סשנים, קבצים ו-commits",
     "chooseModel": "בחירת מודל",
     "chooseModelDescription": "מודלים מובנים ומותאמים אישית ברשימה אחת",
+    "chooseModelDescriptionCustomOnly": "עבור {{providers, list}} מוצגים רק המודלים שלך",
     "addModel": "הוספת מודל",
     "searchModels": "חיפוש מודלים…",
     "manageModels": "ניהול מודלים",
@@ -264,8 +268,7 @@
       "command": "פקודה {{description}}",
       "count_one": "משימה אחת",
       "count_two": "שתי משימות",
-      "count_other": "{{count}} משימות",
-      "sendAnyway": "בסשן הזה עדיין רצה עבודה ברקע:\n{{work}}\n\nהודעה חדשה פותחת תור חדש, וזה עוצר את העבודה הזו; כל מה שעוד לא דווח ממנה יאבד. לשלוח בכל זאת?"
+      "count_other": "{{count}} משימות"
     },
     "controls": {
       "stopGeneration": "עצירת היצירה",
@@ -378,5 +381,11 @@
     "tokensLabel_other": "טוקנים",
     "escClosesModal": "Esc סוגר את החלון.",
     "close": "סגירה"
+  },
+  "modelLibrary": {
+    "customModelsOnly": "שימוש רק במודלים שלי",
+    "customModelsOnlyHint": "מסתיר את המודלים המובנים של {{provider}} מכל בוחרי המודלים, והמודל הראשון שלך הופך לברירת המחדל. המודלים המובנים ממשיכים להופיע עד להוספת מודל.",
+    "builtInModelsHidden": "מוסתרים מבוחרי המודלים כל עוד „שימוש רק במודלים שלי” פעיל.",
+    "customModelsOnlyFailed": "לא ניתן לשנות את ההגדרה הזו."
   }
 }
