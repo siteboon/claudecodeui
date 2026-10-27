@@ -1,5 +1,6 @@
 import spawn from 'cross-spawn';
 
+import { pluginProvidersStore } from '@/modules/providers/plugin-providers.store.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
@@ -182,7 +183,7 @@ function getProviderLabel(provider: LLMProvider): string {
     cursor: 'Cursor CLI',
     opencode: 'OpenCode',
   };
-  return labels[provider];
+  return labels[provider] ?? pluginProvidersStore.get(provider)?.meta.label ?? provider;
 }
 
 /**
@@ -359,6 +360,10 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
   };
 
   const resolveUpdateCommand = (provider: LLMProvider): { command: string; args: string[] } | null => {
+    const pluginUpdater = pluginProvidersStore.get(provider)?.meta.cliUpdater;
+    if (pluginUpdater) {
+      return { command: pluginUpdater.command, args: pluginUpdater.args };
+    }
     const updater = CLI_UPDATERS[provider];
     const command = updater?.resolveCommand();
     return updater && command ? { command, args: updater.args } : null;

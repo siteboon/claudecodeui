@@ -1,5 +1,7 @@
 import type { TFunction } from 'i18next';
 
+import { getPluginProviderLabel } from '@/shared/providerRegistry';
+
 import type {
   LLMProvider,
   Project,
@@ -215,3 +217,8 @@ export const PROVIDER_LABELS: Record<LLMProvider, string> = {
   cursor: 'Cursor',
   opencode: 'OpenCode',
 };
+
+/** PROVIDER_LABELS plus providers loaded from plugins. */
+export const getSidebarProviderLabel = (provider: LLMProvider): string => (
+  PROVIDER_LABELS[provider] ?? getPluginProviderLabel(provider, provider)
+);

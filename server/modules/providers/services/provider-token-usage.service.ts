@@ -6,6 +6,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { pluginProvidersStore } from '@/modules/providers/plugin-providers.store.js';
 import type { AnyRecord } from '@/shared/types.js';
 import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
 
@@ -435,6 +436,20 @@ export function createProviderTokenUsageService(
       }
 
       const providerSessionId = session.provider_session_id || sessionId;
+
+      const pluginProvider = pluginProvidersStore.get(session.provider);
+      if (pluginProvider) {
+        const pluginUsage = await pluginProvider.meta.getTokenUsage?.(providerSessionId);
+        return (pluginUsage as TokenUsageResult | null | undefined) ?? {
+          used: 0,
+          total: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          breakdown: { input: 0, output: 0 },
+          unsupported: true,
+          message: `Token usage tracking not available for ${pluginProvider.meta.label} sessions`,
+        };
+      }
 
       if (session.provider === 'cursor') {
         return {

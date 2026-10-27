@@ -3,6 +3,8 @@ import { McpServers } from '@/modules/mcp';
 import { ProviderSkills } from '@/modules/skills';
 import AccountContent from '@/modules/settings/tabs/agents-settings/sections/content/AccountContent';
 import PermissionsContent from '@/modules/settings/tabs/agents-settings/sections/content/PermissionsContent';
+import { PluginTabContent } from '@/modules/plugins';
+import { getPluginProvider } from '@/shared/providerRegistry';
 
 type AgentCategoryContentSectionProps = {
   selectedAgent: AgentProvider;
@@ -30,8 +32,15 @@ export default function AgentCategoryContentSection({
   onCodexPermissionModeChange,
   projects,
 }: AgentCategoryContentSectionProps) {
+  const pluginProvider = getPluginProvider(selectedAgent);
+
   return (
     <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-4">
+      {/* A provider plugin's own settings UI (its manifest `entry`), mounted like a tab plugin. */}
+      {selectedCategory === 'permissions' && pluginProvider?.settingsPanel && (
+        <PluginTabContent pluginName={pluginProvider.pluginName} selectedProject={null} selectedSession={null} />
+      )}
+
       {selectedCategory === 'account' && (
         <AccountContent
           agent={selectedAgent}

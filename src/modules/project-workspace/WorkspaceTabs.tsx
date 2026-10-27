@@ -69,7 +69,8 @@ export default function WorkspaceTabs({
   ];
 
   const pluginTabs: PluginTab[] = plugins
-    .filter((p) => p.enabled)
+    // Provider plugins add a chat provider, not a tab.
+    .filter((p) => p.enabled && (p.slot ?? 'tab') === 'tab')
     .map((p) => ({
       kind: 'plugin',
       id: `plugin:${p.name}` as AppTab,

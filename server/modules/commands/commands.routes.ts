@@ -4,6 +4,7 @@ import path from "path";
 import express from "express";
 
 import { parseFrontMatter } from "../../shared/frontmatter.js";
+import { pluginProvidersStore } from "../providers/plugin-providers.store.js";
 
 type CommandsRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
@@ -60,7 +61,7 @@ const readModelProvider = (value) => {
   }
 
   const normalized = value.trim().toLowerCase();
-  return MODEL_PROVIDERS.includes(normalized) ? normalized : "claude";
+  return MODEL_PROVIDERS.includes(normalized) || pluginProvidersStore.get(normalized) ? normalized : "claude";
 };
 
 /**
@@ -97,7 +98,7 @@ const executeModelsCommand = async (args, context, modelsService) => {
     data: {
       current: {
         provider: currentProvider,
-        providerLabel: MODEL_PROVIDER_LABELS[currentProvider],
+        providerLabel: MODEL_PROVIDER_LABELS[currentProvider] ?? pluginProvidersStore.get(currentProvider)?.meta.label,
         model: currentModel,
       },
       available: {

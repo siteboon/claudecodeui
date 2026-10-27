@@ -1,3 +1,4 @@
+import { getPluginProviderLabel } from '@/shared/providerRegistry';
 import { LLMProviderLogo, PillBar, Pill } from '@/shared/ui';
 import type { AgentContextByProvider, AgentProvider } from '@/shared/types';
 
@@ -39,8 +40,8 @@ export default function AgentSelectorSection({
               className="min-w-0 flex-1 justify-center md:flex-initial"
             >
               <LLMProviderLogo provider={agent} className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate">{AGENT_NAMES[agent]}</span>
-              {agentContextById[agent].authStatus.authenticated && (
+              <span className="truncate">{AGENT_NAMES[agent] ?? getPluginProviderLabel(agent, agent)}</span>
+              {agentContextById[agent]?.authStatus.authenticated && (
                 <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotColor}`} />
               )}
             </Pill>

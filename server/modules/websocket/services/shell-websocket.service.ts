@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { pluginProvidersStore } from '@/modules/providers/plugin-providers.store.js';
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -224,6 +225,11 @@ function buildShellCommand(
 
   if (isPlainShell) {
     return otherProgram(initialCommand);
+  }
+
+  const pluginShellCommand = pluginProvidersStore.get(provider)?.meta.shellCommand;
+  if (pluginShellCommand) {
+    return otherProgram(pluginShellCommand({ resumeSessionId, projectPath }));
   }
 
   if (provider === 'cursor') {
@@ -789,7 +795,7 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'opencode'
                     ? 'OpenCode'
-                  : 'Claude';
+                  : pluginProvidersStore.get(provider)?.meta.label ?? 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
             : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;

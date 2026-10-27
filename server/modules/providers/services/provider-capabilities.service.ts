@@ -1,3 +1,4 @@
+import { pluginProvidersStore } from '@/modules/providers/plugin-providers.store.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 /**
@@ -127,10 +128,14 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
  */
 export const providerCapabilitiesService = {
   getProviderCapabilities(provider: LLMProvider): ProviderCapabilities {
-    return PROVIDER_CAPABILITIES[provider];
+    return (Object.hasOwn(PROVIDER_CAPABILITIES, provider) ? PROVIDER_CAPABILITIES[provider] : undefined)
+      ?? (pluginProvidersStore.get(provider)?.meta.capabilities as ProviderCapabilities);
   },
 
   listAllProviderCapabilities(): ProviderCapabilities[] {
-    return Object.values(PROVIDER_CAPABILITIES);
+    return [
+      ...Object.values(PROVIDER_CAPABILITIES),
+      ...pluginProvidersStore.list().map((entry) => entry.meta.capabilities as ProviderCapabilities),
+    ];
   },
 };

@@ -1,3 +1,5 @@
+import { PluginIcon } from '@/modules/plugins';
+import { getPluginProvider } from '@/shared/providerRegistry';
 import type { LLMProvider } from '@/shared/types';
 import ClaudeLogo from '@/shared/ui/ClaudeLogo';
 import CodexLogo from '@/shared/ui/CodexLogo';
@@ -24,6 +26,17 @@ export function LLMProviderLogo({
 
   if (provider === 'opencode') {
     return <OpenCodeLogo className={className} />;
+  }
+
+  const pluginProvider = getPluginProvider(provider);
+  if (pluginProvider?.pluginIcon) {
+    return (
+      <PluginIcon
+        pluginName={pluginProvider.pluginName}
+        iconFile={pluginProvider.pluginIcon}
+        className={`inline-flex [&>svg]:h-full [&>svg]:w-full ${className}`}
+      />
+    );
   }
 
   return <ClaudeLogo className={className} />;

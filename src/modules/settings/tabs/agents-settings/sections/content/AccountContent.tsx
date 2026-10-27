@@ -2,6 +2,7 @@ import { AlertTriangle, LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import ProviderCliVersion from '@/modules/settings/tabs/agents-settings/sections/content/ProviderCliVersion';
+import { getPluginProvider } from '@/shared/providerRegistry';
 import { Badge, Button, LLMProviderLogo } from '@/shared/ui';
 import type { AgentProvider, ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types';
 
@@ -98,7 +99,12 @@ function SubscriptionOverrideNotice({ override }: SubscriptionOverrideNoticeProp
 /** Rendered by AgentCategoryContentSection for the "account" category to show sign-in state for one provider. */
 export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
   const { t } = useTranslation('settings');
-  const config = agentConfig[agent];
+  const pluginProvider = getPluginProvider(agent);
+  const config = agentConfig[agent] ?? {
+    ...agentConfig.codex,
+    name: pluginProvider?.label ?? agent,
+    description: pluginProvider?.description || undefined,
+  };
 
   return (
     <div className="space-y-6">

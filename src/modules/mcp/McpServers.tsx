@@ -147,7 +147,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
           label={t('mcpServersAdd.menuLabel')}
           icon={Plus}
           className="w-full sm:w-auto"
-          triggerClassName={`w-full sm:w-auto ${MCP_PROVIDER_BUTTON_CLASSES[selectedProvider]}`}
+          triggerClassName={`w-full sm:w-auto ${MCP_PROVIDER_BUTTON_CLASSES[selectedProvider] ?? MCP_PROVIDER_BUTTON_CLASSES.claude}`}
           items={[
             {
               key: 'global',

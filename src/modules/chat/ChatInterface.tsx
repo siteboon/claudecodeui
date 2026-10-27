@@ -9,6 +9,7 @@ import PermissionContext from '@/modules/chat/context/PermissionContext';
 import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspaceContext';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
 import { api } from '@/shared/api';
+import { getPluginProviderLabel } from '@/shared/providerRegistry';
 import type {
   ChatMessage,
   Project,
@@ -114,6 +115,7 @@ function ChatInterface({
     pendingPermissionRequests,
     setPendingPermissionRequests,
     availablePermissionModes,
+    permissionModeOptions,
     selectPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,
@@ -436,7 +438,7 @@ function ChatInterface({
         ? t('messageTypes.codex')
         : provider === 'opencode'
             ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-          : t('messageTypes.claude');
+          : getPluginProviderLabel(provider, t('messageTypes.claude'));
 
   if (!selectedProject) {
     return (
@@ -542,6 +544,7 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
           availablePermissionModes={availablePermissionModes}
+          permissionModeOptions={permissionModeOptions}
           onSelectPermissionMode={selectPermissionMode}
           providerLabel={selectedProviderLabel}
           effort={currentProviderEffort}

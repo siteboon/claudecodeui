@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 
+import { getPluginProvider } from '@/shared/providerRegistry';
 import type { FileStatusCode, LLMProvider, McpProvider, McpScope, McpTransport, SettingsMainTab } from '@/shared/types';
 import type { UserPreferenceKey } from '@/shared/userSettings';
 
@@ -114,40 +115,55 @@ export const FILE_STATUS_GROUPS: GitStatusGroupEntry[] = [
 
 //----------------- MCP SERVER CAPABILITIES ------------
 
+/**
+ * Answers lookups for plugin provider ids (outside McpProvider) with
+ * `fallback`, so the MCP maps below never return undefined for them.
+ */
+const withPluginProviderFallback = <T,>(
+  builtins: Record<McpProvider, T>,
+  fallback: (provider: string) => T,
+): Record<McpProvider, T> => new Proxy(builtins, {
+  get: (target, key, receiver) => (
+    typeof key === 'string' && !Object.prototype.hasOwnProperty.call(target, key) && getPluginProvider(key)
+      ? fallback(key)
+      : Reflect.get(target, key, receiver)
+  ),
+});
+
 /** Display name for each provider that can host MCP servers, used in headings and buttons. */
-export const MCP_PROVIDER_NAMES: Record<McpProvider, string> = {
+export const MCP_PROVIDER_NAMES: Record<McpProvider, string> = withPluginProviderFallback({
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
   opencode: 'OpenCode',
-};
+}, (provider) => getPluginProvider(provider)?.label ?? provider);
 
 /** Scopes each provider can install an MCP server into; drives the scope selector and validation. */
-export const MCP_SUPPORTED_SCOPES: Record<McpProvider, McpScope[]> = {
+export const MCP_SUPPORTED_SCOPES: Record<McpProvider, McpScope[]> = withPluginProviderFallback({
   claude: ['user', 'project', 'local'],
   cursor: ['user', 'project'],
   codex: ['user', 'project'],
   opencode: ['user', 'project'],
-};
+}, () => ['user']);
 
 /** Transports each provider can talk to an MCP server over; drives the transport selector and validation. */
-export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
+export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = withPluginProviderFallback({
   claude: ['stdio', 'http', 'sse'],
   cursor: ['stdio', 'http'],
   codex: ['stdio', 'http'],
   opencode: ['stdio', 'http'],
-};
+}, () => ['stdio', 'http']);
 
 /** Transports offered when configuring a global (provider-agnostic) MCP server. */
 export const MCP_GLOBAL_SUPPORTED_TRANSPORTS: McpTransport[] = ['stdio', 'http'];
 
 /** Whether a provider honours an MCP server's working-directory setting; the form hides the field when it does not. */
-export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = {
+export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = withPluginProviderFallback({
   claude: false,
   cursor: false,
   codex: true,
   opencode: false,
-};
+}, () => false);
 
 // ---------------------------
 

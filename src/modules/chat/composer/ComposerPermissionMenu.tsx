@@ -78,10 +78,13 @@ const UNKNOWN_MODE: ModeAppearance = {
 const getAppearance = (mode: PermissionMode | string): ModeAppearance =>
   MODE_APPEARANCE[mode as PermissionMode] ?? UNKNOWN_MODE;
 
+export type PermissionModeOptions = Record<string, { label: string; description: string }>;
+
 type ComposerPermissionMenuProps = {
   permissionMode: PermissionMode;
   /** Modes the active provider supports, in the order the backend reports them. */
   permissionModes: PermissionMode[];
+  permissionModeOptions?: PermissionModeOptions;
   onSelectPermissionMode: (mode: PermissionMode) => void;
   providerLabel: string;
 };
@@ -93,6 +96,7 @@ type ComposerPermissionMenuProps = {
 function ComposerPermissionMenu({
   permissionMode,
   permissionModes,
+  permissionModeOptions,
   onSelectPermissionMode,
   providerLabel,
 }: ComposerPermissionMenuProps) {
@@ -101,7 +105,7 @@ function ComposerPermissionMenu({
   const close = useCallback(() => setIsOpen(false), []);
   const { triggerRef, menuRef, anchor, updateAnchor } = useComposerMenuAnchor(isOpen, close, 22 * 16);
   const modeLabel = (mode: PermissionMode) =>
-    t(`codex.modes.${mode}`, { defaultValue: getAppearance(mode).label || mode });
+    permissionModeOptions?.[mode]?.label ?? t(`codex.modes.${mode}`, { defaultValue: getAppearance(mode).label || mode });
   const activeModeLabel = modeLabel(permissionMode);
   // The name is shown only where the composer has room for it, so it never
   // pushes the model menu and the send button onto a second row. Plan mode,
@@ -161,7 +165,7 @@ function ComposerPermissionMenu({
                 key={mode}
                 icon={<ModeIcon className="h-4 w-4" />}
                 label={modeLabel(mode)}
-                description={t(`codex.descriptions.${mode}`, { defaultValue: '' }) || undefined}
+                description={permissionModeOptions?.[mode]?.description ?? (t(`codex.descriptions.${mode}`, { defaultValue: '' }) || undefined)}
                 isSelected={mode === permissionMode}
                 onSelect={() => {
                   onSelectPermissionMode(mode);

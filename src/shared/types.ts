@@ -1241,7 +1241,7 @@ export type Plugin = {
   author: string;
   icon: string;
   type: 'react' | 'module';
-  slot: 'tab';
+  slot: 'tab' | 'provider';
   entry: string;
   server: string | null;
   permissions: string[];

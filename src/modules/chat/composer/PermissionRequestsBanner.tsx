@@ -17,6 +17,12 @@ import {
 
 registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
 
+/** The rule a non-Claude provider proposes for "Allow & remember" (`context.rememberRule`). */
+const getProviderRememberRule = (request: PendingPermissionRequest): string | null => {
+  const rule = (request.context as { rememberRule?: unknown } | undefined)?.rememberRule;
+  return typeof rule === 'string' && rule ? rule : null;
+};
+
 type PermissionRequestsBannerProps = {
   pendingPermissionRequests: PendingPermissionRequest[];
   handlePermissionDecision: (
@@ -60,16 +66,20 @@ export default function PermissionRequestsBanner({
         }
 
         const rawInput = formatToolInputForDisplay(request.input);
-        const permissionEntry = buildClaudeToolPermissionEntry(request.toolName, rawInput);
+        // A provider can name the rule "Allow & remember" saves (in its own
+        // syntax, kept by the provider itself); otherwise it is a Claude rule.
+        const providerRule = getProviderRememberRule(request);
+        const entryFor = (item: PendingPermissionRequest) => (
+          getProviderRememberRule(item)
+          ?? buildClaudeToolPermissionEntry(item.toolName, formatToolInputForDisplay(item.input))
+        );
+        const permissionEntry = entryFor(request);
         const settings = getClaudeSettings();
-        const alreadyAllowed = permissionEntry ? settings.allowedTools.includes(permissionEntry) : false;
+        const alreadyAllowed = !providerRule && permissionEntry ? settings.allowedTools.includes(permissionEntry) : false;
         const rememberLabel = alreadyAllowed ? 'Allow (saved)' : 'Allow & remember';
         const matchingRequestIds = permissionEntry
           ? pendingPermissionRequests
-              .filter(
-                (item) =>
-                  buildClaudeToolPermissionEntry(item.toolName, formatToolInputForDisplay(item.input)) === permissionEntry,
-              )
+              .filter((item) => entryFor(item) === permissionEntry)
               .map((item) => item.requestId)
           : [request.requestId];
 
@@ -113,7 +123,7 @@ export default function PermissionRequestsBanner({
               <ConfirmationAction
                 variant="outline"
                 onClick={() => {
-                  if (permissionEntry && !alreadyAllowed) {
+                  if (permissionEntry && !alreadyAllowed && !providerRule) {
                     handleGrantToolPermission({ entry: permissionEntry, toolName: request.toolName });
                   }
                   handlePermissionDecision(matchingRequestIds, { allow: true, rememberEntry: permissionEntry });

@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 
+import { getPluginProviderLabel } from '@/shared/providerRegistry';
 import { Badge, Button, Input, LLMProviderLogo } from '@/shared/ui';
 import type {
   CustomProviderModelInput,
@@ -95,7 +96,9 @@ export default function ModelLibraryPanel({
   // providers this machine has connected (OpenCode). Empty for providers
   // without effort support, which hides the section entirely.
   const providerEffortLevels = providerModelCatalog[selectedProvider]?.EFFORT_LEVELS ?? [];
-  const selectedProviderLabel = PROVIDERS.find((entry) => entry.id === selectedProvider)?.label;
+  // Plugin providers have no tab here (custom models are built-in only) but can be the initial provider.
+  const selectedProviderLabel = PROVIDERS.find((entry) => entry.id === selectedProvider)?.label
+    ?? getPluginProviderLabel(selectedProvider, selectedProvider);
   const customModelsOnly = providerModelCatalog[selectedProvider]?.CUSTOM_MODELS_ONLY === true;
   // The server only hides the built-ins while a custom model exists.
   const builtInModelsHidden = customModelsOnly && customModels.length > 0;

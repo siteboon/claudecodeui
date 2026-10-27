@@ -4,6 +4,7 @@ import { promises as fsPromises } from 'node:fs';
 
 import chokidar, { type FSWatcher } from 'chokidar';
 
+import { pluginProvidersStore } from '@/modules/providers/plugin-providers.store.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
@@ -106,6 +107,11 @@ let watcherRescheduleAfterRefresh = false;
  * Filters watcher events to provider-specific session artifact file types.
  */
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
+  const pluginProvider = pluginProvidersStore.get(provider);
+  if (pluginProvider) {
+    return pluginProvider.meta.isWatchTarget?.(filePath) ?? true;
+  }
+
   if (provider === 'opencode') {
     return path.basename(filePath) === 'opencode.db';
   }
@@ -243,7 +249,11 @@ export async function initializeSessionsWatcher(): Promise<void> {
     failures: initialSync.failures,
   });
 
-  for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
+  const pluginWatchPaths = pluginProvidersStore.list().flatMap(({ provider, meta }) => (
+    (meta.watchRoots ?? []).map((rootPath) => ({ provider: provider.id, rootPath }))
+  ));
+
+  for (const { provider, rootPath } of [...PROVIDER_WATCH_PATHS, ...pluginWatchPaths]) {
     try {
       await fsPromises.mkdir(rootPath, { recursive: true });
 

@@ -26,6 +26,7 @@ import type {
   ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
 } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
+import { getPluginProviderLabel } from '@/shared/providerRegistry';
 
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
@@ -73,7 +74,7 @@ const getProviderLabel = (provider: string | undefined, fallback = 'Unknown') =>
     return fallback;
   }
 
-  return PROVIDER_LABELS[provider] || provider;
+  return PROVIDER_LABELS[provider] || getPluginProviderLabel(provider, provider);
 };
 
 const formatNumber = (value: number) => {
