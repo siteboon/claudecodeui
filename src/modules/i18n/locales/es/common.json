@@ -24,7 +24,8 @@
     "git": "Control de versiones",
     "tasks": "Tareas",
     "browser": "Navegador",
-    "computer": "Equipo"
+    "computer": "Equipo",
+    "views": "Vistas del espacio de trabajo"
   },
   "status": {
     "loading": "Cargando...",
@@ -55,7 +56,9 @@
     "back": "Atrás",
     "next": "Siguiente",
     "previous": "Anterior",
-    "logout": "Cerrar sesión"
+    "logout": "Cerrar sesión",
+    "scrollTabsLeft": "Desplazar pestañas a la izquierda",
+    "scrollTabsRight": "Desplazar pestañas a la derecha"
   },
   "common": {
     "language": "Idioma",
@@ -70,13 +73,22 @@
     "version": "Versión",
     "select": "Seleccionar",
     "selectAll": "Seleccionar todo",
-    "deselectAll": "Deseleccionar todo"
+    "deselectAll": "Deseleccionar todo",
+    "cancel": "Cancelar",
+    "done": "Listo",
+    "failed": "Error"
   },
   "time": {
     "justNow": "Justo ahora",
     "minutesAgo": "hace {{count}} min",
     "hoursAgo": "hace {{count}} horas",
+    "hoursAgo_one": "hace {{count}} hora",
+    "hoursAgo_other": "hace {{count}} horas",
+    "hoursAgo_many": "hace {{count}} horas",
     "daysAgo": "hace {{count}} días",
+    "daysAgo_one": "hace {{count}} día",
+    "daysAgo_other": "hace {{count}} días",
+    "daysAgo_many": "hace {{count}} días",
     "yesterday": "Ayer"
   },
   "fileOperations": {
@@ -97,7 +109,9 @@
     "createProjectDesktop": "Crea un proyecto nuevo haciendo clic en el icono de carpeta de la barra lateral",
     "newSession": "Nueva sesión",
     "untitledSession": "Sesión sin título",
-    "projectFiles": "Archivos del proyecto"
+    "projectFiles": "Archivos del proyecto",
+    "renameSessionHint": "{{title}} (doble clic para renombrar)",
+    "renameSessionLabel": "Título de la sesión"
   },
   "fileTree": {
     "loading": "Cargando archivos...",
@@ -113,16 +127,31 @@
     "permissions": "Permisos",
     "noFilesFound": "No se encontraron archivos",
     "checkProjectPath": "Comprueba si la ruta del proyecto es accesible",
+    "loadFailed": "No se pudieron cargar los archivos",
     "noMatchesFound": "No se encontraron coincidencias",
     "tryDifferentSearch": "Prueba con otro término o limpia la búsqueda",
     "justNow": "justo ahora",
     "minAgo": "hace {{count}} min",
     "hoursAgo": "hace {{count}} horas",
+    "hoursAgo_one": "hace {{count}} hora",
+    "hoursAgo_other": "hace {{count}} horas",
+    "hoursAgo_many": "hace {{count}} horas",
     "daysAgo": "hace {{count}} días",
+    "daysAgo_one": "hace {{count}} día",
+    "daysAgo_other": "hace {{count}} días",
+    "daysAgo_many": "hace {{count}} días",
     "newFile": "Archivo nuevo (Cmd+N)",
     "newFolder": "Carpeta nueva (Cmd+Shift+N)",
     "refresh": "Actualizar",
     "collapseAll": "Contraer todo",
+    "dropToUpload": "Suelta archivos para subirlos",
+    "dropToUploadTo": "Suelta archivos para subirlos a \"{{folder}}\"",
+    "uploadingFiles": "Subiendo archivos",
+    "uploadFiles": "Subir archivos (máx. {{size}} cada uno)",
+    "uploadToFolder": "Subir archivos a \"{{folder}}\"",
+    "uploadComplete": "Subida completada",
+    "uploadFailed": "Error al subir",
+    "uploadedCount": "Se subieron {{uploaded}} de {{total}} archivos",
     "context": {
       "rename": "Renombrar",
       "delete": "Eliminar",
@@ -134,6 +163,28 @@
       "refresh": "Actualizar",
       "menuLabel": "Menú contextual de archivo",
       "loading": "Cargando..."
+    },
+    "delete": {
+      "title": "Eliminar elemento",
+      "folderWarning": "Esta carpeta y todo su contenido se eliminarán permanentemente.",
+      "fileWarning": "Este archivo se eliminará permanentemente.",
+      "confirm": "Eliminar"
+    },
+    "toast": {
+      "renamed": "Renombrado correctamente",
+      "fileDeleted": "Archivo eliminado",
+      "folderDeleted": "Carpeta eliminada",
+      "fileCreated": "Archivo creado correctamente",
+      "folderCreated": "Carpeta creada correctamente",
+      "pathCopied": "Ruta copiada al portapapeles",
+      "copyFailed": "No se pudo copiar la ruta",
+      "folderDownloaded": "Carpeta descargada como ZIP"
+    },
+    "validation": {
+      "emptyName": "El nombre del archivo no puede estar vacío",
+      "invalidChars": "El nombre del archivo contiene caracteres no válidos",
+      "reserved": "El nombre del archivo es un nombre reservado",
+      "dotsOnly": "El nombre del archivo no puede contener solo puntos"
     }
   },
   "projectWizard": {
@@ -268,6 +319,132 @@
       "updateAvailable": "Actualización disponible",
       "closeSidebar": "Cerrar barra lateral",
       "resizeSidebar": "Redimensionar barra lateral"
-    }
-  }
+    },
+    "startingUpdate": "Iniciando la actualización...",
+    "updateStartedRestarting": "Actualización iniciada. El servidor parece estar reiniciándose para aplicarla.",
+    "unexpectedResponse": "El punto de actualización devolvió una respuesta inesperada (HTTP {{status}}). Actualiza a mano con el comando de abajo.",
+    "connectionInterrupted": "Se interrumpió la conexión con el servidor: es probable que se esté reiniciando para aplicar la actualización.",
+    "unknownError": "Error desconocido",
+    "refreshNow": "Recargando la ventana ahora...",
+    "refreshIn_one": "La ventana se recargará en {{count}} segundo. Si la actualización no se aplica, REINICIA el entorno.",
+    "refreshIn_other": "La ventana se recargará en {{count}} segundos. Si la actualización no se aplica, REINICIA el entorno.",
+    "refreshIn_many": "La ventana se recargará en {{count}} segundos. Si la actualización no se aplica, REINICIA el entorno."
+  },
+  "commandPalette": {
+    "title": "Paleta de comandos",
+    "pages": {
+      "actions": "Acciones",
+      "files": "Archivos",
+      "sessions": "Sesiones",
+      "commits": "Commits",
+      "branches": "Ramas"
+    },
+    "backToAll": "Volver al listado",
+    "backspaceHint": "Backspace para volver",
+    "searchPage": "Buscar en {{page}}…",
+    "searchAnything": "Escribe para buscar lo que quieras…",
+    "noResults": "Sin resultados.",
+    "groupActions": "Acciones",
+    "groupNavigate": "Navegar",
+    "groupGit": "Git",
+    "groupSettings": "Ajustes",
+    "groupSessions": "Sesiones",
+    "groupFiles": "Archivos",
+    "groupCommits": "Commits",
+    "groupBranches": "Ramas",
+    "startNewChat": "Iniciar un chat nuevo",
+    "selectProjectFirst": "Elige primero un proyecto",
+    "openSettings": "Abrir ajustes",
+    "toggleTheme": "Cambiar tema",
+    "navChat": "Ir al chat",
+    "navFiles": "Ir a Archivos",
+    "navShell": "Ir a la shell",
+    "navGit": "Ir a Git",
+    "navTasks": "Ir a Tareas",
+    "gitFetch": "Git: hacer fetch",
+    "gitPull": "Git: hacer pull",
+    "gitPush": "Git: hacer push",
+    "settingsItem": "Ajustes: {{label}}",
+    "browseAllSessions": "Ver todas las sesiones ({{count}})",
+    "browseAllFiles": "Ver todos los archivos ({{count}})",
+    "browseAllCommits": "Ver todos los commits ({{count}})",
+    "browseAllBranches": "Ver todas las ramas ({{count}})",
+    "switchTo": "Cambiar a: {{name}}"
+  },
+  "folderBrowser": {
+    "title": "Elegir carpeta",
+    "hideHidden": "Ocultar carpetas ocultas",
+    "showHidden": "Mostrar carpetas ocultas",
+    "createNew": "Crear carpeta nueva",
+    "newFolderPlaceholder": "Nombre de la carpeta nueva",
+    "create": "Crear",
+    "loadFailed": "No se pudieron cargar las carpetas",
+    "createFailed": "No se pudo crear la carpeta",
+    "noSubfolders": "No se encontraron subcarpetas",
+    "select": "Seleccionar",
+    "pathLabel": "Ruta:",
+    "useThisFolder": "Usar esta carpeta"
+  },
+  "misc": {
+    "errorTitle": "Algo salió mal",
+    "errorDescription": "Ocurrió un error al cargar la interfaz del chat.",
+    "errorDetails": "Detalles del error",
+    "tryAgain": "Reintentar",
+    "projectFallback": "Proyecto",
+    "openMenu": "Abrir menú",
+    "noProjectSelected": "Ningún proyecto seleccionado",
+    "projectRequiredForShell": "Hace falta un proyecto para abrir una shell",
+    "completedBadge": "(Completado)",
+    "close": "Cerrar",
+    "hideToken": "Ocultar token",
+    "showToken": "Mostrar token",
+    "unknownProvider": "Desconocido",
+    "browseFolders": "Explorar carpetas",
+    "closeLoginModal": "Cerrar el inicio de sesión",
+    "pluginLoadFailed": "No se pudo cargar el plugin: {{error}}"
+  },
+  "workflow": {
+    "title": "Flujo",
+    "status": {
+      "running": "en curso",
+      "completed": "listo",
+      "failed": "falló",
+      "stopped": "sin resultado"
+    },
+    "stoppedHint": "La ejecución terminó antes de que este flujo informara",
+    "phases": "Fases",
+    "agents": "Agentes",
+    "agentsFinished_one": "{{finished}} de {{count}} agente terminó",
+    "agentsFinished_other": "{{finished}} de {{count}} agentes terminaron",
+    "agentsFinished_many": "{{finished}} de {{count}} agentes terminaron",
+    "agentsFailed": "{{count}} con error",
+    "agentsProgress_one": "{{finished}}/{{count}} agente",
+    "agentsProgress_other": "{{finished}}/{{count}} agentes",
+    "agentsProgress_many": "{{finished}}/{{count}} agentes",
+    "agentStatus": {
+      "queued": "en cola",
+      "running": "en curso",
+      "completed": "listo",
+      "failed": "falló",
+      "stopped": "sin resultado"
+    },
+    "agentTokens": "{{tokens}} tokens",
+    "agentToolCalls_one": "{{count}} llamada a herramienta",
+    "agentToolCalls_other": "{{count}} llamadas a herramientas",
+    "agentToolCalls_many": "{{count}} llamadas a herramientas",
+    "agentTimelineLoading": "Leyendo los pasos del agente…",
+    "agentTimelineEmpty": "Aún no hay nada registrado",
+    "agentTimelineUnavailable": "Pasos no disponibles: {{reason}}",
+    "usage": "Usos de herramientas: {{toolUses}} · {{elapsed}}",
+    "currentAgent": "actual: {{label}}",
+    "result": "Resultado",
+    "script": "Script",
+    "backgroundTasks": "Tareas en segundo plano",
+    "backgroundAgent": "Agente",
+    "backgroundCommand": "Comando",
+    "stopTask": "Detener",
+    "taskRowNotLoaded": "Se lanzó antes en esta conversación; haz clic para cargarla",
+    "taskOfAgent": "Lanzada por uno de los agentes de esta sesión"
+  },
+  "cancel": "Cancelar"
 }

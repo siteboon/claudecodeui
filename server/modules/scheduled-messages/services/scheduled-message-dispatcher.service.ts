@@ -3,6 +3,7 @@ import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/
 import { announceScheduledMessagesChanged } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
+import { readQueuedChatMessage } from '@/shared/utils.js';
 
 /**
  * How often due messages are looked for.
@@ -16,12 +17,6 @@ const POLL_INTERVAL_MS = 30_000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dispatchInFlight = false;
 
-type StoredQueuedMessage = {
-  content: string;
-  options: Record<string, unknown>;
-  attachments: unknown[];
-};
-
 function readOptions(raw: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -33,31 +28,11 @@ function readOptions(raw: string): Record<string, unknown> {
   }
 }
 
-function readQueuedMessage(value: unknown): StoredQueuedMessage | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-  const record = value as Record<string, unknown>;
-  const content = typeof record.content === 'string' ? record.content : '';
-  const attachments = Array.isArray(record.attachments)
-    ? record.attachments
-    : Array.isArray(record.images)
-      ? record.images
-      : [];
-  if (!content.trim() && attachments.length === 0) {
-    return null;
-  }
-  const options = record.options && typeof record.options === 'object' && !Array.isArray(record.options)
-    ? record.options as Record<string, unknown>
-    : {};
-  return { content, options, attachments };
-}
-
 async function sendClaimedQueuedMessage(
   candidate: QueuedSessionMessageRecord,
   runtime: ProviderRuntimeGateway,
 ): Promise<void> {
-  const message = readQueuedMessage(candidate.queuedMessage);
+  const message = readQueuedChatMessage(candidate.queuedMessage);
   if (!message) {
     sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
     return;
