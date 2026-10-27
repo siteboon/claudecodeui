@@ -26,7 +26,7 @@ const checkCredentials = (auth: ClaudeProviderAuth): Promise<CheckCredentialsRes
 // `claude --version`. Stubbing checkInstalled() lets the test cover the mapping
 // from checkCredentials() to the wire shape without the CLI.
 const getStatusWithCliInstalled = (auth: ClaudeProviderAuth): Promise<ProviderAuthStatus> => {
-  (auth as unknown as { checkInstalled: () => boolean }).checkInstalled = () => true;
+  auth.checkInstalled = () => ({ installed: true, exitCode: 0, version: '2.1.0' });
   return auth.getStatus();
 };
 

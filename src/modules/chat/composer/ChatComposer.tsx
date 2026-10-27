@@ -272,6 +272,7 @@ export default function ChatComposer({
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
   const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
 
+  const hasQueuedDraft = Boolean(queuedDraft);
   const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
   const submitHint = canQueueDraft
     ? !canSteer
@@ -293,7 +294,9 @@ export default function ChatComposer({
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');
   const submitAriaLabel = canQueueDraft
-    ? t(`input.sendMode.${sendMode}`, { defaultValue: sendMode })
+    ? sendMode === 'queue' && hasQueuedDraft
+      ? t('input.queue.append', { defaultValue: 'Add to queued message' })
+      : t(`input.sendMode.${sendMode}`, { defaultValue: sendMode })
     : isLoading
       ? t('input.stop')
       : t('input.send');

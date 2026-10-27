@@ -139,7 +139,7 @@ function sendJson(ws: WebSocket, payload: unknown): void {
  * Used only within this file today; move to `server/shared/types.ts` if a
  * second module needs it.
  */
-type ChatRequestType = 'chat.send' | 'chat.steer' | 'chat.edit-send';
+type ChatRequestType = 'chat.send' | 'chat.steer' | 'chat.edit-send' | 'chat.stop-task';
 
 /**
  * Reports a protocol-level failure to the requesting client.
@@ -157,7 +157,8 @@ function sendProtocolError(
   code: string,
   error: string,
   sessionId?: string,
-  requestType?: ChatRequestType
+  requestType?: ChatRequestType,
+  extra: AnyRecord = {}
 ): void {
   sendJson(ws, {
     kind: 'protocol_error',
@@ -166,6 +167,7 @@ function sendProtocolError(
     sessionId: sessionId ?? null,
     ...(requestType ? { requestType } : {}),
     timestamp: new Date().toISOString(),
+    ...extra,
   });
 }
 
@@ -773,6 +775,9 @@ async function handleChatStopTask(
       'NO_SUCH_TASK',
       `Session "${sessionId}" has no running background task "${taskId}".`,
       sessionId,
+      'chat.stop-task',
+      // Names the task so the client can settle a chip whose end it missed.
+      { taskId },
     );
   }
 }

@@ -9,7 +9,12 @@ import type {
   FileTreeServices,
   FileTreeUploadedFile,
 } from '@/shared/types.js';
-import { AppError, FORBIDDEN_WORKSPACE_PATHS, normalizeProjectPath } from '@/shared/utils.js';
+import {
+  AppError,
+  FORBIDDEN_WORKSPACE_PATHS,
+  normalizeProjectPath,
+  resolvePathUnderRoots,
+} from '@/shared/utils.js';
 
 const HARD_EXCLUDED_DIRECTORY_NAMES = new Set([
   'node_modules', '.git', '.svn', '.hg',
@@ -342,15 +347,24 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
    * background command's log lives in the system temp directory and a
    * background agent's output file is a link from there into the Claude
    * projects directory, and the transcript quotes those paths verbatim. Those
-   * resolve through the read-only root policy instead of the project root; the
-   * writing endpoints keep using `resolvePathInsideProject` alone, so nothing
-   * outside the project can be changed.
+   * resolve through the read-only root policy instead of the project root.
+   *
+   * The agent may also point at a file in another folder of the workspace, the
+   * same tree `browseWorkspace` lists, so anything under the workspace root is
+   * readable too. Symlinks are resolved before that comparison. The writing
+   * endpoints keep using `resolvePathInsideProject` alone, so nothing outside
+   * the project can be changed.
    */
   async function resolveReadablePath(projectRoot: string, targetPath: string): Promise<string> {
     if (path.isAbsolute(targetPath)) {
       const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
       if (readOnlyPath) {
         return readOnlyPath;
+      }
+
+      const workspacePath = await resolvePathUnderRoots(targetPath, [dependencies.workspace.rootPath]);
+      if (workspacePath) {
+        return workspacePath;
       }
     }
 

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
-import { readQueuedMessage, resetChatDrafts, writeQueuedMessage } from '@/shared/chatDrafts';
+import { appendQueuedMessage, readQueuedMessage, resetChatDrafts } from '@/shared/chatDrafts';
 import type { PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
 
 /**
@@ -54,8 +54,42 @@ const submit = async (mode?: 'steer' | 'interrupt') => {
   return { sent, view };
 };
 
+type FakeQueued = { content: string; options?: unknown; attachments: unknown[] };
+
+// The queued-message endpoints as the server implements them: an append joins
+// the new message onto the waiting one (text with a blank line, attachments in
+// order, latest options); a delete clears it. Everything else answers '[]'.
+const fakeServer = () => {
+  const queued = new Map<string, FakeQueued>();
+  return async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (String(url).endsWith('/api/user/drafts/queued-message')) {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) as { scope: string; queuedMessage?: FakeQueued } : { scope: '' };
+      if (init?.method === 'DELETE') {
+        queued.delete(body.scope);
+        return json({ success: true });
+      }
+      const message = body.queuedMessage as FakeQueued;
+      const waiting = queued.get(body.scope);
+      const queuedMessage: FakeQueued = waiting
+        ? {
+            content: [waiting.content, message.content].filter((part) => part.trim()).join('\n\n'),
+            options: message.options ?? waiting.options,
+            attachments: [...waiting.attachments, ...(message.attachments ?? [])],
+          }
+        : { content: message.content, options: message.options, attachments: message.attachments ?? [] };
+      queued.set(body.scope, queuedMessage);
+      return json({ success: true, queuedMessage, appended: Boolean(waiting) });
+    }
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+};
+
+/** Lets fire-and-forget re-queues (a rejected steer, a restored draft) reach the store. */
+const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } })));
+  vi.stubGlobal('fetch', vi.fn(fakeServer()));
   localStorage.clear();
   resetChatDrafts();
 });
@@ -147,6 +181,7 @@ test('handleSteerRejected reports whether it actually consumed a pending steer',
   // rejection consumes it...
   let first: boolean | void = undefined;
   act(() => { first = view.result.current.handleSteerRejected(SESSION.id); });
+  await settle();
   assert.equal(first, true, 'a pending steer for this session is consumed');
   assert.equal(readQueuedMessage(SESSION.id)?.content, 'hello', 'the rejected steer text is re-queued, not lost');
 
@@ -240,7 +275,6 @@ test('handleSteerRejected merges into an already-queued message instead of overw
     await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
   });
   assert.equal(readQueuedMessage(SESSION.id)?.content, 'first', 'sanity: first is queued');
-  const firstOptions = readQueuedMessage(SESSION.id)?.options;
 
   // Steer 'second' — the pending steer that will be rejected below.
   await act(async () => { view.result.current.setInput('second'); });
@@ -258,6 +292,7 @@ test('handleSteerRejected merges into an already-queued message instead of overw
   );
 
   act(() => { view.result.current.handleSteerRejected(SESSION.id, 'STEER_UNSUPPORTED'); });
+  await settle();
 
   const merged = readQueuedMessage(SESSION.id);
   assert.equal(
@@ -265,7 +300,6 @@ test('handleSteerRejected merges into an already-queued message instead of overw
     'first\n\nsecond',
     'the rejected steer is appended to the already-queued message, not overwriting it',
   );
-  assert.deepEqual(merged?.options, firstOptions, 'the merge keeps the earlier queued message\'s send options');
 });
 
 test('a provider without steer support (e.g. codex) queues a steer submit instead of sending chat.steer', async () => {
@@ -298,13 +332,14 @@ test('a provider without steer support (e.g. codex) queues a steer submit instea
 test('handleSteerRejected keeps an attachments-only queued message instead of overwriting it', async () => {
   const view = renderHook(() => useChatComposerState(baseConfig({ isLoading: true }) as never));
   const queuedFile = { name: 'notes.txt', path: '/uploads/notes.txt', mimeType: 'text/plain', size: 5 };
-  writeQueuedMessage(SESSION.id, { content: '', attachments: [queuedFile] } as never);
+  await act(async () => { await appendQueuedMessage(SESSION.id, { content: '', attachments: [queuedFile] } as never); });
 
   await act(async () => { view.result.current.setInput('second'); });
   await act(async () => {
     await view.result.current.handleSubmit({ preventDefault: () => undefined } as never, undefined, { mode: 'steer' });
   });
   act(() => { view.result.current.handleSteerRejected(SESSION.id, 'STEER_UNSUPPORTED'); });
+  await settle();
 
   const merged = readQueuedMessage(SESSION.id);
   assert.equal(merged?.content, 'second', 'no blank-line join when the queued message had no text');
