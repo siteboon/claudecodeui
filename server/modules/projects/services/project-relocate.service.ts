@@ -2,9 +2,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { sessionsService } from '@/modules/providers/index.js';
+import { providerRuntimeService, sessionsService } from '@/modules/providers/index.js';
+import { chatRunRegistry } from '@/modules/websocket/index.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
 import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
+
+// Projects with a relocation under way. A second one would read the same rows,
+// and its rollback would put them back over the first one's finished move.
+const relocatingProjectIds = new Set<string>();
 
 type RelocateProjectResult = {
   projectId: string;
@@ -56,6 +61,24 @@ async function assertDirectoryExists(projectPath: string): Promise<void> {
  * project and moves the session there.
  */
 export async function relocateProject(
+  projectId: string,
+  requestedPath: string,
+): Promise<RelocateProjectResult> {
+  if (relocatingProjectIds.has(projectId)) {
+    throw new AppError('This project is already being moved', {
+      code: 'PROJECT_RELOCATION_IN_PROGRESS',
+      statusCode: 409,
+    });
+  }
+  relocatingProjectIds.add(projectId);
+  try {
+    return await relocateUnguarded(projectId, requestedPath);
+  } finally {
+    relocatingProjectIds.delete(projectId);
+  }
+}
+
+async function relocateUnguarded(
   projectId: string,
   requestedPath: string,
 ): Promise<RelocateProjectResult> {
@@ -112,6 +135,17 @@ export async function relocateProject(
   // Read before writing: once the project row moves, these rows are no longer
   // reachable through the old path.
   const sessionRows = sessionsDb.getSessionsByProjectPathIncludingArchived(previousPath);
+  // A run still writing its transcript would lose what it appends during the
+  // copy, and then re-create the transcript under the old folder.
+  if (sessionRows.some((row) => (
+    chatRunRegistry.isProcessing(row.session_id) || providerRuntimeService.hasBackgroundWork(row.session_id)
+  ))) {
+    throw new AppError('A conversation in this project is still running', {
+      code: 'PROJECT_SESSION_RUNNING',
+      statusCode: 409,
+      details: 'Wait for it to finish or stop it, then try again.',
+    });
+  }
   const transcripts = sessionRows
     .filter((row) => Boolean(row.jsonl_path))
     .map((row) => ({

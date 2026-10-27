@@ -6,7 +6,8 @@ import test from 'node:test';
 
 import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { relocateProject } from '@/modules/projects/services/project-relocate.service.js';
-import { sessionsService } from '@/modules/providers/index.js';
+import { providerRuntimeService, sessionsService } from '@/modules/providers/index.js';
+import { chatRunRegistry } from '@/modules/websocket/index.js';
 import { WORKSPACES_ROOT } from '@/shared/utils.js';
 
 type RelocateFixture = {
@@ -285,6 +286,44 @@ test('relocateProject keeps the project with its transcripts when they cannot be
       `${SESSION_ID}.jsonl`,
     );
     assert.equal(JSON.parse(await readFile(movedPath, 'utf8')).cwd, fixture.newProjectPath);
+  });
+});
+
+test('relocateProject refuses while a conversation in the project is running', async (t) => {
+  for (const busy of ['run', 'background work'] as const) {
+    await withRelocateFixture(async (fixture) => {
+      await rename(fixture.oldProjectPath, fixture.newProjectPath);
+      const isSession = (sessionId: string) => sessionId === SESSION_ID;
+      t.mock.method(chatRunRegistry, 'isProcessing', (sessionId: string) => busy === 'run' && isSession(sessionId));
+      t.mock.method(providerRuntimeService, 'hasBackgroundWork', (sessionId: string) => busy === 'background work' && isSession(sessionId));
+
+      await assert.rejects(
+        () => relocateProject(fixture.projectId, fixture.newProjectPath),
+        { statusCode: 409, code: 'PROJECT_SESSION_RUNNING' },
+      );
+
+      assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
+      assert.equal(JSON.parse(await readFile(fixture.transcriptPath, 'utf8')).cwd, fixture.oldProjectPath);
+      t.mock.restoreAll();
+    });
+  }
+});
+
+test('relocateProject refuses a second move of the same project while one is under way', async () => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+
+    // A double Enter in the editor: both requests arrive before either finishes.
+    const first = relocateProject(fixture.projectId, fixture.newProjectPath);
+    await assert.rejects(
+      () => relocateProject(fixture.projectId, fixture.newProjectPath),
+      { statusCode: 409, code: 'PROJECT_RELOCATION_IN_PROGRESS' },
+    );
+
+    assert.equal((await first).path, fixture.newProjectPath);
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.newProjectPath);
+    // The guard is released once the move is over.
+    assert.equal((await relocateProject(fixture.projectId, fixture.newProjectPath)).movedSessionCount, 0);
   });
 });
 
