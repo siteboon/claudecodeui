@@ -18,15 +18,15 @@ import type { BackgroundSendChoice, PermissionMode, Project, ProjectSession, Ses
  * cancel.
  */
 
-const { writeQueuedMessage } = vi.hoisted(() => ({ writeQueuedMessage: vi.fn() }));
+const { appendQueuedMessage } = vi.hoisted(() => ({ appendQueuedMessage: vi.fn() }));
 
 vi.mock('@/shared/chatDrafts', async (importOriginal) => {
   const actual = await importOriginal<typeof ChatDrafts>();
   return {
     ...actual,
-    writeQueuedMessage: (...args: Parameters<typeof actual.writeQueuedMessage>) => {
-      writeQueuedMessage(...args);
-      actual.writeQueuedMessage(...args);
+    appendQueuedMessage: (...args: Parameters<typeof actual.appendQueuedMessage>) => {
+      appendQueuedMessage(...args);
+      return actual.appendQueuedMessage(...args);
     },
   };
 });
@@ -101,16 +101,21 @@ const submitAndAnswer = async (view: View, choice: BackgroundSendChoice) => {
 };
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
+  vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     if (String(url).includes('/api/assets/files')) {
       return new Response(JSON.stringify({ attachments: [UPLOADED] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).includes('/api/user/drafts/queued-message') && init?.method === 'POST') {
+      // Nothing else is queued: the server queues the message on its own.
+      const { queuedMessage } = JSON.parse(String(init.body)) as { queuedMessage: unknown };
+      return new Response(JSON.stringify({ success: true, queuedMessage, appended: false }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
   }));
   // The drafts store is module state; a message queued by one test must not
   // be restored into the next one's composer.
   clearQueuedMessage(SESSION.id);
-  writeQueuedMessage.mockReset();
+  appendQueuedMessage.mockReset();
   localStorage.clear();
 });
 
@@ -144,7 +149,7 @@ test('cancel (the default answer to Enter, Esc or a click outside) sends nothing
   await submitAndAnswer(view, 'cancel');
 
   assert.equal(sends().length, 0, 'declined: nothing is sent');
-  assert.equal(writeQueuedMessage.mock.calls.length, 0, 'and nothing is queued');
+  assert.equal(appendQueuedMessage.mock.calls.length, 0, 'and nothing is queued');
   assert.equal(view.result.current.input, 'hello', 'and the draft stays in the composer');
   assert.equal(view.result.current.backgroundSendPrompt, null, 'and the prompt closes');
 });
@@ -160,10 +165,9 @@ test('queue persists the message behind the work with its uploaded files, sends 
 
   assert.equal(sends().length, 0, 'queued: nothing is sent now');
   assert.equal(uploads().length, 1, 'the files uploaded before the prompt are not uploaded again');
-  // Written synchronously at queue time (and again, identically, by the
-  // composer's persistence effect — the same as queueing during a turn).
-  assert.ok(writeQueuedMessage.mock.calls.length >= 1);
-  assert.equal(writeQueuedMessage.mock.calls[0]?.[0], 'session-1');
+  // Queued on the server at once, the same as queueing during a turn.
+  assert.equal(appendQueuedMessage.mock.calls.length, 1);
+  assert.equal(appendQueuedMessage.mock.calls[0]?.[0], 'session-1');
   const stored = readQueuedMessage('session-1');
   assert.equal(stored?.content, 'hello');
   assert.deepEqual(stored?.attachments, [UPLOADED]);
@@ -180,7 +184,7 @@ test('send anyway sends the message', async () => {
   await submitAndAnswer(view, 'send');
 
   assert.equal(sends().length, 1);
-  assert.equal(writeQueuedMessage.mock.calls.length, 0);
+  assert.equal(appendQueuedMessage.mock.calls.length, 0);
 });
 
 test('a second submit while the prompt is open neither opens another prompt nor sends', async () => {

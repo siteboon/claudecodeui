@@ -400,6 +400,37 @@
       }
     },
     "connectionStatus": "סטטוס חיבור",
+    "cli": {
+      "title": "גרסת CLI",
+      "checking": "בודק גרסה…",
+      "installed": "מותקנת: v{{version}}",
+      "installedUnknown": "מותקנת (גרסה לא ידועה)",
+      "versionUnavailable": "לא ניתן לקרוא את הגרסה",
+      "updateAvailable": "עדכון זמין: v{{version}}",
+      "upToDate": "מעודכנת",
+      "bundled": "מגיעה עם CloudCLI ומתעדכנת יחד איתו.",
+      "platform": "מנוהלת על ידי פלטפורמת האירוח.",
+      "updateTo": "עדכון ל-v{{version}}",
+      "runUpdater": "הפעלת העדכון",
+      "updating": "מעדכן…",
+      "updatingHint": "מריץ את {{command}} בשרת. זה עשוי להימשך כמה דקות.",
+      "runsCommand": "מריץ את {{command}} בשרת",
+      "output": "הפלט של {{command}}",
+      "result": {
+        "updated": "עודכן ל-v{{version}}.",
+        "alreadyUpToDate": "כבר מעודכנת (v{{version}}).",
+        "unchanged": "העדכון הסתיים, אבל הגרסה עדיין v{{version}}. הפלט שלמטה מסביר מדוע.",
+        "unchangedUnknown": "העדכון הסתיים. הפלט מופיע למטה.",
+        "permissionDenied": "למשתמש של השרת אין הרשאה לכתוב במיקום שבו ה-CLI הזה מותקן. יש להריץ את {{command}} בשרת בתור הבעלים של ההתקנה (למשל עם sudo).",
+        "timedOut": "העדכון לא הסתיים בזמן והופסק. יש להריץ את {{command}} בשרת כדי להשלים אותו.",
+        "failed": "העדכון נכשל (קוד יציאה {{exitCode}}). הפלט מופיע למטה.",
+        "failedQuietly": "תוכנית העדכון דיווחה על כישלון. הפלט מופיע למטה.",
+        "notStarted": "לא ניתן היה להפעיל את תוכנית העדכון.",
+        "busy": "הסוכן הזה עובד כרגע בסשן. יש להמתין לסיומו או לעצור אותו, ואז לעדכן.",
+        "requestFailed": "העדכון לא הופעל: {{error}}",
+        "unconfirmed": "לא התקבלה תשובה מהשרת ({{error}}). ייתכן שהעדכון רץ בכל זאת; הגרסה שלמעלה היא האחרונה שהשרת דיווח עליה."
+      }
+    },
     "subscriptionOverride": {
       "title": "התחברות המנוי לא בשימוש",
       "description": "{{variable}} מוגדר ב-{{source}}, ולכן Claude Code מחייב כל בקשה על המפתח הזה כשימוש API בתשלום לפי שימוש, במקום להשתמש בהתחברות המנוי.",

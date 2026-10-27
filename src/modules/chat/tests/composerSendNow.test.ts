@@ -67,7 +67,14 @@ const submit = async (view: ReturnType<typeof render>['view'], text: string) => 
 };
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })));
+  vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (String(url).includes('/api/user/drafts/queued-message') && init?.method === 'POST') {
+      // Nothing else is queued: the server queues the message as sent.
+      const { queuedMessage } = JSON.parse(String(init.body)) as { queuedMessage: unknown };
+      return new Response(JSON.stringify({ success: true, queuedMessage, appended: false }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }));
   clearQueuedMessage(SESSION.id);
   localStorage.clear();
 });

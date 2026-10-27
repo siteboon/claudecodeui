@@ -14,6 +14,7 @@ export type UiPreferences = {
   showThinking: boolean;
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
+  keepProjectsExpanded: boolean;
   voiceEnabled: boolean;
   /** Keeps the browser live-view side panel open across workspace visits. */
   browserViewPanelOpen: boolean;
@@ -30,6 +31,7 @@ const DEFAULTS: UiPreferences = {
   showThinking: true,
   sendByCtrlEnter: false,
   sidebarVisible: true,
+  keepProjectsExpanded: false,
   voiceEnabled: false,
   browserViewPanelOpen: false,
 };
