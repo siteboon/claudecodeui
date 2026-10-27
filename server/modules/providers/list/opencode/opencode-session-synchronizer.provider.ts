@@ -16,11 +16,15 @@ import {
 
 import { opencodeSideQuestionForks } from './opencode-side-question-forks.js';
 
-// Opencode's own `session.agent` column is set from the row's creation, so it
-// covers a fork the instant it exists; the registry (above) covers the gap
-// before that — right after `--fork` starts and before its id is read off the
-// first event. Both filters sit in the SQL so a fork can never be the newest
-// row that `synchronizeFile`'s `LIMIT 1` picks, not after.
+// Opencode sets its own `session.agent` column asynchronously, not from the
+// row's creation (verified live, 2026-10-27), so it alone cannot close the
+// window right after `--fork` starts. The registry's pending-window clause
+// (below) covers that window by directory, start time and opencode's own
+// `(fork #N)` title suffix; the registry's confirmed-id clause covers a fork
+// once its id is read off the first event; this `agent` column adds a third
+// layer wherever opencode has actually set it by query time. All three sit in
+// the SQL so a fork can never be the newest row that `synchronizeFile`'s
+// `LIMIT 1` picks, not after.
 const SIDE_QUESTION_AGENT = 'sidequestion';
 
 type OpenCodeSessionRow = {
@@ -92,9 +96,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       // placeholders so the SQL (not a post-query JS filter) is what keeps a
       // registered fork off the row `synchronizeFile`'s LIMIT 1 picks.
       const forkIdsClause = this.registeredForkIdsClause();
+      const pendingForkClause = this.pendingForkWindowClause();
       // Older opencode's `session` table has no `agent` column at all; the
-      // registry filter below still covers every fork, so this one is an
-      // extra layer where the column exists and simply absent where it
+      // registry filters above/below still cover every fork, so this one is
+      // an extra layer where the column exists and simply absent where it
       // doesn't, rather than a query that throws and drops every session.
       const agentFilterClause = this.hasAgentColumn(db)
         ? `AND (s.agent IS NULL OR s.agent != '${SIDE_QUESTION_AGENT}')`
@@ -103,6 +108,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
         sinceMillis,
         sinceMillis,
         ...forkIdsClause.ids,
+        ...pendingForkClause.params,
         ...(limit ? [limit] : []),
       ];
       const rows = db.prepare(`
@@ -120,6 +126,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
           AND (? IS NULL OR COALESCE(s.time_updated, s.time_created, 0) >= ?)
           ${agentFilterClause}
           ${forkIdsClause.sql}
+          ${pendingForkClause.sql}
         ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC, s.id DESC
         ${limitClause}
       `).all(...params) as OpenCodeSessionRow[];
@@ -161,6 +168,25 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       return { sql: '', ids: [] };
     }
     return { sql: `AND s.id NOT IN (${ids.map(() => '?').join(', ')})`, ids };
+  }
+
+  /**
+   * One `NOT (...)` per pending fork, excluding any row in its directory
+   * created at or after its start time whose title ends in opencode's own
+   * `(fork #N)` suffix — the only marker available before a pending fork's id
+   * is read off an event (see opencode-side-question-forks.ts).
+   */
+  private pendingForkWindowClause(): { sql: string; params: Array<string | number> } {
+    const pendingForks = opencodeSideQuestionForks.listPending();
+    if (pendingForks.length === 0) {
+      return { sql: '', params: [] };
+    }
+
+    const clauses = pendingForks
+      .map(() => "NOT (s.directory = ? AND s.time_created >= ? AND s.title LIKE '%(fork #%)')")
+      .join(' AND ');
+    const params = pendingForks.flatMap((fork) => [fork.directory, fork.startedAt]);
+    return { sql: `AND ${clauses}`, params };
   }
 
   private pruneChildSessions(db: Database.Database): void {

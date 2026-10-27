@@ -81,6 +81,14 @@ async function withAppServer<T>(
     call: (method: string, params: unknown) => Promise<unknown>;
     /** Registers a handler for every notification (no `id`) the app-server sends. Returns a function that removes it. */
     onNotification: (handler: NotificationHandler) => () => void;
+    /**
+     * Registers a handler for the child exiting or erroring. Separate from
+     * `call()`'s own rejection: a waiter that is not sitting on a pending
+     * request (e.g. `askSideQuestion` waiting on a `turn/completed`
+     * notification) would otherwise only learn the child is gone once its
+     * own timeout fires, minutes later.
+     */
+    onExit: (handler: (reason: string) => void) => () => void;
   }) => Promise<T>,
 ): Promise<T> {
   // Resolved through the exported object, not a module-local function, so
@@ -108,6 +116,12 @@ async function withAppServer<T>(
   const onNotification = (handler: NotificationHandler): (() => void) => {
     notificationListeners.add(handler);
     return () => notificationListeners.delete(handler);
+  };
+
+  const exitListeners = new Set<(reason: string) => void>();
+  const onExit = (handler: (reason: string) => void): (() => void) => {
+    exitListeners.add(handler);
+    return () => exitListeners.delete(handler);
   };
 
   const reader = readline.createInterface({ input: child.stdout });
@@ -159,6 +173,9 @@ async function withAppServer<T>(
       resolve({ error: { message: reason } });
     }
     pending.clear();
+    for (const listener of exitListeners) {
+      listener(reason);
+    }
   };
 
   child.on('error', (error) => failPending(error.message));
@@ -218,7 +235,7 @@ async function withAppServer<T>(
     });
     child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'initialized', params: {} })}\n`);
 
-    return await run({ call, onNotification });
+    return await run({ call, onNotification, onExit });
   } catch (error) {
     if (error instanceof AppError && exitReason) {
       throw new AppError(`${error.message}${stderr ? ` — ${stderr.trim().split('\n').slice(-1)[0]}` : ''}`, {
@@ -310,39 +327,29 @@ export const codexAppServer = {
    * (`codex-runtime.provider.ts`) to answer a side question without touching
    * the parent thread.
    *
-   * `ephemeral: true` and `excludeTurns: true` keep the fork off disk and off
-   * the parent's turn list; `sandbox: 'read-only'` and `approvalPolicy:
-   * 'never'` keep it from mutating anything while it has no one to approve a
-   * request. The turn itself is the boundary prompt followed by the question,
-   * exactly as Codex's own side-conversation support sends it.
+   * `ephemeral: true` keeps the fork off disk; `excludeTurns: true` only
+   * leaves `thread.turns` out of the `thread/fork` response — this fork is
+   * never listed anywhere, so there is nothing else for it to exclude.
+   * `sandbox: 'read-only'` and `approvalPolicy: 'never'` keep it from
+   * mutating anything while it has no one to approve a request. The turn
+   * itself is the boundary prompt followed by the question, exactly as
+   * Codex's own side-conversation support sends it.
    */
   async askSideQuestion(
     input: { threadId: string; cwd: string; model: string; question: string; signal: AbortSignal },
     onDelta: (text: string) => void,
   ): Promise<string> {
-    return withAppServer(async ({ call, onNotification }) => {
-      const forkResult = await call('thread/fork', {
-        threadId: input.threadId,
-        ...(input.cwd ? { cwd: input.cwd } : {}),
-        ...(input.model ? { model: input.model } : {}),
-        ephemeral: true,
-        sandbox: 'read-only',
-        approvalPolicy: 'never',
-        developerInstructions: SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
-        excludeTurns: true,
-      }) as { thread?: { id?: unknown } } | undefined;
+    const abortedError = () => new AppError('The side question was aborted.', {
+      code: 'CODEX_SIDE_QUESTION_ABORTED',
+      statusCode: 499,
+    });
 
-      const forkThreadId = typeof forkResult?.thread?.id === 'string' ? forkResult.thread.id : '';
-      if (!forkThreadId) {
-        throw new AppError('Codex reported a side-question fork without a thread id.', {
-          code: 'FORK_FAILED',
-          statusCode: 502,
-        });
-      }
-
+    return withAppServer(async ({ call, onNotification, onExit }) => {
       return new Promise<string>((resolve, reject) => {
         let text = '';
         let settled = false;
+        let removeNotificationListener: (() => void) | null = null;
+        let removeExitListener: (() => void) | null = null;
 
         const timer = setTimeout(() => {
           settle(() => reject(new AppError(
@@ -352,43 +359,13 @@ export const codexAppServer = {
         }, SIDE_QUESTION_TURN_TIMEOUT_MS);
 
         const onAbort = () => {
-          settle(() => reject(new AppError('The side question was aborted.', {
-            code: 'CODEX_SIDE_QUESTION_ABORTED',
-            statusCode: 499,
-          })));
+          settle(() => reject(abortedError()));
         };
+        // Attached before the `thread/fork` request even goes out, so a
+        // dismiss during `initialize`/`thread/fork` is caught the same way
+        // as one during the turn itself — it used to be added only once the
+        // fork had already returned, and an abort in that window was lost.
         input.signal.addEventListener('abort', onAbort);
-
-        const removeListener = onNotification((method, params) => {
-          const notificationParams = params as { threadId?: unknown; delta?: unknown; turn?: { status?: unknown; error?: { message?: unknown } } } | undefined;
-          // Another thread's deltas (e.g. the one this fork was copied from)
-          // arrive on the same connection; only this fork's own notifications
-          // belong to this question.
-          if (notificationParams?.threadId !== forkThreadId) {
-            return;
-          }
-
-          if (method === 'item/agentMessage/delta') {
-            const delta = typeof notificationParams.delta === 'string' ? notificationParams.delta : '';
-            if (delta) {
-              text += delta;
-              onDelta(delta);
-            }
-            return;
-          }
-
-          if (method === 'turn/completed') {
-            const status = notificationParams.turn?.status;
-            if (status === 'completed') {
-              settle(() => resolve(text));
-              return;
-            }
-            const message = typeof notificationParams.turn?.error?.message === 'string'
-              ? notificationParams.turn.error.message
-              : `Codex side-question turn ${String(status)}.`;
-            settle(() => reject(new AppError(message, { code: 'CODEX_SIDE_QUESTION_FAILED', statusCode: 502 })));
-          }
-        });
 
         function settle(action: () => void) {
           if (settled) {
@@ -397,16 +374,95 @@ export const codexAppServer = {
           settled = true;
           clearTimeout(timer);
           input.signal.removeEventListener('abort', onAbort);
-          removeListener();
+          removeNotificationListener?.();
+          removeExitListener?.();
           action();
         }
 
-        call('turn/start', {
-          threadId: forkThreadId,
-          input: [
-            { type: 'text', text: SIDE_CONVERSATION_BOUNDARY_PROMPT, text_elements: [] },
-            { type: 'text', text: input.question, text_elements: [] },
-          ],
+        if (input.signal.aborted) {
+          settle(() => reject(abortedError()));
+          return;
+        }
+
+        call('thread/fork', {
+          threadId: input.threadId,
+          ...(input.cwd ? { cwd: input.cwd } : {}),
+          ...(input.model ? { model: input.model } : {}),
+          ephemeral: true,
+          sandbox: 'read-only',
+          approvalPolicy: 'never',
+          developerInstructions: SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+          excludeTurns: true,
+        }).then((forkResult) => {
+          if (settled) {
+            // Aborted, or already timed out, while the fork request was in flight.
+            return;
+          }
+
+          const typedForkResult = forkResult as { thread?: { id?: unknown } } | undefined;
+          const forkThreadId = typeof typedForkResult?.thread?.id === 'string' ? typedForkResult.thread.id : '';
+          if (!forkThreadId) {
+            settle(() => reject(new AppError('Codex reported a side-question fork without a thread id.', {
+              code: 'FORK_FAILED',
+              statusCode: 502,
+            })));
+            return;
+          }
+
+          // From here on the turn waiter sits on a notification, not a
+          // pending `call()`, so a child that exits mid-turn would otherwise
+          // only be noticed once `SIDE_QUESTION_TURN_TIMEOUT_MS` elapses.
+          removeExitListener = onExit((reason) => {
+            settle(() => reject(new AppError(
+              `Codex exited before the side-question turn finished (${reason}).`,
+              { code: 'CODEX_SIDE_QUESTION_FAILED', statusCode: 502 },
+            )));
+          });
+
+          removeNotificationListener = onNotification((method, params) => {
+            const notificationParams = params as { threadId?: unknown; delta?: unknown; turn?: { status?: unknown; error?: { message?: unknown } } } | undefined;
+            // Another thread's deltas (e.g. the one this fork was copied from)
+            // arrive on the same connection; only this fork's own notifications
+            // belong to this question.
+            if (notificationParams?.threadId !== forkThreadId) {
+              return;
+            }
+
+            if (method === 'item/agentMessage/delta') {
+              const delta = typeof notificationParams.delta === 'string' ? notificationParams.delta : '';
+              if (delta) {
+                text += delta;
+                onDelta(delta);
+              }
+              return;
+            }
+
+            if (method === 'turn/completed') {
+              const status = notificationParams.turn?.status;
+              if (status === 'completed') {
+                settle(() => resolve(text));
+                return;
+              }
+              const message = typeof notificationParams.turn?.error?.message === 'string'
+                ? notificationParams.turn.error.message
+                : `Codex side-question turn ${String(status)}.`;
+              settle(() => reject(new AppError(message, { code: 'CODEX_SIDE_QUESTION_FAILED', statusCode: 502 })));
+            }
+          });
+
+          if (settled) {
+            return;
+          }
+
+          call('turn/start', {
+            threadId: forkThreadId,
+            input: [
+              { type: 'text', text: SIDE_CONVERSATION_BOUNDARY_PROMPT, text_elements: [] },
+              { type: 'text', text: input.question, text_elements: [] },
+            ],
+          }).catch((error) => {
+            settle(() => reject(error));
+          });
         }).catch((error) => {
           settle(() => reject(error));
         });

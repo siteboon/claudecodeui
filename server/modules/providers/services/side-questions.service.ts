@@ -1,15 +1,13 @@
 import { broadcastToConnectedClients } from '@/modules/websocket/index.js';
 
 import type {
+  InMemorySideQuestionsStore,
   LLMProvider,
   SideQuestion,
   SideQuestionEvent,
   SideQuestionRuntime,
 } from '@/shared/types.js';
-import {
-  createInMemorySideQuestionsStore,
-  type InMemorySideQuestionsStore,
-} from './side-questions.store.js';
+import { createInMemorySideQuestionsStore } from './side-questions.store.js';
 
 type SideQuestionsServiceDependencies = {
   /** Defaults to a fresh in-memory store: a new service instance is empty. */
@@ -32,6 +30,9 @@ type AskInput = {
  * Not a measured value: the store lives in the server's memory for weeks, so
  * the list per session has a bound. 50 is far above the asides one session
  * plausibly carries, so a real chat never hits it.
+ *
+ * Exported through the providers barrel for `side-questions.service.test.ts`,
+ * which asserts on the bound directly.
  */
 export const MAX_SIDE_QUESTIONS_PER_SESSION = 50;
 

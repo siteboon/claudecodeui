@@ -361,14 +361,28 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
     backgroundWork.clear(sessionId);
   }
   const carried = superseding ? null : existing;
-  activeSessions.set(sessionId, {
+  const sessionEntry = {
     instance: queryInstance,
     startTime: carried?.startTime || Date.now(),
     status: 'active',
     writer,
-    // Re-registered mid-run once the provider session id lands; keep the closer.
-    releaseInput: releaseInput || carried?.releaseInput || null
-  });
+    // Set the moment `releaseInput` actually runs (idle ceiling, or the turn
+    // ending with no background work left). A native side question writes
+    // into that same stdin, and the SDK drops a write after it has been
+    // released rather than erroring, so this flag is the only signal
+    // `askSideQuestion` has to fall back to the read-only fork instead.
+    inputReleased: false,
+    releaseInput: null
+  };
+  // Re-registered mid-run once the provider session id lands; keep the closer.
+  const effectiveReleaseInput = releaseInput || carried?.releaseInput || null;
+  sessionEntry.releaseInput = effectiveReleaseInput
+    ? () => {
+      sessionEntry.inputReleased = true;
+      effectiveReleaseInput();
+    }
+    : null;
+  activeSessions.set(sessionId, sessionEntry);
   // The history reader reports a background agent as running or stopped by
   // whether this entry exists, and the cached history does not see this map.
   sessionHistoryCache.invalidate(sessionId);
@@ -1642,7 +1656,12 @@ async function askSideQuestion(request, sink, context) {
   /** @type {NativeSideQuestionCapableInstance|undefined} */
   const instance = session?.instance;
 
-  if (instance && typeof instance.askSideQuestion === 'function') {
+  // A session whose stdin was already released (turn ended with no
+  // background work, or the idle ceiling) still has `instance` around, but
+  // a write into its input stream is silently dropped rather than answered.
+  // The fork path below spawns its own process instead, so it is the only
+  // one that can still reach this session's transcript.
+  if (instance && typeof instance.askSideQuestion === 'function' && !session.inputReleased) {
     try {
       const result = await instance.askSideQuestion(request.question, { signal: request.signal });
       const response = result?.response;

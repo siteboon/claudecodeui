@@ -227,6 +227,16 @@
       "label": "{{time}} vergangen",
       "startingNow": "Startet jetzt"
     },
+    "backgroundTask": {
+      "prompt": {
+        "title": "Diese Sitzung hat noch Hintergrundarbeit laufen",
+        "description": "Eine neue Nachricht startet einen neuen Turn, der diese Arbeit stoppt; alles, was sie noch nicht gemeldet hat, geht verloren. Stell die Nachricht in die Warteschlange, um sie zu senden, wenn die Arbeit fertig ist.",
+        "cancel": "Abbrechen",
+        "queue": "Einreihen",
+        "sendAnyway": "Trotzdem senden",
+        "sideQuestion": "Nebenfrage"
+      }
+    },
     "controls": {
       "stopGeneration": "Generierung stoppen",
       "pressEscToStop": "Jederzeit Esc drücken, um zu stoppen"

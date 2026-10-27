@@ -347,6 +347,37 @@ export type SideQuestionRuntime = {
   askSideQuestion(provider: LLMProvider, request: SideQuestionRequest, sink: SideQuestionSink): Promise<SideQuestionOutcome>;
 };
 
+/**
+ * The one place a side question's mutable state lives.
+ *
+ * It holds `SideQuestion` objects directly, so the service, the history
+ * route and the websocket handler all read and write the same object and no
+ * row-to-wire mapping is needed. Side questions are deliberately in memory
+ * only: a CloudCLI restart is a clean slate, and `createdAt`/`finishedAt` are
+ * ISO strings, not database timestamps. Used by
+ * `server/modules/providers/services/side-questions.store.ts` (the only
+ * implementation) and `side-questions.service.ts` (the only consumer).
+ */
+export type InMemorySideQuestionsStore = {
+  /** Inserts a fresh question as `running` and returns it. */
+  create(input: {
+    id: string;
+    sessionId: string;
+    question: string;
+    model: string | null;
+  }): SideQuestion;
+  /** The whole question, whatever its status, or null once deleted. */
+  getById(id: string): SideQuestion | null;
+  /** Appends streamed text to the answer; a no-op once deleted. */
+  appendAnswer(id: string, text: string): void;
+  /** Settles a running question; a no-op once deleted. */
+  finish(id: string, outcome: SideQuestionOutcome): void;
+  /** The session's questions, oldest first. */
+  listForSession(sessionId: string): SideQuestion[];
+  /** Deletes one question of one session. Reports whether anything went. */
+  delete(sessionId: string, id: string): boolean;
+};
+
 /** The owning project as it appears inside a `session_upserted` delta. */
 export type SessionUpsertedProject = {
   projectId: string;
