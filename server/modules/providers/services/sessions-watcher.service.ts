@@ -109,7 +109,16 @@ let watcherRescheduleAfterRefresh = false;
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   const pluginProvider = pluginProvidersStore.get(provider);
   if (pluginProvider) {
-    return pluginProvider.meta.isWatchTarget?.(filePath) ?? true;
+    if (!pluginProvider.meta.isWatchTarget) {
+      return true;
+    }
+    try {
+      return pluginProvider.meta.isWatchTarget(filePath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[SessionsWatcher] isWatchTarget failed for provider "${provider}": ${message}`);
+      return false;
+    }
   }
 
   if (provider === 'opencode') {

@@ -57,6 +57,7 @@ export function loadPluginProviders(): Promise<void> {
       const response = await api.providers.registry();
       const body = (await response.json()) as { success?: boolean; data?: { providers?: PluginProviderInfo[] } };
       if (!body.success || !Array.isArray(body.data?.providers)) {
+        loadRequest = null;
         return;
       }
 

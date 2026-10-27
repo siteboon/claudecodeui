@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import { withPluginProviderIds } from '@/shared/providerRegistry';
+import { usePluginProviders, withPluginProviderIds } from '@/shared/providerRegistry';
 import type {
   LLMProvider,
   ProviderAuthStatus,
@@ -125,6 +125,23 @@ export function useProviderAuthStatus(
   const refreshProviderAuthStatuses = useCallback(async (providers: LLMProvider[] = withPluginProviderIds(CLI_PROVIDERS)) => {
     await Promise.all(providers.map((provider) => checkProviderAuthStatus(provider)));
   }, [checkProviderAuthStatus]);
+
+  const pluginProviders = usePluginProviders();
+  const pluginProviderIds = useMemo(
+    () => pluginProviders.map((p) => p.id),
+    [pluginProviders],
+  );
+
+  const prevPluginIdsRef = useRef<string>('');
+  useEffect(() => {
+    const key = pluginProviderIds.join(',');
+    if (key !== prevPluginIdsRef.current) {
+      prevPluginIdsRef.current = key;
+      if (pluginProviderIds.length > 0) {
+        void Promise.all(pluginProviderIds.map((id) => checkProviderAuthStatus(id)));
+      }
+    }
+  }, [pluginProviderIds, checkProviderAuthStatus]);
 
   return {
     providerAuthStatus,

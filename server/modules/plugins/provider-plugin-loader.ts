@@ -8,8 +8,8 @@ import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index
 import {
   pluginProvidersStore,
   type PluginProviderMeta,
-} from '@/modules/providers/plugin-providers.store.js';
-import { providerRegistry } from '@/modules/providers/provider.registry.js';
+  providerRegistry,
+} from '@/modules/providers/index.js';
 import { McpProvider } from '@/modules/providers/shared/mcp/mcp.provider.js';
 import { SkillsProvider } from '@/modules/providers/shared/skills/skills.provider.js';
 import * as imageAttachments from '@/shared/image-attachments.js';
@@ -88,6 +88,12 @@ export async function loadProviderPlugins(): Promise<void> {
 
       if (!provider?.id || !meta?.capabilities) {
         throw new Error('provider factory must return { provider, meta } with provider.id and meta.capabilities');
+      }
+      if (typeof provider.id !== 'string' || !/^[a-z0-9_-]+$/.test(provider.id)) {
+        throw new Error(`invalid provider id "${provider.id}": must be lowercase alphanumeric, dashes or underscores`);
+      }
+      if (provider.id === 'plain-shell') {
+        throw new Error('provider id "plain-shell" is reserved');
       }
       if (providerRegistry.hasProvider(provider.id)) {
         throw new Error(`provider id "${provider.id}" is already registered`);

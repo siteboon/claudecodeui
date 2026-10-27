@@ -5,7 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { pluginProvidersStore } from '@/modules/providers/plugin-providers.store.js';
+import { pluginProvidersStore } from '@/modules/providers/index.js';
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -227,9 +227,15 @@ function buildShellCommand(
     return otherProgram(initialCommand);
   }
 
-  const pluginShellCommand = pluginProvidersStore.get(provider)?.meta.shellCommand;
-  if (pluginShellCommand) {
-    return otherProgram(pluginShellCommand({ resumeSessionId, projectPath }));
+  const pluginProvider = pluginProvidersStore.get(provider);
+  if (pluginProvider) {
+    if (!pluginProvider.meta.shellCommand) {
+      throw new Error(`Provider "${provider}" does not support terminal sessions`);
+    }
+    return otherProgram(pluginProvider.meta.shellCommand({
+      resumeSessionId: resumeSessionId || null,
+      projectPath,
+    }));
   }
 
   if (provider === 'cursor') {

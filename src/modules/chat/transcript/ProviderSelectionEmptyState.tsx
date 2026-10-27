@@ -112,7 +112,7 @@ export default function ProviderSelectionEmptyState({
   const providerMeta = useMemo(
     () => [
       ...PROVIDER_META,
-      ...pluginProviders.map((plugin) => ({ id: plugin.id, name: plugin.description || plugin.label })),
+      ...pluginProviders.map((plugin) => ({ id: plugin.id, name: plugin.label })),
     ],
     [pluginProviders],
   );

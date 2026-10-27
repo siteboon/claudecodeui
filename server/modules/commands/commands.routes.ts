@@ -4,7 +4,7 @@ import path from "path";
 import express from "express";
 
 import { parseFrontMatter } from "../../shared/frontmatter.js";
-import { pluginProvidersStore } from "../providers/plugin-providers.store.js";
+import { pluginProvidersStore } from "../providers/index.js";
 
 type CommandsRouterDependencies = {
   fileSystem: typeof import('node:fs/promises');
