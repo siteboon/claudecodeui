@@ -440,6 +440,7 @@ async function handleChatAbort(
         return;
       }
     }
+    console.warn('[chat] chat.abort refused: no active run', { sessionId, runStatus: run?.status ?? null });
     sendProtocolError(ws, 'NO_ACTIVE_RUN', `Session "${sessionId}" has no active run.`, sessionId);
     return;
   }

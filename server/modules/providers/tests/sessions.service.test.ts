@@ -308,6 +308,7 @@ test('running sessions carry their tasks on a chat run that is still going', { c
           provider: 'claude',
           startedAt: run.startedAt,
           lastSeq: 0,
+          canInterrupt: true,
           tasks,
         });
       },
@@ -327,7 +328,7 @@ test('running sessions with no background work are the chat runs alone', { concu
       { codex: { run: async () => undefined, abort: () => false } },
       async () => {
         assert.deepEqual(await sessionsService.listRunningSessions(), [{
-          sessionId: 'plain-session', provider: 'codex', startedAt: run.startedAt, lastSeq: 0,
+          sessionId: 'plain-session', provider: 'codex', startedAt: run.startedAt, lastSeq: 0, canInterrupt: true,
         }]);
       },
     ));
@@ -398,7 +399,7 @@ test('a CLI turn does not duplicate a session already running a chat run', { con
         async () => {
           const sessions = await sessionsService.listRunningSessions();
           assert.equal(sessions.length, 1, 'the chat run already covers this session');
-          assert.equal(sessions[0].canInterrupt, undefined, 'the interruptible chat run entry wins');
+          assert.equal(sessions[0].canInterrupt, true, 'the interruptible chat run entry wins');
         },
       ),
     );

@@ -38,7 +38,7 @@ type RunningSessionEntry = {
   startedAt: number;
   lastSeq: number;
   background?: true;
-  canInterrupt?: false;
+  canInterrupt?: boolean;
   statusText?: string;
   tasks?: BackgroundTaskSummary[];
 };
@@ -161,7 +161,11 @@ export const sessionsService = {
    * indicators should not attach to chat streams or request replayed messages.
    */
   async listRunningSessions(): Promise<RunningSessionEntry[]> {
-    const entries: RunningSessionEntry[] = chatRunRegistry.listRunningRuns();
+    // Said outright: a client keeps the previous entry's `canInterrupt` when
+    // one leaves it out, so a background or CLI entry seen just before this
+    // turn would leave it unstoppable.
+    const entries: RunningSessionEntry[] = chatRunRegistry.listRunningRuns()
+      .map((run) => ({ ...run, canInterrupt: true }));
     const runningById = new Map(entries.map((entry) => [entry.sessionId, entry]));
 
     for (const provider of providerRegistry.listProviders()) {
