@@ -284,9 +284,16 @@ function runCommand(command: string, args: string[]): Promise<void> {
   });
 }
 
+// `playwright install-deps` shells out to sudo, which fails when CloudCLI runs as a
+// non-root user without passwordless sudo (message wording varies by sudo version).
+function isPrivilegeError(message: string): boolean {
+  return message.includes('sudo')
+    && (message.includes('password') || message.includes('terminal is required'));
+}
+
 function formatInstallError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes('sudo') && message.includes('password')) {
+  if (isPrivilegeError(message)) {
     return 'Installing Chromium system dependencies requires administrator privileges. Run `npx playwright install-deps chromium` on the machine where CloudCLI runs, then try again.';
   }
   return message || 'Failed to install Browser runtime.';
@@ -304,15 +311,27 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
       lastInstallMessage = 'Installing Playwright package...';
       await runCommand(npmCommand, ['install', '--no-save', '--no-package-lock', 'playwright']);
 
+      // System deps need root. Without it, keep going: the OS packages are often
+      // already present and the Chromium download below does not need privileges.
+      let missingPrivileges = false;
       if (process.platform === 'linux') {
         lastInstallMessage = 'Installing Chromium system dependencies...';
-        await runCommand(npmCommand, ['exec', '--', 'playwright', 'install-deps', 'chromium']);
+        try {
+          await runCommand(npmCommand, ['exec', '--', 'playwright', 'install-deps', 'chromium']);
+        } catch (error) {
+          if (!isPrivilegeError(error instanceof Error ? error.message : String(error))) {
+            throw error;
+          }
+          missingPrivileges = true;
+        }
       }
 
       lastInstallMessage = 'Installing Chromium runtime...';
       await runCommand(npmCommand, ['exec', '--', 'playwright', 'install', 'chromium']);
 
-      lastInstallMessage = 'Browser runtime installed.';
+      lastInstallMessage = missingPrivileges
+        ? 'Browser runtime installed. System dependencies could not be installed without administrator privileges; if Chromium fails to start, run `npx playwright install-deps chromium` as root.'
+        : 'Browser runtime installed.';
       return { success: true, message: lastInstallMessage };
     } catch (error) {
       lastInstallMessage = formatInstallError(error);
