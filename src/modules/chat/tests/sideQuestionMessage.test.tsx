@@ -139,6 +139,15 @@ test('an ordinary user row with the same anchor does show them (so the test abov
   assert.ok(screen.queryByText('Side question · not part of the session') === null, 'an ordinary row carries no aside label');
 });
 
+test('the asker\'s bubble is opaque, not the translucent /60 it has on an ordinary row', () => {
+  const { container } = renderRows([question('done'), answer('done', 'It skips the cache.')]);
+
+  const bubble = container.querySelector('.side-question div[dir="auto"]');
+  assert.ok(bubble, 'the question bubble is drawn');
+  const classes = Array.from(bubble?.classList ?? []);
+  assert.ok(!classes.some((name) => name.includes('/60')), `no /60 alpha background, got: ${classes.join(' ')}`);
+});
+
 test('the pair is one aside: a single label and a single dismiss control, both on the question', () => {
   const { container } = renderRows([question('done'), answer('done', 'It skips the cache.')]);
 

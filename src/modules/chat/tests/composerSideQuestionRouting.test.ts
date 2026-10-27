@@ -260,6 +260,75 @@ for (const [name, state] of [
   });
 }
 
+// Option/Alt+Enter asks the side question directly from the textarea, in
+// every state, ahead of the plain-Enter branch that queues or submits.
+const altEnter = () => ({
+  key: 'Enter',
+  altKey: true,
+  shiftKey: false,
+  ctrlKey: false,
+  metaKey: false,
+  preventDefault: () => undefined,
+  nativeEvent: { isComposing: false },
+} as unknown as Parameters<View['result']['current']['handleKeyDown']>[0]);
+
+const plainEnter = () => ({
+  key: 'Enter',
+  altKey: false,
+  shiftKey: false,
+  ctrlKey: false,
+  metaKey: false,
+  preventDefault: () => undefined,
+  nativeEvent: { isComposing: false },
+} as unknown as Parameters<View['result']['current']['handleKeyDown']>[0]);
+
+for (const [name, state] of [
+  ['while a turn is written', { isLoading: true, processingSessions: responding }],
+  ['while only background work runs', { isLoading: false, processingSessions: backgroundOnly }],
+  ['while idle, in a session', { isLoading: false, processingSessions: new Map() as SessionActivityMap }],
+] as const) {
+  test(`Option/Alt+Enter ${name} sends one chat.side_question and does not queue or send a turn`, async () => {
+    const { view, of, types, promptsSeen } = render(state);
+    await act(async () => { view.result.current.setInput('what does this flag do?'); });
+
+    await act(async () => { view.result.current.handleKeyDown(altEnter()); });
+
+    assertOneSideQuestion(of('chat.side_question'), 'what does this flag do?');
+    assert.deepEqual(types(), ['chat.side_question'], 'no chat.send, no queue, nothing stopped');
+    assert.equal(appendQueuedMessage.mock.calls.length, 0, 'not queued');
+    assert.equal(view.result.current.queuedDraft, null);
+    assert.equal(promptsSeen.length, 0, 'no background-work dialog');
+    assert.equal(view.result.current.input, '', 'the composer is cleared');
+  });
+
+  test(`Option/Alt+Enter ${name} without side-question support sends nothing, keeps the input and says why`, async () => {
+    const { view, types, promptsSeen, added } = render({ ...state, supportsSideQuestions: false });
+    await act(async () => { view.result.current.setInput('what does this flag do?'); });
+
+    await act(async () => { view.result.current.handleKeyDown(altEnter()); });
+
+    assert.deepEqual(types(), [], 'no side-question frame, no turn, nothing stopped');
+    assert.equal(appendQueuedMessage.mock.calls.length, 0, 'not queued');
+    assert.equal(view.result.current.queuedDraft, null);
+    assert.equal(promptsSeen.length, 0, 'no background-work dialog');
+    assert.equal(view.result.current.input, 'what does this flag do?', 'the typed text stays');
+    const errors = added.filter((row) => row.type === 'error');
+    assert.equal(errors.length, 1, 'one error row');
+    assert.equal(errors[0]?.content, UNSUPPORTED);
+  });
+}
+
+test('plain Enter while a turn is written still queues, not a side question', async () => {
+  const { view, of, types } = render({ isLoading: true, processingSessions: responding });
+  await act(async () => { view.result.current.setInput('hello'); });
+
+  await act(async () => { view.result.current.handleKeyDown(plainEnter()); });
+
+  assert.equal(appendQueuedMessage.mock.calls.length, 1, 'queued');
+  assert.equal(of('chat.send').length, 0);
+  assert.equal(of('chat.side_question').length, 0);
+});
+
 // The capability gate. A provider that cannot answer side questions (Cursor,
 // or any provider before the capability matrix has loaded) still recognises
 // `/btw`, so the question is never sent as a turn by mistake; it refuses it

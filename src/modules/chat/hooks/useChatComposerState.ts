@@ -1451,7 +1451,13 @@ export function useChatComposerState({
           return;
         }
 
-        if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
+        // Option/Alt+Enter asks a side question in every state (loading,
+        // background, idle), ahead of the ctrl/meta and plain-Enter submit
+        // branches below, which never see altKey set.
+        if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+          event.preventDefault();
+          askSideQuestionAndClear(sessionKey, inputValueRef.current);
+        } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
           event.preventDefault();
           handleSubmit(event);
         } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !sendByCtrlEnter) {
@@ -1461,12 +1467,14 @@ export function useChatComposerState({
       }
     },
     [
+      askSideQuestionAndClear,
       cyclePermissionMode,
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
       handleHistoryKeyDown,
       handleSubmit,
       sendByCtrlEnter,
+      sessionKey,
       showCommandMenu,
       showFileDropdown,
     ],

@@ -1,14 +1,20 @@
 import { useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { SendHorizonal } from 'lucide-react';
+import { ArrowUpIcon, ChevronDownIcon } from 'lucide-react';
 
 import { useComposerMenuAnchor } from '@/modules/chat/hooks/useComposerMenuAnchor';
+import { Button } from '@/shared/ui/Button';
 import {
   ComposerMenuItem,
   ComposerMenuSeparator,
   ComposerMenuSurface,
 } from '@/modules/chat/composer/ComposerMenuPrimitives';
+
+// Same symbol the OS shows on its own menus; no textual word to translate, so
+// this stays out of i18n (unlike the row's label and description).
+const SIDE_QUESTION_SHORTCUT =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌥↵' : 'Alt+↵';
 
 export type ComposerSendMenuState = 'responding' | 'background';
 export type ComposerSendMenuChoice = 'queue' | 'sideQuestion' | 'stop' | 'send';
@@ -57,9 +63,11 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
 
   return (
     <>
-      <button
+      <Button
         ref={triggerRef}
         type="button"
+        variant="default"
+        size="icon"
         onClick={() => {
           updateAnchor();
           setIsOpen((current) => !current);
@@ -68,10 +76,11 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
         aria-expanded={isOpen}
         aria-label={triggerLabel}
         title={triggerLabel}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted"
+        className="relative h-10 w-10 shrink-0 rounded-lg"
       >
-        <SendHorizonal className="h-4 w-4" />
-      </button>
+        <ArrowUpIcon className="h-4 w-4" />
+        <ChevronDownIcon aria-hidden className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5" />
+      </Button>
 
       {isOpen && anchor && createPortal(
         <ComposerMenuSurface anchor={anchor} menuRef={menuRef} ariaLabel={triggerLabel}>
@@ -90,6 +99,11 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
               role="menuitem"
               label={t('sendMenu.sideQuestion.label', { defaultValue: 'Side question' })}
               description={t('sendMenu.sideQuestion.description', { defaultValue: 'Ask on the side now; the session never sees it' })}
+              trailing={
+                <kbd className="hidden rounded border border-border/60 px-1 text-[10px] text-muted-foreground/70 [@media(hover:hover)_and_(pointer:fine)]:inline-block">
+                  {SIDE_QUESTION_SHORTCUT}
+                </kbd>
+              }
               onSelect={() => select('sideQuestion')}
             />
           )}

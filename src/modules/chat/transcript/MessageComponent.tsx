@@ -157,7 +157,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
             <div className="mt-1.5 flex justify-end">
               <div
                 dir="auto"
-                className="max-w-[85%] break-words rounded-2xl rounded-br-md border border-border/60 bg-muted/60 px-3 py-2 font-serif text-sm text-foreground shadow-sm dark:bg-gray-800/60"
+                className="max-w-[85%] break-words rounded-2xl rounded-br-md border border-border bg-muted px-3 py-2 font-serif text-sm text-foreground shadow-sm dark:bg-gray-800"
               >
                 <Markdown breaks className="prose prose-sm max-w-none font-serif dark:prose-invert">
                   {message.content}

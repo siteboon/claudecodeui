@@ -264,7 +264,8 @@ export default function ChatComposer({
   const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
 
   const hasQueuedDraft = Boolean(queuedDraft);
-  const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
+  const hasAnyInput = Boolean(input.trim() || attachedFiles.length > 0);
+  const canQueueDraft = isLoading && hasAnyInput;
   const submitHint = canQueueDraft
     ? hasQueuedDraft
       ? t('input.hintText.appendQueued', { defaultValue: 'Enter to add to the queued message' })
@@ -272,7 +273,10 @@ export default function ChatComposer({
     : sendByCtrlEnter
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');
-  const submitAriaLabel = t('input.send');
+  // With an empty composer during a turn the green button is the one-tap Stop,
+  // so it says so to screen readers as it did before the send menu existed.
+  const submitAriaLabel =
+    isLoading && !hasAnyInput && !isRecording && !isTranscribing ? t('input.stop') : t('input.send');
 
   return (
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
@@ -507,10 +511,14 @@ export default function ChatComposer({
               providerLabel={providerLabel}
             />
 
-            {(isLoading || activity?.background) && !isRecording ? (
+            {(isLoading || activity?.background) && hasAnyInput && !isRecording && !isTranscribing ? (
+              // The caret-trigger menu only replaces the plain button when there is
+              // something to send: an empty composer during a turn keeps the
+              // one-tap ■ Stop below, and an empty composer during background
+              // work keeps the plain disabled ↑, exactly as on `main`.
               <ComposerSendMenu
                 state={isLoading ? 'responding' : 'background'}
-                hasInput={Boolean(input.trim() || attachedFiles.length > 0)}
+                hasInput={hasAnyInput}
                 hasText={Boolean(input.trim())}
                 supportsSideQuestions={supportsSideQuestions}
                 onSelect={(choice) => {
@@ -524,19 +532,28 @@ export default function ChatComposer({
             ) : (
               <PromptInputSubmit
                 onClick={
-                  isRecording
-                    ? (e: MouseEvent<HTMLButtonElement>) => {
-                        e.preventDefault();
-                        voiceStop({ send: true });
-                      }
-                    : undefined
+                  isTranscribing
+                    ? undefined
+                    : isLoading && !isRecording
+                      ? onAbortSession
+                      : isRecording
+                        ? (e: MouseEvent<HTMLButtonElement>) => {
+                            e.preventDefault();
+                            voiceStop({ send: true });
+                          }
+                        : undefined
                 }
                 disabled={
-                  isRecording
-                    ? false
-                    : isTranscribing
-                      ? true
-                      : !input.trim() && attachedFiles.length === 0
+                  // Transcribing shows the same spinner as a running turn, but it
+                  // is not a turn: disable the button so a tap cannot reach
+                  // `onAbortSession` and end an unrelated in-flight turn.
+                  isTranscribing
+                    ? true
+                    : isLoading
+                      ? false
+                      : isRecording
+                        ? false
+                        : !hasAnyInput
                 }
                 aria-label={submitAriaLabel}
                 title={submitAriaLabel}
