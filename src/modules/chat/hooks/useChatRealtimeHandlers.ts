@@ -227,6 +227,9 @@ export function useChatRealtimeHandlers({
         // Sidebar/global events — owned by useProjectsState.
         case 'session_upserted':
         case 'loading_progress':
+        // Owned by useScheduledMessages, which reads the composer banner's
+        // list again. Not a transcript row.
+        case 'scheduled_messages_changed':
           return;
 
         default:
