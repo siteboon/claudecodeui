@@ -92,6 +92,13 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       // placeholders so the SQL (not a post-query JS filter) is what keeps a
       // registered fork off the row `synchronizeFile`'s LIMIT 1 picks.
       const forkIdsClause = this.registeredForkIdsClause();
+      // Older opencode's `session` table has no `agent` column at all; the
+      // registry filter below still covers every fork, so this one is an
+      // extra layer where the column exists and simply absent where it
+      // doesn't, rather than a query that throws and drops every session.
+      const agentFilterClause = this.hasAgentColumn(db)
+        ? `AND (s.agent IS NULL OR s.agent != '${SIDE_QUESTION_AGENT}')`
+        : '';
       const params = [
         sinceMillis,
         sinceMillis,
@@ -111,7 +118,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
         WHERE s.time_archived IS NULL
           AND s.parent_id IS NULL
           AND (? IS NULL OR COALESCE(s.time_updated, s.time_created, 0) >= ?)
-          AND (s.agent IS NULL OR s.agent != '${SIDE_QUESTION_AGENT}')
+          ${agentFilterClause}
           ${forkIdsClause.sql}
         ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC, s.id DESC
         ${limitClause}
@@ -139,6 +146,12 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     } finally {
       db.close();
     }
+  }
+
+  /** Whether this opened `opencode.db` has a `session.agent` column (absent in older opencode). */
+  private hasAgentColumn(db: Database.Database): boolean {
+    const columns = db.prepare('PRAGMA table_info(session)').all() as { name: string }[];
+    return columns.some((column) => column.name === 'agent');
   }
 
   /** `AND s.id NOT IN (...)` for the registry's current ids, or no clause when it is empty. */
