@@ -199,6 +199,22 @@ test('an edit without an anchor is refused', async () => {
   });
 });
 
+test('new turns are refused with a clear protocol error while the server drains', async () => {
+  await withGateway('claude', async ({ socket, runs }) => {
+    assert.equal(await chatRunRegistry.drain(1_000), true);
+
+    socket.emit('message', JSON.stringify({
+      type: 'chat.send',
+      sessionId: SESSION_ID,
+      content: 'do not start this turn',
+    }));
+    await settle();
+
+    assert.equal(runs.length, 0);
+    assert.equal(socket.frames.at(-1)?.code, 'SERVER_DRAINING');
+  });
+});
+
 test('an anchor the transcript does not hold is refused', async () => {
   await withGateway('claude', async ({ socket, runs }) => {
     socket.emit('message', JSON.stringify({
