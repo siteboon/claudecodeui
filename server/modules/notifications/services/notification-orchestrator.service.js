@@ -177,6 +177,45 @@ function buildNotificationPayload(event) {
   };
 }
 
+// A push endpoint URL embeds the device's push token, so logs name only its host.
+function describePushService(endpoint) {
+  try {
+    return new URL(endpoint).host;
+  } catch {
+    return 'unknown push service';
+  }
+}
+
+const MAX_LOGGED_PUSH_RESPONSE_LENGTH = 200;
+
+// Push services explain a rejection in the response body, e.g. Apple's {"reason":"BadJwtToken"}.
+// Network failures have no status code and are described by their error message instead.
+function describePushFailure(reason, endpoint) {
+  const statusCode = reason?.statusCode;
+  const detail = statusCode
+    ? `HTTP ${statusCode} ${typeof reason.body === 'string' ? reason.body : ''}`
+    : normalizeErrorMessage(reason);
+  const redactedDetail = endpoint ? detail.split(endpoint).join('<endpoint>') : detail;
+
+  // The body comes from whichever host the subscription names, so line breaks, terminal escapes
+  // and invisible format characters (such as U+202E, which reorders the rest of a line) are
+  // flattened to keep it on one plain log line.
+  const flattenedDetail = redactedDetail.replace(/[\s\p{Cc}\p{Cf}]+/gu, ' ').trim();
+  // Array.from() splits by code point, so the cut never leaves half of a surrogate pair. A code
+  // point takes at most two UTF-16 units, so slicing to twice the limit first only keeps a huge
+  // body cheap and does not change the result.
+  return Array.from(flattenedDetail.slice(0, 2 * MAX_LOGGED_PUSH_RESPONSE_LENGTH))
+    .slice(0, MAX_LOGGED_PUSH_RESPONSE_LENGTH)
+    .join('');
+}
+
+// web-push sets no timeout of its own, so a push service that never answers would keep the whole
+// batch from settling: no failure would be logged and no expired subscription removed. Its
+// `timeout` option is an idle-socket timeout, not a limit on the whole request: a request whose
+// socket stays silent this long fails as "Socket timeout" (a stalled TLS handshake took about
+// twice as long when measured), while a service that keeps sending bytes is not cut off.
+const WEB_PUSH_REQUEST_TIMEOUT_MS = 30000;
+
 function sendWebPushPayload(userId, payload) {
   const subscriptions = pushSubscriptionsDb.getSubscriptions(userId);
   if (!subscriptions.length) return Promise.resolve();
@@ -192,16 +231,23 @@ function sendWebPushPayload(userId, payload) {
             auth: sub.keys_auth
           }
         },
-        serializedPayload
+        serializedPayload,
+        { timeout: WEB_PUSH_REQUEST_TIMEOUT_MS }
       )
     )
   ).then((results) => {
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
+        const { endpoint } = subscriptions[index];
         const statusCode = result.reason?.statusCode;
+        // 404/410: the push service no longer knows this subscription, so forget it quietly.
         if (statusCode === 410 || statusCode === 404) {
-          pushSubscriptionsDb.removeSubscription(subscriptions[index].endpoint);
+          pushSubscriptionsDb.removeSubscription(endpoint);
+          return;
         }
+        console.warn(
+          `[WebPush] Delivery to ${describePushService(endpoint)} failed for user ${userId}: ${describePushFailure(result.reason, endpoint)}`
+        );
       }
     });
   });
