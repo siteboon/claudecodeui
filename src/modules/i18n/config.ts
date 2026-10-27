@@ -60,6 +60,9 @@ import zhSidebar from '@/modules/i18n/locales/zh-CN/sidebar.json';
 import zhChat from '@/modules/i18n/locales/zh-CN/chat.json';
 import zhCodeEditor from '@/modules/i18n/locales/zh-CN/codeEditor.json';
 import zhTasks from '@/modules/i18n/locales/zh-CN/tasks.json';
+// oxlint-disable-next-line importx/order
+import zhGit from '@/modules/i18n/locales/zh-CN/git.json';
+
 import jaCommon from '@/modules/i18n/locales/ja/common.json';
 import jaSettings from '@/modules/i18n/locales/ja/settings.json';
 import jaAuth from '@/modules/i18n/locales/ja/auth.json';
@@ -144,6 +147,8 @@ import zhTWChat from '@/modules/i18n/locales/zh-TW/chat.json';
 import zhTWCodeEditor from '@/modules/i18n/locales/zh-TW/codeEditor.json';
 // oxlint-disable-next-line importx/order
 import zhTWTasks from '@/modules/i18n/locales/zh-TW/tasks.json';
+// oxlint-disable-next-line importx/order
+import zhTWGit from '@/modules/i18n/locales/zh-TW/git.json';
 
 import ptBRCommon from '@/modules/i18n/locales/pt-BR/common.json';
 import ptBRSettings from '@/modules/i18n/locales/pt-BR/settings.json';
@@ -228,6 +233,7 @@ git: enGit,
         chat: zhChat,
         codeEditor: zhCodeEditor,
         tasks: zhTasks,
+        git: zhGit,
       },
       ja: {
         common: jaCommon,
@@ -312,6 +318,7 @@ git: enGit,
         chat: zhTWChat,
         codeEditor: zhTWCodeEditor,
         tasks: zhTWTasks,
+        git: zhTWGit,
       },
       'pt-BR': {
         common: ptBRCommon,
