@@ -181,15 +181,55 @@ test('a name-only save renames the project without touching its folder', async (
   assert.equal(refreshProjects.mock.calls.length, 1);
 });
 
-test('a moved folder refreshes the sidebar even when the name then fails to save', async () => {
-  renameProject.mockResolvedValue({ ok: false, json: async () => ({}) });
-  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+test('a folder-only save leaves the name alone', async () => {
   const { result } = renderController();
 
   act(() => result.current.startEditingProject(PROJECT));
   await act(() => result.current.saveProjectName('a', 'alpha', '/workspace/beta'));
+
+  // Re-sending the name from when the editor opened would overwrite a rename
+  // made elsewhere in the meantime.
+  assert.deepEqual(updateProjectPath.mock.calls, [['a', '/workspace/beta']]);
+  assert.equal(renameProject.mock.calls.length, 0);
+  assert.equal(refreshProjects.mock.calls.length, 1);
+  assert.equal(result.current.activeRename, null);
+});
+
+test('a folder save that cannot reach the server keeps the editor open', async () => {
+  updateProjectPath.mockRejectedValue(new Error('network down'));
+  const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const { result } = renderController();
+
+  act(() => result.current.startEditingProject(PROJECT));
+  await act(() => result.current.saveProjectName('a', 'alpha renamed', '/workspace/beta'));
+  assert.deepEqual(alertSpy.mock.calls, [['messages.updateProjectPathError']]);
   consoleError.mockRestore();
+  alertSpy.mockRestore();
+
+  assert.equal(renameProject.mock.calls.length, 0);
+  assert.equal(refreshProjects.mock.calls.length, 0);
+  assert.ok(result.current.activeRename, 'the folder draft must not be discarded');
+});
+
+test('a moved folder refreshes the sidebar even when the name then fails to save', async () => {
+  renameProject.mockResolvedValue({ ok: false, json: async () => ({}) });
+  const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+  const { result } = renderController();
+
+  act(() => result.current.startEditingProject(PROJECT));
+  await act(() => result.current.saveProjectName('a', 'alpha renamed', '/workspace/beta'));
+  assert.deepEqual(alertSpy.mock.calls, [['messages.updateProjectError']]);
+  alertSpy.mockRestore();
 
   assert.deepEqual(updateProjectPath.mock.calls, [['a', '/workspace/beta']]);
   assert.equal(refreshProjects.mock.calls.length, 1, 'the sidebar must show the new folder');
+  assert.ok(result.current.activeRename, 'the name draft must not be discarded');
+
+  // The retry sends only the name: the folder already moved.
+  renameProject.mockResolvedValue({ ok: true, json: async () => ({}) });
+  await act(() => result.current.saveProjectName('a', 'alpha renamed', '/workspace/beta'));
+  assert.equal(updateProjectPath.mock.calls.length, 1);
+  assert.deepEqual(renameProject.mock.calls.at(-1), ['a', 'alpha renamed']);
+  assert.equal(result.current.activeRename, null);
 });
