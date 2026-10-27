@@ -5,7 +5,6 @@ import { errorMessage } from '@/shared/utils.js';
 import type {
   AnyRecord,
   BackgroundTaskSummary,
-  NormalizedMessage,
   ProviderRuntimeContext,
   SideQuestionOutcome,
   SideQuestionRequest,
@@ -13,13 +12,12 @@ import type {
 } from '@/shared/types.js';
 
 /**
- * Asks a question on the side of a Claude session, on a read-only fork or
- * (when there is no native session to resume) from the session's history.
+ * Asks a question on the side of a Claude session, on a read-only fork of
+ * its native process.
  *
- * Both entry points share the same streaming machinery: a forked/history
- * query with the same read-only tool set, the same three traps worked
- * around (see below), and the same rules for turning the SDK's stream into
- * one `SideQuestionOutcome`.
+ * The streaming machinery below runs that forked query with a read-only tool
+ * set, works around the three traps documented inline, and turns the SDK's
+ * stream into one `SideQuestionOutcome`.
  */
 
 // The CLI/SDK tools a side question is allowed to use: look, never touch.
@@ -31,12 +29,6 @@ const SIDE_QUESTION_SYSTEM_PROMPT_APPEND =
   'This is a side question asked apart from the ongoing conversation, on a read-only '
   + 'copy of it. Do not use any tool that changes anything. Answer briefly, in the '
   + 'language the question was asked in.';
-
-// Starting value for how much of the session's text history the fallback
-// path carries in the prompt, oldest first, trimmed from the oldest end.
-// Not measured: say so here until it is, rather than presenting a guess as
-// a measured number.
-const HISTORY_CHAR_BUDGET = 100_000;
 
 /**
  * The live-tasks note placed above the question in the fork's prompt.
@@ -68,17 +60,6 @@ function buildForkPromptText(question: string, liveTasks: BackgroundTaskSummary[
   return `${buildLiveTasksNote(liveTasks, now)}\n\n${question}`;
 }
 
-/** The session's text messages, oldest first, trimmed from the oldest end to the budget. */
-function buildHistoryTranscript(history: NormalizedMessage[]): string {
-  const lines = history
-    .filter((message) => message.kind === 'text' && (message.role === 'user' || message.role === 'assistant'))
-    .map((message) => `${message.role}: ${message.content}`);
-  const transcript = lines.join('\n');
-  return transcript.length > HISTORY_CHAR_BUDGET
-    ? transcript.slice(transcript.length - HISTORY_CHAR_BUDGET)
-    : transcript;
-}
-
 type ForkExtraOptions = {
   resume?: string;
   forkSession?: true;
@@ -86,9 +67,9 @@ type ForkExtraOptions = {
 };
 
 /**
- * Runs one read-only Claude query (forked or history-based) to completion
- * and turns its stream into a `SideQuestionOutcome`. Never rejects: every
- * failure, thrown or reported, comes back as an `error` outcome.
+ * Runs one read-only, forked Claude query to completion and turns its
+ * stream into a `SideQuestionOutcome`. Never rejects: every failure, thrown
+ * or reported, comes back as an `error` outcome.
  */
 async function runSideQuestionQuery(
   request: SideQuestionRequest,
@@ -242,24 +223,4 @@ export async function askClaudeSideQuestion(
     // pick its own default instead of sending another provider's model id.
     model: request.model || undefined,
   }, createQueryFn);
-}
-
-/**
- * Answers a side question from the session's own text history, for a
- * provider with no native fork capability. Read-only, like the fork path,
- * but never resumes a Claude session and never sends another provider's
- * model id to Claude.
- */
-export async function askClaudeSideQuestionFromHistory(
-  request: SideQuestionRequest,
-  history: NormalizedMessage[],
-  sink: SideQuestionSink,
-  deps: { createQuery?: ProviderRuntimeContext['createQuery'] },
-): Promise<SideQuestionOutcome> {
-  const createQueryFn = deps.createQuery
-    ?? (query as unknown as NonNullable<ProviderRuntimeContext['createQuery']>);
-  const transcript = buildHistoryTranscript(history);
-  const promptText = `${transcript}\n\n${request.question}`;
-
-  return runSideQuestionQuery(request, sink, promptText, {}, createQueryFn);
 }

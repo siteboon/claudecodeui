@@ -228,7 +228,8 @@
     "label": "Side question · not part of the session",
     "pending": "Answering on the side",
     "failed": "The side question failed.",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "unsupported": "This provider cannot answer side questions."
   },
   "sendMenu": {
     "trigger": "Send options",

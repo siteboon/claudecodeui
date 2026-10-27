@@ -307,15 +307,14 @@ export type SideQuestionEvent = {
  *
  * `appSessionId` is the user-facing session being asked about; `providerSessionId`
  * is the provider's own native session id needed for context (or null). `projectPath`
- * is the working directory for read-only tools. `model` is what the client asked for;
- * the history fallback ignores it and uses the provider's default instead.
+ * is the working directory for read-only tools. `model` is what the client asked for.
  */
 export type SideQuestionRequest = {
   appSessionId: string;
   providerSessionId: string | null;
   projectPath: string | null;
   question: string;
-  model: string | null;     // what the client asked for; the history fallback ignores it
+  model: string | null;     // what the client asked for
   signal: AbortSignal;
 };
 
@@ -340,8 +339,9 @@ export type SideQuestionOutcome =
  * Side-question capability of a provider runtime.
  *
  * The service layer calls this method on the runtime to ask a question on the
- * side while a session is active, using either a native fork or history fallback.
- * It never rejects: all failures are returned as error outcomes.
+ * side while a session is active, using whatever path the provider's own
+ * runtime implements. It never rejects: all failures are returned as error
+ * outcomes.
  */
 export type SideQuestionRuntime = {
   askSideQuestion(provider: LLMProvider, request: SideQuestionRequest, sink: SideQuestionSink): Promise<SideQuestionOutcome>;

@@ -23,7 +23,7 @@ export const connectedClients = new Set<RealtimeClientConnection>();
  * payload).
  *
  * The single producer of fan-out broadcasts in this module: the session
- * upsert broadcaster, the `chat.btw` socket handler and the side-questions
+ * upsert broadcaster, the `chat.side_question` socket handler and the side-questions
  * dismiss route all used to walk `connectedClients` themselves with the same
  * loop. Consumed through `@/modules/websocket/index.js` by
  * `session-upsert-broadcast.service.ts` and by the providers module's

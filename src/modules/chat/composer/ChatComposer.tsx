@@ -87,6 +87,8 @@ type ChatComposerProps = {
   onDeleteQueuedDraft: () => void;
   /** Handle send menu choices (queue, side question, send). */
   onSendMenuChoice?: (choice: 'queue' | 'sideQuestion' | 'send') => void;
+  /** False until the capability matrix has loaded, or for a provider it does not list; passed through to the send menu and the background-send dialog so neither offers a side question that would be refused. */
+  supportsSideQuestions?: boolean;
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
   fileErrors: Map<string, string>;
@@ -163,6 +165,7 @@ export default function ChatComposer({
   onEditQueuedDraft,
   onDeleteQueuedDraft,
   onSendMenuChoice,
+  supportsSideQuestions,
   attachedFiles,
   onRemoveAttachment,
   fileErrors,
@@ -314,6 +317,7 @@ export default function ChatComposer({
 
       <BackgroundSendDialog
         prompt={backgroundSendPrompt}
+        supportsSideQuestions={supportsSideQuestions}
         onResolve={onResolveBackgroundSendPrompt}
       />
 
@@ -508,6 +512,7 @@ export default function ChatComposer({
                 state={isLoading ? 'responding' : 'background'}
                 hasInput={Boolean(input.trim() || attachedFiles.length > 0)}
                 hasText={Boolean(input.trim())}
+                supportsSideQuestions={supportsSideQuestions}
                 onSelect={(choice) => {
                   if (choice === 'stop') {
                     onAbortSession();

@@ -52,7 +52,7 @@ type UseChatComposerStateArgs = {
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
-  /** Whether the chat socket is currently open; a BTW ask while it is not would send nothing and leave the optimistic entry pending forever. */
+  /** Whether the chat socket is currently open; a side-question ask while it is not would send nothing and leave the optimistic entry pending forever. */
   isConnected?: boolean;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
@@ -70,6 +70,8 @@ type UseChatComposerStateArgs = {
   addMessage: (msg: ChatMessage) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
+  /** From the capability matrix, exactly like `supportsSessionForking`; false until it has loaded. Gates the `/btw` branch. */
+  supportsSideQuestions?: boolean;
 };
 
 type MentionableFile = {
@@ -219,6 +221,7 @@ export function useChatComposerState({
   tokenBudget,
   sendMessage,
   isConnected = true,
+  supportsSideQuestions = false,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -744,7 +747,7 @@ export function useChatComposerState({
   // A side question never touches the session: on a successful ask, the
   // typed text is cleared the same way a sent message is, without the parts
   // (queued draft, session processing) that belong only to an actual turn.
-  // BTW cannot carry attachments, so they are left untouched — unlike a real
+  // A side question cannot carry attachments, so they are left untouched — unlike a real
   // send, which takes them. Called only when `askSideQuestion` returned
   // `true`; a refusal (no connection) leaves the text in place too, so the
   // user does not lose what they typed.
@@ -768,11 +771,19 @@ export function useChatComposerState({
   // actually ends that branch either way.
   const askSideQuestionAndClear = useCallback(
     (sessionId: string | null, text: string) => {
+      if (!supportsSideQuestions) {
+        addMessage({
+          type: 'error',
+          content: t('sideQuestion.unsupported'),
+          timestamp: Date.now(),
+        });
+        return;
+      }
       if (askSideQuestion(sessionId, text, { model: currentProviderModel }, isConnected)) {
         clearComposerAfterSideQuestion();
       }
     },
-    [askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected],
+    [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, supportsSideQuestions],
   );
 
   // Persist a message to send "when this finishes" and show it as the queued

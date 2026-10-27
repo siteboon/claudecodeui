@@ -3,7 +3,11 @@ import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import readline from 'node:readline';
 
-import { AppError } from '@/shared/utils.js';
+import {
+  AppError,
+  SIDE_CONVERSATION_BOUNDARY_PROMPT,
+  SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+} from '@/shared/utils.js';
 
 /**
  * Minimal JSON-RPC client for `codex app-server`.
@@ -24,11 +28,32 @@ import { AppError } from '@/shared/utils.js';
 /** How long a single request may take before the child is killed. */
 const REQUEST_TIMEOUT_MS = 30_000;
 
+/**
+ * How long a side-question turn may run before it is given up on. Not
+ * measured like `REQUEST_TIMEOUT_MS`: a side question is a model turn, not a
+ * handshake request, and can legitimately run for minutes on a hard
+ * question. 5 minutes is a generous ceiling against a turn that never sends
+ * `turn/completed` (a hung child, a provider bug) rather than a tuned value.
+ */
+const SIDE_QUESTION_TURN_TIMEOUT_MS = 5 * 60_000;
+
 type JsonRpcResponse = {
   id?: number;
   result?: unknown;
   error?: { code?: number; message?: string };
 };
+
+/** A line from the app-server: a reply to us, a notification, or a server request. */
+type JsonRpcLine = {
+  id?: number;
+  method?: string;
+  params?: unknown;
+  result?: unknown;
+  error?: { code?: number; message?: string };
+};
+
+/** Handler for a notification the app-server sent us (never a reply). */
+type NotificationHandler = (method: string, params: unknown) => void;
 
 /**
  * One fork of a Codex thread.
@@ -43,25 +68,6 @@ export type CodexThreadFork = {
 };
 
 /**
- * Resolves the `codex` launcher shipped in node_modules.
- *
- * Deliberately not the `codex` on PATH: a machine can have a second, older
- * install, and the protocol this speaks is only guaranteed against the
- * version this package depends on.
- */
-function resolveCodexLauncher(): string {
-  const require_ = createRequire(import.meta.url);
-  try {
-    return require_.resolve('@openai/codex/bin/codex.js');
-  } catch {
-    throw new AppError('The Codex CLI package is not installed, so Codex conversations cannot be branched.', {
-      code: 'CODEX_APP_SERVER_UNAVAILABLE',
-      statusCode: 501,
-    });
-  }
-}
-
-/**
  * Runs one exchange against a freshly spawned `codex app-server`.
  *
  * A process per operation rather than a pooled long-lived one: the handshake
@@ -71,9 +77,16 @@ function resolveCodexLauncher(): string {
  * the model turn that follows.
  */
 async function withAppServer<T>(
-  run: (call: (method: string, params: unknown) => Promise<unknown>) => Promise<T>,
+  run: (helpers: {
+    call: (method: string, params: unknown) => Promise<unknown>;
+    /** Registers a handler for every notification (no `id`) the app-server sends. Returns a function that removes it. */
+    onNotification: (handler: NotificationHandler) => () => void;
+  }) => Promise<T>,
 ): Promise<T> {
-  const launcher = resolveCodexLauncher();
+  // Resolved through the exported object, not a module-local function, so
+  // tests can replace `codexAppServer.resolveLauncher` with a fake app-server
+  // script the same way they already replace `forkThread`.
+  const launcher = codexAppServer.resolveLauncher();
   const child = spawn(process.execPath, [launcher, 'app-server'], {
     env: process.env,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -89,21 +102,50 @@ async function withAppServer<T>(
 
   let nextRequestId = 1;
   const pending = new Map<number, (response: JsonRpcResponse) => void>();
+  const notificationListeners = new Set<NotificationHandler>();
   let exitReason: string | null = null;
+
+  const onNotification = (handler: NotificationHandler): (() => void) => {
+    notificationListeners.add(handler);
+    return () => notificationListeners.delete(handler);
+  };
 
   const reader = readline.createInterface({ input: child.stdout });
   reader.on('line', (line) => {
     if (!line.trim()) {
       return;
     }
-    let message: JsonRpcResponse;
+    let message: JsonRpcLine;
     try {
-      message = JSON.parse(line) as JsonRpcResponse;
+      message = JSON.parse(line) as JsonRpcLine;
     } catch {
-      // Server-to-client notifications and any non-JSON banner are not
-      // replies to anything this client asked for.
+      // Any non-JSON banner is not a reply to anything this client asked for.
       return;
     }
+
+    // A line with `method` is never a reply, even when its `id` happens to
+    // match one of our own pending requests (the app-server reuses our
+    // `turn/start` id when it turns around and asks *us* something).
+    if (typeof message.method === 'string') {
+      if (typeof message.id === 'number') {
+        // A server request (`item/tool/requestUserInput`,
+        // `mcpServer/elicitation/request`, `item/tool/call`, …) that
+        // `approvalPolicy: 'never'` does not suppress. A side question has no
+        // one to answer it, so it is rejected at once rather than left
+        // pending — an unanswered one stalls the turn that is waiting on it.
+        child.stdin?.write(`${JSON.stringify({
+          jsonrpc: '2.0',
+          id: message.id,
+          error: { code: -32601, message: 'Side questions do not support interactive requests.' },
+        })}\n`);
+        return;
+      }
+      for (const handler of notificationListeners) {
+        handler(message.method, message.params);
+      }
+      return;
+    }
+
     if (typeof message.id !== 'number') {
       return;
     }
@@ -176,7 +218,7 @@ async function withAppServer<T>(
     });
     child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'initialized', params: {} })}\n`);
 
-    return await run(call);
+    return await run({ call, onNotification });
   } catch (error) {
     if (error instanceof AppError && exitReason) {
       throw new AppError(`${error.message}${stderr ? ` — ${stderr.trim().split('\n').slice(-1)[0]}` : ''}`, {
@@ -192,6 +234,27 @@ async function withAppServer<T>(
 }
 
 export const codexAppServer = {
+  /**
+   * Resolves the `codex` launcher shipped in node_modules.
+   *
+   * Deliberately not the `codex` on PATH: a machine can have a second, older
+   * install, and the protocol this speaks is only guaranteed against the
+   * version this package depends on. A property on the exported object
+   * rather than a module function so tests can swap in a fake app-server
+   * script, the same seam `forkThread` already uses.
+   */
+  resolveLauncher(): string {
+    const require_ = createRequire(import.meta.url);
+    try {
+      return require_.resolve('@openai/codex/bin/codex.js');
+    } catch {
+      throw new AppError('The Codex CLI package is not installed, so Codex conversations cannot be branched.', {
+        code: 'CODEX_APP_SERVER_UNAVAILABLE',
+        statusCode: 501,
+      });
+    }
+  },
+
   /**
    * Copies a thread into a new one that ends at `lastTurnId`, or copies the
    * whole thread when it is omitted.
@@ -209,7 +272,7 @@ export const codexAppServer = {
     lastTurnId?: string;
     cwd: string;
   }): Promise<CodexThreadFork> {
-    return withAppServer(async (call) => {
+    return withAppServer(async ({ call }) => {
       const result = await call('thread/fork', {
         threadId: input.threadId,
         ...(input.lastTurnId ? { lastTurnId: input.lastTurnId } : {}),
@@ -238,6 +301,116 @@ export const codexAppServer = {
       }
 
       return { threadId, path };
+    });
+  },
+
+  /**
+   * Asks one question on an ephemeral, read-only fork of `threadId` and
+   * resolves the concatenated answer. Used by `codexRuntime.askSideQuestion`
+   * (`codex-runtime.provider.ts`) to answer a side question without touching
+   * the parent thread.
+   *
+   * `ephemeral: true` and `excludeTurns: true` keep the fork off disk and off
+   * the parent's turn list; `sandbox: 'read-only'` and `approvalPolicy:
+   * 'never'` keep it from mutating anything while it has no one to approve a
+   * request. The turn itself is the boundary prompt followed by the question,
+   * exactly as Codex's own side-conversation support sends it.
+   */
+  async askSideQuestion(
+    input: { threadId: string; cwd: string; model: string; question: string; signal: AbortSignal },
+    onDelta: (text: string) => void,
+  ): Promise<string> {
+    return withAppServer(async ({ call, onNotification }) => {
+      const forkResult = await call('thread/fork', {
+        threadId: input.threadId,
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        ...(input.model ? { model: input.model } : {}),
+        ephemeral: true,
+        sandbox: 'read-only',
+        approvalPolicy: 'never',
+        developerInstructions: SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+        excludeTurns: true,
+      }) as { thread?: { id?: unknown } } | undefined;
+
+      const forkThreadId = typeof forkResult?.thread?.id === 'string' ? forkResult.thread.id : '';
+      if (!forkThreadId) {
+        throw new AppError('Codex reported a side-question fork without a thread id.', {
+          code: 'FORK_FAILED',
+          statusCode: 502,
+        });
+      }
+
+      return new Promise<string>((resolve, reject) => {
+        let text = '';
+        let settled = false;
+
+        const timer = setTimeout(() => {
+          settle(() => reject(new AppError(
+            `Codex side question did not complete within ${SIDE_QUESTION_TURN_TIMEOUT_MS}ms.`,
+            { code: 'CODEX_SIDE_QUESTION_TIMEOUT', statusCode: 504 },
+          )));
+        }, SIDE_QUESTION_TURN_TIMEOUT_MS);
+
+        const onAbort = () => {
+          settle(() => reject(new AppError('The side question was aborted.', {
+            code: 'CODEX_SIDE_QUESTION_ABORTED',
+            statusCode: 499,
+          })));
+        };
+        input.signal.addEventListener('abort', onAbort);
+
+        const removeListener = onNotification((method, params) => {
+          const notificationParams = params as { threadId?: unknown; delta?: unknown; turn?: { status?: unknown; error?: { message?: unknown } } } | undefined;
+          // Another thread's deltas (e.g. the one this fork was copied from)
+          // arrive on the same connection; only this fork's own notifications
+          // belong to this question.
+          if (notificationParams?.threadId !== forkThreadId) {
+            return;
+          }
+
+          if (method === 'item/agentMessage/delta') {
+            const delta = typeof notificationParams.delta === 'string' ? notificationParams.delta : '';
+            if (delta) {
+              text += delta;
+              onDelta(delta);
+            }
+            return;
+          }
+
+          if (method === 'turn/completed') {
+            const status = notificationParams.turn?.status;
+            if (status === 'completed') {
+              settle(() => resolve(text));
+              return;
+            }
+            const message = typeof notificationParams.turn?.error?.message === 'string'
+              ? notificationParams.turn.error.message
+              : `Codex side-question turn ${String(status)}.`;
+            settle(() => reject(new AppError(message, { code: 'CODEX_SIDE_QUESTION_FAILED', statusCode: 502 })));
+          }
+        });
+
+        function settle(action: () => void) {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timer);
+          input.signal.removeEventListener('abort', onAbort);
+          removeListener();
+          action();
+        }
+
+        call('turn/start', {
+          threadId: forkThreadId,
+          input: [
+            { type: 'text', text: SIDE_CONVERSATION_BOUNDARY_PROMPT, text_elements: [] },
+            { type: 'text', text: input.question, text_elements: [] },
+          ],
+        }).catch((error) => {
+          settle(() => reject(error));
+        });
+      });
     });
   },
 };

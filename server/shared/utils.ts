@@ -1426,7 +1426,7 @@ export function findApplicationRoot(startDirectory: string): string {
 // ---------------------------
 //----------------- SIDE-QUESTION ID VALIDATION ------------
 /**
- * Shape a `chat.btw` side-question id must satisfy end to end: the websocket
+ * Shape a `chat.side_question` side-question id must satisfy end to end: the websocket
  * frame that creates one and the route that dismisses it both check against
  * this same pattern, so a dismiss can target any id the frame was allowed to
  * create.

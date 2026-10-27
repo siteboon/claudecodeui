@@ -1,4 +1,5 @@
 import { broadcastToConnectedClients } from '@/modules/websocket/index.js';
+
 import type {
   LLMProvider,
   SideQuestion,
@@ -16,7 +17,7 @@ type SideQuestionsServiceDependencies = {
   maxPerSession?: number;
 };
 
-/** What the websocket handler supplies when a `chat.btw` frame is accepted. */
+/** What the websocket handler supplies when a `chat.side_question` frame is accepted. */
 type AskInput = {
   sessionId: string;
   provider: LLMProvider;
@@ -49,7 +50,7 @@ function broadcastSideQuestionEvent(event: SideQuestionEvent): void {
  *
  * `ask` is never tied to a socket — a closed tab does not abort the question
  * it started, only an explicit `dismiss` does. Used by the websocket module's
- * `chat.btw` handler and the provider routes' side-question endpoints.
+ * `chat.side_question` handler and the provider routes' side-question endpoints.
  *
  * State is the in-memory store, never a table: a CloudCLI restart drops every
  * question, so a new service instance starts empty and nothing can be left

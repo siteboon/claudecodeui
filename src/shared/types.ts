@@ -494,9 +494,9 @@ type QuestionOption = {
 
 // ---------------------------
 
-//----------------- BTW SIDE QUESTIONS ------------
+//----------------- SIDE QUESTIONS ------------
 
-/** Where a BTW side question stands: `running` while the fork is still answering, `done` once it finished, `error` if the fork failed or the question was refused. */
+/** Where a side question stands: `running` while the fork is still answering, `done` once it finished, `error` if the fork failed or the question was refused. */
 export type SideQuestionStatus = 'running' | 'done' | 'error';
 
 /** A side question asked beside a session's own transcript — answered by a fork of the session's provider that never joins the session itself. Same shape on client and server. */
@@ -825,7 +825,7 @@ export type QueuedDraft = {
   options?: QueuedSendOptions;
 };
 
-/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, ask a BTW side question instead, or do nothing. */
+/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, ask a side question instead, or do nothing. */
 export type BackgroundSendChoice = 'send' | 'queue' | 'sideQuestion' | 'cancel';
 
 /** An open background-work send prompt, listing the session's own background tasks as display strings. */

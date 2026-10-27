@@ -294,7 +294,8 @@
     "label": "Nebenfrage · gehört nicht zur Sitzung",
     "pending": "Wird nebenbei beantwortet",
     "failed": "Die Nebenfrage ist fehlgeschlagen.",
-    "dismiss": "Entfernen"
+    "dismiss": "Entfernen",
+    "unsupported": "Dieser Anbieter kann keine Nebenfragen beantworten."
   },
   "sendMenu": {
     "trigger": "Sendeoptionen",

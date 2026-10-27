@@ -940,7 +940,7 @@ router.delete(
     const sessionId = parseSessionId(req.params.sessionId);
     const sideQuestionId = parseSideQuestionId(req.params.sideQuestionId);
     // `dismiss` broadcasts the `dismissed` event itself, through the same
-    // connected-clients fan-out the `chat.btw` handler uses.
+    // connected-clients fan-out the `chat.side_question` handler uses.
     const deleted = sideQuestionsService.dismiss(sessionId, sideQuestionId);
     if (!deleted) {
       throw new AppError('Side question not found.', {

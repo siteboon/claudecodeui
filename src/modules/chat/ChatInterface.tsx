@@ -124,6 +124,7 @@ function ChatInterface({
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
+    supportsSideQuestions,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -264,6 +265,7 @@ function ChatInterface({
     setIsUserScrolledUp,
     setPendingPermissionRequests,
     resolvePermissionModeForProvider,
+    supportsSideQuestions,
   });
 
   // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
@@ -608,6 +610,7 @@ function ChatInterface({
           placeholder={t('input.placeholder', { provider: selectedProviderLabel })}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
+          supportsSideQuestions={supportsSideQuestions}
         />
         </div>
       </div>

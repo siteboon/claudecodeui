@@ -4,6 +4,7 @@ import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
+  providerCapabilitiesService,
   providerModelsService,
   sessionsService,
   sideQuestionsService,
@@ -313,9 +314,9 @@ async function dispatchRun(
 }
 
 /**
- * Reports a `chat.btw` refusal to the asking socket only, in the same `kind`
- * other side-question events use, so the client does not need a second
- * error shape for "this side question never started".
+ * Reports a `chat.side_question` refusal to the asking socket only, in the
+ * same `kind` other side-question events use, so the client does not need a
+ * second error shape for "this side question never started".
  *
  * `sideQuestion` carries the existing row on a duplicate id, so the asker
  * upserts its real state instead of marking a good answer failed.
@@ -340,16 +341,16 @@ function sendSideQuestionError(
 }
 
 /**
- * Handles `chat.btw`: asks a question on the side while a turn runs, or while
- * only background work runs. Unlike `chat.send`, it never calls
- * `chatRunRegistry.startRun`, so it never competes with (or waits behind) the
- * session's main turn.
+ * Handles `chat.side_question`: asks a question on the side while a turn
+ * runs, or while only background work runs. Unlike `chat.send`, it never
+ * calls `chatRunRegistry.startRun`, so it never competes with (or waits
+ * behind) the session's main turn.
  *
  * The provider-native session id and project path come from the session row,
  * never from the client; only the question, its id and the model come from
  * the frame.
  */
-function handleChatBtw(
+function handleChatSideQuestion(
   ws: WebSocket,
   data: AnyRecord,
   dependencies: ChatWebSocketDependencies,
@@ -358,13 +359,13 @@ function handleChatBtw(
   const idLooksValid = SIDE_QUESTION_ID_PATTERN.test(sideQuestionId);
   const rawSessionId = typeof data.sessionId === 'string' ? data.sessionId.trim() : '';
 
-  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.btw');
+  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.side_question');
   if (!resolved) {
     // resolveSendTarget already sent its own protocol_error; a valid-looking
     // id additionally gets the side-question-shaped refusal the client reads
     // to clear a pending pair it drew optimistically.
     if (idLooksValid) {
-      sendSideQuestionError(ws, rawSessionId, sideQuestionId, 'chat.btw could not be started for that session.');
+      sendSideQuestionError(ws, rawSessionId, sideQuestionId, 'chat.side_question could not be started for that session.');
     }
     return;
   }
@@ -376,9 +377,14 @@ function handleChatBtw(
     return;
   }
 
+  if (!providerCapabilitiesService.getProviderCapabilities(provider).supportsSideQuestions) {
+    sendSideQuestionError(ws, sessionId, sideQuestionId, `Provider "${provider}" has no side questions.`);
+    return;
+  }
+
   const question = typeof data.question === 'string' ? data.question.trim() : '';
   if (!question) {
-    sendSideQuestionError(ws, sessionId, sideQuestionId, 'chat.btw requires a non-empty question.');
+    sendSideQuestionError(ws, sessionId, sideQuestionId, 'chat.side_question requires a non-empty question.');
     return;
   }
 
@@ -407,7 +413,7 @@ function handleChatBtw(
   // but a DB error inside it (create/appendAnswer/finish/getById) still
   // rejects the promise; without this `.catch` that is an unhandled
   // rejection, and Node 26 exits the whole process on one of those — every
-  // session on the server would go down for one bad `chat.btw` frame.
+  // session on the server would go down for one bad `chat.side_question` frame.
   sideQuestionsService
     .ask(
       {
@@ -423,7 +429,7 @@ function handleChatBtw(
     )
     .catch((error: unknown) => {
       console.error('[Chat] side question "ask" rejected unexpectedly', { sessionId, sideQuestionId, error });
-      sendSideQuestionError(ws, sessionId, sideQuestionId, 'chat.btw failed unexpectedly.');
+      sendSideQuestionError(ws, sessionId, sideQuestionId, 'chat.side_question failed unexpectedly.');
     });
 }
 
@@ -701,7 +707,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *
  * Inbound protocol (client to server):
  * - `chat.send`                { sessionId, content, options? }
- * - `chat.btw`                 { sessionId, sideQuestionId, question, options?: { model? } }
+ * - `chat.side_question`       { sessionId, sideQuestionId, question, options?: { model? } }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
@@ -804,8 +810,8 @@ export function handleChatConnection(
         case 'chat.send':
           await handleChatSend(ws, userId, data, dependencies);
           return;
-        case 'chat.btw':
-          handleChatBtw(ws, data, dependencies);
+        case 'chat.side_question':
+          handleChatSideQuestion(ws, data, dependencies);
           return;
         case 'chat.abort':
           await handleChatAbort(ws, data, dependencies);
