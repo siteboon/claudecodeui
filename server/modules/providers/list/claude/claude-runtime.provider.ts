@@ -1072,6 +1072,9 @@ async function queryClaudeSDK(
   // stream exists; the finally block calls it no matter how the run ends.
   let releasePromptStream: () => void = () => {};
   let idleReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+  // Ends a hold at the hard ceiling even while the work keeps reporting,
+  // which resets the silence countdown every time.
+  let hardCeilingTimer: ReturnType<typeof setTimeout> | null = null;
   // The client is told the turn is over as soon as `result` lands, even though
   // the process lingers, so the UI never waits out the idle hold.
   let turnCompleteSent = false;
@@ -1452,7 +1455,21 @@ async function queryClaudeSDK(
         sawTaskEventThisTurn = false;
         if (holdForTurn) {
           if (!heldForBackgroundWork) {
-            holdStartedAt = Date.now();
+            const startedAt = Date.now();
+            holdStartedAt = startedAt;
+            if (hardCeilingTimer) {
+              clearTimeout(hardCeilingTimer);
+              hardCeilingTimer = null;
+            }
+            if (CLI_BG_HARD_CEILING_MS > 0) {
+              hardCeilingTimer = setTimeout(() => {
+                hardCeilingTimer = null;
+                if (heldForBackgroundWork && holdStartedAt === startedAt) {
+                  releasePromptStream();
+                }
+              }, CLI_BG_HARD_CEILING_MS);
+              hardCeilingTimer.unref?.();
+            }
           }
           heldForBackgroundWork = true;
           scheduleRelease();
@@ -1546,6 +1563,10 @@ async function queryClaudeSDK(
     if (idleReleaseTimer) {
       clearTimeout(idleReleaseTimer);
       idleReleaseTimer = null;
+    }
+    if (hardCeilingTimer) {
+      clearTimeout(hardCeilingTimer);
+      hardCeilingTimer = null;
     }
     releasePromptStream();
   }
