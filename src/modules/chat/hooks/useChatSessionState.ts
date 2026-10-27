@@ -10,6 +10,7 @@ import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransfor
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { findSearchTargetIndex, resolveSearchWindowSize } from '@/modules/chat/utils/searchTargetLocator';
 import { readSelectedProvider } from '@/shared/selectedProvider';
+import { toServerIso } from '@/shared/serverClock';
 import type { SearchTarget } from '@/modules/chat/utils/searchTargetLocator';
 
 const INITIAL_VISIBLE_MESSAGES = 100;
@@ -140,10 +141,15 @@ function chatMessageToNormalized(
   provider: LLMProvider,
 ): NormalizedMessage | null {
   const id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // Locally created rows are stamped by the browser but sorted and deduped
+  // against transcript rows stamped by the machine running the provider CLI.
+  // Correcting onto the server timeline here is what keeps a skewed clock
+  // from leaving a second user bubble (#1195). An already-formatted string
+  // came from elsewhere and is left alone.
   const ts = msg.timestamp instanceof Date
-    ? msg.timestamp.toISOString()
+    ? toServerIso(msg.timestamp)
     : typeof msg.timestamp === 'number'
-      ? new Date(msg.timestamp).toISOString()
+      ? toServerIso(msg.timestamp)
       : String(msg.timestamp);
   const base = { id, sessionId, timestamp: ts, provider };
 
