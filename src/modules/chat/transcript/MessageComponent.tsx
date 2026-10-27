@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranchIcon, PencilIcon, XIcon } from 'lucide-react';
+import { Bot, GitBranchIcon, PencilIcon, XIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
@@ -44,7 +44,7 @@ type MessageComponentProps = {
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
-/** Used by MessageComponent's side-question row, for both its question and answer form. */
+/** Used by MessageComponent's side-question header, to dismiss the whole question/answer pair. */
 function SideQuestionDismissButton({ label, onDismiss }: { label: string; onDismiss: () => void }) {
   return (
     <button
@@ -117,47 +117,55 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
   }
 
   if (message.btw) {
-    // A side question is drawn in place, as a tinted aside rather than the
-    // ordinary user/assistant layout: it never had edit, fork or grouping
-    // affordances, because the session itself never saw it.
+    // A side question is one aside drawn as two rows: the question row is its
+    // top half, the answer row its bottom half, joined by the subagent rail
+    // and tint (the pane drops the gap between them). Who said what is told
+    // apart the way the session's own turns are: the asker's bubble on the
+    // right, the agent's plain text on the left. It never had edit, fork or
+    // grouping affordances, because the session itself never saw it.
     const isAnswerRow = message.type === 'assistant';
     const isPendingAnswer = isAnswerRow && message.btw.status === 'running' && !String(message.content || '').trim();
+    const railClassName = 'border-l-2 border-l-purple-500 bg-purple-500/5 px-3 dark:border-l-purple-400 dark:bg-purple-400/10';
     return (
       <div
         ref={messageRef}
         data-message-timestamp={message.timestamp || undefined}
         className="chat-message btw-side-question w-full px-3 sm:px-0"
       >
-        <div className="w-full rounded-lg border-l-2 border-primary/60 bg-primary/5 px-3 py-2 dark:bg-primary/10">
-          {!isAnswerRow && (
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                {t('sideQuestion.label')}
-              </span>
+        {isAnswerRow ? (
+          <div className={`${railClassName} rounded-b-lg pb-2 pt-1.5`}>
+            <div dir="auto" className="text-sm">
+              {isPendingAnswer ? (
+                <Shimmer>{t('sideQuestion.pending')}</Shimmer>
+              ) : (
+                <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
+                  {formattedMessageContent}
+                </Markdown>
+              )}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">{formattedTime}</div>
+          </div>
+        ) : (
+          <div className={`${railClassName} rounded-t-lg pb-1.5 pt-2`}>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Bot className="h-3.5 w-3.5 flex-shrink-0 text-purple-500 dark:text-purple-400" />
+              <span className="min-w-0 flex-1 truncate">{t('sideQuestion.label')}</span>
               {!isExporting && (
                 <SideQuestionDismissButton label={t('sideQuestion.dismiss')} onDismiss={handleDismissSideQuestion} />
               )}
             </div>
-          )}
-          <div dir="auto" className="text-sm text-gray-700 dark:text-gray-300">
-            {isPendingAnswer ? (
-              <Shimmer>{t('sideQuestion.pending')}</Shimmer>
-            ) : (
-              <Markdown
-                breaks
-                className="prose prose-sm max-w-none font-serif dark:prose-invert"
+            <div className="mt-1.5 flex justify-end">
+              <div
+                dir="auto"
+                className="max-w-[85%] break-words rounded-2xl rounded-br-md border border-border/60 bg-muted/60 px-3 py-2 font-serif text-sm text-foreground shadow-sm dark:bg-gray-800/60"
               >
-                {formattedMessageContent}
-              </Markdown>
-            )}
+                <Markdown breaks className="prose prose-sm max-w-none font-serif dark:prose-invert">
+                  {message.content}
+                </Markdown>
+              </div>
+            </div>
           </div>
-          <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>{formattedTime}</span>
-            {isAnswerRow && !isExporting && (
-              <SideQuestionDismissButton label={t('sideQuestion.dismiss')} onDismiss={handleDismissSideQuestion} />
-            )}
-          </div>
-        </div>
+        )}
       </div>
     );
   }

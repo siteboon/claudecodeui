@@ -139,6 +139,16 @@ test('an ordinary user row with the same anchor does show them (so the test abov
   assert.ok(screen.queryByText('BTW · not part of the session') === null, 'an ordinary row carries no aside label');
 });
 
+test('the pair is one aside: a single label and a single dismiss control, both on the question', () => {
+  const { container } = renderRows([question('done'), answer('done', 'It skips the cache.')]);
+
+  assert.equal(screen.getAllByText('BTW · not part of the session').length, 1, 'one label for the pair');
+  assert.equal(screen.getAllByRole('button', { name: 'Dismiss' }).length, 1, 'one dismiss control for the pair');
+  const rows = container.querySelectorAll('.btw-side-question');
+  assert.equal(rows.length, 2, 'drawn as two rows');
+  assert.ok(rows[0]?.querySelector('button[aria-label="Dismiss"]'), 'the control sits on the question row, which starts the aside');
+});
+
 test('the dismiss control asks the server to delete the side question', async () => {
   renderRows([question('done'), answer('done', 'It skips the cache.')]);
 
