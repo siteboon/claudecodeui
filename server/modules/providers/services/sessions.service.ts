@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
+import { broadcastSessionArchiveChanged, broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
@@ -690,6 +690,7 @@ export const sessionsService = {
 
     if (!options.force) {
       sessionsDb.updateSessionIsArchived(sessionId, true);
+      broadcastSessionArchiveChanged(sessionId, 'archived');
       return {
         sessionId,
         action: 'archived',
@@ -722,6 +723,7 @@ export const sessionsService = {
       });
     }
 
+    broadcastSessionArchiveChanged(sessionId, 'deleted');
     return {
       sessionId,
       action: 'deleted',
@@ -742,6 +744,10 @@ export const sessionsService = {
     }
 
     sessionsDb.updateSessionIsArchived(sessionId, false);
+    broadcastSessionArchiveChanged(sessionId, 'restored');
+    void broadcastSessionUpserted(sessionId).catch((error: unknown) => {
+      console.error('[Sessions] Failed to announce a restored session', { sessionId, error: error instanceof Error ? error.message : String(error) });
+    });
     return { sessionId, isArchived: false };
   },
 
