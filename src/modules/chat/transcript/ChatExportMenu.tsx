@@ -15,6 +15,8 @@ type ChatExportMenuProps = {
   provider: LLMProvider | string;
   selectedProject?: Project | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
+  /** Carried into the HTML export, so it shows the same times as the transcript. */
+  showTimestamps?: boolean;
   /**
    * Loads the rest of the conversation before exporting.
    *
@@ -41,6 +43,7 @@ export default function ChatExportMenu({
   provider,
   selectedProject,
   createDiff,
+  showTimestamps = false,
   onLoadFullTranscript,
 }: ChatExportMenuProps) {
   const { t } = useTranslation('chat');
@@ -62,6 +65,7 @@ export default function ChatExportMenu({
         provider,
         selectedProject,
         createDiff,
+        showTimestamps,
       });
     } catch (error) {
       console.error('Failed to export conversation:', error);

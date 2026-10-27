@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,DiffStats,Project,ToolGroupItem } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
@@ -18,6 +19,8 @@ type ToolGroupContainerProps = {
   onGrantToolPermission?: (suggestion: ClaudePermissionSuggestion) => PermissionGrantResult | null | undefined;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  /** Stamps the collapsed row with the span from the run's first call to its last, and each expanded row with its own time. */
+  showTimestamps?: boolean;
   selectedProject?: Project | null;
   provider: LLMProvider | string;
 };
@@ -83,6 +86,7 @@ function ToolGroupContainer({
   onGrantToolPermission,
   showRawParameters,
   showThinking,
+  showTimestamps = false,
   selectedProject,
   provider,
 }: ToolGroupContainerProps) {
@@ -100,6 +104,12 @@ function ToolGroupContainer({
 
   const preview = group.preview;
   const groupDiffStats = useGroupDiffStats(group.toolName, group.messages, createDiff);
+  // The run's span, over the calls whose times the provider recorded: when
+  // it began, and when the agent last did something in it.
+  const { firstStampAt, lastStampAt } = useMemo(() => {
+    const recorded = group.messages.filter((message) => !message.timestampEstimated);
+    return { firstStampAt: recorded[0]?.timestamp, lastStampAt: recorded[recorded.length - 1]?.timestamp };
+  }, [group.messages]);
 
   // Keys only have to be unique among this group's own rows, so repeats of the
   // same key are disambiguated here by occurrence.
@@ -139,6 +149,13 @@ function ToolGroupContainer({
           </>
         )}
         {groupDiffStats && <DiffStatsBadge stats={groupDiffStats} className="ml-auto pl-2" />}
+        {showTimestamps && (
+          <TranscriptTimestamp
+            value={firstStampAt}
+            endValue={lastStampAt}
+            className={`${groupDiffStats ? '' : 'ml-auto pl-2 '}flex-shrink-0 text-[11px] text-muted-foreground`}
+          />
+        )}
       </button>
 
       {showChildren && (
@@ -154,6 +171,7 @@ function ToolGroupContainer({
               onGrantToolPermission={onGrantToolPermission}
               showRawParameters={showRawParameters}
               showThinking={showThinking}
+              showTimestamps={showTimestamps}
               selectedProject={selectedProject}
               provider={provider}
             />

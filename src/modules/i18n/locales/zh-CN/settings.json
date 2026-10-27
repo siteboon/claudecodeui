@@ -75,6 +75,7 @@
     "darkMode": "深色模式",
     "showRawParameters": "显示原始参数",
     "showThinking": "显示思考过程",
+    "showTimestamps": "显示时间戳",
     "sendByCtrlEnter": "使用 Ctrl+Enter 发送",
     "voiceEnabled": "语音（麦克风 + 朗读）",
     "sendByCtrlEnterDescription": "启用后，按 Ctrl+Enter 发送消息，而不是仅按 Enter。这对于使用输入法的用户可以避免意外发送。",

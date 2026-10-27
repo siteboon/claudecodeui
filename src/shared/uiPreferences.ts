@@ -12,6 +12,8 @@ import { readUserPreference } from '@/shared/userSettings';
 export type UiPreferences = {
   showRawParameters: boolean;
   showThinking: boolean;
+  /** Puts a time on every transcript row, tool call and subagent step, not only on user turns. */
+  showTimestamps: boolean;
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
   keepProjectsExpanded: boolean;
@@ -27,6 +29,8 @@ export type UiPreferencesAction =
 const DEFAULTS: UiPreferences = {
   showRawParameters: false,
   showThinking: true,
+  // Off so the transcript looks exactly as it always has unless the user asks.
+  showTimestamps: false,
   sendByCtrlEnter: false,
   sidebarVisible: true,
   keepProjectsExpanded: false,

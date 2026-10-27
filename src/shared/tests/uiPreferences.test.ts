@@ -34,6 +34,8 @@ test('a fresh install gets the documented defaults', () => {
   assert.deepEqual(readStoredUiPreferences(), {
     showRawParameters: false,
     showThinking: true,
+    // Off: the extra per-row times are opt-in (#1595).
+    showTimestamps: false,
     sendByCtrlEnter: false,
     sidebarVisible: true,
     keepProjectsExpanded: false,
@@ -109,4 +111,14 @@ test('a cross-tab update with nothing new keeps the same object', () => {
   });
 
   assert.equal(next, state);
+});
+
+test('the timestamps preference is toggled and read back like the others', () => {
+  const state = baseline();
+  const next = uiPreferencesReducer(state, { type: 'set', key: 'showTimestamps', value: true });
+  assert.equal(next.showTimestamps, true);
+
+  // What another device stored arrives as the blob, string-coerced like the rest.
+  storeUiPreferences({ showTimestamps: 'true' });
+  assert.equal(readStoredUiPreferences().showTimestamps, true);
 });

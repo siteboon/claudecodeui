@@ -75,6 +75,7 @@
     "darkMode": "Modo escuro",
     "showRawParameters": "Mostrar parâmetros brutos",
     "showThinking": "Mostrar raciocínio",
+    "showTimestamps": "Mostrar data e hora",
     "sendByCtrlEnter": "Enviar com Ctrl+Enter",
     "voiceEnabled": "Voz (microfone + leitura em voz alta)",
     "sendByCtrlEnterDescription": "Quando ativado, pressionar Ctrl+Enter envia a mensagem em vez de apenas Enter. Isso é útil para usuários de IME evitarem envios acidentais.",

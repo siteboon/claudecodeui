@@ -364,6 +364,12 @@ export type ChatMessage = {
   content?: string;
   displayText?: string;
   timestamp: string | number | Date;
+  /**
+   * The provider recorded no time for this row, so `timestamp` only orders it
+   * (it is when the history was read). The "Show timestamps" preference shows
+   * no time for such a row rather than a made-up "just now".
+   */
+  timestampEstimated?: boolean;
   images?: ChatImage[];
   files?: ChatAttachment[];
   reasoning?: string;
@@ -527,6 +533,12 @@ export type NormalizedMessage = {
   replacesAfterRowCount?: number;
   sessionId: string;
   timestamp: string;
+  /**
+   * Set by the backend when the provider recorded no time for this row, so
+   * `timestamp` is only when the history was read (every Cursor history row).
+   * Still used for ordering; never shown as the row's time.
+   */
+  timestampEstimated?: boolean;
   provider: LLMProvider;
   kind: MessageKind;
   /**
@@ -1384,6 +1396,7 @@ export type ProviderCliUpdateResult = {
 export type PreferenceToggleKey =
   | 'showRawParameters'
   | 'showThinking'
+  | 'showTimestamps'
   | 'sendByCtrlEnter'
   | 'voiceEnabled';
 

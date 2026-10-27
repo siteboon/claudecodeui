@@ -42,6 +42,8 @@ type ChatInterfaceProps = {
   onShowSettings?: () => void;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  /** Stamps every transcript row with its time (the "Show timestamps" preference). */
+  showTimestamps?: boolean;
   sendByCtrlEnter?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
@@ -66,6 +68,7 @@ function ChatInterface({
   onShowSettings,
   showRawParameters,
   showThinking,
+  showTimestamps,
   sendByCtrlEnter,
   externalMessageUpdate,
   newSessionTrigger,
@@ -507,6 +510,7 @@ function ChatInterface({
               onGrantToolPermission={handleGrantToolPermission}
               showRawParameters={showRawParameters}
               showThinking={showThinking}
+              showTimestamps={showTimestamps}
               selectedProject={selectedProject}
               // Editing replaces the turn and everything after it, so it is only
               // offered when the session is idle — a half-truncated transcript with
