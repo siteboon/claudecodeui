@@ -521,6 +521,7 @@ export default function ChatComposer({
                 hasInput={hasAnyInput}
                 hasText={Boolean(input.trim())}
                 supportsSideQuestions={supportsSideQuestions}
+                sendByCtrlEnter={sendByCtrlEnter}
                 onSelect={(choice) => {
                   if (choice === 'stop') {
                     onAbortSession();

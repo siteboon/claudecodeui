@@ -11,10 +11,11 @@ import {
   ComposerMenuSurface,
 } from '@/modules/chat/composer/ComposerMenuPrimitives';
 
+const isApplePlatform = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
 // Same symbol the OS shows on its own menus; no textual word to translate, so
 // this stays out of i18n (unlike the row's label and description).
-const SIDE_QUESTION_SHORTCUT =
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌥↵' : 'Alt+↵';
+const SIDE_QUESTION_SHORTCUT = isApplePlatform ? '⌥↵' : 'Alt+↵';
 
 export type ComposerSendMenuState = 'responding' | 'background';
 export type ComposerSendMenuChoice = 'queue' | 'sideQuestion' | 'stop' | 'send';
@@ -28,8 +29,23 @@ type ComposerSendMenuProps = {
   hasText?: boolean;
   /** False until the capability matrix has loaded, or for a provider it does not list; the side-question row is left out rather than offered and then refused. */
   supportsSideQuestions?: boolean;
+  /** Mirrors the composer's "send with Ctrl+Enter" setting, so Queue's hint names the key that actually sends; defaults to false, Enter-to-send, like the composer's own default. */
+  sendByCtrlEnter?: boolean;
   onSelect: (choice: ComposerSendMenuChoice) => void;
 };
+
+/**
+ * One `<kbd>` styling, shared by every row's hint instead of repeated three
+ * times: hidden unless the pointer is fine and can hover, same as the
+ * side-question hint had before the other rows got one.
+ */
+function ShortcutHint({ children }: { children: string }) {
+  return (
+    <kbd className="hidden rounded border border-border/60 px-1 text-[10px] text-muted-foreground/70 [@media(hover:hover)_and_(pointer:fine)]:inline-block">
+      {children}
+    </kbd>
+  );
+}
 
 /**
  * Rendered by chat's ChatComposer in place of the send button while a turn is
@@ -38,7 +54,7 @@ type ComposerSendMenuProps = {
  * background-send dialog, so a tap on the first row can never stop or
  * override anything.
  */
-export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, supportsSideQuestions = false, onSelect }: ComposerSendMenuProps) {
+export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, supportsSideQuestions = false, sendByCtrlEnter = false, onSelect }: ComposerSendMenuProps) {
   const { t } = useTranslation('chat');
   const [isOpen, setIsOpen] = useState(false);
   const close = useCallback(() => setIsOpen(false), []);
@@ -60,6 +76,15 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
   const queueDescription = state === 'responding'
     ? t('sendMenu.queue.descriptionResponding', { defaultValue: 'Send when this turn ends' })
     : t('sendMenu.queue.descriptionBackground', { defaultValue: 'Send when the background work ends' });
+  // Enter only queues while a turn is written; during background work it
+  // opens the "send anyway?" confirm dialog instead, so Queue gets no hint
+  // there, matching that row's own description above.
+  const queueShortcut = state === 'responding'
+    ? (sendByCtrlEnter ? (isApplePlatform ? '⌘↵' : 'Ctrl+↵') : '↵')
+    : null;
+  // Esc stops a running turn; background work has no key for Send anyway,
+  // so the last row's hint follows the same gate as Queue's.
+  const lastShortcut = state === 'responding' ? 'esc' : null;
 
   return (
     <>
@@ -89,6 +114,7 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
             role="menuitem"
             label={t('sendMenu.queue.label', { defaultValue: 'Queue' })}
             description={queueDescription}
+            trailing={queueShortcut ? <ShortcutHint>{queueShortcut}</ShortcutHint> : undefined}
             onSelect={() => select('queue')}
           />
           {supportsSideQuestions && (
@@ -98,11 +124,7 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
               role="menuitem"
               label={t('sendMenu.sideQuestion.label', { defaultValue: 'Side question' })}
               description={t('sendMenu.sideQuestion.description', { defaultValue: 'Ask on the side now; the session never sees it' })}
-              trailing={
-                <kbd className="hidden rounded border border-border/60 px-1 text-[10px] text-muted-foreground/70 [@media(hover:hover)_and_(pointer:fine)]:inline-block">
-                  {SIDE_QUESTION_SHORTCUT}
-                </kbd>
-              }
+              trailing={<ShortcutHint>{SIDE_QUESTION_SHORTCUT}</ShortcutHint>}
               onSelect={() => select('sideQuestion')}
             />
           )}
@@ -113,6 +135,7 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
             role="menuitem"
             label={lastLabel}
             description={lastDescription}
+            trailing={lastShortcut ? <ShortcutHint>{lastShortcut}</ShortcutHint> : undefined}
             onSelect={() => select(lastChoice)}
             destructive
           />
