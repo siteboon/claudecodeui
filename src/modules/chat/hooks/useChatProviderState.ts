@@ -126,6 +126,12 @@ const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): strin
   `${provider}:${sessionId}`
 );
 
+/**
+ * Manages provider, model, capability, and permission state for the chat interface.
+ *
+ * @param args - The hook arguments containing the selected session and project.
+ * @returns An object containing the current provider state, models, and action handlers.
+ */
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
@@ -169,6 +175,17 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   // Built-ins plus plugin providers; grows once the plugin registry has loaded.
   const pluginProviders = usePluginProviders();
   const providerIds = useMemo(() => withPluginProviderIds(PROVIDERS), [pluginProviders]);
+
+  useEffect(() => {
+    if (selectedSession?.__provider) {
+      return;
+    }
+
+    const persistedProvider = readSelectedProvider();
+    if (persistedProvider !== provider) {
+      setProvider(persistedProvider);
+    }
+  }, [pluginProviders, provider, selectedSession?.__provider]);
 
   const providerModelsRequestIdRef = useRef(0);
   const sessionSelectionLoadRequestIdRef = useRef(0);
