@@ -24,7 +24,7 @@ const noop = () => {};
 const PROJECT = { projectId: 'project-1', displayName: 'project one', fullPath: '/tmp/project-1', sessions: [] } as unknown as Project;
 const SESSION = { id: 's1', summary: 'session one', lastActivity: '2026-08-21T09:59:00.000Z', __provider: 'claude' } as unknown as SessionWithProvider;
 
-const renderRow = (overrides: Record<string, unknown>) => render(
+const renderRow = (overrides: Partial<React.ComponentProps<typeof SidebarSessionItem>>) => render(
   React.createElement(SidebarSessionItem, {
     project: PROJECT,
     session: SESSION,
@@ -66,7 +66,7 @@ test('the mobile options sheet offers moving the session to another project', ()
 });
 
 test('the mobile sheet withholds a move while the session is busy or cannot move', () => {
-  const cases: Array<[string, Record<string, unknown>]> = [
+  const cases: Array<[string, Partial<React.ComponentProps<typeof SidebarSessionItem>>]> = [
     ['a running turn', { onMoveSession: vi.fn(), isProcessing: true }],
     ['background work that outlived the turn', { onMoveSession: vi.fn(), hasBackgroundWork: true }],
     ['a provider that cannot move sessions', { onMoveSession: vi.fn(), session: { ...SESSION, __provider: 'cursor' } }],
@@ -79,7 +79,7 @@ test('the mobile sheet withholds a move while the session is busy or cannot move
     });
 
     // Absent from an open sheet, not merely from a sheet that never rendered.
-    assert.ok(screen.getByText('Session options'), reason);
+    assert.notEqual(screen.queryByRole('dialog'), null, reason);
     assert.equal(screen.queryByRole('button', { name: 'actions.moveSession' }), null, reason);
     unmount();
   }
