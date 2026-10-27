@@ -40,6 +40,8 @@ type Scripted = {
   emit: (message: Record<string, unknown>) => void;
   end: () => void;
   released: () => boolean;
+  /** How many emitted messages the production side has finished handling. */
+  consumed: () => number;
 };
 
 /**
@@ -54,11 +56,15 @@ function createScriptedQuery(askSideQuestion?: NativeAsk): {
   const queue: Array<Record<string, unknown> | null> = [];
   let wake: (() => void) | null = null;
   let released = false;
+  // Advances only once the generator below is resumed for the *next* item —
+  // which the consumer only asks for after it finishes handling this one.
+  let consumed = 0;
 
   const script: Scripted = {
     emit: (message) => { queue.push(message); wake?.(); },
     end: () => { queue.push(null); wake?.(); },
     released: () => released,
+    consumed: () => consumed,
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
@@ -79,6 +85,7 @@ function createScriptedQuery(askSideQuestion?: NativeAsk): {
           return;
         }
         yield next;
+        consumed += 1;
       }
     })();
 
@@ -133,13 +140,51 @@ function makeContext(createQuery: NonNullable<ProviderRuntimeContext['createQuer
   };
 }
 
+// A short, fixed pause used only where a predicate already confirmed the
+// event that must precede a *negative* assertion (see `waitFor` below) — it
+// is never the only thing a test waits on.
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 25); });
 
-async function waitFor(condition: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 200 && !condition(); attempt += 1) {
-    await settle();
+/**
+ * Polls `condition` until it holds, instead of guessing a fixed delay — the
+ * 25ms `settle()` this replaced was long enough alone but not always under
+ * the full suite's parallel load. Fails with a clear message once
+ * `timeoutMs` passes without the condition becoming true.
+ */
+async function waitFor(
+  condition: () => boolean,
+  { timeoutMs = 2000, stepMs = 5 }: { timeoutMs?: number; stepMs?: number } = {},
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() >= deadline) {
+      assert.ok(condition(), `condition never became true within ${timeoutMs}ms`);
+      return;
+    }
+    await new Promise<void>((resolve) => { setTimeout(resolve, stepMs); });
   }
-  assert.ok(condition(), 'condition never became true');
+}
+
+/**
+ * Emits a scripted message and waits for the production side to have pulled
+ * it (and finished its synchronous handling of it) off the queue, rather
+ * than guessing how long that takes. `Scripted.consumed()` only advances once
+ * the generator in `createScriptedQuery` is resumed for the *next* item,
+ * which the consumer only does after it is done processing this one.
+ */
+async function emitAndFlush(script: Scripted, message: Record<string, unknown>): Promise<void> {
+  const before = script.consumed();
+  script.emit(message);
+  await waitFor(() => script.consumed() > before);
+}
+
+/** Wraps a native stub so tests can wait for it having actually been called. */
+function trackCalls(native: NativeAsk): { native: NativeAsk; called: () => boolean } {
+  let calls = 0;
+  return {
+    native: (question, options) => { calls += 1; return native(question, options); },
+    called: () => calls > 0,
+  };
 }
 
 const init = () => ({ type: 'system', subtype: 'init', session_id: NATIVE_ID });
@@ -187,7 +232,9 @@ async function ask(
 test('a turn that ends while a native side question is pending keeps the input open until the answer arrives, then releases it', { concurrency: false }, async () => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-side-question-hold-'));
   let resolveNative!: (value: unknown) => void;
-  const native: NativeAsk = () => new Promise((resolve) => { resolveNative = resolve; });
+  const { native, called: nativeCalled } = trackCalls(
+    () => new Promise((resolve) => { resolveNative = resolve; }),
+  );
   const { createQuery, script } = createScriptedQuery(native);
   const fork = createForkQuery();
   const sent: NormalizedMessage[] = [];
@@ -195,16 +242,18 @@ test('a turn that ends while a native side question is pending keeps the input o
 
   try {
     const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, makeContext(createQuery));
-    script.emit(init());
-    await settle();
+    await emitAndFlush(script, init());
 
     const controller = new AbortController();
     const asked = ask(makeRequest(cwd, controller.signal), fork.createQuery);
-    await settle();
+    await waitFor(nativeCalled);
 
     // The turn ends with nothing backgrounded — ordinarily that releases
     // stdin at once (see the "no hold needed" branch in `queryClaudeSDK`).
-    script.emit(result());
+    await emitAndFlush(script, result());
+    // `emitAndFlush` only confirms the result message's own synchronous
+    // handling ran; give any (buggy) async release path a moment too, so
+    // this negative check is not vacuous.
     await settle();
     assert.equal(script.released(), false, 'the pending side question keeps stdin open past the turn\'s own result');
 
@@ -228,7 +277,9 @@ test('a CLI cancellation the side question\'s own signal did not cause (a new tu
   // The native call rejects only once its own query's stdin has actually
   // been released — by the second turn below, not by the question's signal.
   let rejectNative!: (error: unknown) => void;
-  const native: NativeAsk = () => new Promise((_resolve, reject) => { rejectNative = reject; });
+  const { native, called: nativeCalled } = trackCalls(
+    () => new Promise((_resolve, reject) => { rejectNative = reject; }),
+  );
   const first = createScriptedQuery(native);
   const second = createScriptedQuery();
   const fork = createForkQuery();
@@ -236,18 +287,17 @@ test('a CLI cancellation the side question\'s own signal did not cause (a new tu
 
   try {
     const firstRun = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, makeContext(first.createQuery));
-    first.script.emit(init());
-    await settle();
+    await emitAndFlush(first.script, init());
 
     const controller = new AbortController();
     const asked = ask(makeRequest(cwd, controller.signal), fork.createQuery);
-    await settle();
+    await waitFor(nativeCalled);
 
     // A new turn on the same session supersedes the held one directly
     // (`releaseHeldSession`), which does not consult the pending-question
     // count: the first process is let go while the question is still out.
     const secondRun = queryClaudeSDK('continue', { sessionId: SESSION_ID, cwd }, writer as never, makeContext(second.createQuery));
-    await settle();
+    await waitFor(() => first.script.released());
     assert.equal(first.script.released(), true, 'the superseded process is let go');
 
     rejectNative(new Error('Side question cancelled'));
@@ -276,8 +326,7 @@ test('a dismissed question (its own signal aborted) is not retried', { concurren
 
   try {
     const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, makeContext(createQuery));
-    script.emit(init());
-    await settle();
+    await emitAndFlush(script, init());
 
     // `dismiss` aborts the question's own signal before the runtime call
     // settles — the service's side, not this runtime's.
@@ -313,28 +362,32 @@ test('a superseded run\'s late task-stopped notification does not release the ru
     first.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
     first.script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
     first.script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
-    first.script.emit(result());
+    await emitAndFlush(first.script, result());
+    // The result's own handling is confirmed above; a short extra pause
+    // before the negative check below covers any async release path too.
     await settle();
     assert.equal(first.script.released(), false, 'the first process is held for its agent');
 
     // A new turn supersedes the held one directly: its process is let go at
     // once, and the map entry under the session key now belongs to it.
     const secondRun = queryClaudeSDK('continue', { sessionId: SESSION_ID, cwd }, writer as never, makeContext(second.createQuery));
-    await settle();
+    await waitFor(() => first.script.released());
     assert.equal(first.script.released(), true, 'the superseded process is let go');
 
     // The stale run's own stream is still open on its scripted side (nothing
     // called `first.script.end()` yet), so this notification — the agent's
     // real-world stop reply, arriving late — still reaches its loop.
-    first.script.emit(taskNotification('a1', 'toolu_agent', 'stopped'));
+    await emitAndFlush(first.script, taskNotification('a1', 'toolu_agent', 'stopped'));
+    // Confirmed the stale run's own loop finished handling it; give any
+    // (buggy) cross-session release a moment too before the negative check.
     await settle();
     assert.equal(second.script.released(), false, 'the new run\'s input is untouched by the stale run\'s own release check');
 
     first.script.end();
     await firstRun;
     second.script.emit(init());
-    second.script.emit(result());
-    await settle();
+    await emitAndFlush(second.script, result());
+    await waitFor(() => second.script.released());
     assert.equal(second.script.released(), true, 'the new run still releases normally once its own turn ends');
     second.script.end();
     await secondRun;
@@ -350,9 +403,13 @@ test('a native side question answered on a superseded run does not touch the pen
   // wrongly release — the count the new run's own question was relying on.
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-side-question-hold-'));
   let rejectFirstNative!: (error: unknown) => void;
-  const firstNative: NativeAsk = () => new Promise((_resolve, reject) => { rejectFirstNative = reject; });
+  const { native: firstNative, called: firstNativeCalled } = trackCalls(
+    () => new Promise((_resolve, reject) => { rejectFirstNative = reject; }),
+  );
   let resolveSecondNative!: (value: unknown) => void;
-  const secondNative: NativeAsk = () => new Promise((resolve) => { resolveSecondNative = resolve; });
+  const { native: secondNative, called: secondNativeCalled } = trackCalls(
+    () => new Promise((resolve) => { resolveSecondNative = resolve; }),
+  );
   const first = createScriptedQuery(firstNative);
   const second = createScriptedQuery(secondNative);
   const fork = createForkQuery();
@@ -360,29 +417,29 @@ test('a native side question answered on a superseded run does not touch the pen
 
   try {
     const firstRun = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, makeContext(first.createQuery));
-    first.script.emit(init());
-    await settle();
+    await emitAndFlush(first.script, init());
 
     const firstController = new AbortController();
     const firstAsked = ask(makeRequest(cwd, firstController.signal), fork.createQuery);
-    await settle();
+    await waitFor(firstNativeCalled);
 
     // Supersede while the first question is still outstanding. The CLI
     // cancels it once its own process is let go, so `firstAsked` will settle
     // on the fork path below — exercising the `finally` this pins.
     const secondRun = queryClaudeSDK('continue', { sessionId: SESSION_ID, cwd }, writer as never, makeContext(second.createQuery));
-    await settle();
+    await waitFor(() => first.script.released());
     assert.equal(first.script.released(), true, 'the superseded process is let go');
-    second.script.emit(init());
-    await settle();
+    await emitAndFlush(second.script, init());
 
     // The new run gets its own native side question, still pending, and lets
     // its turn end — nothing else outstanding, so the hold is purely this
     // question's count and its own `releaseDeferred`.
     const secondController = new AbortController();
     const secondAsked = ask(makeRequest(cwd, secondController.signal), fork.createQuery);
-    await settle();
-    second.script.emit(result());
+    await waitFor(secondNativeCalled);
+    await emitAndFlush(second.script, result());
+    // Confirmed the result's own handling ran; a short extra pause covers
+    // any (buggy) async release before this negative check.
     await settle();
     assert.equal(second.script.released(), false, 'the second run\'s own pending question keeps its stdin open');
 
@@ -394,6 +451,9 @@ test('a native side question answered on a superseded run does not touch the pen
     const { outcome: firstOutcome } = await firstAsked;
     assert.equal(fork.calls(), 1, 'the cancelled first question is retried on the fork');
     assert.deepEqual(firstOutcome, { status: 'done', answer: FORK_ANSWER });
+    // `firstAsked` already settled, so the `finally` this pins has already
+    // run; a short extra pause covers any further async effects of it
+    // before this negative check.
     await settle();
     assert.equal(second.script.released(), false, 'the second run\'s own pending question still holds its stdin');
 
@@ -418,19 +478,24 @@ test('a native side question the CLI never answers still releases once the idle 
   // and forces the release through once it passes, so a question the CLI
   // never answers cannot hold the process (and its MCP servers) forever.
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  // `setTimeout` is mocked above, so the scripted query's async chain (a
-  // promise `wake()` resolves, read by the `for await` loop, normalized,
-  // and so on) is drained with real microtask/immediate turns instead of
-  // `settle()`'s real 25ms wait — several rounds, since one is not always
-  // enough for a multi-step chain.
-  const flush = async () => {
-    for (let round = 0; round < 10; round += 1) {
+  // `setTimeout` is mocked above, so sequencing below cannot poll with it —
+  // `waitForImmediate` drains the scripted query's async chain (a promise
+  // `wake()` resolves, read by the `for await` loop, normalized, and so on)
+  // with real `setImmediate` rounds instead, polling an actual predicate
+  // rather than guessing a fixed number of rounds the way the old fixed
+  // 10-round `flush()` did.
+  async function waitForImmediate(
+    condition: () => boolean,
+    { maxRounds = 2000 }: { maxRounds?: number } = {},
+  ): Promise<void> {
+    for (let round = 0; round < maxRounds && !condition(); round += 1) {
       await new Promise<void>((resolve) => { setImmediate(resolve); });
     }
-  };
+    assert.ok(condition(), `condition never became true within ${maxRounds} setImmediate rounds`);
+  }
 
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-side-question-hold-'));
-  const native: NativeAsk = () => new Promise(() => { /* never settles */ });
+  const { native, called: nativeCalled } = trackCalls(() => new Promise(() => { /* never settles */ }));
   const { createQuery, script } = createScriptedQuery(native);
   const fork = createForkQuery();
   const writer = { send: () => {}, userId: null };
@@ -438,17 +503,20 @@ test('a native side question the CLI never answers still releases once the idle 
   try {
     const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, makeContext(createQuery));
     script.emit(init());
-    await flush();
+    await waitForImmediate(() => script.consumed() >= 1);
 
     const controller = new AbortController();
     void ask(makeRequest(cwd, controller.signal), fork.createQuery);
 
     script.emit(result());
-    await flush();
+    // Wait until the side question has reached the native stub *and* the
+    // turn has ended, before advancing the mocked clock — otherwise ticking
+    // the ceiling could land before there is anything pending to force.
+    await waitForImmediate(() => nativeCalled() && script.consumed() >= 2);
     assert.equal(script.released(), false, 'the hung question keeps stdin open past the turn\'s own result');
 
     t.mock.timers.tick(30 * 60 * 1000);
-    await flush();
+    await waitForImmediate(() => script.released());
     assert.equal(script.released(), true, 'the idle ceiling forces the release even though the question never settled');
 
     script.end();
