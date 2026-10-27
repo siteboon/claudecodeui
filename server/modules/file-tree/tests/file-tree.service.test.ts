@@ -628,6 +628,9 @@ test('credential files stay refused even when confirmed', async () => {
       path.join(outsideDirectory, '.env.production'),
       path.join(outsideDirectory, 'id_ed25519'),
       path.join(outsideDirectory, 'server.key'),
+      path.join(outsideDirectory, '.credentials.json'),
+      path.join(outsideDirectory, '.git-credentials'),
+      path.join(outsideDirectory, '.npmrc'),
       path.join(sshDirectory, 'config'),
     ];
     // A symlink named `.ssh` into a folder with another name is refused by its own name.

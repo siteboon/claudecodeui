@@ -67,9 +67,25 @@ type ReadOptions = { allowOutside?: boolean };
  */
 const CREDENTIAL_DIR_NAMES = ['.ssh', '.gnupg', '.aws', '.kube', '.docker', '.cloudcli',
   path.join('.config', 'cloudcli'), path.join('.config', 'slack-mcp'), path.join('.config', 'gh')];
-const CREDENTIAL_DIRS = [...new Set([os.homedir(), os.userInfo().homedir])]
+// os.userInfo() throws for a UID with no passwd entry (containers run with an
+// arbitrary --user), and this runs at load, so it must not take the module down.
+function readHomeDirectories(): string[] {
+  const homes: string[] = [];
+  for (const read of [() => os.homedir(), () => os.userInfo().homedir]) {
+    try {
+      const home = read();
+      if (home) {
+        homes.push(home);
+      }
+    } catch {
+      // The other source still applies.
+    }
+  }
+  return [...new Set(homes)];
+}
+const CREDENTIAL_DIRS = readHomeDirectories()
   .flatMap((home) => CREDENTIAL_DIR_NAMES.map((dir) => path.join(home, dir) + path.sep));
-const CREDENTIAL_FILE_PATTERN = /^(\.env(\..*)?|\.netrc|\.pgpass|id_[a-z0-9_]+|.*\.(pem|key|p12|pfx)|credentials(\.json)?)$/i;
+const CREDENTIAL_FILE_PATTERN = /^(\.env(\..*)?|\.netrc|\.npmrc|\.pgpass|\.git-credentials|id_[a-z0-9_]+|.*\.(pem|key|p12|pfx)|\.?credentials(\.json)?)$/i;
 
 // Windows and default macOS volumes match names without regard to case, so
 // `.SSH` there is the same folder as `.ssh`.
