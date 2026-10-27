@@ -232,6 +232,62 @@ test('relocateProject puts the rows back when the transcripts cannot be moved', 
   });
 });
 
+test('relocateProject moves the transcripts back when their new paths cannot be saved', async (t) => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+    const realUpdate = sessionsDb.updateSessionTranscriptPath.bind(sessionsDb);
+    let failed = false;
+    t.mock.method(sessionsDb, 'updateSessionTranscriptPath', (sessionId: string, jsonlPath: string) => {
+      if (!failed) {
+        failed = true;
+        throw new Error('database is locked');
+      }
+      return realUpdate(sessionId, jsonlPath);
+    });
+
+    await assert.rejects(() => relocateProject(fixture.projectId, fixture.newProjectPath), /database is locked/);
+
+    // Rows and files agree again: both describe the old folder.
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
+    assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, fixture.transcriptPath);
+    assert.equal(JSON.parse(await readFile(fixture.transcriptPath, 'utf8')).cwd, fixture.oldProjectPath);
+    await assert.rejects(() => readFile(
+      path.join(fixture.claudeProjectsRoot, encodeClaudeProjectDirName(fixture.newProjectPath), `${SESSION_ID}.jsonl`),
+      'utf8',
+    ));
+  });
+});
+
+test('relocateProject keeps the project with its transcripts when they cannot be moved back', async (t) => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+    t.mock.method(sessionsDb, 'updateSessionTranscriptPath', () => {
+      throw new Error('database is locked');
+    });
+    const realRelocate = sessionsService.relocateProjectTranscripts.bind(sessionsService);
+    let calls = 0;
+    t.mock.method(sessionsService, 'relocateProjectTranscripts', async (input: Parameters<typeof realRelocate>[0]) => {
+      calls += 1;
+      if (calls > 1) {
+        throw new Error('disk full');
+      }
+      return realRelocate(input);
+    });
+    const consoleError = t.mock.method(console, 'error', () => {});
+
+    await assert.rejects(() => relocateProject(fixture.projectId, fixture.newProjectPath), /database is locked/);
+
+    assert.equal(consoleError.mock.callCount(), 1);
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.newProjectPath);
+    const movedPath = path.join(
+      fixture.claudeProjectsRoot,
+      encodeClaudeProjectDirName(fixture.newProjectPath),
+      `${SESSION_ID}.jsonl`,
+    );
+    assert.equal(JSON.parse(await readFile(movedPath, 'utf8')).cwd, fixture.newProjectPath);
+  });
+});
+
 test('relocateProject reports a transcript already in the new folder as a conflict', async () => {
   await withRelocateFixture(async (fixture) => {
     await rename(fixture.oldProjectPath, fixture.newProjectPath);

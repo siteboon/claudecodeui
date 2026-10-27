@@ -44,8 +44,9 @@ async function assertDirectoryExists(projectPath: string): Promise<void> {
  *
  * The project row moves first (its sessions follow through the FK's
  * `ON UPDATE CASCADE`), then the transcripts, then their new `jsonl_path`s. If
- * the transcripts cannot be moved, the rows are put back as they were read, so
- * the database keeps describing what is on disk.
+ * the transcripts cannot be moved, or their new paths cannot be saved (the
+ * transcripts are then moved back), the rows are put back as they were read,
+ * so the database keeps describing what is on disk.
  *
  * Known limitation: only providers with a `transcriptRelocation` facet (Claude
  * today) have their artifacts moved or rewritten. Codex, Cursor and OpenCode
@@ -127,6 +128,17 @@ export async function relocateProject(
   // instead of inserting a second project that claims the new path.
   projectsDb.updateProjectPathById(projectId, nextPath);
 
+  // Puts the rows back as they were read, including any `jsonl_path` the
+  // watcher pointed at a copy that has since been removed.
+  const restoreRows = () => {
+    projectsDb.updateProjectPathById(projectId, previousPath);
+    for (const row of sessionRows) {
+      if (row.jsonl_path) {
+        sessionsDb.updateSessionTranscriptPath(row.session_id, row.jsonl_path);
+      }
+    }
+  };
+
   let movedTranscripts: SessionTranscriptRelocation[];
   try {
     movedTranscripts = await sessionsService.relocateProjectTranscripts({
@@ -136,19 +148,38 @@ export async function relocateProject(
     });
   } catch (error) {
     // The providers undid their file changes, so the rows go back to what is
-    // on disk, including any `jsonl_path` the watcher pointed at a copy that
-    // has since been removed.
-    projectsDb.updateProjectPathById(projectId, previousPath);
-    for (const row of sessionRows) {
-      if (row.jsonl_path) {
-        sessionsDb.updateSessionTranscriptPath(row.session_id, row.jsonl_path);
-      }
-    }
+    // on disk.
+    restoreRows();
     throw error;
   }
 
-  for (const transcript of movedTranscripts) {
-    sessionsDb.updateSessionTranscriptPath(transcript.sessionId, transcript.jsonlPath);
+  try {
+    for (const transcript of movedTranscripts) {
+      sessionsDb.updateSessionTranscriptPath(transcript.sessionId, transcript.jsonlPath);
+    }
+  } catch (error) {
+    // The files already moved, so they go back first, by the same relocation
+    // with the paths swapped. If that fails too, the providers undid it and the
+    // files stay in the new folder, so the project row stays there with them.
+    const providerBySession = new Map(transcripts.map((transcript) => [transcript.sessionId, transcript.provider]));
+    try {
+      await sessionsService.relocateProjectTranscripts({
+        sessions: movedTranscripts.map((transcript) => ({
+          ...transcript,
+          provider: providerBySession.get(transcript.sessionId) ?? '',
+        })),
+        oldProjectPath: nextPath,
+        newProjectPath: previousPath,
+      });
+    } catch (moveBackError) {
+      console.error(
+        '[projects] Could not move the transcripts back after a failed relocation:',
+        moveBackError instanceof Error ? moveBackError.message : moveBackError,
+      );
+      throw error;
+    }
+    restoreRows();
+    throw error;
   }
 
   return {
