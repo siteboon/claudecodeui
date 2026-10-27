@@ -123,6 +123,7 @@
     "disabled": "Input disabilitato",
     "attachFiles": "Allega file",
     "attachImages": "Allega immagini",
+    "fileTooLarge": "{{name}} è troppo grande per essere allegato (max {{size}} MB)",
     "send": "Invia",
     "stop": "Ferma",
     "hintText": {

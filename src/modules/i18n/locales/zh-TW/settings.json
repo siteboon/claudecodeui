@@ -133,6 +133,7 @@
       "title": "聲音",
       "description": "聊天執行完成時播放短提示音。",
       "enabled": "已啟用",
+      "volume": "音量",
       "test": "測試聲音"
     },
     "events": {

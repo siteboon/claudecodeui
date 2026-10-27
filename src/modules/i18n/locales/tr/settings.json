@@ -133,6 +133,7 @@
       "title": "Ses",
       "description": "Sohbet çalışması tamamlandığında kısa bir ton çal.",
       "enabled": "Etkin",
+      "volume": "Ses düzeyi",
       "test": "Sesi test et"
     },
     "events": {

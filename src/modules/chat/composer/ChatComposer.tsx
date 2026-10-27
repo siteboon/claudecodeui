@@ -397,6 +397,17 @@ export default function ChatComposer({
             </div>
           )}
 
+          {fileErrors.size > 0 && (
+            // Files the composer refused never become chips, so their reasons are listed here.
+            <PromptInputHeader>
+              <div role="alert" className="space-y-1 rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-400">
+                {Array.from(fileErrors).map(([fileName, message]) => (
+                  <p key={fileName} className="break-words">{message}</p>
+                ))}
+              </div>
+            </PromptInputHeader>
+          )}
+
           {attachedFiles.length > 0 && (
             <PromptInputHeader>
               <div className="rounded-xl bg-muted/40 p-2">
@@ -406,7 +417,6 @@ export default function ChatComposer({
                       key={`${file.name}-${file.lastModified}-${index}`}
                       file={file}
                       onRemove={() => onRemoveAttachment(index)}
-                      error={fileErrors.get(file.name)}
                     />
                   ))}
                 </div>

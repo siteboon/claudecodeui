@@ -1446,7 +1446,7 @@ export type ClaudeSettingsPermissionSource = {
   ask: string[];
 };
 
-/** The user's notification settings, grouped into delivery channels (in-app, web push, desktop, sound) and the events that trigger them; mirrors the payload of the notification preferences API. */
+/** The user's notification settings, grouped into delivery channels (in-app, web push, desktop, sound) and the events that trigger them, plus the chime volume; mirrors the payload of the notification preferences API. */
 export type NotificationPreferencesState = {
   channels: {
     inApp: boolean;
@@ -1459,6 +1459,8 @@ export type NotificationPreferencesState = {
     stop: boolean;
     error: boolean;
   };
+  /** Completion chime volume in percent (0-100); `channels.sound` still decides whether it plays. */
+  soundVolume: number;
 };
 
 /** Cursor's persisted permission settings: the allowed and disallowed command patterns and whether permission prompts are skipped; read and written as one unit by the settings controller. */
