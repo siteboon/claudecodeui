@@ -14,6 +14,15 @@ import {
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
+import { opencodeSideQuestionForks } from './opencode-side-question-forks.js';
+
+// Opencode's own `session.agent` column is set from the row's creation, so it
+// covers a fork the instant it exists; the registry (above) covers the gap
+// before that — right after `--fork` starts and before its id is read off the
+// first event. Both filters sit in the SQL so a fork can never be the newest
+// row that `synchronizeFile`'s `LIMIT 1` picks, not after.
+const SIDE_QUESTION_AGENT = 'sidequestion';
+
 type OpenCodeSessionRow = {
   id: string;
   directory: string | null;
@@ -79,7 +88,16 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
 
       const sinceMillis = since?.getTime() ?? null;
       const limitClause = limit ? 'LIMIT ?' : '';
-      const params = limit ? [sinceMillis, sinceMillis, limit] : [sinceMillis, sinceMillis];
+      // A snapshot of the registry's current ids, bound as its own
+      // placeholders so the SQL (not a post-query JS filter) is what keeps a
+      // registered fork off the row `synchronizeFile`'s LIMIT 1 picks.
+      const forkIdsClause = this.registeredForkIdsClause();
+      const params = [
+        sinceMillis,
+        sinceMillis,
+        ...forkIdsClause.ids,
+        ...(limit ? [limit] : []),
+      ];
       const rows = db.prepare(`
         SELECT
           s.id AS id,
@@ -93,6 +111,8 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
         WHERE s.time_archived IS NULL
           AND s.parent_id IS NULL
           AND (? IS NULL OR COALESCE(s.time_updated, s.time_created, 0) >= ?)
+          AND (s.agent IS NULL OR s.agent != '${SIDE_QUESTION_AGENT}')
+          ${forkIdsClause.sql}
         ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC, s.id DESC
         ${limitClause}
       `).all(...params) as OpenCodeSessionRow[];
@@ -119,6 +139,15 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     } finally {
       db.close();
     }
+  }
+
+  /** `AND s.id NOT IN (...)` for the registry's current ids, or no clause when it is empty. */
+  private registeredForkIdsClause(): { sql: string; ids: string[] } {
+    const ids = opencodeSideQuestionForks.list();
+    if (ids.length === 0) {
+      return { sql: '', ids: [] };
+    }
+    return { sql: `AND s.id NOT IN (${ids.map(() => '?').join(', ')})`, ids };
   }
 
   private pruneChildSessions(db: Database.Database): void {

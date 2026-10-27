@@ -42,7 +42,7 @@ import {
   getReportedClaudeContextWindow,
   rememberClaudeContextWindow
 } from '@/modules/providers/services/provider-token-usage.service.js';
-import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, errorMessage } from '@/shared/utils.js';
 
 const activeSessions = new Map();
 // Outstanding background tasks per live session, keyed like activeSessions. An
@@ -1601,10 +1601,36 @@ function reconnectSessionWriter(sessionId, newRawWs) {
 }
 
 /**
- * Forks the session named by `request.providerSessionId` to answer a side
- * question read-only. `liveTasks` comes from this runtime's own background
- * work tracker, keyed by the app session id (`request.appSessionId`), so the
- * fork's prompt can say which of the session's own tasks are still running.
+ * SDK 0.3.311 ships `Query.prototype.askSideQuestion` without it in the SDK's
+ * own typings (checked in node_modules/@anthropic-ai/claude-agent-sdk) — hence
+ * the local JSDoc shapes below rather than an imported type.
+ * @typedef {Object} NativeSideQuestionResult
+ * @property {string} response
+ * @property {boolean} synthetic
+ * @property {Object} [refusalFallback]
+ */
+/**
+ * @typedef {Object} NativeSideQuestionCapableInstance
+ * @property {(question: string, options?: { signal?: AbortSignal }) => Promise<NativeSideQuestionResult|null>} askSideQuestion
+ */
+
+/**
+ * Asks a side question on the live query of `request.appSessionId`, when one
+ * is up and ships the method, or on a read-only fork otherwise.
+ *
+ * Measured 2026-10-27 (`claude-measurement`, SDK 0.3.311, five calls each,
+ * alternating): median response time, native vs the fork —
+ *   mid-turn (process mid-generation):        native 1504 ms, fork 7476 ms
+ *   background (held only for background work): native 2141 ms, fork 5016 ms
+ * Native wins in both busy states, so the path taken here does not depend on
+ * which one the process is in: any live query with the method answers
+ * natively. Caveat: the CLI refused a foreground `sleep 240` during
+ * measurement, so most "mid-turn" calls likely ran after the turn ended too
+ * — the gap there may be narrower than measured, not wider.
+ *
+ * `liveTasks` for the fork path comes from this runtime's own background
+ * work tracker, keyed by the app session id, so the fork's prompt can say
+ * which of the session's own tasks are still running.
  *
  * @param {import('@/shared/types.js').SideQuestionRequest} request
  * @param {import('@/shared/types.js').SideQuestionSink} sink
@@ -1612,6 +1638,24 @@ function reconnectSessionWriter(sessionId, newRawWs) {
  * @returns {Promise<import('@/shared/types.js').SideQuestionOutcome>}
  */
 async function askSideQuestion(request, sink, context) {
+  const session = getSession(request.appSessionId);
+  /** @type {NativeSideQuestionCapableInstance|undefined} */
+  const instance = session?.instance;
+
+  if (instance && typeof instance.askSideQuestion === 'function') {
+    try {
+      const result = await instance.askSideQuestion(request.question, { signal: request.signal });
+      const response = result?.response;
+      if (typeof response === 'string' && response.length > 0) {
+        sink.delta(response);
+        return { status: 'done', answer: response };
+      }
+      return { status: 'error', error: 'Claude returned no answer.', answer: '' };
+    } catch (error) {
+      return { status: 'error', error: errorMessage(error), answer: '' };
+    }
+  }
+
   return askClaudeSideQuestion(request, sink, {
     createQuery: context.createQuery,
     liveTasks: backgroundWork.outstanding(request.appSessionId),

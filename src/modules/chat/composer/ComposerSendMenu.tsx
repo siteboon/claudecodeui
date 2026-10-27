@@ -11,14 +11,14 @@ import {
 } from '@/modules/chat/composer/ComposerMenuPrimitives';
 
 export type ComposerSendMenuState = 'responding' | 'background';
-export type ComposerSendMenuChoice = 'queue' | 'btw' | 'stop' | 'send';
+export type ComposerSendMenuChoice = 'queue' | 'sideQuestion' | 'stop' | 'send';
 
 type ComposerSendMenuProps = {
   /** Whether a turn is still being written, or only background work runs. */
   state: ComposerSendMenuState;
   /** Queue and Send anyway need text or an attachment; Stop never does. */
   hasInput: boolean;
-  /** BTW cannot carry attachments, so it needs non-whitespace text on its own; defaults to `hasInput` so existing callers and tests, which never had attachment-only input, keep working. */
+  /** Side question cannot carry attachments, so it needs non-whitespace text on its own; defaults to `hasInput` so existing callers and tests, which never had attachment-only input, keep working. */
   hasText?: boolean;
   onSelect: (choice: ComposerSendMenuChoice) => void;
 };
@@ -85,9 +85,9 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
             disabled={!hasText}
             isSelected={false}
             role="menuitem"
-            label={t('sendMenu.btw.label', { defaultValue: 'BTW' })}
-            description={t('sendMenu.btw.description', { defaultValue: 'Ask on the side now; the session never sees it' })}
-            onSelect={() => select('btw')}
+            label={t('sendMenu.sideQuestion.label', { defaultValue: 'Side question' })}
+            description={t('sendMenu.sideQuestion.description', { defaultValue: 'Ask on the side now; the session never sees it' })}
+            onSelect={() => select('sideQuestion')}
           />
           <ComposerMenuSeparator />
           <ComposerMenuItem

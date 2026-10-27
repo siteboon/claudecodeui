@@ -67,7 +67,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
   const { t } = useTranslation('chat');
   // A side question never groups with its neighbours: it is drawn as its own
   // tinted aside regardless of what came before or after it.
-  const isGrouped = Boolean(prevMessage) && !message.btw && !prevMessage?.btw && prevMessage?.type === message.type &&
+  const isGrouped = Boolean(prevMessage) && !message.sideQuestion && !prevMessage?.sideQuestion && prevMessage?.type === message.type &&
     ((prevMessage?.type === 'assistant') ||
       (prevMessage?.type === 'user') ||
       (prevMessage?.type === 'tool') ||
@@ -75,11 +75,11 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
   const messageRef = useRef<HTMLDivElement | null>(null);
   const dismissSideQuestion = useDismissSideQuestion();
   const handleDismissSideQuestion = useCallback(() => {
-    if (!message.btw) {
+    if (!message.sideQuestion) {
       return;
     }
-    void dismissSideQuestion(message.btw.sessionId, message.btw.sideQuestionId);
-  }, [dismissSideQuestion, message.btw]);
+    void dismissSideQuestion(message.sideQuestion.sessionId, message.sideQuestion.sideQuestionId);
+  }, [dismissSideQuestion, message.sideQuestion]);
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(
     () => {
@@ -116,7 +116,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
     return null;
   }
 
-  if (message.btw) {
+  if (message.sideQuestion) {
     // A side question is one aside drawn as two rows: the question row is its
     // top half, the answer row its bottom half, joined by the subagent rail
     // and tint (the pane drops the gap between them). Who said what is told
@@ -124,13 +124,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
     // right, the agent's plain text on the left. It never had edit, fork or
     // grouping affordances, because the session itself never saw it.
     const isAnswerRow = message.type === 'assistant';
-    const isPendingAnswer = isAnswerRow && message.btw.status === 'running' && !String(message.content || '').trim();
+    const isPendingAnswer = isAnswerRow && message.sideQuestion.status === 'running' && !String(message.content || '').trim();
     const railClassName = 'border-l-2 border-l-purple-500 bg-purple-500/5 px-3 dark:border-l-purple-400 dark:bg-purple-400/10';
     return (
       <div
         ref={messageRef}
         data-message-timestamp={message.timestamp || undefined}
-        className="chat-message btw-side-question w-full px-3 sm:px-0"
+        className="chat-message side-question w-full px-3 sm:px-0"
       >
         {isAnswerRow ? (
           <div className={`${railClassName} rounded-b-lg pb-2 pt-1.5`}>

@@ -20,16 +20,16 @@ export type TranscriptExportInput = {
   selectedProject?: Project | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   /**
-   * Keep BTW asides in the file. Off by default: an aside is not part of the
+   * Keep side question asides in the file. Off by default: an aside is not part of the
    * session, so a default export matches what the session itself saw, and the
    * operator opts in from the export menu.
    */
   includeSideQuestions?: boolean;
 };
 
-/** True when the export should drop the BTW aside rows and the rows that pair with them. */
+/** True when the export should drop the side question aside rows and the rows that pair with them. */
 function isSideQuestionRow(message: ChatMessage): boolean {
-  return Boolean(message.btw);
+  return Boolean(message.sideQuestion);
 }
 
 const EXTENSIONS: Record<TranscriptExportFormat, string> = {

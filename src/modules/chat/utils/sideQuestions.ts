@@ -1,5 +1,5 @@
 /**
- * Draws BTW side questions where they were asked, by splicing each one into a
+ * Draws side questions where they were asked, by splicing each one into a
  * session's own transcript as a question/answer pair placed by time — never
  * by reordering the session's own rows.
  */
@@ -36,21 +36,21 @@ function buildAnswerContent(item: SideQuestion, failedText: string): string {
 }
 
 function buildPair(item: SideQuestion, failedText: string): [ChatMessage, ChatMessage] {
-  const btw = { sideQuestionId: item.id, sessionId: item.sessionId, status: item.status };
+  const sideQuestion = { sideQuestionId: item.id, sessionId: item.sessionId, status: item.status };
   const question: ChatMessage = {
-    id: `btw-q-${item.id}`,
+    id: `side-question-q-${item.id}`,
     type: 'user',
     content: item.question,
     timestamp: item.createdAt,
-    btw,
+    sideQuestion,
   };
   const answer: ChatMessage = {
-    id: `btw-a-${item.id}`,
+    id: `side-question-a-${item.id}`,
     type: 'assistant',
     content: buildAnswerContent(item, failedText),
     timestamp: item.createdAt,
     isStreaming: item.status === 'running',
-    btw,
+    sideQuestion,
   };
   return [question, answer];
 }

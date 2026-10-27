@@ -225,7 +225,7 @@
     }
   },
   "sideQuestion": {
-    "label": "BTW · not part of the session",
+    "label": "Side question · not part of the session",
     "pending": "Answering on the side",
     "failed": "The side question failed.",
     "dismiss": "Dismiss"
@@ -237,8 +237,8 @@
       "descriptionResponding": "Send when this turn ends",
       "descriptionBackground": "Send when the background work ends"
     },
-    "btw": {
-      "label": "BTW",
+    "sideQuestion": {
+      "label": "Side question",
       "description": "Ask on the side now; the session never sees it"
     },
     "stop": {
@@ -312,7 +312,7 @@
         "cancel": "Cancel",
         "queue": "Queue",
         "sendAnyway": "Send anyway",
-        "btw": "BTW"
+        "sideQuestion": "Side question"
       }
     },
     "controls": {

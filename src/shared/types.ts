@@ -418,8 +418,8 @@ export type ChatMessage = {
   memoryCitations?: MemoryCitation[];
   /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
   toolStatus?: string;
-  /** Set when this row is the question or answer half of a BTW side question pair, so it draws and behaves apart from the session's own transcript (no edit, fork or retry; never a grouping, last-message or fork anchor). The session id is carried here because `ChatMessage` otherwise has none of its own, and the dismiss control's DELETE needs it. */
-  btw?: { sideQuestionId: string; sessionId: string; status: SideQuestionStatus };
+  /** Set when this row is the question or answer half of a side question pair, so it draws and behaves apart from the session's own transcript (no edit, fork or retry; never a grouping, last-message or fork anchor). The session id is carried here because `ChatMessage` otherwise has none of its own, and the dismiss control's DELETE needs it. */
+  sideQuestion?: { sideQuestionId: string; sessionId: string; status: SideQuestionStatus };
   [key: string]: unknown;
 };
 
@@ -826,7 +826,7 @@ export type QueuedDraft = {
 };
 
 /** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, ask a BTW side question instead, or do nothing. */
-export type BackgroundSendChoice = 'send' | 'queue' | 'btw' | 'cancel';
+export type BackgroundSendChoice = 'send' | 'queue' | 'sideQuestion' | 'cancel';
 
 /** An open background-work send prompt, listing the session's own background tasks as display strings. */
 export type BackgroundSendPrompt = {

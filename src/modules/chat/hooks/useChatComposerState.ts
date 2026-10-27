@@ -761,8 +761,8 @@ export function useChatComposerState({
     }
   }, [resetCommandMenuState, setInput]);
 
-  // Shared by the `/btw` command, the background-send dialog's BTW choice and
-  // the send menu's BTW row: all three ask the same way and clear the
+  // Shared by the `/btw` command, the background-send dialog's side question choice and
+  // the send menu's side question row: all three ask the same way and clear the
   // composer the same way on success, and do nothing extra when the ask was
   // refused (no connection) — the caller's own `return` right after is what
   // actually ends that branch either way.
@@ -1084,7 +1084,7 @@ export function useChatComposerState({
         if (choice === 'cancel') {
           return;
         }
-        if (choice === 'btw') {
+        if (choice === 'sideQuestion') {
           askSideQuestionAndClear(targetSessionId, currentInput);
           return;
         }
@@ -1224,12 +1224,12 @@ export function useChatComposerState({
     [submitMessage],
   );
 
-  // The send menu's entry point: BTW never becomes a turn, so it never goes
+  // The send menu's entry point: side question never becomes a turn, so it never goes
   // through `submitMessage`; Queue and Send anyway answer the background-work
   // question the menu already asked, so the dialog never opens for them.
   const handleSendMenuChoice = useCallback(
-    async (choice: 'queue' | 'btw' | 'send'): Promise<void> => {
-      if (choice === 'btw') {
+    async (choice: 'queue' | 'sideQuestion' | 'send'): Promise<void> => {
+      if (choice === 'sideQuestion') {
         askSideQuestionAndClear(sessionKey, inputValueRef.current);
         return;
       }

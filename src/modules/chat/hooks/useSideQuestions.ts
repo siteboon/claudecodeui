@@ -1,5 +1,5 @@
 /**
- * BTW side questions live beside a session's transcript, in one module-level
+ * Side questions live beside a session's transcript, in one module-level
  * store shared by every view of that session (another tab, a second render
  * of the same page). The server's list is the truth once it holds a row; a
  * question asked from this tab exists locally before the server stores it,
@@ -163,7 +163,7 @@ function newSideQuestionId(): string {
  * session, or a dropped connection (`sendMessage` silently discards a frame
  * sent while the socket is not open, which would otherwise leave the
  * optimistic entry `running` forever), draws the optimistic pending entry,
- * and sends the `chat.btw` frame through the `sendMessage` it was given —
+ * and sends the `chat.side_question` frame through the `sendMessage` it was given —
  * the composer's own, never `useWebSocket()` directly, which throws outside
  * a provider and would break the composer's existing tests.
  */
@@ -190,7 +190,7 @@ export function useAskSideQuestion(
       sideQuestionStore.begin({ id: sideQuestionId, sessionId, question: trimmed, createdAt });
 
       const frame: Record<string, unknown> = {
-        type: 'chat.btw',
+        type: 'chat.side_question',
         sessionId,
         sideQuestionId,
         question: trimmed,

@@ -2,12 +2,11 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
-import { sessionsDb, sideQuestionsDb } from '@/modules/database/index.js';
+import { sessionsDb } from '@/modules/database/index.js';
 import {
   providerModelsService,
   sessionsService,
   sideQuestionsService,
-  toSideQuestion,
 } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
@@ -383,19 +382,18 @@ function handleChatBtw(
     return;
   }
 
-  // Looked up across every session, not just this one: the id is a database
-  // primary key, so a duplicate from another session would otherwise hit the
-  // INSERT and reject `ask` unhandled. The existing row is only attached to
-  // the refusal when it belongs to the asker's own session — never leak
-  // another session's row to this one.
-  const existingRow = sideQuestionsDb.getById(sideQuestionId);
-  if (existingRow) {
+  // Looked up across every session, not just this one, so a duplicate from
+  // another session is refused instead of leaking into it. The existing
+  // question is only attached to the refusal when it belongs to the asker's
+  // own session — never leak another session's question to this one.
+  const existing = sideQuestionsService.getById(sideQuestionId);
+  if (existing) {
     sendSideQuestionError(
       ws,
       sessionId,
       sideQuestionId,
       'A side question with that id already exists.',
-      existingRow.session_id === sessionId ? toSideQuestion(existingRow) : undefined,
+      existing.sessionId === sessionId ? existing : undefined,
     );
     return;
   }

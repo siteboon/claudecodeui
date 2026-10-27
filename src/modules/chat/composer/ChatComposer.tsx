@@ -85,8 +85,8 @@ type ChatComposerProps = {
   onCancelScheduledMessage: (id: string) => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
-  /** Handle send menu choices (queue, btw, send). */
-  onSendMenuChoice?: (choice: 'queue' | 'btw' | 'send') => void;
+  /** Handle send menu choices (queue, side question, send). */
+  onSendMenuChoice?: (choice: 'queue' | 'sideQuestion' | 'send') => void;
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
   fileErrors: Map<string, string>;

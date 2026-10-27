@@ -342,7 +342,7 @@ function ChatMessagesPane({
                   initiallyNearViewport={initiallyNearViewport}
                   // A side question's answer is the bottom half of the aside
                   // its question row starts, so the list's gap goes.
-                  className={item.btw && item.type === 'assistant' ? '!mt-0' : undefined}
+                  className={item.sideQuestion && item.type === 'assistant' ? '!mt-0' : undefined}
                 >
                   <MessageComponent
                     message={item}
