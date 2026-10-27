@@ -109,14 +109,11 @@ let watcherRescheduleAfterRefresh = false;
 function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
   const pluginProvider = pluginProvidersStore.get(provider);
   if (pluginProvider) {
-    if (!pluginProvider.meta.isWatchTarget) {
-      return true;
-    }
     try {
-      return pluginProvider.meta.isWatchTarget(filePath);
+      return pluginProvider.meta.isWatchTarget?.(filePath) ?? true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[SessionsWatcher] isWatchTarget failed for provider "${provider}": ${message}`);
+      console.error(`Plugin isWatchTarget failed for provider "${provider}"`, { filePath, error: message });
       return false;
     }
   }

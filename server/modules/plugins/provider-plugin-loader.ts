@@ -6,12 +6,12 @@ import Database from 'better-sqlite3';
 import { sessionsDb } from '@/modules/database/index.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import {
+  McpProvider,
   pluginProvidersStore,
   type PluginProviderMeta,
   providerRegistry,
+  SkillsProvider,
 } from '@/modules/providers/index.js';
-import { McpProvider } from '@/modules/providers/shared/mcp/mcp.provider.js';
-import { SkillsProvider } from '@/modules/providers/shared/skills/skills.provider.js';
 import * as imageAttachments from '@/shared/image-attachments.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import * as utils from '@/shared/utils.js';

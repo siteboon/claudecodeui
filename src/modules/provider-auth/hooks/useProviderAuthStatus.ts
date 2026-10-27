@@ -149,10 +149,10 @@ export function useProviderAuthStatus(
     if (key !== prevPluginIdsRef.current) {
       prevPluginIdsRef.current = key;
       if (pluginProviderIds.length > 0) {
-        void Promise.all(pluginProviderIds.map((id) => checkProviderAuthStatus(id)));
+        void refreshProviderAuthStatuses(pluginProviderIds);
       }
     }
-  }, [pluginProviderIds, checkProviderAuthStatus]);
+  }, [pluginProviderIds, refreshProviderAuthStatuses]);
 
   return {
     providerAuthStatus,
