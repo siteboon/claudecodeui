@@ -116,6 +116,7 @@ function ChatInterface({
     availablePermissionModes,
     selectPermissionMode,
     cyclePermissionMode,
+    applyPlanModeChange,
     providerModelCatalog,
     providerModelsLoading,
     providerModelActions,
@@ -301,6 +302,7 @@ function ChatInterface({
     onWebSocketReconnect: handleWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
+    onPlanModeChange: applyPlanModeChange,
   });
 
   // Lets other modules (the quick settings Commands tab) hand text to the
