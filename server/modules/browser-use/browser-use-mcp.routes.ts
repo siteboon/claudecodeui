@@ -12,7 +12,33 @@ function readBearerToken(header: unknown): string | null {
   return match?.[1]?.trim() || null;
 }
 
+const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+/**
+ * The MCP bridge hands full agent control of the managed browser to whoever
+ * presents the shared machine token, so it must only accept requests from the
+ * local MCP process. A request that arrived through a reverse proxy is treated
+ * as remote even when the proxy itself dials from loopback, because the local
+ * bridge never sets forwarding headers.
+ */
+function isLoopbackRequest(req: express.Request): boolean {
+  if (req.headers['x-forwarded-for'] !== undefined) {
+    return false;
+  }
+
+  return LOOPBACK_ADDRESSES.has(req.socket.remoteAddress || '');
+}
+
+// Escape hatch for deployments that deliberately run the MCP process on another
+// host; opting in keeps the default safe.
+const MCP_ALLOW_REMOTE = process.env.CLOUDCLI_BROWSER_USE_MCP_ALLOW_REMOTE === '1';
+
 router.use((req, res, next) => {
+  if (!MCP_ALLOW_REMOTE && !isLoopbackRequest(req)) {
+    res.status(403).json({ success: false, error: 'Browser MCP tools only accept local requests.' });
+    return;
+  }
+
   const expected = browserUseService.getMcpToken();
   const token = readBearerToken(req.headers.authorization) || String(req.headers['x-browser-use-mcp-token'] || '');
   if (!token || token !== expected) {

@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, type Dispatch, type SetStateAction, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { MonitorPlay } from 'lucide-react';
 
 import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
 import { StandaloneShell } from '@/modules/standalone-shell';
 import { GitPanel } from '@/modules/git-panel';
 import { PluginTabContent } from '@/modules/plugins';
-import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
+import { BrowserUsePanel, BrowserViewSidePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
 import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
-import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
+import { useSetUiPreference, useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { useFileOpenResolver } from '@/modules/project-workspace/hooks/useFileOpenResolver';
 import { EditorSidebar, useEditorSidebar } from '@/modules/code-editor';
 import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
@@ -60,7 +62,9 @@ function WorkspaceMain({
   onRenameSession,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
-  const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
+  const { showRawParameters, showThinking, sendByCtrlEnter, browserViewPanelOpen } = preferences;
+  const setBrowserViewPanelOpen = useSetUiPreference();
+  const { t } = useTranslation('settings');
 
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const browserUseEnabled = useBrowserUseEnabled();
@@ -245,6 +249,22 @@ function WorkspaceMain({
           projectPath={selectedProject.path}
           fillSpace={activeTab === 'files'}
         />
+
+        {shouldShowBrowserTab && !isMobile && (
+          browserViewPanelOpen ? (
+            <BrowserViewSidePanel onClose={() => setBrowserViewPanelOpen('browserViewPanelOpen', false)} />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setBrowserViewPanelOpen('browserViewPanelOpen', true)}
+              className="flex w-9 shrink-0 items-center justify-center border-l border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={t('browserView.openPanel')}
+              aria-label={t('browserView.openPanel')}
+            >
+              <MonitorPlay className="h-4 w-4" />
+            </button>
+          )
+        )}
       </div>
     </div>
   );

@@ -15,6 +15,8 @@ export type UiPreferences = {
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
   voiceEnabled: boolean;
+  /** Keeps the browser live-view side panel open across workspace visits. */
+  browserViewPanelOpen: boolean;
 };
 
 export type UiPreferenceKey = keyof UiPreferences;
@@ -29,6 +31,7 @@ const DEFAULTS: UiPreferences = {
   sendByCtrlEnter: false,
   sidebarVisible: true,
   voiceEnabled: false,
+  browserViewPanelOpen: false,
 };
 
 const PREFERENCE_KEYS = Object.keys(DEFAULTS) as UiPreferenceKey[];
