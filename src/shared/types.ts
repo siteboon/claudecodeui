@@ -628,6 +628,9 @@ export type WorkflowAgentInfo = {
   phase?: string;
   /** `stopped` is an agent the journal never settled although the run itself has — abandoned by a stop or a resume that re-ran the step. */
   status: 'running' | 'completed' | 'failed' | 'stopped';
+  /** Epoch ms of the first and last entry in the agent's own transcript; absent when it has none yet. */
+  startedAt?: number;
+  lastActivityAt?: number;
 };
 
 /** A `Workflow` call's run as the backend read it from disk; `stopped` is a run whose session process ended before it reported, and an empty agent list is a run that left no journal behind. */
