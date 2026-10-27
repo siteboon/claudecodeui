@@ -7,5 +7,6 @@ export { chatRunRegistry } from './services/chat-run-registry.service.js';
 export { broadcastSessionUpserted, broadcastSessionUpsertedBatch } from './services/session-upsert-broadcast.service.js';
 // runDetachedChatTurn: used by the scheduled-messages module to run a turn
 // from a timer, with no socket to stream to or report errors on.
-export { runDetachedChatTurn } from './services/chat-websocket.service.js';
+export { RUN_IN_PROGRESS_ERROR, runDetachedChatTurn } from './services/chat-websocket.service.js';
+export type { DetachedTurnResult } from './services/chat-websocket.service.js';
 export type { ProviderRuntimeGateway } from './services/chat-websocket.service.js';
