@@ -272,6 +272,16 @@
     },
     "stop": "Stop",
     "backgroundWork": "Background work",
+    "waitingFor": {
+      "agents_one": "Waiting for {{count}} subagent",
+      "agents_other": "Waiting for {{count}} subagents",
+      "commands_one": "Waiting for {{count}} background command",
+      "commands_other": "Waiting for {{count}} background commands",
+      "tasks_one": "Waiting for {{count}} background task",
+      "tasks_other": "Waiting for {{count}} background tasks"
+    },
+    "keepChatting": "you can keep chatting",
+    "heldElsewhereDetail": "your message will wait until it finishes",
     "backgroundTask": {
       "workflow": "Workflow {{name}}",
       "agent": "Agent {{description}}",

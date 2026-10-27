@@ -41,7 +41,26 @@ type RunningSessionEntry = {
   background?: true;
   canInterrupt?: false;
   statusText?: string;
+  /** Set when another program (a terminal CLI, an IDE) runs the session; messages wait for it. */
+  heldElsewhere?: true;
   tasks?: BackgroundTaskSummary[];
+};
+
+/** Names the program behind a CLI process from its recorded entrypoint, for the status line. */
+const describeClaudeEntrypoint = (entrypoint: string | null): string => {
+  if (entrypoint === 'cli') {
+    return 'the Claude CLI';
+  }
+  if (entrypoint && /vscode/i.test(entrypoint)) {
+    return 'VS Code';
+  }
+  if (entrypoint && /jetbrains|intellij/i.test(entrypoint)) {
+    return 'JetBrains';
+  }
+  if (entrypoint && /desktop/i.test(entrypoint)) {
+    return 'Claude Desktop';
+  }
+  return 'another Claude program';
 };
 
 type CreateAppSessionResult = {
@@ -212,7 +231,8 @@ export const sessionsService = {
         // There is no run here to abort: the turn belongs to a CLI process
         // CloudCLI does not own, so it can be reported but not interrupted.
         canInterrupt: false,
-        statusText: 'Running in the Claude CLI',
+        statusText: `Busy in ${describeClaudeEntrypoint(live.entrypoint)}`,
+        heldElsewhere: true,
       });
       runningById.set(session.session_id, entries[entries.length - 1]);
     }

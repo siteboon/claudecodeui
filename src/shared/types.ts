@@ -208,6 +208,8 @@ export type SessionActivity = {
   background?: boolean;
   /** The background tasks the session still has running, with or without a response in flight. */
   tasks?: BackgroundTaskSummary[];
+  /** Set when another program (a terminal CLI, an IDE) is running the session; messages wait for it. */
+  heldElsewhere?: boolean;
 };
 
 /** Every busy session, keyed by session id. Read it to tell whether a session is busy; check `background` to tell how. */
@@ -245,6 +247,7 @@ export type IsSessionProcessing = (sessionId?: string | null) => boolean;
 /** One running session as reported by the server, before it is folded into the client-side activity map. */
 export type SessionActivitySnapshot = {
   sessionId: string;
+  heldElsewhere?: boolean;
   statusText?: string | null;
   canInterrupt?: boolean;
   startedAt?: number;

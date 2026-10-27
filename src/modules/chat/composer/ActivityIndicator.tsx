@@ -23,6 +23,16 @@ const ACTION_KEYS = [
 const DEFAULT_ACTION_WORDS = ['Thinking', 'Processing', 'Analyzing', 'Working', 'Computing', 'Reasoning'];
 const EXIT_ANIMATION_MS = 220;
 
+/** "Waiting for 2 subagents": how many tasks the session waits on, named by kind when they are all one kind. */
+function describeWaiting(allTasks: BackgroundTaskSummary[], t: TFunction): string {
+  const tasks = ownBackgroundTasks(allTasks);
+  const count = Math.max(tasks.length, 1);
+  const kind = tasks.length > 0 && tasks.every((task) => task.taskType === 'local_agent')
+    ? 'agents'
+    : tasks.length > 0 && tasks.every((task) => task.taskType === 'local_bash') ? 'commands' : 'tasks';
+  return t(`claudeStatus.waitingFor.${kind}`, { count });
+}
+
 /** What the background work is: the one task by kind and name, or how many when there are several. */
 function describeBackgroundTasks(allTasks: BackgroundTaskSummary[], t: TFunction): string {
   const tasks = ownBackgroundTasks(allTasks);
@@ -81,12 +91,19 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
   if (!renderedActivity) return null;
 
   const isBackground = Boolean(renderedActivity.background);
+  const isHeldElsewhere = Boolean(renderedActivity.heldElsewhere);
   const actionWords = ACTION_KEYS.map((key, i) => t(key, { defaultValue: DEFAULT_ACTION_WORDS[i] }));
   const label = isBackground
-    ? t('claudeStatus.backgroundWork', 'Background work')
+    ? describeWaiting(renderedActivity.tasks ?? [], t)
     : (renderedActivity.statusText || actionWords[Math.floor(elapsedSeconds / 4) % actionWords.length])
       .replace(/\.+$/, '');
-  const detail = isBackground ? describeBackgroundTasks(renderedActivity.tasks ?? [], t) : '';
+  // Background-only: what is running, and that the chat still takes messages.
+  // Held by another program: that a message sent now waits for it.
+  const detail = isBackground
+    ? [describeBackgroundTasks(renderedActivity.tasks ?? [], t), t('claudeStatus.keepChatting', 'you can keep chatting')].filter(Boolean).join(' · ')
+    : isHeldElsewhere
+      ? t('claudeStatus.heldElsewhereDetail', 'your message will wait until it finishes')
+      : '';
 
   const minutes = Math.floor(elapsedSeconds / 60);
   const seconds = elapsedSeconds % 60;
@@ -110,7 +127,9 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
         <div className={`${tabSurfaceClassName} min-w-0 max-w-full gap-2`}>
           <span
             className={`h-1.5 w-1.5 shrink-0 animate-pulse rounded-full ${
-              isBackground ? 'bg-purple-500 dark:bg-purple-400' : 'bg-primary'
+              isBackground
+                ? 'bg-purple-500 dark:bg-purple-400'
+                : isHeldElsewhere ? 'bg-amber-500 dark:bg-amber-400' : 'bg-primary'
             }`}
             aria-hidden
           />

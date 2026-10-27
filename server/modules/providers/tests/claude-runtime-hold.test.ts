@@ -427,7 +427,8 @@ test('a turn the held process starts by itself is shown as running and completes
     script.emit(taskNotification('bg1', 'toolu_bg', 'completed'));
     script.emit(init());
     await waitFor(() => reopens() === 1);
-    assert.equal(working(sent), 1);
+    const labels = sent.filter((message) => message.kind === 'status').map((message) => (message as { text?: string }).text);
+    assert.ok(labels.includes('Working on a background result'), 'labelled as a turn it started by itself');
 
     // It takes "Send now" like any running turn.
     assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'also check the log', {}), true);

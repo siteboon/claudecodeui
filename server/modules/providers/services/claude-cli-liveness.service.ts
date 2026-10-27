@@ -11,6 +11,8 @@ import path from 'node:path';
 type LiveClaudeCliSession = {
   providerSessionId: string;
   startedAt: number;
+  /** How the CLI was started (`cli` for a terminal, an IDE's or an SDK app's name otherwise), when it says. */
+  entrypoint: string | null;
 };
 
 /**
@@ -90,7 +92,8 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
   }
 
   const startedAt = typeof record.startedAt === 'number' ? record.startedAt : Date.now();
-  return { providerSessionId, startedAt };
+  const entrypoint = typeof record.entrypoint === 'string' && record.entrypoint ? record.entrypoint : null;
+  return { providerSessionId, startedAt, entrypoint };
 }
 
 /**

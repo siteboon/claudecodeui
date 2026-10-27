@@ -352,7 +352,8 @@ test('running sessions report a turn driven by the Claude CLI', { concurrency: f
             startedAt: 4_000,
             lastSeq: 0,
             canInterrupt: false,
-            statusText: 'Running in the Claude CLI',
+            statusText: 'Busy in the Claude CLI',
+            heldElsewhere: true,
           }]);
         },
       ),

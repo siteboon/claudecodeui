@@ -38,7 +38,8 @@ test('a background-only session names its workflow, counts from its start and of
   const onAbort = vi.fn();
   const { container } = render(<ActivityIndicator activity={backgroundActivity([task()])} onAbort={onAbort} />);
 
-  assert.match(container.textContent ?? '', /Background work…/);
+  assert.match(container.textContent ?? '', /Waiting for 1 background task…/);
+  assert.match(container.textContent ?? '', /you can keep chatting/, 'the chat still takes messages');
   assert.match(container.textContent ?? '', /Workflow frontend-architecture-audit/);
   assert.match(container.textContent ?? '', /1m 5s/, 'elapsed since the task started, not since the pill mounted');
   assert.equal(screen.queryByRole('button', { name: 'Stop' }), null);
@@ -84,4 +85,27 @@ test('a response in flight still shows the Stop button and the primary dot', () 
   assert.ok(screen.getByRole('button', { name: 'Stop' }));
   assert.ok(container.querySelector('.bg-primary'));
   assert.equal(container.querySelector('.bg-purple-500'), null);
+});
+
+test('helpers that are all subagents are counted as subagents', () => {
+  const { container } = render(<ActivityIndicator
+    activity={backgroundActivity([
+      task({ taskId: 'a1', taskType: 'local_agent', description: 'Explore the settings panels' }),
+      task({ taskId: 'a2', taskType: 'local_agent', description: 'Explore the build scripts' }),
+    ])}
+    onAbort={vi.fn()}
+  />);
+  assert.match(container.textContent ?? '', /Waiting for 2 subagents…/);
+  assert.equal(screen.queryByRole('button', { name: 'Stop' }), null);
+});
+
+test('a session another program is running says so, and that a message waits', () => {
+  const { container } = render(<ActivityIndicator
+    activity={{ statusText: 'Busy in VS Code', canInterrupt: false, startedAt: Date.now(), heldElsewhere: true }}
+    onAbort={vi.fn()}
+  />);
+  assert.match(container.textContent ?? '', /Busy in VS Code…/);
+  assert.match(container.textContent ?? '', /your message will wait until it finishes/);
+  assert.ok(container.querySelector('.bg-amber-500'), 'drawn in amber, apart from a turn of its own');
+  assert.equal(screen.queryByRole('button', { name: 'Stop' }), null);
 });

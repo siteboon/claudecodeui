@@ -29,7 +29,7 @@ type ChatSessionWriterOptions = {
    * Marks the run as running again after it completed. Implemented by the
    * chat run registry; see `reopen`.
    */
-  onReopen?: () => boolean;
+  onReopen?: (statusText: string | null) => boolean;
 };
 
 /**
@@ -153,10 +153,11 @@ export class ChatSessionWriter {
    * Reports the run as running again after its `complete`. A provider process
    * held open for background work can start another turn by itself (a cron, a
    * task reporting back) or for a message sent into it; that turn is a run's
-   * work like any other. Returns false when a newer run owns the session.
+   * work like any other. `statusText` labels a turn the provider started by
+   * itself. Returns false when a newer run owns the session.
    */
-  reopen(): boolean {
-    return this.options.onReopen?.() ?? false;
+  reopen(statusText: string | null = null): boolean {
+    return this.options.onReopen?.(statusText) ?? false;
   }
 
   getSessionId(): string | null {

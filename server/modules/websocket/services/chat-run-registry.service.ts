@@ -33,6 +33,8 @@ type ChatRun = {
   writer: ChatSessionWriter;
   startedAt: number;
   completedAt: number | null;
+  /** Status line for a reopened run whose turn the provider started by itself; null otherwise. */
+  statusText: string | null;
 };
 
 /**
@@ -177,7 +179,7 @@ function recordProviderSessionId(run: ChatRun, providerSessionId: string): void 
  * after its retention window takes its slot back. Refused when a newer run is
  * running for the session.
  */
-function reopenRun(run: ChatRun): boolean {
+function reopenRun(run: ChatRun, statusText: string | null): boolean {
   const current = runs.get(run.appSessionId);
   if (current && current !== run && current.status === 'running') {
     return false;
@@ -185,6 +187,7 @@ function reopenRun(run: ChatRun): boolean {
 
   run.status = 'running';
   run.completedAt = null;
+  run.statusText = statusText;
   runs.set(run.appSessionId, run);
   return true;
 }
@@ -235,6 +238,7 @@ export const chatRunRegistry = {
       writer: null as unknown as ChatSessionWriter,
       startedAt: Date.now(),
       completedAt: null,
+      statusText: null,
     };
 
     run.writer = new ChatSessionWriter({
@@ -246,7 +250,7 @@ export const chatRunRegistry = {
         recordProviderSessionId(run, providerSessionId);
       },
       decorateOutboundEvent: (message) => decorateAndRecordEvent(run, message),
-      onReopen: () => reopenRun(run),
+      onReopen: (statusText) => reopenRun(run, statusText),
     });
 
     runs.set(input.appSessionId, run);
@@ -266,6 +270,7 @@ export const chatRunRegistry = {
     provider: LLMProvider;
     startedAt: number;
     lastSeq: number;
+    statusText?: string;
   }> {
     return Array.from(runs.values())
       .filter((run) => run.status === 'running')
@@ -274,6 +279,7 @@ export const chatRunRegistry = {
         provider: run.provider,
         startedAt: run.startedAt,
         lastSeq: run.lastSeq,
+        ...(run.statusText ? { statusText: run.statusText } : {}),
       }));
   },
 

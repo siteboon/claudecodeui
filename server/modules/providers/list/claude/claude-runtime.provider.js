@@ -82,6 +82,9 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 // to start the follow-up turn that answers it (it starts one right away when
 // the message arrived too late for the turn to take it in).
 const INJECT_FOLLOW_UP_GRACE_MS = 2000;
+// Status line for a turn a held process starts by itself: a cron firing, or
+// background work (agents, commands) reporting back.
+const BACKGROUND_RESULT_STATUS = 'Working on a background result';
 // Live runs that can take a "Send now" message, keyed like activeSessions.
 // Each entry names its query instance so a superseded run is never fed.
 const sessionInjectors = new Map();
@@ -1448,8 +1451,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         if (sessionKey()) {
           abortedSessionIds.delete(sessionKey());
         }
-        if (ws.reopen?.()) {
-          ws.send(createNormalizedMessage({ kind: 'status', text: 'Working', canInterrupt: true, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        const reopenedLabel = userInputThisTurn ? null : BACKGROUND_RESULT_STATUS;
+        if (ws.reopen?.(reopenedLabel)) {
+          ws.send(createNormalizedMessage({ kind: 'status', text: reopenedLabel ?? 'Working', canInterrupt: true, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
       }
 

@@ -19,6 +19,7 @@ type RunningSessionApiItem = {
   statusText?: unknown;
   canInterrupt?: unknown;
   background?: unknown;
+  heldElsewhere?: unknown;
   tasks?: unknown;
 };
 
@@ -155,6 +156,7 @@ export function SessionProtectionProvider({ children }: { children: ReactNode })
               statusText: typeof session.statusText === 'string' ? session.statusText : undefined,
               canInterrupt: typeof session.canInterrupt === 'boolean' ? session.canInterrupt : undefined,
               background: session.background === true,
+              heldElsewhere: session.heldElsewhere === true,
               tasks: parseBackgroundTasks(session.tasks),
             };
           })

@@ -194,6 +194,7 @@ export function useSessionProtection() {
           canInterrupt: snapshot.canInterrupt ?? existing?.canInterrupt ?? true,
           startedAt: snapshotStartedAt ?? existing?.startedAt ?? now,
           ...(snapshot.background ? { background: true } : {}),
+          ...(snapshot.heldElsewhere ? { heldElsewhere: true } : {}),
           ...(snapshot.tasks ? { tasks: snapshot.tasks } : {}),
         });
       }
