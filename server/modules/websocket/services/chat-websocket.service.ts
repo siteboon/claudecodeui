@@ -476,8 +476,14 @@ async function handleChatInject(
     return;
   }
 
+  // A run CloudCLI started is the usual case. After it reported complete, its
+  // process can still be held open for background work and run a turn of its
+  // own when that work reports back; the runtime knows, so ask it.
   const run = chatRunRegistry.getRun(sessionId);
-  if (!run || run.status !== 'running') {
+  const provider = run?.status === 'running'
+    ? run.provider
+    : sessionsDb.getSessionById(sessionId)?.provider as LLMProvider | undefined;
+  if (!provider || !dependencies.runtime.hasRuntime(provider)) {
     reply(false, 'NO_ACTIVE_RUN');
     return;
   }
@@ -487,7 +493,7 @@ async function handleChatInject(
   const verifiedAttachments = filterAttachmentsToUploadStore(
     normalizeAttachmentDescriptors(clientOptions.attachments),
   );
-  const accepted = await dependencies.runtime.inject(run.provider, sessionId, content, {
+  const accepted = await dependencies.runtime.inject(provider, sessionId, content, {
     images: verifiedAttachments.filter(isImageAttachmentDescriptor),
     files: verifiedAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
   });

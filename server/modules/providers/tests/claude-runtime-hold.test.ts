@@ -377,3 +377,29 @@ test('a turn that already completed refuses a message sent now', async () => {
 test('no live run refuses a message sent now', async () => {
   assert.equal(await injectClaudeSDKMessage('no-such-session', 'hello', {}), false);
 });
+
+test('a turn the held process starts by itself for background work takes a message sent now', async () => {
+  await withRun(async ({ script, sent }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_bg', 'Bash', { command: 'sleep 600', run_in_background: true }));
+    script.emit(taskStarted('bg1', 'toolu_bg', 'local_bash'));
+    script.emit(ack('toolu_bg', 'Command running in background with ID: bg1', { backgroundTaskId: 'bg1' }));
+    script.emit(result());
+    await waitFor(() => completes(sent) === 1);
+    assert.equal(script.released(), false, 'held for the background command');
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'too early', {}), false, 'nothing is running between turns');
+
+    // The command reports back and the CLI starts a turn of its own.
+    script.emit(taskNotification('bg1', 'toolu_bg', 'completed'));
+    script.emit(init());
+    await settle();
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'also check the log', {}), true);
+    await waitFor(() => script.received.length === 2);
+    assert.equal((script.received[1] as { priority?: string }).priority, 'next');
+
+    script.emit(text('The command finished; the log is clean.'));
+    script.emit(result());
+    await settle();
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'after it', {}), false, 'the follow-up turn is over');
+  });
+});

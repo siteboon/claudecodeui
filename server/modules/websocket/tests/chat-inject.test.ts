@@ -32,6 +32,8 @@ async function withGateway(
     socket: ReturnType<typeof createFakeSocket>;
     injects: InjectCall[];
   }) => Promise<void>,
+  // Whether the runtime has a live turn to take the message.
+  runtimeAccepts = true,
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'chat-inject-'));
@@ -51,9 +53,10 @@ async function withGateway(
       { user: { id: 1 } } as never,
       {
         runtime: {
+          hasRuntime: () => true,
           inject: async (provider: string, sessionId: string, text: string, attachments: unknown) => {
             injects.push({ provider, sessionId, text, attachments });
-            return true;
+            return runtimeAccepts;
           },
         } as never,
       },
@@ -90,14 +93,34 @@ test('chat.inject hands the message to the running turn and answers accepted', a
   });
 });
 
-test('chat.inject without a running turn is refused so the client queues it', async () => {
+test('chat.inject with no live turn anywhere is refused so the client queues it', async () => {
   await withGateway(async ({ socket, injects }) => {
     socket.emit('message', JSON.stringify({ type: 'chat.inject', sessionId: SESSION_ID, requestId: 'r2', content: 'steer' }));
     await settle();
 
-    assert.equal(injects.length, 0);
+    assert.equal(injects.length, 1, 'the runtime is asked');
     assert.equal(socket.frames.at(-1)?.kind, 'inject_result');
     assert.equal(socket.frames.at(-1)?.accepted, false);
+    assert.equal(socket.frames.at(-1)?.reason, 'NOT_ACCEPTED');
+  }, false);
+});
+
+test('chat.inject reaches a turn the held process started by itself after the run completed', async () => {
+  await withGateway(async ({ socket, injects }) => {
+    socket.emit('message', JSON.stringify({ type: 'chat.inject', sessionId: SESSION_ID, requestId: 'r4', content: 'steer' }));
+    await settle();
+
+    assert.deepEqual(injects.map((call) => call.provider), ['claude'], 'the provider comes from the session row');
+    assert.equal(socket.frames.at(-1)?.accepted, true);
+  });
+});
+
+test('chat.inject for a session that does not exist is refused', async () => {
+  await withGateway(async ({ socket, injects }) => {
+    socket.emit('message', JSON.stringify({ type: 'chat.inject', sessionId: 'no-such-session', requestId: 'r5', content: 'steer' }));
+    await settle();
+
+    assert.equal(injects.length, 0);
     assert.equal(socket.frames.at(-1)?.reason, 'NO_ACTIVE_RUN');
   });
 });

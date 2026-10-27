@@ -1029,6 +1029,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // a follow-up turn (see INJECT_FOLLOW_UP_GRACE_MS).
   let injectedSinceResult = 0;
   let injectGraceTimer = null;
+  // True while a process held open for background work runs a turn of its own
+  // (the CLI answering a task that reported back). The client was already told
+  // the run is complete, but that turn can still take a "Send now" message.
+  let followUpTurnActive = false;
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
@@ -1228,11 +1232,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // has reported complete (a held process only waits for background work)
     // or stdin is closing; the client then queues the message instead.
     const injectInput = async (text, images, files) => {
-      if (turnCompleteSent || heldPrompt.isReleased()) {
+      const turnRunning = () => !turnCompleteSent || followUpTurnActive;
+      if (!turnRunning() || heldPrompt.isReleased()) {
         return false;
       }
       const [message] = await buildPromptMessages(text, images, files, options.cwd);
-      if (turnCompleteSent || !heldPrompt.push({ ...message, priority: 'next' })) {
+      if (!turnRunning() || !heldPrompt.push({ ...message, priority: 'next' })) {
         return false;
       }
       injectedSinceResult += 1;
@@ -1410,6 +1415,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         releasePromptStream();
       }
 
+      if (message.type === 'system' && message.subtype === 'init' && turnCompleteSent) {
+        followUpTurnActive = true;
+      }
+
       if (message.type === 'system' && message.subtype === 'init' && injectGraceTimer) {
         // The CLI started a turn of its own for a "Send now" message that came
         // too late for the last one; that turn's `result` completes the run.
@@ -1419,7 +1428,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
       if (message.type === 'result') {
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
-        if (injectedSinceResult > 0 && !turnCompleteSent && !abortPending) {
+        followUpTurnActive = false;
+        if (injectedSinceResult > 0 && !abortPending) {
           // A "Send now" message went in during this turn. If the turn took it
           // in, nothing follows; if not, the CLI answers it in a follow-up turn
           // that starts at once. Wait briefly to see which before completing.

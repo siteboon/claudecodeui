@@ -5,6 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { isClaudeSDKSessionActive } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
@@ -200,10 +201,14 @@ export const sessionsService = {
         provider: session.provider as LLMProvider,
         startedAt: live.startedAt,
         lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0,
-        // There is no run here to abort: the turn belongs to a CLI process
-        // CloudCLI does not own, so it can be reported but not interrupted.
+        // There is no run here to abort: either the turn belongs to a CLI
+        // process CloudCLI does not own, or it is a turn CloudCLI's own held
+        // process started by itself for background work that reported back
+        // (that one still takes "Send now").
         canInterrupt: false,
-        statusText: 'Running in the Claude CLI',
+        statusText: isClaudeSDKSessionActive(session.session_id)
+          ? 'Working on a background task result'
+          : 'Running in the Claude CLI',
       });
       runningById.set(session.session_id, entries[entries.length - 1]);
     }
