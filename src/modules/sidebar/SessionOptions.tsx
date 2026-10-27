@@ -20,6 +20,8 @@ type SessionOptionsProps = {
   projectId: string | null;
   /** A running session cannot be deleted or forked, matching the Projects row. */
   isProcessing: boolean;
+  /** Background work outliving the turn still writes the transcript, so the server refuses a move. */
+  hasBackgroundWork?: boolean;
   isEditing: boolean;
   renameDraft: string;
   onRenameDraftChange: (draft: string) => void;
@@ -52,6 +54,7 @@ export default function SessionOptions({
   provider,
   projectId,
   isProcessing,
+  hasBackgroundWork = false,
   isEditing,
   renameDraft,
   onRenameDraftChange,
@@ -75,7 +78,7 @@ export default function SessionOptions({
   const forkableProviders = useSessionForkingProviders();
   const canFork = Boolean(onFork) && forkableProviders.has(provider) && !isProcessing;
   const movableProviders = useSessionMovingProviders();
-  const canMove = Boolean(onMove) && movableProviders.has(provider) && !isProcessing;
+  const canMove = Boolean(onMove) && movableProviders.has(provider) && !isProcessing && !hasBackgroundWork;
 
   // While editing, dismiss only when the click lands outside the rename panel,
   // matching Escape and the cancel button.

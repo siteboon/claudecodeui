@@ -86,7 +86,7 @@ function SidebarSessionItem({
   const providerLabel = PROVIDER_LABELS[session.__provider];
   // Same gate as the desktop menu in SessionOptions.
   const movableProviders = useSessionMovingProviders();
-  const canMove = Boolean(onMoveSession) && movableProviders.has(session.__provider) && !isProcessing;
+  const canMove = Boolean(onMoveSession) && movableProviders.has(session.__provider) && !isProcessing && !hasBackgroundWork;
 
   // The desktop controls live in SessionOptions, which owns the rename panel and
   // its outside-click dismissal. The mobile rename sits inside the bottom sheet,
@@ -490,6 +490,7 @@ function SidebarSessionItem({
             provider={session.__provider}
             projectId={project.projectId}
             isProcessing={isProcessing}
+            hasBackgroundWork={hasBackgroundWork}
             isEditing={isEditing}
             renameDraft={renameDraft}
             onRenameDraftChange={onRenameDraftChange}

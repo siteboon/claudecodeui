@@ -65,12 +65,20 @@ test('the mobile options sheet offers moving the session to another project', ()
   assert.equal(onMoveSession.mock.calls[0][0].id, 's1');
 });
 
-test('a running session is not offered a move on mobile', () => {
-  renderRow({ onMoveSession: vi.fn(), isProcessing: true });
+test('the mobile sheet withholds a move the server would refuse', () => {
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['a running turn', { onMoveSession: vi.fn(), isProcessing: true }],
+    ['background work that outlived the turn', { onMoveSession: vi.fn(), hasBackgroundWork: true }],
+    ['a provider that cannot move sessions', { onMoveSession: vi.fn(), session: { ...SESSION, __provider: 'cursor' } }],
+    ['no move handler', {}],
+  ];
+  for (const [reason, overrides] of cases) {
+    const { unmount } = renderRow(overrides);
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Session options for session one' }));
+    });
 
-  act(() => {
-    fireEvent.click(screen.getByRole('button', { name: 'Session options for session one' }));
-  });
-
-  assert.equal(screen.queryByRole('button', { name: 'actions.moveSession' }), null);
+    assert.equal(screen.queryByRole('button', { name: 'actions.moveSession' }), null, reason);
+    unmount();
+  }
 });
