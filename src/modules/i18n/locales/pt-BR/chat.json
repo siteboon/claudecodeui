@@ -151,7 +151,7 @@
       "ctrlEnter": "Ctrl+Enter para enviar • Shift+Enter para nova linha • Tab para alternar modos • / para slash commands",
       "enter": "Enter para enviar • Shift+Enter para nova linha • Tab para alternar modos • / para slash commands",
       "queue": "Enter para enfileirar sua próxima mensagem",
-      "updateQueued": "Enter para atualizar mensagem enfileirada"
+      "appendQueued": "Enter para adicionar à mensagem enfileirada"
     },
     "clickToChangeMode": "Clique para alterar modo de permissão (ou pressione Tab na entrada)",
     "showAllCommands": "Mostrar todos os comandos",
@@ -159,7 +159,8 @@
     "scrollToBottom": "Rolar para o final",
     "queue": {
       "sendNext": "Enfileirar próxima mensagem",
-      "update": "Atualizar mensagem enfileirada",
+      "append": "Adicionar à mensagem enfileirada",
+      "notCombinable": "Falha ao enfileirar a mensagem: um slash command é executado sozinho, então não pode ser combinado com a mensagem enfileirada. Envie-o depois que a mensagem enfileirada for enviada.",
       "label": "Enfileirado",
       "willSend": "Enviará quando isto terminar",
       "edit": "Editar mensagem enfileirada",
@@ -173,6 +174,8 @@
     "loadingModels": "Carregando modelos…",
     "modelMenu": "Selecionar modelo e nível de raciocínio",
     "permissionHeading": "Como as ações do {{provider}} devem ser aprovadas?",
+    "permissionCycleHint": "Pressione Tab no campo de mensagem para alternar o modo",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Substituindo uma mensagem anterior",
       "filesNotReverted": "arquivos que o agente já alterou não são revertidos",
@@ -199,6 +202,7 @@
     "pressToSearch": "Pressione <kbd>{{shortcut}}</kbd> para pesquisar sessões, arquivos e commits",
     "chooseModel": "Escolher um modelo",
     "chooseModelDescription": "Modelos integrados e personalizados em uma lista",
+    "chooseModelDescriptionCustomOnly": "Apenas os seus modelos são listados para {{providers, list}}",
     "addModel": "Adicionar modelo",
     "searchModels": "Pesquisar modelos...",
     "manageModels": "Gerenciar modelos",
@@ -281,8 +285,7 @@
       "workflow": "Workflow {{name}}",
       "agent": "Agente {{description}}",
       "command": "Comando {{description}}",
-      "count": "{{count}} tarefas",
-      "sendAnyway": "Esta sessão ainda tem trabalho em segundo plano rodando:\n{{work}}\n\nUma nova mensagem inicia um novo turno, que interrompe esse trabalho; o que ele ainda não reportou é perdido. Enviar mesmo assim?"
+      "count": "{{count}} tarefas"
     },
     "controls": {
       "stopGeneration": "Parar geração",
@@ -399,6 +402,10 @@
   "modelLibrary": {
     "effortLevels": "Níveis de raciocínio",
     "effortLevelsHint": "Selecione os níveis de esforço de raciocínio que este modelo aceita. Se nenhum for selecionado, nenhum nível de esforço poderá ser escolhido para este modelo no composer.",
-    "effortSummary": "Raciocínio: {{levels}}"
+    "effortSummary": "Raciocínio: {{levels}}",
+    "customModelsOnly": "Usar apenas meus modelos",
+    "customModelsOnlyHint": "Oculta os modelos integrados do {{provider}} em todos os seletores de modelo e torna o seu primeiro modelo o padrão. Os integrados continuam visíveis até você adicionar um modelo.",
+    "builtInModelsHidden": "Ocultos nos seletores de modelo enquanto “Usar apenas meus modelos” estiver ativado.",
+    "customModelsOnlyFailed": "Não foi possível alterar esta configuração."
   }
 }

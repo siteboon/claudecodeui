@@ -3,6 +3,7 @@ import express, { type Request, type Response } from 'express';
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
+import { providerCliService } from '@/modules/providers/services/provider-cli.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
@@ -608,6 +609,21 @@ const parseCustomProviderModelPayload = (payload: unknown): CustomProviderModelI
   return effort === undefined ? { model, id } : { model, id, effort };
 };
 
+/** Reads the `{ enabled: boolean }` body of the custom-models-only toggle. */
+const parseCustomModelsOnlyPayload = (payload: unknown): boolean => {
+  const enabled = payload && typeof payload === 'object'
+    ? (payload as Record<string, unknown>).enabled
+    : undefined;
+  if (typeof enabled !== 'boolean') {
+    throw new AppError('enabled must be true or false.', {
+      code: 'INVALID_CUSTOM_MODELS_ONLY',
+      statusCode: 400,
+    });
+  }
+
+  return enabled;
+};
+
 router.get(
   '/:provider/auth/status',
   asyncHandler(async (req: Request, res: Response) => {
@@ -617,11 +633,40 @@ router.get(
   }),
 );
 
+/** The installed CLI version, the newest npm release, whether this server can update the CLI and whether it is doing so. */
+router.get(
+  '/:provider/cli',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    res.json(createApiSuccessResponse(await providerCliService.getCliStatus(provider)));
+  }),
+);
+
+/** Runs the CLI's own updater; refused while the provider is busy in a session. */
+router.post(
+  '/:provider/cli/update',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    res.json(createApiSuccessResponse(await providerCliService.updateCli(provider)));
+  }),
+);
+
 router.get(
   '/:provider/models',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const models = await providerModelsService.getProviderModels(provider);
+    res.json(createApiSuccessResponse({ provider, models }));
+  }),
+);
+
+/** Turns "use only my models" on or off for one provider and returns its new catalog. */
+router.put(
+  '/:provider/models/custom-only',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const enabled = parseCustomModelsOnlyPayload(req.body);
+    const models = await providerModelsService.setCustomModelsOnly(provider, enabled);
     res.json(createApiSuccessResponse({ provider, models }));
   }),
 );

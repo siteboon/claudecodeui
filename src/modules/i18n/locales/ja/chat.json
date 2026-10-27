@@ -97,14 +97,14 @@
     "permissionMode": "権限モード",
     "modes": {
       "default": "デフォルトモード",
-      "auto": "Auto Mode",
+      "auto": "自動モード",
       "acceptEdits": "編集を許可",
       "bypassPermissions": "権限をバイパス",
       "plan": "プランモード"
     },
     "descriptions": {
       "default": "信頼されたコマンド（ls、cat、grep、git statusなど）のみ自動実行。その他のコマンドはスキップ。ワークスペースへの書き込みは可能。",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "モデルの分類器がツール呼び出しごとに承認か拒否かを判断します。手動での承認は不要ですが、「権限をバイパス」より安全です。拒否されることもあります。",
       "acceptEdits": "ワークスペース内ですべてのコマンドを自動実行。サンドボックス環境での完全自動モード。",
       "bypassPermissions": "制限なしの完全なシステムアクセス。すべてのコマンドがディスクとネットワークへの完全なアクセスで自動実行されます。注意して使用してください。",
       "plan": "プランニングモード - コマンドは実行されません"
@@ -121,10 +121,15 @@
     "stop": "停止",
     "hintText": {
       "ctrlEnter": "Ctrl+Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド",
-      "enter": "Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド"
+      "enter": "Enterで送信 • Shift+Enterで改行 • Tabでモード切替 • / でスラッシュコマンド",
+      "appendQueued": "Enterでキュー内のメッセージに追加"
     },
     "clickToChangeMode": "クリックで権限モードを変更（または入力欄でTab）",
-    "showAllCommands": "すべてのコマンドを表示"
+    "showAllCommands": "すべてのコマンドを表示",
+    "queue": {
+      "append": "キュー内のメッセージに追加",
+      "notCombinable": "メッセージをキューに追加できませんでした: スラッシュコマンドは単独で実行されるため、キュー内のメッセージと結合できません。キュー内のメッセージが送信された後に送信してください。"
+    }
   },
   "providerSelection": {
     "title": "AIアシスタントを選択",
@@ -141,7 +146,8 @@
       "codex": "{{model}}でCodexを使用する準備ができました。下にメッセージを入力してください。",
       "default": "上からプロバイダーを選択して開始してください"
     },
-    "pressToSearch": "<kbd>{{shortcut}}</kbd> を押してセッション、ファイル、コミットを検索"
+    "pressToSearch": "<kbd>{{shortcut}}</kbd> を押してセッション、ファイル、コミットを検索",
+    "chooseModelDescriptionCustomOnly": "{{providers, list}} では自分のモデルのみ表示されます"
   },
   "session": {
     "continue": {
@@ -222,6 +228,9 @@
     "answeredBy": "{{model}} が回答"
   },
   "composer": {
+    "permissionHeading": "{{provider}} の操作をどのように承認しますか？",
+    "permissionCycleHint": "入力欄でTabを押すとモードを切り替えられます",
+    "permissionTriggerLabel": "{{mode}}：{{heading}}",
     "editing": {
       "title": "以前のメッセージを置き換えています",
       "filesNotReverted": "変更済みのファイルは元に戻りません",
@@ -264,6 +273,10 @@
   "modelLibrary": {
     "effortLevels": "推論レベル",
     "effortLevelsHint": "このモデルが受け付ける推論エフォートのレベルを選択してください。何も選択しない場合、コンポーザーではこのモデルのレベルを選べません。",
-    "effortSummary": "推論: {{levels}}"
+    "effortSummary": "推論: {{levels}}",
+    "customModelsOnly": "自分のモデルのみを使用",
+    "customModelsOnlyHint": "{{provider}} の組み込みモデルをすべてのモデル選択から非表示にし、最初の自分のモデルをデフォルトにします。モデルを追加するまでは組み込みモデルが表示されます。",
+    "builtInModelsHidden": "「自分のモデルのみを使用」がオンの間、モデル選択には表示されません。",
+    "customModelsOnlyFailed": "この設定を変更できませんでした。"
   }
 }

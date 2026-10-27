@@ -103,14 +103,14 @@
     "permissionMode": "Berechtigungsmodus",
     "modes": {
       "default": "Standardmodus",
-      "auto": "Auto Mode",
+      "auto": "Automatikmodus",
       "acceptEdits": "Bearbeitungen akzeptieren",
       "bypassPermissions": "Berechtigungen umgehen",
       "plan": "Planungsmodus"
     },
     "descriptions": {
       "default": "Nur vertrauenswürdige Befehle (ls, cat, grep, git status usw.) werden automatisch ausgeführt. Andere Befehle werden übersprungen. Kann in den Arbeitsbereich schreiben.",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "Ein Klassifikator-Modell entscheidet bei jedem Tool-Aufruf, ob er genehmigt oder abgelehnt wird. Ohne Eingreifen, aber sicherer als das Umgehen der Berechtigungen – Ablehnungen kommen weiterhin vor.",
       "acceptEdits": "Alle Befehle werden automatisch innerhalb des Arbeitsbereichs ausgeführt. Vollautomatischer Modus mit isolierter Ausführung.",
       "bypassPermissions": "Vollständiger Systemzugriff ohne Einschränkungen. Alle Befehle werden automatisch mit vollem Festplatten- und Netzwerkzugriff ausgeführt. Mit Vorsicht verwenden.",
       "plan": "Planungsmodus – keine Befehle werden ausgeführt"
@@ -127,12 +127,17 @@
     "stop": "Stoppen",
     "hintText": {
       "ctrlEnter": "Strg+Enter zum Senden • Shift+Enter für neue Zeile • Tab zum Moduswechsel • / für Slash-Befehle",
-      "enter": "Enter zum Senden • Shift+Enter für neue Zeile • Tab zum Moduswechsel • / für Slash-Befehle"
+      "enter": "Enter zum Senden • Shift+Enter für neue Zeile • Tab zum Moduswechsel • / für Slash-Befehle",
+      "appendQueued": "Enter zum Anhängen an die Nachricht in der Warteschlange"
     },
     "clickToChangeMode": "Klicken, um den Berechtigungsmodus zu ändern (oder Tab in der Eingabe drücken)",
     "showAllCommands": "Alle Befehle anzeigen",
     "clearInput": "Eingabe leeren",
-    "scrollToBottom": "Nach unten scrollen"
+    "scrollToBottom": "Nach unten scrollen",
+    "queue": {
+      "append": "An Nachricht in der Warteschlange anhängen",
+      "notCombinable": "Nachricht konnte nicht in die Warteschlange gestellt werden: Ein Slash-Befehl läuft für sich allein und kann daher nicht mit der Nachricht in der Warteschlange kombiniert werden. Sende ihn, nachdem die Nachricht in der Warteschlange gesendet wurde."
+    }
   },
   "providerSelection": {
     "title": "KI-Assistent wählen",
@@ -150,7 +155,8 @@
       "codex": "Bereit, Codex mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "default": "Wähl oben einen Anbieter, um zu beginnen"
     },
-    "pressToSearch": "Drücke <kbd>{{shortcut}}</kbd>, um Sitzungen, Dateien und Commits zu durchsuchen"
+    "pressToSearch": "Drücke <kbd>{{shortcut}}</kbd>, um Sitzungen, Dateien und Commits zu durchsuchen",
+    "chooseModelDescriptionCustomOnly": "Für {{providers, list}} werden nur deine Modelle angezeigt"
   },
   "session": {
     "continue": {
@@ -241,6 +247,9 @@
     "answeredBy": "Beantwortet von {{model}}"
   },
   "composer": {
+    "permissionHeading": "Wie sollen Aktionen von {{provider}} genehmigt werden?",
+    "permissionCycleHint": "Tab im Eingabefeld drücken, um den Modus zu wechseln",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Ersetzt eine frühere Nachricht",
       "filesNotReverted": "bereits geänderte Dateien werden nicht zurückgesetzt",
@@ -283,6 +292,10 @@
   "modelLibrary": {
     "effortLevels": "Reasoning-Stufen",
     "effortLevelsHint": "Wähle die Reasoning-Effort-Stufen, die dieses Modell akzeptiert. Ohne Auswahl lässt sich im Composer für dieses Modell keine Stufe wählen.",
-    "effortSummary": "Reasoning: {{levels}}"
+    "effortSummary": "Reasoning: {{levels}}",
+    "customModelsOnly": "Nur meine Modelle verwenden",
+    "customModelsOnlyHint": "Blendet die integrierten {{provider}}-Modelle in allen Modellauswahlen aus und macht dein erstes Modell zum Standard. Die integrierten Modelle bleiben sichtbar, bis du ein Modell hinzufügst.",
+    "builtInModelsHidden": "In den Modellauswahlen ausgeblendet, solange „Nur meine Modelle verwenden“ aktiv ist.",
+    "customModelsOnlyFailed": "Diese Einstellung konnte nicht geändert werden."
   }
 }

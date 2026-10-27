@@ -180,7 +180,8 @@ carries `AbortSignal.timeout(SESSION_HISTORY_REQUEST_TIMEOUT_MS)`.
 **Which frames reach `appendRealtime`.** `useChatRealtimeHandlers` dispatches in three stages,
 and only the last one appends. Stage one handles and returns on the control frames
 (`websocket_reconnected`, `history_truncated`, `chat_subscribed`, `session_upserted`,
-`loading_progress`) and on `protocol_error`, which appends a synthetic `error` row of its own.
+`loading_progress`, `scheduled_messages_changed`) and on `protocol_error`, which appends a
+synthetic `error` row of its own.
 Stage two handles and returns on `stream_delta` and `stream_end`; `stream_delta` also appends
 the raw frame, but *only* for a session that is not the one being viewed, so switching to it
 later shows the partial reply. Stage three appends everything left except `complete`, `status`,
