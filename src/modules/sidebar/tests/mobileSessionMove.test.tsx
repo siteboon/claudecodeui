@@ -65,7 +65,7 @@ test('the mobile options sheet offers moving the session to another project', ()
   assert.equal(onMoveSession.mock.calls[0][0].id, 's1');
 });
 
-test('the mobile sheet withholds a move the server would refuse', () => {
+test('the mobile sheet withholds a move while the session is busy or cannot move', () => {
   const cases: Array<[string, Record<string, unknown>]> = [
     ['a running turn', { onMoveSession: vi.fn(), isProcessing: true }],
     ['background work that outlived the turn', { onMoveSession: vi.fn(), hasBackgroundWork: true }],
@@ -78,6 +78,8 @@ test('the mobile sheet withholds a move the server would refuse', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Session options for session one' }));
     });
 
+    // Absent from an open sheet, not merely from a sheet that never rendered.
+    assert.ok(screen.getByText('Session options'), reason);
     assert.equal(screen.queryByRole('button', { name: 'actions.moveSession' }), null, reason);
     unmount();
   }

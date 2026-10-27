@@ -21,7 +21,7 @@ type SessionOptionsProps = {
   /** A running session cannot be deleted or forked, matching the Projects row. */
   isProcessing: boolean;
   /** Background work outliving the turn still writes the transcript, so the server refuses a move. */
-  hasBackgroundWork?: boolean;
+  hasBackgroundWork: boolean;
   isEditing: boolean;
   renameDraft: string;
   onRenameDraftChange: (draft: string) => void;
@@ -54,7 +54,7 @@ export default function SessionOptions({
   provider,
   projectId,
   isProcessing,
-  hasBackgroundWork = false,
+  hasBackgroundWork,
   isEditing,
   renameDraft,
   onRenameDraftChange,
