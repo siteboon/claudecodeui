@@ -224,7 +224,19 @@ export default function CommandMenu({
     ? ['frequent', 'builtin', 'skill', 'project', 'user', 'other']
     : ['builtin', 'skill', 'project', 'user', 'other'];
   const extraNamespaces = Object.keys(groupedCommands).filter((namespace) => !preferredOrder.includes(namespace));
-  const orderedNamespaces = [...preferredOrder, ...extraNamespaces].filter((namespace) => groupedCommands[namespace]);
+  const namespacesInPreferredOrder = [...preferredOrder, ...extraNamespaces].filter(
+    (namespace) => groupedCommands[namespace],
+  );
+  // While nothing is highlighted, Enter and Tab act on the first command, so
+  // its group leads and that command is the top row even when usage, an exact
+  // name, or the server's by-name order of project and user commands ranks it
+  // ahead of an earlier group. The frequent group, when shown, already starts
+  // with it. The order follows the first command, not the highlighted one, so
+  // the groups stay put while the arrow keys move.
+  const leadingNamespace = !hasFrequentCommands && commands.length > 0 ? getNamespace(commands[0]) : null;
+  const orderedNamespaces = leadingNamespace && groupedCommands[leadingNamespace]
+    ? [leadingNamespace, ...namespacesInPreferredOrder.filter((namespace) => namespace !== leadingNamespace)]
+    : namespacesInPreferredOrder;
   const renderInPortal = (node: ReactElement) =>
     typeof document === 'undefined' ? node : createPortal(node, document.body);
 
