@@ -231,6 +231,9 @@ function matchesToolPermission(entry, toolName, input) {
  * Claude Code turns the Artifact tools off for SDK-driven sessions unless
  * CLAUDE_CODE_ARTIFACT is set, so a session continued from this UI would lose them.
  * Default it on; a host value (e.g. CLAUDE_CODE_ARTIFACT=0) still wins.
+ *
+ * @param {NodeJS.ProcessEnv} [hostEnv] - Environment to forward, `process.env` by default
+ * @returns {NodeJS.ProcessEnv} Environment for the spawned CLI
  */
 export function buildClaudeSdkEnv(hostEnv = process.env) {
   return {
