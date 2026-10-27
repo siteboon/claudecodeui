@@ -34,6 +34,7 @@ vi.mock('@/modules/plugins/context/PluginsContext', () => ({
   PluginsProvider: ({ children }: { children: ReactNode }) => children,
 }));
 
+/** Builds an enabled `alwaysMount` plugin; the layer only filters on those two flags. */
 const residentPlugin = (name: string): Plugin => ({
   name,
   displayName: name,
@@ -70,6 +71,15 @@ function renderLayer(plugins: Plugin[], selectedProject: unknown = null) {
     <ThemeProvider>
       <PluginHostLayer selectedProject={selectedProject as never} selectedSession={null} />
     </ThemeProvider>,
+  );
+}
+
+/** Rebuilds the layer element between rerenders; the mocked provider replays `pluginList`. */
+function renderTree(selectedProject: unknown) {
+  return (
+    <ThemeProvider>
+      <PluginHostLayer selectedProject={selectedProject as never} selectedSession={null} />
+    </ThemeProvider>
   );
 }
 
@@ -149,32 +159,26 @@ describe('PluginHostLayer mounts resident plugins once and tears them down exact
       unmount: vi.fn(),
     }));
 
-    const tree = (plugins: Plugin[], selectedProject: unknown) => (
-      <ThemeProvider>
-        <PluginHostLayer selectedProject={selectedProject as never} selectedSession={null} />
-      </ThemeProvider>
-    );
-
     const { rerender } = renderLayer([residentPlugin('resident-demo')], project('p1'));
     await waitFor(() => expect(callbacks).toHaveLength(1));
     const staleCallback = callbacks[0];
 
     // Dropping the plugin empties the resident set, which tears its mount down.
     pluginList.current = [];
-    rerender(tree(pluginList.current, project('p1')));
+    rerender(renderTree(project('p1')));
     await waitFor(() => expect(loadPluginModule).toHaveBeenCalledTimes(1));
     staleCallback.mockClear();
 
     // The mount is gone, so this context change must not reach it.
-    rerender(tree(pluginList.current, project('p2')));
+    rerender(renderTree(project('p2')));
     expect(staleCallback).not.toHaveBeenCalled();
 
     // Bringing it back registers a new callback, which does receive updates.
     pluginList.current = [residentPlugin('resident-demo')];
-    rerender(tree(pluginList.current, project('p3')));
+    rerender(renderTree(project('p3')));
     await waitFor(() => expect(callbacks).toHaveLength(2));
 
-    rerender(tree(pluginList.current, project('p4')));
+    rerender(renderTree(project('p4')));
     await waitFor(() => expect(callbacks[1]).toHaveBeenCalled());
     expect(staleCallback).not.toHaveBeenCalled();
   });
@@ -250,12 +254,6 @@ describe('PluginHostLayer mounts resident plugins once and tears them down exact
     });
 
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const tree = (selectedProject: unknown) => (
-      <ThemeProvider>
-        <PluginHostLayer selectedProject={selectedProject as never} selectedSession={null} />
-      </ThemeProvider>
-    );
-
     const { container, rerender } = renderLayer([residentPlugin('broken-resident')], project('p1'));
     await waitFor(() => expect(callbacks).toHaveLength(1));
     await waitFor(() => expect(errorSpy).toHaveBeenCalled());
@@ -266,7 +264,7 @@ describe('PluginHostLayer mounts resident plugins once and tears them down exact
     );
 
     // A context update must not reach the callback of the failed mount.
-    rerender(tree(project('p2')));
+    rerender(renderTree(project('p2')));
     expect(callbacks[0]).not.toHaveBeenCalled();
   });
 

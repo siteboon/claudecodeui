@@ -128,10 +128,12 @@ export default function PluginHostLayer({ selectedProject, selectedSession }: Pl
     const mounted: ResidentMountRecord[] = [];
     let active = true;
 
-    // Exact-once teardown for one mount. Two callers can reach it — the effect
-    // cleanup, and the mount promise settling after the effect was already torn
-    // down — so it must be safe to call twice and must not tear down a mount
-    // that has not finished.
+    /**
+     * Exact-once teardown for one mount. Two callers can reach it — the effect
+     * cleanup, and the mount promise settling after the effect was already torn
+     * down — so it must be safe to call twice and must not tear down a mount
+     * that has not finished.
+     */
     const teardown = (record: ResidentMountRecord) => {
       if (record.finalized) return;
 
