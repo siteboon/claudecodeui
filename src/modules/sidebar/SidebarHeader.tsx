@@ -145,6 +145,7 @@ export default function SidebarHeader({
               searchMode={searchMode}
               onSearchModeChange={onSearchModeChange}
               runningSessionsCount={runningSessionsCount}
+              onCreateProject={onCreateProject}
               t={t}
             />
             <div className="relative">
@@ -224,6 +225,7 @@ export default function SidebarHeader({
               searchMode={searchMode}
               onSearchModeChange={onSearchModeChange}
               runningSessionsCount={runningSessionsCount}
+              onCreateProject={onCreateProject}
               t={t}
             />
             <div className="relative">

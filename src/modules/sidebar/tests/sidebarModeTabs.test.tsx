@@ -20,6 +20,7 @@ const LABELS: Record<string, string> = {
   'search.runningTooltip': 'Running sessions',
   'search.archiveOnlyTooltip': 'Archive only',
   'search.modeMore': 'More',
+  'tooltips.createProject': 'Create new project',
 };
 
 const t = ((key: string, fallback?: string) => LABELS[key] ?? fallback ?? key) as unknown as TFunction;
@@ -81,4 +82,50 @@ test('the section on screen keeps its place in the row', () => {
   assert.equal(archive.getAttribute('aria-pressed'), 'true');
   assert.equal(screen.queryByRole('button', { name: 'Conversations' }), null);
   assert.ok(screen.getByRole('button', { name: 'More' }));
+});
+
+test('the new-project button sits right after the Conversations tab', () => {
+  stubLayout(400);
+  const created: string[] = [];
+  render(
+    <SidebarModeTabs
+      searchMode="projects"
+      onSearchModeChange={() => {}}
+      runningSessionsCount={0}
+      onCreateProject={() => created.push('wizard')}
+      t={t}
+    />,
+  );
+
+  const plus = screen.getByRole('button', { name: 'Create new project' });
+  const conversations = screen.getByRole('button', { name: 'Conversations' });
+  // The strip injects the button into the Conversations slot, so it (or the
+  // tooltip wrapper around it) is the tab's immediate next element.
+  const next = conversations.nextElementSibling;
+  assert.ok(next instanceof Element && next.contains(plus));
+
+  fireEvent.click(plus);
+  assert.deepEqual(created, ['wizard']);
+});
+
+test('the new-project button stays reachable once Conversations drops into the dropdown', () => {
+  stubLayout(220);
+  render(
+    <SidebarModeTabs
+      searchMode="projects"
+      onSearchModeChange={() => {}}
+      runningSessionsCount={0}
+      onCreateProject={() => {}}
+      t={t}
+    />,
+  );
+
+  assert.equal(screen.queryByRole('button', { name: 'Conversations' }), null);
+  assert.ok(screen.getByRole('button', { name: 'Create new project' }));
+});
+
+test('without onCreateProject the strip renders no new-project button', () => {
+  renderTabs(400, 'projects');
+
+  assert.equal(screen.queryByRole('button', { name: 'Create new project' }), null);
 });

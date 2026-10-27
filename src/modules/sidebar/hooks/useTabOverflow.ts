@@ -65,8 +65,13 @@ const isSameIndexes = (first: number[], second: number[]) =>
  * off-layout copy of the full strip: once a tab has been dropped it is no
  * longer in the row to be measured, so the natural widths have to come from
  * somewhere that always renders all of them.
+ *
+ * `reservedCount` is the number of always-visible non-tab buttons the strip
+ * renders besides the tabs (for example the new-project button). They take up
+ * row width the tabs cannot use, so their widths are subtracted from the
+ * budget; in the mirror they must be rendered after the overflow trigger.
  */
-export function useTabOverflow(tabCount: number, activeIndex: number) {
+export function useTabOverflow(tabCount: number, activeIndex: number, reservedCount = 0) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const mirrorRef = useRef<HTMLDivElement | null>(null);
   // The tabs the row has room for. It can only be measured from a laid-out DOM,
@@ -83,13 +88,18 @@ export function useTabOverflow(tabCount: number, activeIndex: number) {
     }
 
     const measured = Array.from(mirror.children, (child) => child.getBoundingClientRect().width);
-    // The mirror holds every tab plus the overflow trigger. A different count
-    // means it is mid-render and the widths cannot be trusted yet.
-    if (measured.length !== tabCount + 1) {
+    // The mirror holds every tab, the overflow trigger and the reserved buttons.
+    // A different count means it is mid-render and the widths cannot be trusted
+    // yet.
+    if (measured.length !== tabCount + 1 + reservedCount) {
       return;
     }
 
-    const available = row.getBoundingClientRect().width;
+    const reservedWidth = measured
+      .slice(tabCount + 1)
+      .reduce((sum, width) => sum + width, 0);
+    // The tabs may only use what the reserved buttons leave them.
+    const available = row.getBoundingClientRect().width - reservedWidth;
     // The header renders a desktop and a mobile copy of the strip and hides one
     // of them with `display: none`. The hidden copy measures zero — keep its
     // last layout rather than collapsing every tab into the dropdown.
@@ -104,7 +114,7 @@ export function useTabOverflow(tabCount: number, activeIndex: number) {
       activeIndex,
     });
     setVisibleIndexes((current) => (isSameIndexes(current, next) ? current : next));
-  }, [tabCount, activeIndex]);
+  }, [tabCount, activeIndex, reservedCount]);
 
   useLayoutEffect(() => {
     measure();

@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Activity, Archive, Folder, MessageSquare, MoreHorizontal } from 'lucide-react';
+import { Activity, Archive, Folder, MessageSquare, MoreHorizontal, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
@@ -20,6 +20,8 @@ type SidebarModeTabsProps = {
   searchMode: SidebarSearchMode;
   onSearchModeChange: (mode: SidebarSearchMode) => void;
   runningSessionsCount: number;
+  /** Opens the new-project wizard. Optional so the strip can render without it. */
+  onCreateProject?: () => void;
   t: TFunction;
 };
 
@@ -35,6 +37,7 @@ export default function SidebarModeTabs({
   searchMode,
   onSearchModeChange,
   runningSessionsCount,
+  onCreateProject,
   t,
 }: SidebarModeTabsProps) {
   const tabs: ModeTab[] = [
@@ -45,7 +48,13 @@ export default function SidebarModeTabs({
   ];
 
   const activeIndex = tabs.findIndex((tab) => tab.mode === searchMode);
-  const { rowRef, mirrorRef, visibleIndexes } = useTabOverflow(tabs.length, activeIndex);
+  const { rowRef, mirrorRef, visibleIndexes } = useTabOverflow(
+    tabs.length,
+    activeIndex,
+    onCreateProject ? 1 : 0,
+  );
+  const conversationsIndex = tabs.findIndex((tab) => tab.mode === 'conversations');
+  const conversationsVisible = visibleIndexes.includes(conversationsIndex);
   const hiddenTabs = tabs.filter((_, index) => !visibleIndexes.includes(index));
   const runningBadgeText = runningSessionsCount > 99 ? '99+' : String(runningSessionsCount);
   const moreLabel = t('search.modeMore', 'More');
@@ -110,19 +119,43 @@ export default function SidebarModeTabs({
     />
   );
 
+  // Sits right next to the Conversations tab; when that tab has been dropped
+  // into the "…" dropdown it moves to the end of the strip so the wizard stays
+  // one click away at every sidebar width.
+  const createProjectButton = onCreateProject ? (
+    <Tooltip content={t('tooltips.createProject', 'Create new project')} position="top">
+      <button
+        type="button"
+        onClick={onCreateProject}
+        aria-label={t('tooltips.createProject', 'Create new project')}
+        title={t('tooltips.createProject', 'Create new project')}
+        className="flex flex-none items-center justify-center rounded-md px-1.5 py-1.5 text-muted-foreground transition-all hover:text-foreground"
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+    </Tooltip>
+  ) : null;
+
   return (
     <div className="rounded-lg bg-muted/50 p-0.5">
       <div ref={rowRef} className="relative flex">
         {visibleIndexes.map((index) => (
-          <Fragment key={tabs[index].mode}>{renderTab(tabs[index], true)}</Fragment>
+          <Fragment key={tabs[index].mode}>
+            {renderTab(tabs[index], true)}
+            {index === conversationsIndex && createProjectButton}
+          </Fragment>
         ))}
         {hiddenTabs.length > 0 && overflowTrigger}
+        {!conversationsVisible && createProjectButton}
 
         {/*
           An off-layout copy of the whole strip. What to drop can only be decided
           from every tab's natural width, and a tab that has already been dropped
-          is no longer in the row to measure. Clipped rather than merely hidden so
-          it cannot widen an ancestor's scroll area.
+          is no longer in the row to measure. The reserved new-project button is
+          measured here too — after the overflow trigger, so tab widths keep
+          their indexes — and its width is subtracted from what the tabs may use.
+          Clipped rather than merely hidden so it cannot widen an ancestor's
+          scroll area.
         */}
         <div aria-hidden className="pointer-events-none invisible absolute inset-0 overflow-hidden">
           <div ref={mirrorRef} className="flex w-max">
@@ -130,6 +163,7 @@ export default function SidebarModeTabs({
               <div key={tab.mode} className="flex-none">{renderTab(tab, false)}</div>
             ))}
             <div className="flex-none">{overflowTrigger}</div>
+            {createProjectButton && <div className="flex-none">{createProjectButton}</div>}
           </div>
         </div>
       </div>
