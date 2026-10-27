@@ -97,6 +97,10 @@ export function createProviderRuntimeService(
       return Boolean(await runtime.stopBackgroundTask?.(sessionId, taskId));
     },
 
+    hasLiveSession(sessionId: string): boolean {
+      return dependencies.listProviders().some((provider) => Boolean(provider.runtime.hasLiveSession?.(sessionId)));
+    },
+
     hasBackgroundWork(sessionId: string): boolean {
       return dependencies.listProviders().some((provider) =>
         (provider.runtime.listBackgroundWork?.() ?? []).some((entry) => entry.sessionId === sessionId));

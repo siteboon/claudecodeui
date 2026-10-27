@@ -1655,6 +1655,7 @@ export const claudeRuntime = {
   },
   listBackgroundWork: listClaudeSDKBackgroundWork,
   stopBackgroundTask: stopClaudeSDKTask,
+  hasLiveSession: isClaudeSDKSessionActive,
 };
 
 // Export public API

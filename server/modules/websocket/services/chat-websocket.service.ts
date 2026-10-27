@@ -76,6 +76,8 @@ export type ProviderRuntimeGateway = {
   stopBackgroundTask(provider: LLMProvider, sessionId: string, taskId: string): Promise<boolean>;
   /** Whether a provider runtime still holds background work for the session after its turn ended. */
   hasBackgroundWork(sessionId: string): boolean;
+  /** Whether a provider runtime holds a live process for the session, with or without a chat run. */
+  hasLiveSession(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
   getPendingApprovalsForSession(sessionId: string): unknown[];
 };
@@ -430,6 +432,15 @@ async function handleChatAbort(
 
   const run = chatRunRegistry.getRun(sessionId);
   if (!run || run.status !== 'running') {
+    // The process can be working without a run on record: holding background
+    // work, or in a turn the CLI started itself when that work reported back.
+    // Its turn already sent its `complete`.
+    if (dependencies.runtime.hasLiveSession(sessionId)) {
+      const session = sessionsDb.getSessionById(sessionId);
+      if (session && await dependencies.runtime.abort(session.provider as LLMProvider, sessionId)) {
+        return;
+      }
+    }
     sendProtocolError(ws, 'NO_ACTIVE_RUN', `Session "${sessionId}" has no active run.`, sessionId);
     return;
   }
