@@ -372,7 +372,15 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
     // released rather than erroring, so this flag is the only signal
     // `askSideQuestion` has to fall back to the read-only fork instead.
     inputReleased: false,
-    releaseInput: null
+    releaseInput: null,
+    // Count of `askSideQuestion` native calls currently in flight against
+    // this entry's live query. Carried across the mid-run re-registration
+    // below (same process, same question), reset only when superseded.
+    pendingNativeSideQuestions: carried?.pendingNativeSideQuestions || 0,
+    // Set when a release was requested (turn end, idle ceiling) while the
+    // count above was still positive, so the last question to settle knows
+    // to pick the deferred release back up.
+    releaseDeferred: carried?.releaseDeferred || false
   };
   // Re-registered mid-run once the provider session id lands; keep the closer.
   const effectiveReleaseInput = releaseInput || carried?.releaseInput || null;
@@ -1040,6 +1048,53 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     releaseHeldSession(sessionKey());
   }
 
+  // Closes the held stdin, going through the activeSessions entry so
+  // `inputReleased` is set accurately for `askSideQuestion`'s own check —
+  // unless a native side question (`askSideQuestion` below) is still
+  // waiting on this same query. The SDK drops a write made after release
+  // instead of erroring, so releasing under a pending question would have
+  // the CLI cancel it ("Side question cancelled") instead of answering it.
+  // `askSideQuestion`'s `finally` calls this again once the count drops back
+  // to zero, picking the deferred release back up.
+  //
+  // The map entry under this session's key may belong to a newer run that
+  // superseded this one (a turn started while this one was still held) — in
+  // that case `addSession` already released this run's stdin directly via
+  // its own closure when it superseded it, and the entry's pending count and
+  // `releaseInput` belong to the new run, not this one. Only read or write
+  // the entry when it is still this run's own (`entry.instance ===
+  // queryInstance`); otherwise fall back to this run's own closer so a late
+  // call here cannot touch the run that replaced it.
+  //
+  // `isIdleCeiling` is true only when this call is the idle timer itself
+  // firing. A normal call (turn end, background work settling) still defers
+  // under a pending native side question and arms the ceiling as a backstop;
+  // the ceiling's own call must not defer again on top of itself — a side
+  // question the CLI never answers would otherwise hold the process (and its
+  // MCP servers) forever, so the ceiling forces the release through instead.
+  const maybeReleasePromptStream = (isIdleCeiling = false) => {
+    const entry = sessionKey() ? getSession(sessionKey()) : null;
+    const ownsEntry = Boolean(entry) && entry.instance === queryInstance;
+    if (ownsEntry && entry.pendingNativeSideQuestions > 0 && !isIdleCeiling) {
+      entry.releaseDeferred = true;
+      // Re-arm (rather than drop) the same idle ceiling that governs every
+      // other hold, so an unanswered question is rechecked instead of being
+      // left to wait on `askSideQuestion`'s own resolution alone.
+      scheduleRelease();
+      return;
+    }
+    if (ownsEntry) {
+      entry.releaseDeferred = false;
+      if (entry.releaseInput) {
+        entry.releaseInput();
+      } else {
+        releasePromptStream();
+      }
+    } else {
+      releasePromptStream();
+    }
+  };
+
   // Arms (or re-arms) the idle countdown that eventually closes stdin.
   const scheduleRelease = () => {
     if (idleReleaseTimer) {
@@ -1048,7 +1103,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     }
     idleReleaseTimer = setTimeout(() => {
       idleReleaseTimer = null;
-      releasePromptStream();
+      maybeReleasePromptStream(true);
     }, BG_WAIT_CEILING_MS);
     // Never let the hold keep the server process alive on its own.
     idleReleaseTimer.unref?.();
@@ -1327,7 +1382,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         && !backgroundWork.hasOutstanding(sessionKey())
       ) {
         heldForBackgroundWork = false;
-        releasePromptStream();
+        maybeReleasePromptStream();
       }
 
       if (message.type === 'result') {
@@ -1379,9 +1434,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           scheduleRelease();
         } else {
           // Either nothing was backgrounded, or the background work just
-          // reported in — let the CLI exit now, as it always has.
+          // reported in — let the CLI exit now, as it always has (unless a
+          // native side question is still in flight; see
+          // `maybeReleasePromptStream`).
           heldForBackgroundWork = false;
-          releasePromptStream();
+          maybeReleasePromptStream();
         }
       } else if (idleReleaseTimer) {
         // Background activity after the turn — push the countdown back out.
@@ -1662,6 +1719,10 @@ async function askSideQuestion(request, sink, context) {
   // The fork path below spawns its own process instead, so it is the only
   // one that can still reach this session's transcript.
   if (instance && typeof instance.askSideQuestion === 'function' && !session.inputReleased) {
+    // Counted on the session entry so `queryClaudeSDK`'s
+    // `maybeReleasePromptStream` defers a release requested while this is
+    // still above zero, instead of closing stdin under the question.
+    session.pendingNativeSideQuestions = (session.pendingNativeSideQuestions || 0) + 1;
     try {
       const result = await instance.askSideQuestion(request.question, { signal: request.signal });
       const response = result?.response;
@@ -1671,7 +1732,43 @@ async function askSideQuestion(request, sink, context) {
       }
       return { status: 'error', error: 'Claude returned no answer.', answer: '' };
     } catch (error) {
+      // `request.signal` is what `dismiss` aborts to end this ask at once —
+      // a deliberate drop, never retried. A session whose stdin was
+      // released while this ask was still outstanding (a new turn
+      // superseding this one via `releaseHeldSession`, which lets the old
+      // process go directly and does not consult the pending count above)
+      // is the CLI cancelling the question for a reason that was not that
+      // signal — most of all "Side question cancelled" — so it gets one
+      // more try on the read-only fork instead of surfacing the CLI's own
+      // error. A plain failure with the session still live is not retried.
+      // `session` (not a fresh lookup) so a map entry replaced meanwhile by
+      // a new turn's own registration does not hide this very query's
+      // release, which `releaseHeldSession` sets on this same object.
+      if (!request.signal?.aborted && session.inputReleased === true) {
+        return askClaudeSideQuestion(request, sink, {
+          createQuery: context.createQuery,
+          liveTasks: backgroundWork.outstanding(request.appSessionId),
+        });
+      }
       return { status: 'error', error: errorMessage(error), answer: '' };
+    } finally {
+      // Re-fetched: a mid-run re-registration (`addSession`, once the
+      // provider session id lands) carries this count onto a new entry
+      // object for the same instance, so the one to decrement is whichever
+      // is current now — but only when it is still the entry for the
+      // instance this question was asked on. A turn that superseded this
+      // run while the question was in flight replaced the map entry with
+      // the new run's own (a different `instance`, a `pendingNativeSideQuestions`
+      // count that was never incremented for this question), and must not
+      // be decremented or released on this question's account.
+      const entry = getSession(request.appSessionId);
+      if (entry && entry.instance === instance) {
+        entry.pendingNativeSideQuestions = Math.max(0, (entry.pendingNativeSideQuestions || 0) - 1);
+        if (entry.pendingNativeSideQuestions === 0 && entry.releaseDeferred) {
+          entry.releaseDeferred = false;
+          entry.releaseInput?.();
+        }
+      }
     }
   }
 
