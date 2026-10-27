@@ -334,6 +334,42 @@ export const codexAppServer = {
    * mutating anything while it has no one to approve a request. The turn
    * itself is the boundary prompt followed by the question, exactly as
    * Codex's own side-conversation support sends it.
+   *
+   * `config` carries a per-server `enabled: false` for every MCP server
+   * `config/read` names, so the fork starts none of them. Measured against
+   * the real 0.156.1 binary: `thread/fork`'s `config` deep-merges into the
+   * base config rather than replacing a table wholesale, so `{ mcp_servers:
+   * {} }` is a no-op — the fork still starts every configured server. Each
+   * server does carry an `enabled` field (also seen through `config/read`,
+   * not in the generated protocol types), and setting it `false` per name
+   * skips that server with no startup attempt at all: no
+   * `mcpServer/startupStatus/updated` notification, nothing spawned, nothing
+   * dialled. The names come from this same app-server connection rather than
+   * from the user's `~/.codex/config.toml` on disk, and only the names are
+   * read — never a value, since an MCP entry can carry a token.
+   *
+   * Three more tools that reach outside the `read-only` sandbox get switched
+   * off the same way, each measured against the real 0.156.1 binary with a
+   * throwaway `CODEX_HOME` (codex-read-only-tools, second half):
+   * - `config: { web_search: 'disabled' }` — `Config.web_search` is a
+   *   `WebSearchMode`; `thread/start`/`thread/fork` accept `'disabled'`
+   *   without error, and an invalid value (`'nope'`) is rejected with
+   *   "unknown variant `nope`, expected one of `disabled`, `cached`,
+   *   `indexed`, `live`", so the field is real and the value lands.
+   * - `config: { apps: { _default: { enabled: false } } }` — `AppsConfig`'s
+   *   `_default: AppsDefaultConfig | null` is the fallback applied to every
+   *   connector that has no per-app entry; `enabled: false` there is
+   *   accepted, while `enabled: 'nope'` is rejected with "invalid type:
+   *   string \"nope\", expected a boolean in `apps._default.enabled`" —
+   *   proof the override reaches that exact field rather than being ignored
+   *   as an unknown config key.
+   * - `disabledPluginIds` on the `turn/start` below — `plugin/list` needs no
+   *   auth offline and lists every installed marketplace's plugins;
+   *   `TurnStartParams.disabledPluginIds` "replaces this thread's disabled
+   *   plugin IDs", so every id it reports is passed there. A `plugin/list`
+   *   that errors (or would need auth) is treated as "no plugins" rather
+   *   than failing the side question — nothing is disabled that could not be
+   *   named, but the question still gets asked.
    */
   async askSideQuestion(
     input: { threadId: string; cwd: string; model: string; question: string; signal: AbortSignal },
@@ -345,6 +381,35 @@ export const codexAppServer = {
     });
 
     return withAppServer(async ({ call, onNotification, onExit }) => {
+      const mcpServersOff = async (): Promise<Record<string, unknown>> => {
+        const configResult = await call('config/read', {}) as { config?: { mcp_servers?: Record<string, unknown> } } | undefined;
+        const names = Object.keys(configResult?.config?.mcp_servers ?? {});
+        return Object.fromEntries(names.map((name) => [name, { enabled: false }]));
+      };
+
+      // `plugin/list` can fail offline (no auth, no network) and that is not
+      // a reason to refuse the side question — it just means there is
+      // nothing to name in `disabledPluginIds`, same as a user with no
+      // plugins installed.
+      const pluginIdsOff = async (): Promise<string[]> => {
+        try {
+          const result = await call('plugin/list', {}) as {
+            marketplaces?: Array<{ plugins?: Array<{ id?: unknown }> }>;
+          } | undefined;
+          const ids: string[] = [];
+          for (const marketplace of result?.marketplaces ?? []) {
+            for (const plugin of marketplace.plugins ?? []) {
+              if (typeof plugin?.id === 'string') {
+                ids.push(plugin.id);
+              }
+            }
+          }
+          return ids;
+        } catch {
+          return [];
+        }
+      };
+
       return new Promise<string>((resolve, reject) => {
         let text = '';
         let settled = false;
@@ -384,15 +449,30 @@ export const codexAppServer = {
           return;
         }
 
-        call('thread/fork', {
-          threadId: input.threadId,
-          ...(input.cwd ? { cwd: input.cwd } : {}),
-          ...(input.model ? { model: input.model } : {}),
-          ephemeral: true,
-          sandbox: 'read-only',
-          approvalPolicy: 'never',
-          developerInstructions: SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
-          excludeTurns: true,
+        let pluginIds: string[] = [];
+
+        Promise.all([mcpServersOff(), pluginIdsOff()]).then(([mcpServers, ids]) => {
+          pluginIds = ids;
+          if (settled) {
+            // Aborted, or already timed out, while config/read or
+            // plugin/list was in flight.
+            return;
+          }
+          return call('thread/fork', {
+            threadId: input.threadId,
+            ...(input.cwd ? { cwd: input.cwd } : {}),
+            ...(input.model ? { model: input.model } : {}),
+            ephemeral: true,
+            sandbox: 'read-only',
+            approvalPolicy: 'never',
+            developerInstructions: SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+            excludeTurns: true,
+            config: {
+              mcp_servers: mcpServers,
+              web_search: 'disabled',
+              apps: { _default: { enabled: false } },
+            },
+          });
         }).then((forkResult) => {
           if (settled) {
             // Aborted, or already timed out, while the fork request was in flight.
@@ -456,6 +536,7 @@ export const codexAppServer = {
 
           call('turn/start', {
             threadId: forkThreadId,
+            disabledPluginIds: pluginIds,
             input: [
               { type: 'text', text: SIDE_CONVERSATION_BOUNDARY_PROMPT, text_elements: [] },
               { type: 'text', text: input.question, text_elements: [] },

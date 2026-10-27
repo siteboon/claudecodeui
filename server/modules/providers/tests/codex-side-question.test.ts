@@ -46,7 +46,7 @@ type RuntimeSideQuestion = {
 const appServer = codexAppServer as unknown as AppServerSideQuestion;
 const runtime = codexRuntime as unknown as RuntimeSideQuestion;
 
-type Mode = 'complete' | 'failed' | 'fork-error' | 'hang' | 'server-request';
+type Mode = 'complete' | 'failed' | 'fork-error' | 'hang' | 'server-request' | 'plugin-list-error';
 
 /**
  * The fake app-server. `mode` decides how the turn goes; everything received
@@ -54,12 +54,20 @@ type Mode = 'complete' | 'failed' | 'fork-error' | 'hang' | 'server-request';
  * abort test can check the child is gone. A self-destruct keeps a broken
  * implementation from leaving it running.
  */
-function fakeAppServerSource(mode: Mode, log: string, pidFile: string): string {
+function fakeAppServerSource(
+  mode: Mode,
+  log: string,
+  pidFile: string,
+  mcpServerNames: string[] = [],
+  pluginIds: string[] = [],
+): string {
   return `
 const fs = require('node:fs');
 const readline = require('node:readline');
 const MODE = ${JSON.stringify(mode)};
 const LOG = ${JSON.stringify(log)};
+const MCP_SERVER_NAMES = ${JSON.stringify(mcpServerNames)};
+const PLUGIN_IDS = ${JSON.stringify(pluginIds)};
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 setTimeout(() => process.exit(0), 15000);
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n');
@@ -103,6 +111,19 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 
   if (message.method === 'initialize') {
     send({ jsonrpc: '2.0', id: message.id, result: { userAgent: 'fake-codex/0.156.1' } });
+  } else if (message.method === 'config/read') {
+    const mcp_servers = {};
+    for (const name of MCP_SERVER_NAMES) { mcp_servers[name] = { command: 'node', args: [] }; }
+    send({ jsonrpc: '2.0', id: message.id, result: { config: { mcp_servers }, origins: {}, layers: null } });
+  } else if (message.method === 'plugin/list') {
+    if (MODE === 'plugin-list-error') {
+      send({ jsonrpc: '2.0', id: message.id, error: { code: -32600, message: 'plugin/list needs auth' } });
+      return;
+    }
+    const marketplaces = PLUGIN_IDS.length
+      ? [{ name: 'fake', path: null, interface: null, plugins: PLUGIN_IDS.map((id) => ({ id })) }]
+      : [];
+    send({ jsonrpc: '2.0', id: message.id, result: { marketplaces, marketplaceLoadErrors: [], featuredPluginIds: [] } });
   } else if (message.method === 'thread/fork') {
     if (MODE === 'fork-error') {
       send({ jsonrpc: '2.0', id: message.id, error: { code: -32600, message: 'thread not found: ${PARENT_THREAD}' } });
@@ -126,7 +147,12 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
 
 type Fake = { dir: string; log: string; pidFile: string; received: () => Promise<Array<Record<string, any>>> };
 
-async function withFakeAppServer(mode: Mode, runTest: (fake: Fake) => Promise<void>): Promise<void> {
+async function withFakeAppServer(
+  mode: Mode,
+  runTest: (fake: Fake) => Promise<void>,
+  mcpServerNames: string[] = [],
+  pluginIds: string[] = [],
+): Promise<void> {
   assert.equal(typeof appServer.resolveLauncher, 'function', 'codexAppServer.resolveLauncher is missing (contract-server: the launcher seam)');
   assert.equal(typeof appServer.askSideQuestion, 'function', 'codexAppServer.askSideQuestion is missing (contract-server)');
 
@@ -134,7 +160,7 @@ async function withFakeAppServer(mode: Mode, runTest: (fake: Fake) => Promise<vo
   const log = path.join(dir, 'received.jsonl');
   const pidFile = path.join(dir, 'pid');
   const script = path.join(dir, 'fake-app-server.cjs');
-  await writeFile(script, fakeAppServerSource(mode, log, pidFile), 'utf8');
+  await writeFile(script, fakeAppServerSource(mode, log, pidFile, mcpServerNames, pluginIds), 'utf8');
   await writeFile(log, '', 'utf8');
 
   const original = appServer.resolveLauncher;
@@ -166,7 +192,10 @@ test('the fork is ephemeral, read-only and carries the side-conversation instruc
     await appServer.askSideQuestion!(askInput(), () => {});
     const lines = await received();
 
-    assert.deepEqual(lines.slice(0, 3).map((line) => line.method), ['initialize', 'initialized', 'thread/fork']);
+    assert.deepEqual(
+      lines.slice(0, 5).map((line) => line.method).sort(),
+      ['config/read', 'initialize', 'initialized', 'plugin/list', 'thread/fork'].sort(),
+    );
     const fork = lines.find((line) => line.method === 'thread/fork');
     assert.deepEqual(fork?.params, {
       threadId: PARENT_THREAD,
@@ -177,7 +206,65 @@ test('the fork is ephemeral, read-only and carries the side-conversation instruc
       approvalPolicy: 'never',
       developerInstructions: SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
       excludeTurns: true,
+      config: { mcp_servers: {}, web_search: 'disabled', apps: { _default: { enabled: false } } },
     });
+  });
+});
+
+test('the fork disables every MCP server config/read names, by name, instead of replacing the table', { concurrency: false }, async () => {
+  // Measured against the real 0.156.1 binary (codex-read-only-tools): a
+  // `config` override of `{ mcp_servers: {} }` on `thread/fork` is a no-op —
+  // overrides deep-merge, so an empty table leaves every already-configured
+  // server untouched and it still starts. Only a per-name `enabled: false`
+  // (itself undocumented in the generated protocol types, read back through
+  // `config/read`) skips a server's startup outright, with no
+  // `mcpServer/startupStatus/updated` notification at all.
+  await withFakeAppServer('complete', async ({ received }) => {
+    await appServer.askSideQuestion!(askInput(), () => {});
+    const fork = (await received()).find((line) => line.method === 'thread/fork');
+    assert.deepEqual(fork?.params.config, {
+      mcp_servers: { github: { enabled: false }, filesystem: { enabled: false } },
+      web_search: 'disabled',
+      apps: { _default: { enabled: false } },
+    });
+  }, ['github', 'filesystem']);
+});
+
+test('the fork turns web search and apps/connectors off in the same config override', { concurrency: false }, async () => {
+  // Measured against the real 0.156.1 binary: `thread/start`'s
+  // `config: { web_search: 'disabled' }` is accepted outright, while
+  // `{ web_search: 'nope' }` is rejected with "unknown variant `nope`,
+  // expected one of `disabled`, `cached`, `indexed`, `live`"; and
+  // `config: { apps: { _default: { enabled: false } } }` is accepted, while
+  // `{ apps: { _default: { enabled: 'nope' } } }` is rejected with "invalid
+  // type: string \"nope\", expected a boolean in `apps._default.enabled`" —
+  // both fields are real and the override value lands.
+  await withFakeAppServer('complete', async ({ received }) => {
+    await appServer.askSideQuestion!(askInput(), () => {});
+    const fork = (await received()).find((line) => line.method === 'thread/fork');
+    assert.equal(fork?.params.config.web_search, 'disabled');
+    assert.deepEqual(fork?.params.config.apps, { _default: { enabled: false } });
+  });
+});
+
+test('every plugin/list id is passed as disabledPluginIds on turn/start', { concurrency: false }, async () => {
+  // Measured against the real 0.156.1 binary: `turn/start` accepted
+  // `disabledPluginIds` populated with real plugin ids from `plugin/list`
+  // (which needs no auth offline) and only failed later, on the model call
+  // itself (401, no credentials here) — the params themselves are valid.
+  await withFakeAppServer('complete', async ({ received }) => {
+    await appServer.askSideQuestion!(askInput(), () => {});
+    const turnStart = (await received()).find((line) => line.method === 'turn/start');
+    assert.deepEqual(turnStart?.params.disabledPluginIds, ['game-studio@openai-api-curated', 'github@openai-api-curated']);
+  }, [], ['game-studio@openai-api-curated', 'github@openai-api-curated']);
+});
+
+test('a plugin/list that errors offline is treated as no plugins, not a failure', { concurrency: false }, async () => {
+  await withFakeAppServer('plugin-list-error', async ({ received }) => {
+    const answer = await appServer.askSideQuestion!(askInput(), () => {});
+    assert.equal(answer, 'The router is in src/router.ts.');
+    const turnStart = (await received()).find((line) => line.method === 'turn/start');
+    assert.deepEqual(turnStart?.params.disabledPluginIds, []);
   });
 });
 
