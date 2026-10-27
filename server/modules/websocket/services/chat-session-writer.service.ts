@@ -25,6 +25,11 @@ type ChatSessionWriterOptions = {
    * `complete` after an abort already completed the run).
    */
   decorateOutboundEvent: (message: NormalizedMessage) => NormalizedMessage | null;
+  /**
+   * Marks the run as running again after it completed. Implemented by the
+   * chat run registry; see `reopen`.
+   */
+  onReopen?: () => boolean;
 };
 
 /**
@@ -142,6 +147,16 @@ export class ChatSessionWriter {
 
   setSessionId(sessionId: string): void {
     this.captureProviderSessionId(sessionId);
+  }
+
+  /**
+   * Reports the run as running again after its `complete`. A provider process
+   * held open for background work can start another turn by itself (a cron, a
+   * task reporting back) or for a message sent into it; that turn is a run's
+   * work like any other. Returns false when a newer run owns the session.
+   */
+  reopen(): boolean {
+    return this.options.onReopen?.() ?? false;
   }
 
   getSessionId(): string | null {

@@ -171,6 +171,25 @@ function recordProviderSessionId(run: ChatRun, providerSessionId: string): void 
 }
 
 /**
+ * Flips a completed run back to running for a turn its held process started
+ * after the run's `complete`. The run keeps its event log and `seq`, so
+ * subscribers and replay continue across the turns; a run already evicted
+ * after its retention window takes its slot back. Refused when a newer run is
+ * running for the session.
+ */
+function reopenRun(run: ChatRun): boolean {
+  const current = runs.get(run.appSessionId);
+  if (current && current !== run && current.status === 'running') {
+    return false;
+  }
+
+  run.status = 'running';
+  run.completedAt = null;
+  runs.set(run.appSessionId, run);
+  return true;
+}
+
+/**
  * Registry of live provider runs keyed by the stable app session id.
  *
  * The registry is what makes the websocket protocol provider-independent:
@@ -227,6 +246,7 @@ export const chatRunRegistry = {
         recordProviderSessionId(run, providerSessionId);
       },
       decorateOutboundEvent: (message) => decorateAndRecordEvent(run, message),
+      onReopen: () => reopenRun(run),
     });
 
     runs.set(input.appSessionId, run);

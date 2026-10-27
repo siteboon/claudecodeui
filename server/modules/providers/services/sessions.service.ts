@@ -195,20 +195,24 @@ export const sessionsService = {
       if (!session || runningById.has(session.session_id)) {
         continue;
       }
+      // The CLI marks a process it serves over the SDK busy when it starts
+      // and never clears the mark, so for CloudCLI's own process it says
+      // nothing: its turns are in the run registry and its background work is
+      // listed above. Only a process another program runs (a terminal, an
+      // IDE) is reported here, and messages wait for it.
+      if (isClaudeSDKSessionActive(session.session_id)) {
+        continue;
+      }
 
       entries.push({
         sessionId: session.session_id,
         provider: session.provider as LLMProvider,
         startedAt: live.startedAt,
         lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0,
-        // There is no run here to abort: either the turn belongs to a CLI
-        // process CloudCLI does not own, or it is a turn CloudCLI's own held
-        // process started by itself for background work that reported back
-        // (that one still takes "Send now").
+        // There is no run here to abort: the turn belongs to a CLI process
+        // CloudCLI does not own, so it can be reported but not interrupted.
         canInterrupt: false,
-        statusText: isClaudeSDKSessionActive(session.session_id)
-          ? 'Working on a background task result'
-          : 'Running in the Claude CLI',
+        statusText: 'Running in the Claude CLI',
       });
       runningById.set(session.session_id, entries[entries.length - 1]);
     }

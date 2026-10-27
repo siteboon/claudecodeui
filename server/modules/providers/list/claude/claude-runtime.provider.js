@@ -1029,10 +1029,13 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // a follow-up turn (see INJECT_FOLLOW_UP_GRACE_MS).
   let injectedSinceResult = 0;
   let injectGraceTimer = null;
-  // True while a process held open for background work runs a turn of its own
-  // (the CLI answering a task that reported back). The client was already told
-  // the run is complete, but that turn can still take a "Send now" message.
-  let followUpTurnActive = false;
+  // Set while a turn runs that the held process started after the run had
+  // reported complete — by itself (a cron, background work reporting back) or
+  // for a message sent into it. Such a turn is reported as running again;
+  // `userInputThisTurn` records whether the user's own message is part of it,
+  // which decides how its end is notified.
+  let reopenedTurn = false;
+  let userInputThisTurn = false;
   // Set once a turn publishes a budget read from an assistant message, so the
   // turn-ending `result` is only mined for usage when nothing better arrived.
   let assistantBudgetSent = false;
@@ -1227,27 +1230,28 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       });
     }
 
-    // "Send now": hands the running turn another user message. The CLI takes
-    // it in at the next tool step, as the terminal does. Refused once the turn
-    // has reported complete (a held process only waits for background work)
-    // or stdin is closing; the client then queues the message instead.
+    // "Send now": hands the process another user message. During a turn the
+    // CLI takes it in at the next tool step, as the terminal does. Between
+    // turns — the process held open for background work — it starts a turn,
+    // reported as running again, and the background work keeps going. Refused
+    // once stdin is closing; the client then sends a new run or queues.
     const injectInput = async (text, images, files) => {
-      const turnRunning = () => !turnCompleteSent || followUpTurnActive;
-      if (!turnRunning() || heldPrompt.isReleased()) {
+      if (heldPrompt.isReleased()) {
         return false;
       }
       const [message] = await buildPromptMessages(text, images, files, options.cwd);
-      if (!turnRunning() || !heldPrompt.push({ ...message, priority: 'next' })) {
+      if (!heldPrompt.push({ ...message, priority: 'next' })) {
         return false;
       }
       injectedSinceResult += 1;
+      userInputThisTurn = true;
       return true;
     };
 
     // Track the query instance for abort capability
     if (sessionKey()) {
       addSession(sessionKey(), queryInstance, ws, releasePromptStream);
-      sessionInjectors.set(sessionKey(), { instance: queryInstance, inject: injectInput });
+      sessionInjectors.set(sessionKey(), { instance: queryInstance, inject: injectInput, isHeld: () => heldForBackgroundWork });
     }
 
     // Ends a turn: tells the client, then holds or releases the process.
@@ -1258,13 +1262,28 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       if (!turnCompleteSent && !abortPending) {
         turnCompleteSent = true;
         ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
-        notifyRunStopped({
-          userId: ws?.userId || null,
-          provider: 'claude',
-          sessionId: sessionId || capturedSessionId || null,
-          sessionName: sessionSummary,
-          stopReason: 'completed'
-        });
+        if (reopenedTurn && !userInputThisTurn) {
+          // A turn the held process started by itself is notified the way the
+          // background work it answers always was: once that work has settled.
+          if (!stillOutstanding) {
+            notifyBackgroundWorkCompleted({
+              userId: ws?.userId || null,
+              provider: 'claude',
+              sessionId: sessionId || capturedSessionId || null,
+              sessionName: sessionSummary
+            });
+          }
+        } else {
+          notifyRunStopped({
+            userId: ws?.userId || null,
+            provider: 'claude',
+            sessionId: sessionId || capturedSessionId || null,
+            sessionName: sessionSummary,
+            stopReason: 'completed'
+          });
+        }
+        reopenedTurn = false;
+        userInputThisTurn = false;
       } else if (heldForBackgroundWork && !abortPending && !stillOutstanding) {
         // A result after the turn already reported complete means the work we
         // held the process open for has finished and pushed a follow-up turn
@@ -1314,7 +1333,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
         capturedSessionId = message.session_id;
         addSession(sessionKey(), queryInstance, ws, releasePromptStream);
-        sessionInjectors.set(sessionKey(), { instance: queryInstance, inject: injectInput });
+        sessionInjectors.set(sessionKey(), { instance: queryInstance, inject: injectInput, isHeld: () => heldForBackgroundWork });
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -1416,7 +1435,22 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }
 
       if (message.type === 'system' && message.subtype === 'init' && turnCompleteSent) {
-        followUpTurnActive = true;
+        // The held process started another turn after the run reported
+        // complete: by itself (a cron, background work reporting back) or for
+        // a message sent into it. Report it as running again, as the terminal
+        // and the desktop app show it, so it can be watched, stopped and
+        // steered like any other turn. Messages sent before it started are
+        // its prompt, not late arrivals.
+        turnCompleteSent = false;
+        reopenedTurn = true;
+        userInputThisTurn = injectedSinceResult > 0;
+        injectedSinceResult = 0;
+        if (sessionKey()) {
+          abortedSessionIds.delete(sessionKey());
+        }
+        if (ws.reopen?.()) {
+          ws.send(createNormalizedMessage({ kind: 'status', text: 'Working', canInterrupt: true, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        }
       }
 
       if (message.type === 'system' && message.subtype === 'init' && injectGraceTimer) {
@@ -1428,8 +1462,18 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
       if (message.type === 'result') {
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
-        followUpTurnActive = false;
-        if (injectedSinceResult > 0 && !abortPending) {
+        if (abortPending && sessionKey() && getSession(sessionKey())?.instance === queryInstance) {
+          // Stopped while background work runs: the process stays up for that
+          // work (see abortClaudeSDKSession) and the stop already reported the
+          // turn complete. The loop goes on past this turn, so the abort is
+          // settled here rather than when the loop ends.
+          abortedSessionIds.delete(sessionKey());
+          turnCompleteSent = true;
+          reopenedTurn = false;
+          userInputThisTurn = false;
+          injectedSinceResult = 0;
+          finishTurn();
+        } else if (injectedSinceResult > 0 && !abortPending) {
           // A "Send now" message went in during this turn. If the turn took it
           // in, nothing follows; if not, the CLI answers it in a follow-up turn
           // that starts at once. Wait briefly to see which before completing.
@@ -1568,6 +1612,17 @@ async function abortClaudeSDKSession(sessionId) {
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();
+
+    // Background work (agents, commands, a cron) keeps running after a stop,
+    // as it does when a turn is interrupted in the terminal: stop the turn
+    // only, and leave the process to the hold that ends when the work does.
+    const injector = sessionInjectors.get(sessionId);
+    if (
+      backgroundWork.hasOutstanding(sessionId)
+      || (injector?.instance === session.instance && injector.isHeld?.())
+    ) {
+      return true;
+    }
 
     // Release the held stdin stream; without this the CLI stays up for the rest
     // of the post-turn hold even though the user cancelled.

@@ -7,6 +7,7 @@ import test from 'node:test';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
+  abortClaudeSDKSession,
   injectClaudeSDKMessage,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
@@ -81,12 +82,17 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
 }
 
 async function withRun(
-  runTest: (context: { script: Scripted; sent: NormalizedMessage[]; done: Promise<unknown> }) => Promise<void>,
+  runTest: (context: { script: Scripted; sent: NormalizedMessage[]; done: Promise<unknown>; reopens: () => number }) => Promise<void>,
 ): Promise<void> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
   const { createQuery, script } = createScriptedQuery();
   const sent: NormalizedMessage[] = [];
-  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
+  let reopenCount = 0;
+  const writer = {
+    send: (message: NormalizedMessage) => { sent.push(message); },
+    userId: null,
+    reopen: () => { reopenCount += 1; return true; },
+  };
   const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
   const context: ProviderRuntimeContext = {
     resolveProviderSessionId: () => null,
@@ -99,7 +105,7 @@ async function withRun(
 
   try {
     const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
-    await runTest({ script, sent, done });
+    await runTest({ script, sent, done, reopens: () => reopenCount });
     script.end();
     await done;
   } finally {
@@ -378,28 +384,92 @@ test('no live run refuses a message sent now', async () => {
   assert.equal(await injectClaudeSDKMessage('no-such-session', 'hello', {}), false);
 });
 
-test('a turn the held process starts by itself for background work takes a message sent now', async () => {
-  await withRun(async ({ script, sent }) => {
+// A process held open for background work: the turn ended, a background
+// command is still running.
+const holdForBackgroundCommand = async (script: Scripted, sent: NormalizedMessage[]) => {
+  script.emit(init());
+  script.emit(toolUse('toolu_bg', 'Bash', { command: 'sleep 600', run_in_background: true }));
+  script.emit(taskStarted('bg1', 'toolu_bg', 'local_bash'));
+  script.emit(ack('toolu_bg', 'Command running in background with ID: bg1', { backgroundTaskId: 'bg1' }));
+  script.emit(result());
+  await waitFor(() => completes(sent) === 1);
+  assert.equal(script.released(), false, 'held for the background command');
+};
+
+const working = (sent: NormalizedMessage[]) =>
+  sent.filter((message) => message.kind === 'status' && (message as { text?: string }).text === 'Working').length;
+
+test('a message sent between turns of a held process starts a turn there, shown as running', async () => {
+  await withRun(async ({ script, sent, reopens }) => {
+    await holdForBackgroundCommand(script, sent);
+
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'how is it going?', {}), true, 'taken, not queued');
+    await waitFor(() => script.received.length === 2);
+    assert.equal((script.received[1] as { priority?: string }).priority, 'next');
+
+    // The CLI starts the turn for it; the run is reported as running again.
     script.emit(init());
-    script.emit(toolUse('toolu_bg', 'Bash', { command: 'sleep 600', run_in_background: true }));
-    script.emit(taskStarted('bg1', 'toolu_bg', 'local_bash'));
-    script.emit(ack('toolu_bg', 'Command running in background with ID: bg1', { backgroundTaskId: 'bg1' }));
+    await waitFor(() => reopens() === 1);
+    assert.equal(working(sent), 1);
+
+    script.emit(text('Still running.'));
     script.emit(result());
-    await waitFor(() => completes(sent) === 1);
-    assert.equal(script.released(), false, 'held for the background command');
-    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'too early', {}), false, 'nothing is running between turns');
+    await waitFor(() => completes(sent) === 2);
+    assert.equal(script.released(), false, 'the background command keeps the process');
+  });
+});
+
+test('a turn the held process starts by itself is shown as running and completes', async () => {
+  await withRun(async ({ script, sent, reopens }) => {
+    await holdForBackgroundCommand(script, sent);
 
     // The command reports back and the CLI starts a turn of its own.
     script.emit(taskNotification('bg1', 'toolu_bg', 'completed'));
     script.emit(init());
-    await settle();
+    await waitFor(() => reopens() === 1);
+    assert.equal(working(sent), 1);
+
+    // It takes "Send now" like any running turn.
     assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'also check the log', {}), true);
     await waitFor(() => script.received.length === 2);
-    assert.equal((script.received[1] as { priority?: string }).priority, 'next');
 
     script.emit(text('The command finished; the log is clean.'));
     script.emit(result());
+    await waitFor(() => completes(sent) === 2);
+  });
+});
+
+test('Stop during such a turn stops the turn and keeps the background work running', async () => {
+  await withRun(async ({ script, sent, reopens }) => {
+    await holdForBackgroundCommand(script, sent);
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'one more thing', {}), true);
+    script.emit(init());
+    await waitFor(() => reopens() === 1);
+
+    assert.equal(await abortClaudeSDKSession(SESSION_ID), true);
     await settle();
-    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'after it', {}), false, 'the follow-up turn is over');
+    assert.equal(script.released(), false, 'the process stays up for the background command');
+
+    // The interrupted turn ends; the stop handler reports it complete, not the runtime.
+    script.emit(result());
+    await settle();
+    assert.equal(completes(sent), 1, 'no complete from the runtime for the stopped turn');
+
+    // The process is still usable, and its next turn is shown as running.
+    assert.equal(await injectClaudeSDKMessage(SESSION_ID, 'carry on', {}), true);
+    script.emit(init());
+    await waitFor(() => reopens() === 2);
+    script.emit(result());
+    await waitFor(() => completes(sent) === 2);
+  });
+});
+
+test('Stop with no background work ends the process as before', async () => {
+  await withRun(async ({ script }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_x', 'Bash', { command: 'sleep 5' }));
+    await waitFor(() => script.received.length === 1);
+    assert.equal(await abortClaudeSDKSession(SESSION_ID), true);
+    await waitFor(() => script.released());
   });
 });

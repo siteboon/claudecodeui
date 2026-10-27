@@ -815,6 +815,34 @@ export function useChatComposerState({
       event.preventDefault();
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
       const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
+
+      // A message the session's live process took ("Send now"): show it and
+      // clear the composer, as a direct send does.
+      const showSentNow = (sessionId: string, content: string, attachments: unknown[]) => {
+        const attachmentRecords = attachments as ChatAttachment[];
+        addMessage({
+          type: 'user',
+          content,
+          images: attachmentRecords.filter(isImageAttachment),
+          files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
+          timestamp: new Date(),
+        });
+        recordSentMessage(content, sessionId);
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setAttachedFiles([]);
+        setFileErrors(new Map());
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+        if (draftScopeRef.current) {
+          writeDraftText(draftScopeRef.current, '');
+        }
+        setIsUserScrolledUp(false);
+        setTimeout(() => scrollToBottom(), 100);
+      };
       const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];
       if (
         (
@@ -872,29 +900,7 @@ export function useChatComposerState({
           && !currentInput.trimStart().startsWith('/')
           && await injectIntoRun(liveSessionId, currentInput, uploadedAttachments)
         ) {
-          const attachmentRecords = uploadedAttachments as ChatAttachment[];
-          addMessage({
-            type: 'user',
-            content: currentInput,
-            images: attachmentRecords.filter(isImageAttachment),
-            files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
-            timestamp: new Date(),
-          });
-          recordSentMessage(currentInput, liveSessionId);
-          setInput('');
-          inputValueRef.current = '';
-          resetCommandMenuState();
-          setAttachedFiles([]);
-          setFileErrors(new Map());
-          setIsTextareaExpanded(false);
-          if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-          }
-          if (draftScopeRef.current) {
-            writeDraftText(draftScopeRef.current, '');
-          }
-          setIsUserScrolledUp(false);
-          setTimeout(() => scrollToBottom(), 100);
+          showSentNow(liveSessionId, currentInput, uploadedAttachments);
           return;
         }
 
@@ -1024,6 +1030,22 @@ export function useChatComposerState({
       // call, but not one to make for them — and queueing behind the work,
       // which the server holds until it finishes, is the safe alternative.
       const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
+      // The process that runs the work takes the message as a new turn while
+      // the work keeps going, as in the terminal — nothing to ask. Only when
+      // it cannot (the work belongs to a process that has ended) is there a
+      // choice to make.
+      if (
+        backgroundActivity?.background
+        && !queuedSubmission
+        && !editingAnchorId
+        && SEND_NOW_PROVIDERS.has(provider)
+        && !messageContent.trimStart().startsWith('/')
+        && await injectIntoRun(targetSessionId, messageContent, uploadedAttachments)
+      ) {
+        showSentNow(targetSessionId, messageContent, uploadedAttachments);
+        onSessionProcessing?.(targetSessionId, { statusText: null, canInterrupt: true });
+        return;
+      }
       if (backgroundActivity?.background) {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
           .map((task) => describeBackgroundTask(task, t));
