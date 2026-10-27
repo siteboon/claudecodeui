@@ -6,11 +6,12 @@ import { sessionsService } from '@/modules/providers/index.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
 import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
 
-// One relocation at a time, server-wide. A second one of the same project would
+// Relocations run one at a time, server-wide. Two of the same project would
 // read the same rows, and one into the path another is leaving would make that
 // one's rollback collide with it; either rollback would leave rows that no
-// longer match the disk. Moves are rare enough that waiting costs nothing.
-let relocationInProgress = false;
+// longer match the disk. Queued rather than refused: a repeated request (a
+// double Enter) then finds the folder already moved and returns as a no-op.
+let relocationQueue: Promise<unknown> = Promise.resolve();
 
 type RelocateProjectResult = {
   projectId: string;
@@ -61,26 +62,16 @@ async function assertDirectoryExists(projectPath: string): Promise<void> {
  * or on a full scan) reads the old cwd back, re-creates the old folder as a
  * project and moves the session there.
  */
-export async function relocateProject(
+export function relocateProject(
   projectId: string,
   requestedPath: string,
 ): Promise<RelocateProjectResult> {
-  if (relocationInProgress) {
-    throw new AppError('Another project folder is being moved', {
-      code: 'PROJECT_RELOCATION_IN_PROGRESS',
-      statusCode: 409,
-      details: 'Try again in a moment.',
-    });
-  }
-  relocationInProgress = true;
-  try {
-    return await relocateUnguarded(projectId, requestedPath);
-  } finally {
-    relocationInProgress = false;
-  }
+  const relocation = relocationQueue.then(() => relocateNow(projectId, requestedPath));
+  relocationQueue = relocation.catch(() => undefined);
+  return relocation;
 }
 
-async function relocateUnguarded(
+async function relocateNow(
   projectId: string,
   requestedPath: string,
 ): Promise<RelocateProjectResult> {
@@ -144,7 +135,7 @@ async function relocateUnguarded(
     throw new AppError('A conversation in this project is still running', {
       code: 'PROJECT_SESSION_RUNNING',
       statusCode: 409,
-      details: 'Wait for it to finish or stop it, then try again.',
+      details: 'A conversation in this project is still running. Wait for it to finish or stop it, then try again.',
     });
   }
   const transcripts = sessionRows
