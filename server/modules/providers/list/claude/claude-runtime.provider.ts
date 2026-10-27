@@ -631,7 +631,7 @@ const CACHE_USAGE_KEY_GROUPS = [
  * @param {Object} messageUsage - Anthropic usage payload
  * @returns {boolean} True when both cache halves are reported
  */
-function reportsCacheAccount(messageUsage) {
+function reportsCacheAccount(messageUsage: AnyRecord): boolean {
   // Judge the alias buildTokenBudget will read (the first non-null one), not any alias.
   return CACHE_USAGE_KEY_GROUPS.every((keys) => {
     const key = keys.find((k) => messageUsage[k] != null);
