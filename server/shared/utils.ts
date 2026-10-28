@@ -970,14 +970,6 @@ export function readProviderSkillMarkdownDefinitionFromContent(
 
 // ---------------------------
 //----------------- SESSION SYNCHRONIZER TITLE HELPERS ------------
-/**
- * Produces a compact session title suitable for UI rendering and DB storage.
- *
- * Use this when converting provider-native names into a consistent title value.
- * The helper collapses repeated whitespace, trims the result, and truncates it
- * to 120 characters so every provider writes stable and bounded metadata.
- * If the normalized input is empty, it returns the supplied fallback title.
- */
 const MAX_CLOUDCLI_SESSION_NAME_WORDS = 4;
 
 /**
@@ -990,6 +982,14 @@ export function buildCloudCliSessionName(initialMessage: string): string {
   return words.slice(0, MAX_CLOUDCLI_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
 }
 
+/**
+ * Produces a compact session title suitable for UI rendering and DB storage.
+ *
+ * Use this when converting provider-native names into a consistent title value.
+ * The helper collapses repeated whitespace, trims the result, and truncates it
+ * to 120 characters so every provider writes stable and bounded metadata.
+ * If the normalized input is empty, it returns the supplied fallback title.
+ */
 export function normalizeSessionName(rawValue: string | undefined, fallback: string): string {
   const normalized = (rawValue ?? '').replace(/\s+/g, ' ').trim();
   if (!normalized) {

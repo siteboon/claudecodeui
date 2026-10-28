@@ -147,12 +147,17 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       // conversation moves on). A name the app generated gives way to that
       // title; a name someone chose, in the app or with `/rename`, never does.
       // The createSession upsert keeps an app session's name, so the title is
-      // written explicitly.
+      // written explicitly, and below only if the name is still the one read.
       if (this.isGeneratedName(existingSession.session_id, existingSessionName, await this.readFirstPrompt(filePath))) {
         const title = await this.extractSessionTitle(filePath, parsed.sessionId, { promptFallback: false });
         const sessionName = title ? normalizeSessionName(title, 'Untitled Claude Session') : undefined;
-        if (sessionName && sessionName !== existingSessionName) {
-          sessionsDb.updateSessionCustomName(existingSession.session_id, sessionName);
+        // Conditional on the name read above: the reads in between await I/O,
+        // and a rename that lands meanwhile has to win.
+        if (
+          sessionName
+          && sessionName !== existingSessionName
+          && sessionsDb.replaceSessionCustomName(existingSession.session_id, existingSessionName, sessionName)
+        ) {
           this.titledAs.set(existingSession.session_id, sessionName);
           return { ...parsed, sessionName };
         }
