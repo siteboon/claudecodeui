@@ -11,6 +11,8 @@ export { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATT
 // Providers uses the shared history and runtime summary contracts through this barrel.
 export type { BackgroundTaskSummary, ClearedContextSegment, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, WorkflowAgentActivity } from './types.js';
 export { sliceTailPage } from './utils.js';
+// Providers names a new CloudCLI session from its first message, and recognises that name later.
+export { buildCloudCliSessionName } from './utils.js';
 
 // Session persistence uses canonical path normalization and fork/history metadata.
 export { normalizeProjectPath } from './utils.js';
