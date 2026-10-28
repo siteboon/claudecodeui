@@ -133,6 +133,22 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    // App-created sessions are keyed by an app id, so disk-discovered provider
+    // ids must be resolved through the provider-id mapping first. A name the
+    // app already set — a sidebar rename or an earlier scan's pick — is kept:
+    // the transcript only offers its first prompt, which is a weaker name, and
+    // a rescan (the watcher, or a modified-file scan) must not roll it back.
+    const existingSession = sessionsDb.getSessionByProviderSessionId(sessionId)
+      ?? sessionsDb.getSessionById(sessionId);
+    const existingSessionName = existingSession?.custom_name;
+    if (existingSessionName && existingSessionName !== 'Untitled Cursor Session') {
+      return {
+        sessionId,
+        projectPath,
+        sessionName: normalizeSessionName(existingSessionName, 'Untitled Cursor Session'),
+      };
+    }
+
     return extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, any>;
       if (data.role !== 'user') {

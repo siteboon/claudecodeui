@@ -197,7 +197,7 @@ Command forms currently used by the providers are:
 - Use the existing helpers when they fit:
   - `buildLookupMap(...)`
   - `extractFirstValidJsonlData(...)`
-  - `findFilesRecursivelyCreatedAfter(...)`
+  - `findFilesRecursivelyChangedAfter(...)`
   - `normalizeSessionName(...)`
   - `readFileTimestamps(...)`
 - Make the sync resilient to partial, malformed, or missing provider files.

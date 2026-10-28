@@ -155,7 +155,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 export const LAST_SCANNED_AT_SQL = `
 CREATE TABLE IF NOT EXISTS scan_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
-  last_scanned_at TIMESTAMP NULL
+  last_scanned_at TIMESTAMP NULL,
+  -- Which scanner semantics wrote the cursor. A cursor recorded by an older
+  -- scanner (e.g. the creation-time one that never re-read modified
+  -- transcripts) is ignored once so the next scan revisits everything it
+  -- skipped; see scan-state.db.ts for the current kind value.
+  cursor_kind TEXT
 );
 `;
 
