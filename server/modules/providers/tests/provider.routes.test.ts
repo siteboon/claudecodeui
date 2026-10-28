@@ -604,7 +604,9 @@ test('the session move route validates its input and returns the new project', a
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) },
     );
     const target = path.join(workspacePath, 'target');
-    const targetId = projectsDb.createProjectPath(target).project?.project_id ?? '';
+    const created = projectsDb.createProjectPath(target).project;
+    assert.ok(created, 'the target project must exist');
+    const targetId = created.project_id;
     // Never ran, so it moves without touching any provider transcript.
     sessionsDb.createAppSession('route-move', 'claude', path.join(workspacePath, 'source'), 'Route move');
 
@@ -617,6 +619,8 @@ test('the session move route validates its input and returns the new project', a
       assert.equal(response.status, 400, JSON.stringify(body));
       assert.equal(((await response.json()) as { error: { code: string } }).error.code, 'INVALID_PROJECT_ID');
     }
+    const unknownProject = await move('route-move', { projectId: 'no-such-project' });
+    assert.equal(unknownProject.status, 404);
     assert.equal(sessionsDb.getSessionById('route-move')?.project_path, path.join(workspacePath, 'source'));
 
     const moved = await move('route-move', { projectId: ` ${targetId} ` });
