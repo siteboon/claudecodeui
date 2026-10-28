@@ -978,6 +978,18 @@ export function readProviderSkillMarkdownDefinitionFromContent(
  * to 120 characters so every provider writes stable and bounded metadata.
  * If the normalized input is empty, it returns the supplied fallback title.
  */
+const MAX_CLOUDCLI_SESSION_NAME_WORDS = 4;
+
+/**
+ * The name CloudCLI gives a session it creates, before the provider has titled
+ * it: the first words of the opening message. Shared so a synchronizer can tell
+ * this placeholder from a name someone chose.
+ */
+export function buildCloudCliSessionName(initialMessage: string): string {
+  const words = initialMessage.trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, MAX_CLOUDCLI_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
+}
+
 export function normalizeSessionName(rawValue: string | undefined, fallback: string): string {
   const normalized = (rawValue ?? '').replace(/\s+/g, ' ').trim();
   if (!normalized) {
