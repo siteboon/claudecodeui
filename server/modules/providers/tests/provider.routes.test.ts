@@ -619,16 +619,21 @@ test('the session move route validates its input and returns the new project', a
       assert.equal(response.status, 400, JSON.stringify(body));
       assert.equal(((await response.json()) as { error: { code: string } }).error.code, 'INVALID_PROJECT_ID');
     }
+    const errorCode = async (response: globalThis.Response) => ((await response.json()) as { error: { code: string } }).error.code;
     const unknownProject = await move('route-move', { projectId: 'no-such-project' });
     assert.equal(unknownProject.status, 404);
+    assert.equal(await errorCode(unknownProject), 'PROJECT_NOT_FOUND');
+    const unknownSession = await move('no-such-session', { projectId: targetId });
+    assert.equal(unknownSession.status, 404);
+    assert.equal(await errorCode(unknownSession), 'SESSION_NOT_FOUND');
     assert.equal(sessionsDb.getSessionById('route-move')?.project_path, path.join(workspacePath, 'source'));
 
     const moved = await move('route-move', { projectId: ` ${targetId} ` });
     assert.equal(moved.status, 200);
     assert.deepEqual(await moved.json(), {
       success: true,
-      data: { sessionId: 'route-move', projectId: targetId, projectPath: target },
+      data: { sessionId: 'route-move', projectId: targetId, projectPath: created.project_path },
     });
-    assert.equal(sessionsDb.getSessionById('route-move')?.project_path, target);
+    assert.equal(sessionsDb.getSessionById('route-move')?.project_path, created.project_path);
   });
 });
