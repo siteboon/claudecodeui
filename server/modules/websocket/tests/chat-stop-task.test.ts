@@ -103,6 +103,7 @@ test('a task the runtime is not tracking is refused with NO_SUCH_TASK', async ()
     assert.equal(socket.frames[0].kind, 'protocol_error');
     assert.equal(socket.frames[0].code, 'NO_SUCH_TASK');
     assert.equal(socket.frames[0].sessionId, SESSION_ID);
+    assert.equal(socket.frames[0].taskId, 'already-settled');
   });
 });
 

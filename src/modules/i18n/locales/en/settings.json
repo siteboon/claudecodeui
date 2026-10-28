@@ -404,6 +404,37 @@
       }
     },
     "connectionStatus": "Connection Status",
+    "cli": {
+      "title": "CLI version",
+      "checking": "Checking version…",
+      "installed": "Installed: v{{version}}",
+      "installedUnknown": "Installed (version unknown)",
+      "versionUnavailable": "Could not read the version",
+      "updateAvailable": "Update available: v{{version}}",
+      "upToDate": "Up to date",
+      "bundled": "Ships with CloudCLI and is updated together with it.",
+      "platform": "Managed by the hosting platform.",
+      "updateTo": "Update to v{{version}}",
+      "runUpdater": "Run updater",
+      "updating": "Updating…",
+      "updatingHint": "Running {{command}} on the server. This can take a few minutes.",
+      "runsCommand": "Runs {{command}} on the server",
+      "output": "Output of {{command}}",
+      "result": {
+        "updated": "Updated to v{{version}}.",
+        "alreadyUpToDate": "Already up to date (v{{version}}).",
+        "unchanged": "The updater finished and the version is still v{{version}}. Its output below says why.",
+        "unchangedUnknown": "The updater finished. Its output is below.",
+        "permissionDenied": "The server's user is not allowed to write where this CLI is installed. Run {{command}} on the server as the owner of that install (for example with sudo).",
+        "timedOut": "The update did not finish in time and was stopped. Run {{command}} on the server to finish it.",
+        "failed": "The update failed (exit code {{exitCode}}). Its output is below.",
+        "failedQuietly": "The updater reported a failure. Its output is below.",
+        "notStarted": "The updater could not be started.",
+        "busy": "This agent is working in a session. Wait for it to finish or stop it, then update.",
+        "requestFailed": "The update did not run: {{error}}",
+        "unconfirmed": "No answer came back from the server ({{error}}). The update may have run anyway; the version above is the last one the server reported."
+      }
+    },
     "subscriptionOverride": {
       "title": "Your subscription login is not being used",
       "description": "{{variable}} is set in {{source}}, so Claude Code bills every request to that key as pay-as-you-go API usage instead of using your subscription login.",

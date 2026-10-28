@@ -361,6 +361,37 @@
       }
     },
     "connectionStatus": "Statut de la connexion",
+    "cli": {
+      "title": "Version de la CLI",
+      "checking": "Vérification de la version…",
+      "installed": "Installée : v{{version}}",
+      "installedUnknown": "Installée (version inconnue)",
+      "versionUnavailable": "Impossible de lire la version",
+      "updateAvailable": "Mise à jour disponible : v{{version}}",
+      "upToDate": "À jour",
+      "bundled": "Fournie avec CloudCLI et mise à jour en même temps que lui.",
+      "platform": "Gérée par la plateforme d'hébergement.",
+      "updateTo": "Mettre à jour vers v{{version}}",
+      "runUpdater": "Lancer la mise à jour",
+      "updating": "Mise à jour…",
+      "updatingHint": "Exécution de {{command}} sur le serveur. Cela peut prendre quelques minutes.",
+      "runsCommand": "Exécute {{command}} sur le serveur",
+      "output": "Sortie de {{command}}",
+      "result": {
+        "updated": "Mise à jour vers v{{version}} effectuée.",
+        "alreadyUpToDate": "Déjà à jour (v{{version}}).",
+        "unchanged": "Le programme de mise à jour s'est terminé, mais la version est toujours v{{version}}. Sa sortie ci-dessous en donne la raison.",
+        "unchangedUnknown": "Le programme de mise à jour s'est terminé. Sa sortie figure ci-dessous.",
+        "permissionDenied": "L'utilisateur du serveur n'a pas le droit d'écrire là où cette CLI est installée. Exécutez {{command}} sur le serveur en tant que propriétaire de cette installation (par exemple avec sudo).",
+        "timedOut": "La mise à jour ne s'est pas terminée à temps et a été arrêtée. Exécutez {{command}} sur le serveur pour la terminer.",
+        "failed": "La mise à jour a échoué (code de sortie {{exitCode}}). Sa sortie figure ci-dessous.",
+        "failedQuietly": "Le programme de mise à jour a signalé un échec. Sa sortie figure ci-dessous.",
+        "notStarted": "Le programme de mise à jour n'a pas pu être lancé.",
+        "busy": "Cet agent travaille dans une session. Attendez qu'il ait terminé ou arrêtez-le, puis lancez la mise à jour.",
+        "requestFailed": "La mise à jour n'a pas été lancée : {{error}}",
+        "unconfirmed": "Aucune réponse du serveur ({{error}}). La mise à jour a peut-être quand même eu lieu ; la version ci-dessus est la dernière signalée par le serveur."
+      }
+    },
     "login": {
       "title": "Connexion",
       "reAuthenticate": "Se ré-authentifier",
