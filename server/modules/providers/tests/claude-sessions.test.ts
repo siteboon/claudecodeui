@@ -2147,6 +2147,99 @@ test('synchronizeFile does NOT treat "Untitled Claude Session" in DB as a real c
 });
 
 // ---------------------------------------------------------------------------
+// A manual `/rename` in the CLI arrives as a `custom-title` event appended to
+// the transcript of a session the index already named — from its first prompt,
+// an ai-title, or a sidebar rename. That event is the newest explicit user
+// intent, so it must replace whatever name the DB already carries. Only
+// `custom-title` outranks the DB: an `ai-title` still loses to a sidebar name.
+// ---------------------------------------------------------------------------
+
+test('synchronizeFile updates DB custom_name when a CLI custom-title rename arrives later', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-rename-wins-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(
+      path.join(claudeHome, 'history.jsonl'),
+      JSON.stringify({ sessionId: 'test-session-1', display: 'stale first-prompt name' }) + '\n',
+      'utf8',
+    );
+
+    // The transcript carries the rename the user typed in the CLI after the
+    // index had already named the session.
+    await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
+      JSON.stringify({ type: 'ai-title', aiTitle: 'AI generated title', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'last-prompt', lastPrompt: 'first prompt', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'custom-title', customTitle: 'Renamed via cli', sessionId: 'test-session-1' }),
+    ]);
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createSession(
+        'test-session-1',
+        'claude',
+        workspacePath,
+        'Name from the first sync',
+      );
+
+      const synchronizer = new ClaudeSessionSynchronizer();
+      const result = await synchronizer.synchronizeFile(
+        path.join(workspacePath, 'test-session-1.jsonl'),
+      );
+
+      assert.ok(result);
+      const session = sessionsDb.getSessionById(result!);
+      assert.equal(session?.custom_name, 'Renamed via cli');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('synchronizeFile keeps the latest custom-title when the CLI renames twice', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-rename-twice-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(path.join(claudeHome, 'history.jsonl'), '', 'utf8');
+
+    await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
+      JSON.stringify({ type: 'custom-title', customTitle: 'First rename', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'custom-title', customTitle: 'Second rename', sessionId: 'test-session-1' }),
+    ]);
+
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createSession(
+        'test-session-1',
+        'claude',
+        workspacePath,
+        'First rename',
+      );
+
+      const synchronizer = new ClaudeSessionSynchronizer();
+      const result = await synchronizer.synchronizeFile(
+        path.join(workspacePath, 'test-session-1.jsonl'),
+      );
+
+      assert.ok(result);
+      const session = sessionsDb.getSessionById(result!);
+      assert.equal(session?.custom_name, 'Second rename');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Edge cases
 // ---------------------------------------------------------------------------
 

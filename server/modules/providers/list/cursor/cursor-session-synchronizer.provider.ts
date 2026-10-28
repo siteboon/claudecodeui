@@ -7,7 +7,7 @@ import readline from 'node:readline';
 import { sessionsDb } from '@/modules/database/index.js';
 import {
   extractFirstValidJsonlData,
-  findFilesRecursivelyCreatedAfter,
+  findFilesRecursivelyChangedAfter,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
@@ -47,7 +47,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let processed = 0;
 
-    const files = await findFilesRecursivelyCreatedAfter(projectsDir, '.jsonl', since ?? null);
+    const files = await findFilesRecursivelyChangedAfter(projectsDir, '.jsonl', since ?? null);
 
     for (const filePath of files) {
       const parsed = await this.processSessionFile(filePath);
