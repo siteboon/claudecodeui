@@ -80,7 +80,7 @@ import the service from `server/modules/providers/index.ts`.
 | --- | --- | --- |
 | `runtime` | Run and abort live SDK/CLI sessions | `IProviderRuntime` -> `providerRuntimeService` |
 | `models` | Resolve supported and active models | `IProviderModels` -> `providerModelsService` |
-| `auth` | Report install/auth state for the provider runtime | `IProviderAuth` -> `providerAuthService` |
+| `auth` | Report install/auth state and the CLI version for the provider runtime | `IProviderAuth` -> `providerAuthService`, `providerCliService` |
 | `mcp` | Read, list, write, and remove provider-native MCP config | `McpProvider` -> `providerMcpService` |
 | `skills` | Discover provider-native skill markdown files | `SkillsProvider` -> `providerSkillsService` |
 | `sessions` | Normalize live events and fetch session history | `IProviderSessions` -> `sessionsService` |
@@ -119,6 +119,10 @@ import the service from `server/modules/providers/index.ts`.
 3. Implement auth.
 
 - Return a full `ProviderAuthStatus`.
+- Implement `checkInstalled()` with `probeCliVersion(...)` on the CLI the runtime
+  actually runs; it fills `installed` and `installedVersion`, and the CLI
+  update service reads versions through it. A CLI that updates itself can be
+  added to `CLI_UPDATERS` in `services/provider-cli.service.ts`.
 - Treat normal `not installed` / `not authenticated` states as data, not exceptions.
 - Keep provider-specific credential discovery inside the auth provider.
 - If the provider has no auth step, return a stable unauthenticated or not-installed status instead of omitting the facet.

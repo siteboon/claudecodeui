@@ -68,7 +68,7 @@ const renderHandlers = () => {
   }));
 
   const dispatch = (event: ServerEvent) => listener?.(event);
-  return { dispatch, log, syncs };
+  return { dispatch, log, syncs, stored };
 };
 
 const event = (fields: Record<string, unknown>): ServerEvent => ({
@@ -194,4 +194,84 @@ test('a refused stop request does not idle the session it was sent on', () => {
   // Any other rejection still means the send never became a run.
   dispatch(event({ kind: 'protocol_error', code: 'SESSION_NOT_FOUND', error: 'gone' }));
   assert.deepEqual(log, [{ sessionId: 'viewed-session', idle: true }]);
+});
+
+test('a stop refused for a task whose end never arrived settles its chip instead of erroring', () => {
+  const { dispatch, log, stored } = renderHandlers();
+
+  // A backgrounded command; its started event never reached this client.
+  dispatch(event({ kind: 'tool_use', toolId: 'toolu_bash_1', toolName: 'Bash', toolInput: { command: 'sleep 600', run_in_background: true } }));
+  dispatch(event({ kind: 'tool_result', toolId: 'toolu_bash_1', content: 'Running in background', toolUseResult: { backgroundTaskId: 'bjxsjif0e' } }));
+  dispatch(event({ kind: 'task_status', event: 'progress', taskId: 'bjxsjif0e', toolUseId: 'toolu_bash_1', taskType: 'local_bash' }));
+  dispatch(event({ kind: 'complete', success: true }));
+  assert.equal((log.at(-1) as { tasks: BackgroundTaskSummary[] }).tasks.length, 1);
+
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'bjxsjif0e' }));
+
+  assert.deepEqual(log.at(-1), { sessionId: 'viewed-session', tasks: [] });
+  assert.equal(stored.some((message) => message.kind === 'error'), false);
+  assert.equal(stored.at(-1)?.kind, 'task_status');
+  assert.equal(stored.at(-1)?.toolUseId, 'toolu_bash_1');
+  assert.equal(stored.at(-1)?.status, 'stopped');
+});
+
+test('a stop refused after the task\'s own end arrived adds no error row', () => {
+  const { dispatch, stored } = renderHandlers();
+
+  workflowLaunch().forEach(dispatch);
+  dispatch(event({ kind: 'task_status', event: 'notification', taskId: 'wxkj4kcvd', toolUseId: 'toolu_workflow_1', status: 'completed', summary: 'done' }));
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'wxkj4kcvd' }));
+
+  assert.equal(stored.some((message) => message.kind === 'error'), false);
+});
+
+test('a refused stop for a task with no card here is still reported', () => {
+  const { dispatch, stored } = renderHandlers();
+
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'unknown' }));
+
+  assert.equal(stored.at(-1)?.kind, 'error');
+});
+
+test('a refused stop for a task whose row has no status yet is still reported', () => {
+  const { dispatch, stored } = renderHandlers();
+
+  // Only the launch acknowledgement: the row says nothing about the task.
+  dispatch(event({ kind: 'tool_use', toolId: 'toolu_bash_1', toolName: 'Bash', toolInput: { command: 'sleep 600', run_in_background: true } }));
+  dispatch(event({ kind: 'tool_result', toolId: 'toolu_bash_1', content: 'Running in background', toolUseResult: { backgroundTaskId: 'bjxsjif0e' } }));
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'bjxsjif0e' }));
+
+  assert.equal(stored.at(-1)?.kind, 'error');
+});
+
+test('a refused stop settles the running row when an earlier row of the same task has settled', () => {
+  const { dispatch, stored } = renderHandlers();
+
+  // A resumed agent: the first call settled, the second runs under the same id.
+  dispatch(event({ kind: 'tool_use', toolId: 'toolu_agent_1', toolName: 'Agent', toolInput: { description: 'Survey' } }));
+  dispatch(event({ kind: 'task_status', event: 'started', taskId: 'a1', toolUseId: 'toolu_agent_1', taskType: 'local_agent' }));
+  dispatch(event({ kind: 'task_status', event: 'notification', taskId: 'a1', toolUseId: 'toolu_agent_1', status: 'completed' }));
+  dispatch(event({ kind: 'tool_use', toolId: 'toolu_agent_2', toolName: 'Agent', toolInput: { description: 'Survey again' } }));
+  dispatch(event({ kind: 'task_status', event: 'started', taskId: 'a1', toolUseId: 'toolu_agent_2', taskType: 'local_agent' }));
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'a1' }));
+
+  assert.equal(stored.at(-1)?.toolUseId, 'toolu_agent_2');
+  assert.equal(stored.at(-1)?.status, 'stopped');
+});
+
+test('a refused stop settles every running row of the task', () => {
+  const { dispatch, log, stored } = renderHandlers();
+
+  for (const toolId of ['toolu_agent_1', 'toolu_agent_2']) {
+    dispatch(event({ kind: 'tool_use', toolId, toolName: 'Agent', toolInput: { description: 'Survey' } }));
+    dispatch(event({ kind: 'task_status', event: 'started', taskId: 'a1', toolUseId: toolId, taskType: 'local_agent' }));
+  }
+  dispatch(event({ kind: 'complete', success: true }));
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no running background task', taskId: 'a1' }));
+
+  assert.deepEqual(log.at(-1), { sessionId: 'viewed-session', tasks: [] });
+  assert.deepEqual(
+    stored.filter((message) => message.status === 'stopped').map((message) => message.toolUseId),
+    ['toolu_agent_1', 'toolu_agent_2'],
+  );
 });

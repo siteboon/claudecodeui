@@ -761,6 +761,8 @@ export function useProjectsState({
         && event.kind !== 'chat_subscribed'
         && event.kind !== 'loading_progress'
         && event.kind !== 'session_upserted'
+        // A change to the session's scheduled messages is not new activity in it.
+        && event.kind !== 'scheduled_messages_changed'
         && event.kind !== 'status'
         && event.kind !== 'stream_end'
         && event.kind !== 'permission_resolved'

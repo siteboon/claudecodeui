@@ -354,6 +354,37 @@
       }
     },
     "connectionStatus": "Bağlantı Durumu",
+    "cli": {
+      "title": "CLI sürümü",
+      "checking": "Sürüm kontrol ediliyor…",
+      "installed": "Kurulu: v{{version}}",
+      "installedUnknown": "Kurulu (sürüm bilinmiyor)",
+      "versionUnavailable": "Sürüm okunamadı",
+      "updateAvailable": "Güncelleme var: v{{version}}",
+      "upToDate": "Güncel",
+      "bundled": "CloudCLI ile birlikte gelir ve onunla birlikte güncellenir.",
+      "platform": "Barındırma platformu tarafından yönetilir.",
+      "updateTo": "v{{version}} sürümüne güncelle",
+      "runUpdater": "Güncelleyiciyi çalıştır",
+      "updating": "Güncelleniyor…",
+      "updatingHint": "Sunucuda {{command}} çalıştırılıyor. Bu birkaç dakika sürebilir.",
+      "runsCommand": "Sunucuda {{command}} komutunu çalıştırır",
+      "output": "{{command}} çıktısı",
+      "result": {
+        "updated": "v{{version}} sürümüne güncellendi.",
+        "alreadyUpToDate": "Zaten güncel (v{{version}}).",
+        "unchanged": "Güncelleyici bitti ama sürüm hâlâ v{{version}}. Nedenini aşağıdaki çıktıda görebilirsin.",
+        "unchangedUnknown": "Güncelleyici bitti. Çıktısı aşağıda.",
+        "permissionDenied": "Sunucunun kullanıcısının bu CLI'nin kurulu olduğu yere yazma izni yok. Sunucuda {{command}} komutunu bu kurulumun sahibi olarak çalıştır (örneğin sudo ile).",
+        "timedOut": "Güncelleme zamanında bitmedi ve durduruldu. Tamamlamak için sunucuda {{command}} komutunu çalıştır.",
+        "failed": "Güncelleme başarısız oldu (çıkış kodu {{exitCode}}). Çıktısı aşağıda.",
+        "failedQuietly": "Güncelleyici bir hata bildirdi. Çıktısı aşağıda.",
+        "notStarted": "Güncelleyici başlatılamadı.",
+        "busy": "Bu ajan bir oturumda çalışıyor. Bitmesini bekle ya da durdur, sonra güncelle.",
+        "requestFailed": "Güncelleme çalıştırılmadı: {{error}}",
+        "unconfirmed": "Sunucudan yanıt gelmedi ({{error}}). Güncelleme yine de çalışmış olabilir; yukarıdaki sürüm, sunucunun en son bildirdiği sürümdür."
+      }
+    },
     "login": {
       "title": "Giriş Yap",
       "reAuthenticate": "Yeniden Kimlik Doğrula",
