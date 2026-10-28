@@ -125,3 +125,26 @@ test('a first prompt sent with an attachment still identifies the placeholder', 
     assert.equal(nameOf('app-4'), 'Screenshot review');
   });
 });
+
+test('a rename that lands while the synchronizer reads the transcript is kept', async () => {
+  await withIsolatedDatabase(async () => {
+    const synchronizer = new ClaudeSessionSynchronizer();
+    const filePath = await appSession('app-5', 'native-5', 'Fix the flaky login test');
+    await appendFile(filePath, aiTitle('native-5', 'Flaky login'));
+
+    // The rename arrives after the synchronizer read the placeholder, while it
+    // is still reading the transcript for the title.
+    const original = sessionsDb.getSessionByProviderSessionId.bind(sessionsDb);
+    sessionsDb.getSessionByProviderSessionId = (id: string) => {
+      const row = original(id);
+      sessionsDb.updateSessionCustomName('app-5', 'Renamed mid-sync');
+      return row;
+    };
+    try {
+      await synchronizer.synchronizeFile(filePath);
+    } finally {
+      sessionsDb.getSessionByProviderSessionId = original;
+    }
+    assert.equal(nameOf('app-5'), 'Renamed mid-sync');
+  });
+});

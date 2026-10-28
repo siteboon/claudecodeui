@@ -448,6 +448,21 @@ export const sessionsDb = {
     ).run(customName, sessionId);
   },
 
+  /**
+   * Renames a session only while it still carries `expectedName`, and reports
+   * whether it did. For writers that decided on a rename after reading the old
+   * name — a synchronizer awaiting transcript I/O — so a rename that landed in
+   * between is kept rather than overwritten.
+   */
+  replaceSessionCustomName(sessionId: string, expectedName: string, customName: string): boolean {
+    const db = getConnection();
+    return db.prepare(
+      `UPDATE sessions
+       SET custom_name = ?
+       WHERE session_id = ? AND custom_name = ?`
+    ).run(customName, sessionId, expectedName).changes > 0;
+  },
+
   getSessionById(sessionId: string): SessionRow | null {
     const db = getConnection();
     const row = db
