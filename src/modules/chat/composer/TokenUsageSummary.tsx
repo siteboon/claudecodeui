@@ -12,11 +12,12 @@ const formatTokenCount = (value: number) => {
     return '0';
   }
 
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+  // Thresholds sit where rounding would carry into the next unit, so 9,960 reads "10K", not "10.0K".
+  if (value >= 999_500) {
+    return `${(value / 1_000_000).toFixed(value >= 9_950_000 ? 0 : 1)}M`;
   }
 
-  if (value >= 10_000) {
+  if (value >= 9_950) {
     return `${Math.round(value / 1_000)}K`;
   }
 
@@ -57,7 +58,7 @@ function TokenUsageSummary({ usage, onClick }: TokenUsageSummaryProps) {
       <span className="hidden h-5 w-5 place-items-center rounded-md bg-primary/10 text-primary sm:grid">
         <ActivityIcon className="h-3.5 w-3.5" />
       </span>
-      <span className="min-w-7 text-center font-medium text-foreground">{formatTokenCount(usedTokens)}</span>
+      <span className="font-medium tabular-nums text-foreground">{formatTokenCount(usedTokens)}</span>
       <span className="hidden text-muted-foreground/70 sm:inline">
         {t('chat:misc.tokensLabel', { count: usedTokens })}
       </span>
