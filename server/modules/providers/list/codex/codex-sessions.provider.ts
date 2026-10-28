@@ -5,10 +5,8 @@ import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
-import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
-import type { IProviderSessions } from '@/shared/interfaces.js';
-import { prepareTranscriptMessages } from '@/shared/message-unification.js';
 import type {
+  IProviderSessions,
   AnyRecord,
   FetchHistoryOptions,
   FetchHistoryResult,
@@ -16,15 +14,19 @@ import type {
   NormalizedMessage,
   SubagentActivity,
   SubagentInfo,
-} from '@/shared/types.js';
+} from '@/shared/index.js';
 import {
+  parseFilesInputTag,
+  toImageAttachments,
+  prepareTranscriptMessages,
   AppError,
   createNormalizedMessage,
   generateMessageId,
+  extractFirstValidJsonlData,
   readObjectRecord,
   sliceTailPage,
   truncateSubagentActivity,
-} from '@/shared/utils.js';
+} from '@/shared/index.js';
 
 const PROVIDER = 'codex';
 
@@ -186,7 +188,9 @@ async function findCodexHistorySource(filePath: string, threadId: string): Promi
 
 /**
  * Codex 0.160 paginated forks keep a frozen prefix in `history_base` instead
- * of copying it. Read each ancestor only through its recorded byte boundary,
+ * of copying it. Prefer the stable ordinal boundary when the source has ordinals;
+ * native rewrites can change byte positions without changing row identities.
+ * Legacy sources without ordinals still use the recorded byte boundary,
  * then the child's own rows. `forked_from_id` alone also appears on copied
  * legacy rollouts and must never cause history to be included twice.
  */
@@ -194,6 +198,7 @@ async function* readCodexRolloutLines(
   filePath: string,
   endByteOffset?: number,
   ancestors = new Set<string>(),
+  endOrdinalExclusive?: number,
 ): AsyncGenerator<string> {
   const canonicalPath = await fsp.realpath(filePath);
   if (ancestors.has(canonicalPath) || ancestors.size >= 128) {
@@ -201,24 +206,35 @@ async function* readCodexRolloutLines(
       code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
     });
   }
-  if (endByteOffset !== undefined) {
-    if ((await fsp.stat(canonicalPath)).size < endByteOffset) {
+  const metadata = endOrdinalExclusive === undefined ? null : await extractFirstValidJsonlData(
+    canonicalPath,
+    (raw) => {
+      const row = readObjectRecord(raw);
+      return row?.type === 'session_meta' ? { ordinal: row.ordinal } : null;
+    },
+  );
+  const ordinalLimit = metadata && Number.isSafeInteger(metadata.ordinal) && metadata.ordinal >= 0
+    ? endOrdinalExclusive : undefined;
+  const byteLimit = ordinalLimit === undefined ? endByteOffset : undefined;
+  if (byteLimit !== undefined) {
+    if ((await fsp.stat(canonicalPath)).size < byteLimit) {
       throw new AppError('The source transcript is shorter than the Codex fork snapshot.', {
         code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
       });
     }
-    if (endByteOffset === 0) return;
+    if (byteLimit === 0) return;
   }
   const nextAncestors = new Set(ancestors).add(canonicalPath);
   const stream = fsSync.createReadStream(canonicalPath, {
-    ...(endByteOffset !== undefined ? { end: endByteOffset - 1 } : {}),
+    ...(byteLimit !== undefined ? { end: byteLimit - 1 } : {}),
   });
   const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
   let readMetadata = false;
+  let lastOrdinal: number | undefined;
   try {
     for await (const line of lines) {
       let entry: AnyRecord | undefined;
-      if (!readMetadata) {
+      if (!readMetadata || ordinalLimit !== undefined) {
         try { entry = readObjectRecord(JSON.parse(line)) ?? undefined; } catch { /* Skip malformed rows. */ }
       }
       if (entry?.type === 'session_meta') {
@@ -228,8 +244,10 @@ async function* readCodexRolloutLines(
           const base = readObjectRecord(payload.history_base);
           const threadId = readNonEmptyString(base?.thread_id);
           const offset = base?.end_byte_offset;
+          const ordinal = base?.end_ordinal_exclusive;
           if (!threadId || !/^[a-zA-Z0-9-]+$/.test(threadId)
-            || typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0) {
+            || typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0
+            || (ordinal !== undefined && (typeof ordinal !== 'number' || !Number.isSafeInteger(ordinal) || ordinal < 0))) {
             throw new AppError('Codex fork history has an invalid source boundary.', {
               code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
             });
@@ -240,10 +258,29 @@ async function* readCodexRolloutLines(
               code: 'CODEX_HISTORY_SOURCE_UNAVAILABLE', statusCode: 502,
             });
           }
-          yield* readCodexRolloutLines(sourcePath, offset, nextAncestors);
+          yield* readCodexRolloutLines(sourcePath, offset, nextAncestors,
+            ordinalLimit === undefined ? ordinal : Math.min(ordinal ?? ordinalLimit, ordinalLimit));
         }
       }
+      if (ordinalLimit !== undefined && entry) {
+        const ordinal = entry.ordinal;
+        if (!Number.isSafeInteger(ordinal) || ordinal < 0
+          || (lastOrdinal !== undefined && ordinal !== lastOrdinal + 1)) {
+          throw new AppError('Codex fork history has invalid or missing source ordinals.', {
+            code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
+          });
+        }
+        // Expand this file's own ancestor before stopping at its metadata row:
+        // a fork can inherit its whole prefix without any of its local rows.
+        if (ordinal >= ordinalLimit) return;
+        lastOrdinal = ordinal;
+      }
       yield line;
+    }
+    if (ordinalLimit !== undefined && (lastOrdinal === undefined || lastOrdinal < ordinalLimit - 1)) {
+      throw new AppError('The source transcript is shorter than the Codex fork snapshot.', {
+        code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
+      });
     }
   } finally {
     lines.close();

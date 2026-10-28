@@ -139,3 +139,71 @@ test('missing and invalid inherited history fail visibly instead of returning an
     await assert.rejects(provider.fetchHistory('cycle'), { code: 'CODEX_HISTORY_SOURCE_INVALID' });
   });
 });
+
+// Native paginated rollouts preserve ordinals even when their serialized rows
+// are rewritten. Give each row its native identity independently of byte size.
+async function numberRollout(file: string, firstOrdinal = 0): Promise<void> {
+  const rows = (await readFile(file, 'utf8')).trim().split('\n').map((line, index) => ({
+    ...JSON.parse(line), ordinal: firstOrdinal + index,
+  }));
+  await writeFile(file, encode(rows));
+}
+
+for (const rewrite of ['shrink', 'grow'] as const) {
+  test(`ordinal snapshots survive source rewrites that ${rewrite} its serialized rows`, async () => {
+    await withRollouts(async (root) => {
+      const source = await rollout(root, 'source', turn('turn-a', '한글 원본'), { padding: 'x'.repeat(4000) });
+      await numberRollout(source);
+      const snapshot = await reference('source', source);
+      await rollout(root, 'fork', turn('turn-child', 'child'), snapshot);
+      const rows = (await readFile(source, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+      rows[0].payload.padding = rewrite === 'shrink' ? '' : 'x'.repeat(8000);
+      await writeFile(source, encode(rows));
+      await appendFile(source, encode(turn('turn-later', 'must not leak').map((row, index) => ({
+        ...row, ordinal: rows.length + index,
+      }))));
+      const provider = new CodexSessionsProvider();
+      const history = await provider.fetchHistory('fork');
+      assert.deepEqual(history.messages.map((message) => message.content), [
+        '한글 원본', 'answer: 한글 원본', 'child', 'answer: child',
+      ]);
+      assert.equal((await provider.resolveEditAnchor('fork', 'turn-a')).found, true);
+      assert.equal((await provider.resolveEditAnchor('fork', 'turn-later')).found, false);
+      const page = await provider.fetchHistory('fork', { limit: 2, offset: 2 });
+      assert.deepEqual(page.messages.map((message) => message.content), ['한글 원본', 'answer: 한글 원본']);
+    });
+  });
+}
+
+test('ordinal snapshots expand nested ancestors even when the cut is at child metadata', async () => {
+  await withRollouts(async (root) => {
+    const source = await rollout(root, 'source', turn('turn-a', 'first'), { padding: 'x'.repeat(4000) });
+    await numberRollout(source);
+    const child = await rollout(root, 'child', turn('turn-b', 'second'), await reference('source', source));
+    await numberRollout(child, 5);
+    await rollout(root, 'grandchild', [], { history_base: {
+      thread_id: 'child', end_byte_offset: 999999, end_ordinal_exclusive: 5,
+    } });
+    const rows = (await readFile(source, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    rows[0].payload.padding = '';
+    await writeFile(source, encode(rows));
+    const history = await new CodexSessionsProvider().fetchHistory('grandchild');
+    assert.deepEqual(history.messages.map((message) => message.content), ['first', 'answer: first']);
+  });
+});
+
+test('ordinal snapshots still reject genuinely truncated and invalid source boundaries', async () => {
+  await withRollouts(async (root) => {
+    const source = await rollout(root, 'source', turn('turn-a', 'first'));
+    await numberRollout(source);
+    await rollout(root, 'fork', [], await reference('source', source));
+    const rows = (await readFile(source, 'utf8')).trim().split('\n');
+    await writeFile(source, rows.slice(0, -2).join('\n') + '\n');
+    const provider = new CodexSessionsProvider();
+    await assert.rejects(provider.fetchHistory('fork'), { code: 'CODEX_HISTORY_SOURCE_INVALID' });
+    await rollout(root, 'invalid-ordinal', [], { history_base: {
+      thread_id: 'source', end_byte_offset: 1, end_ordinal_exclusive: -1,
+    } });
+    await assert.rejects(provider.fetchHistory('invalid-ordinal'), { code: 'CODEX_HISTORY_SOURCE_INVALID' });
+  });
+});
