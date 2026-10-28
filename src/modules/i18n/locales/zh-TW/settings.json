@@ -354,6 +354,37 @@
       }
     },
     "connectionStatus": "連線狀態",
+    "cli": {
+      "title": "CLI 版本",
+      "checking": "正在檢查版本…",
+      "installed": "已安裝：v{{version}}",
+      "installedUnknown": "已安裝（版本不明）",
+      "versionUnavailable": "無法讀取版本",
+      "updateAvailable": "有可用更新：v{{version}}",
+      "upToDate": "已是最新",
+      "bundled": "隨 CloudCLI 一起提供，並與其一同更新。",
+      "platform": "由代管平台管理。",
+      "updateTo": "更新至 v{{version}}",
+      "runUpdater": "執行更新程式",
+      "updating": "正在更新…",
+      "updatingHint": "正在伺服器上執行 {{command}}，可能需要幾分鐘。",
+      "runsCommand": "在伺服器上執行 {{command}}",
+      "output": "{{command}} 的輸出",
+      "result": {
+        "updated": "已更新至 v{{version}}。",
+        "alreadyUpToDate": "已是最新版本（v{{version}}）。",
+        "unchanged": "更新程式已結束，但版本仍為 v{{version}}。原因請見下方輸出。",
+        "unchangedUnknown": "更新程式已結束，輸出請見下方。",
+        "permissionDenied": "伺服器使用者沒有權限寫入此 CLI 的安裝位置。請以該安裝的擁有者身分在伺服器上執行 {{command}}（例如使用 sudo）。",
+        "timedOut": "更新未能及時完成，已被停止。請在伺服器上執行 {{command}} 以完成更新。",
+        "failed": "更新失敗（結束代碼 {{exitCode}}），輸出請見下方。",
+        "failedQuietly": "更新程式回報了失敗，輸出請見下方。",
+        "notStarted": "無法啟動更新程式。",
+        "busy": "此代理正在某個工作階段中執行。請等待其完成或將其停止，然後再更新。",
+        "requestFailed": "未執行更新：{{error}}",
+        "unconfirmed": "伺服器沒有回應（{{error}}）。更新可能已經執行；上方是伺服器最後回報的版本。"
+      }
+    },
     "login": {
       "title": "登入",
       "reAuthenticate": "重新驗證",
