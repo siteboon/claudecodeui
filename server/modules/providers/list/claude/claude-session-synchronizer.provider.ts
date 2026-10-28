@@ -16,6 +16,8 @@ type ParsedSession = {
   sessionId: string;
   projectPath: string;
   sessionName?: string;
+  /** The stored name `sessionName` was decided from, so the upsert can keep a rename made since. */
+  readName?: string | null;
 };
 
 /**
@@ -72,7 +74,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         parsed.sessionName,
         timestamps.createdAt,
         timestamps.updatedAt,
-        filePath
+        filePath,
+        parsed.readName
       );
       processed += 1;
     }
@@ -105,7 +108,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       parsed.sessionName,
       timestamps.createdAt,
       timestamps.updatedAt,
-      filePath
+      filePath,
+      parsed.readName
     );
   }
 
@@ -140,10 +144,12 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
+    const readName = existingSessionName ?? null;
     if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
       return {
         ...parsed,
         sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
+        readName,
       };
     }
 
@@ -155,6 +161,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     return {
       ...parsed,
       sessionName: normalizeSessionName(sessionName, 'Untitled Claude Session'),
+      readName,
     };
   }
 
