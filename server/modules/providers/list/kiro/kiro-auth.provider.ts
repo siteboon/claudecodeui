@@ -4,9 +4,8 @@ import path from 'node:path';
 
 import spawn from 'cross-spawn';
 
-import type { IProviderAuth } from '@/shared/interfaces.js';
-import type { ProviderAuthStatus } from '@/shared/types.js';
-import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
+import type { CliVersionProbe, IProviderAuth, ProviderAuthStatus } from '@/shared/index.js';
+import { parseCliVersion, readObjectRecord, readOptionalString } from '@/shared/index.js';
 
 type KiroCredentialsStatus = {
   authenticated: boolean;
@@ -15,22 +14,23 @@ type KiroCredentialsStatus = {
   error?: string;
 };
 
-const KIRO_BIN = process.env.KIRO_PATH ?? 'kiro-cli';
-
+/** Used by the providers registry for Kiro login and CLI version checks. */
 export class KiroProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Kiro CLI is installed and on PATH.
    *
    * Spawns asynchronously (rather than spawn.sync) so a slow or hung CLI cannot
    * block the Node event loop while `getStatus()` runs; the process is killed if
-   * `--version` does not return within the timeout.
+   * `--version` does not return within the timeout. Like the shared probe,
+   * a started but timed-out CLI is installed with an unknown version.
    */
-  private checkInstalled(): Promise<boolean> {
+  checkInstalled(): Promise<CliVersionProbe> {
     return new Promise((resolve) => {
       let settled = false;
       let childProcess: ReturnType<typeof spawn> | undefined;
+      let stdout = '';
 
-      const finish = (value: boolean) => {
+      const finish = (value: CliVersionProbe) => {
         if (settled) {
           return;
         }
@@ -41,18 +41,29 @@ export class KiroProviderAuth implements IProviderAuth {
 
       const timeout = setTimeout(() => {
         childProcess?.kill();
-        finish(false);
+        finish({ installed: true, exitCode: null, version: null });
       }, 5000);
 
       try {
-        childProcess = spawn(KIRO_BIN, ['--version'], { stdio: 'ignore' });
+        childProcess = spawn(process.env.KIRO_PATH ?? 'kiro-cli', ['--version'], {
+          stdio: ['ignore', 'pipe', 'ignore'],
+          windowsHide: true,
+        });
       } catch {
-        finish(false);
+        finish({ installed: false, exitCode: null, version: null });
         return;
       }
 
-      childProcess.on('close', (code) => finish(code === 0));
-      childProcess.on('error', () => finish(false));
+      childProcess.stdout?.on('data', (data: Buffer) => {
+        // A version is short; cap retained output from a misbehaving executable.
+        stdout = (stdout + data.toString()).slice(0, 16_384);
+      });
+      childProcess.on('close', (code) => finish({
+        installed: true,
+        exitCode: code,
+        version: code === 0 ? parseCliVersion(stdout) : null,
+      }));
+      childProcess.on('error', () => finish({ installed: false, exitCode: null, version: null }));
     });
   }
 
@@ -60,12 +71,13 @@ export class KiroProviderAuth implements IProviderAuth {
    * Returns Kiro CLI installation and IdC/BuilderId login status.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = await this.checkInstalled();
+    const { installed, version: installedVersion } = await this.checkInstalled();
 
     if (!installed) {
       return {
         installed,
         provider: 'kiro',
+        installedVersion,
         authenticated: false,
         email: null,
         method: null,
@@ -78,6 +90,7 @@ export class KiroProviderAuth implements IProviderAuth {
     return {
       installed,
       provider: 'kiro',
+      installedVersion,
       authenticated: credentials.authenticated,
       email: credentials.email,
       method: credentials.method,
@@ -172,7 +185,7 @@ export class KiroProviderAuth implements IProviderAuth {
       }, 5000);
 
       try {
-        childProcess = spawn(KIRO_BIN, ['whoami']);
+        childProcess = spawn(process.env.KIRO_PATH ?? 'kiro-cli', ['whoami']);
       } catch {
         finish({ loggedIn: false, email: null, method: null });
         return;

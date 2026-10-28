@@ -81,7 +81,7 @@ import the service from `server/modules/providers/index.ts`.
 | --- | --- | --- |
 | `runtime` | Run and abort live SDK/CLI sessions | `IProviderRuntime` -> `providerRuntimeService` |
 | `models` | Resolve supported and active models | `IProviderModels` -> `providerModelsService` |
-| `auth` | Report install/auth state for the provider runtime | `IProviderAuth` -> `providerAuthService` |
+| `auth` | Report install/auth state and the CLI version for the provider runtime | `IProviderAuth` -> `providerAuthService`, `providerCliService` |
 | `mcp` | Read, list, write, and remove provider-native MCP config | `McpProvider` -> `providerMcpService` |
 | `skills` | Discover provider-native skill markdown files | `SkillsProvider` -> `providerSkillsService` |
 | `sessions` | Normalize live events and fetch session history | `IProviderSessions` -> `sessionsService` |
@@ -120,6 +120,11 @@ import the service from `server/modules/providers/index.ts`.
 3. Implement auth.
 
 - Return a full `ProviderAuthStatus`.
+- Implement `checkInstalled()` with `probeCliVersion(...)` on the CLI the runtime
+  actually runs; it fills `installed` and `installedVersion`, and the CLI
+  update service awaits versions through it. An asynchronous probe may return
+  `Promise<CliVersionProbe>` to avoid blocking the event loop. A CLI that updates itself can be
+  added to `CLI_UPDATERS` in `services/provider-cli.service.ts`.
 - Treat normal `not installed` / `not authenticated` states as data, not exceptions.
 - Keep provider-specific credential discovery inside the auth provider.
 - If the provider has no auth step, return a stable unauthenticated or not-installed status instead of omitting the facet.
@@ -255,6 +260,12 @@ Skills are discovered under user/project `.kiro/skills` and `.agents/skills`;
 managed user skills are written to `~/.kiro/skills`. Auth probes use asynchronous
 `kiro-cli --version` and `kiro-cli whoami`, with the legacy AWS SSO token file as
 an optional hint only.
+
+Settings reports the installed Kiro version and runs its native
+`kiro-cli update --non-interactive` updater. Both honor `KIRO_PATH`; Kiro has
+no npm release lookup. Updates share the provider service's busy-session and
+platform restrictions, concurrent requests share one run, and status polling
+uses the cached starting version while that run is active.
 
 The initial integration supports trusted tools and cancellation. Image/file
 attachments, interactive approvals, effort controls, token usage, message
@@ -404,5 +415,4 @@ alongside the implementation.
 - Forgetting that Claude plugin skills are discovered differently from normal
   user/project skill folders.
 - Assuming one provider's MCP config file format works for the others.
-
 

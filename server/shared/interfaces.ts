@@ -1,6 +1,7 @@
 import type {
   AnyRecord,
   BackgroundTaskSummary,
+  CliVersionProbe,
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
@@ -140,6 +141,14 @@ export interface IProviderAuth {
    * Checks whether the provider is installed and has usable credentials.
    */
   getStatus(): Promise<ProviderAuthStatus>;
+  /**
+   * Runs `--version` on the CLI this provider's chats use: the same check
+   * `getStatus()` reports as `installed` and `installedVersion`, without the
+   * credential lookup (which can take seconds). The providers module's CLI
+   * update service reads versions through it. May be asynchronous so providers
+   * such as Kiro can probe without blocking other requests; callers must await it.
+   */
+  checkInstalled(): CliVersionProbe | Promise<CliVersionProbe>;
 }
 
 // ---------------------------
