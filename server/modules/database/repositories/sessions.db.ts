@@ -84,7 +84,9 @@ export const sessionsDb = {
    * A synchronizer reads the stored name, then awaits transcript I/O before it
    * calls this, so a rename can land in between; when `expectedName` is given,
    * the name is written only if the row still carries it, and a newer rename
-   * is kept. The rest of the row is updated either way.
+   * is kept. The rest of the row is updated either way. `null` is a value here:
+   * it means the caller read a row with no name, so a name set since is kept
+   * too. Leave it `undefined` to write the name unconditionally.
    */
   createSession(
     providerSessionId: string,
@@ -100,6 +102,8 @@ export const sessionsDb = {
     const createdAtValue = normalizeTimestamp(createdAt);
     const updatedAtValue = normalizeTimestamp(updatedAt);
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
+    // SQLite has no undefined: bind "a name was read" separately from the name.
+    const guarded = expectedName === undefined ? 0 : 1;
 
     // First, ensure the project path is recorded in the projects table,
     // since it's a foreign key in the sessions table.
@@ -123,7 +127,7 @@ export const sessionsDb = {
            isArchived = CASE WHEN ? IS NULL OR julianday(?) > julianday(updated_at) THEN 0 ELSE isArchived END,
            custom_name = CASE
              WHEN session_id <> provider_session_id AND custom_name IS NOT NULL THEN custom_name
-             WHEN ? IS NOT NULL AND custom_name IS NOT ? THEN custom_name
+             WHEN ? AND custom_name IS NOT ? THEN custom_name
              ELSE COALESCE(?, custom_name)
            END
          WHERE session_id = ?`
@@ -134,7 +138,7 @@ export const sessionsDb = {
         jsonlPath ?? null,
         updatedAtValue,
         updatedAtValue,
-        expectedName ?? null,
+        guarded,
         expectedName ?? null,
         customName ?? null,
         existing.session_id
@@ -159,7 +163,7 @@ export const sessionsDb = {
          custom_name = CASE
            WHEN sessions.session_id <> sessions.provider_session_id AND sessions.custom_name IS NOT NULL
              THEN sessions.custom_name
-           WHEN ? IS NOT NULL AND sessions.custom_name IS NOT ? THEN sessions.custom_name
+           WHEN ? AND sessions.custom_name IS NOT ? THEN sessions.custom_name
            ELSE COALESCE(excluded.custom_name, sessions.custom_name)
          END`
     ).run(
@@ -172,7 +176,7 @@ export const sessionsDb = {
       createdAtValue,
       updatedAtValue,
       updatedAtValue,
-      expectedName ?? null,
+      guarded,
       expectedName ?? null
     );
 

@@ -55,3 +55,33 @@ test('createSession without an expected name behaves as before', async () => {
     assert.equal(nameOf('native-3'), 'Overwritten');
   });
 });
+
+test('createSession keeps a rename of a row that had no name when it was read (update path)', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createSession('native-4', 'claude', projectPath, undefined);
+    assert.equal(nameOf('native-4'), null);
+    sessionsDb.updateSessionCustomName('native-4', 'Renamed meanwhile');
+    // The caller read NULL, then decided on a name.
+    sessionsDb.createSession('native-4', 'claude', projectPath, 'From the transcript', undefined, undefined, null, null);
+    assert.equal(nameOf('native-4'), 'Renamed meanwhile');
+  });
+});
+
+test('createSession applies a name to a row that still has none (update path)', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createSession('native-5', 'claude', projectPath, undefined);
+    sessionsDb.createSession('native-5', 'claude', projectPath, 'From the transcript', undefined, undefined, null, null);
+    assert.equal(nameOf('native-5'), 'From the transcript');
+  });
+});
+
+test('createSession keeps a rename of a row that had no name when it was read (insert path)', async () => {
+  await withIsolatedDatabase(async () => {
+    // A legacy row: no provider id mapping, so createSession takes the ON CONFLICT path.
+    sessionsDb.createAppSession('legacy-6', 'claude', projectPath, undefined);
+    assert.equal(nameOf('legacy-6'), null);
+    sessionsDb.updateSessionCustomName('legacy-6', 'Renamed meanwhile');
+    sessionsDb.createSession('legacy-6', 'claude', projectPath, 'From the transcript', undefined, undefined, null, null);
+    assert.equal(nameOf('legacy-6'), 'Renamed meanwhile');
+  });
+});
