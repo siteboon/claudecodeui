@@ -77,6 +77,35 @@ test('an unreadable cache field is not rescued by a later alias', () => {
   assert.equal(budget, null);
 });
 
+test('an empty or blank usage field is not a count', () => {
+  // `Number('')` is 0, so an empty half would otherwise pass as reported and
+  // drop out of the prompt total.
+  for (const blank of ['', '  ']) {
+    assert.equal(extractTokenBudget({
+      type: 'assistant',
+      message: { usage: { input_tokens: 12, cache_creation_input_tokens: 2_000, cache_read_input_tokens: blank, output_tokens: 5 } },
+    }), null);
+  }
+});
+
+test('a payload without the uncached input emits no budget', () => {
+  const budget = extractTokenBudget({
+    type: 'assistant',
+    message: { usage: { cache_creation_input_tokens: 2_000, cache_read_input_tokens: 40_000, output_tokens: 5 } },
+  });
+
+  assert.equal(budget, null);
+});
+
+test('numeric strings still count', () => {
+  const budget = extractTokenBudget({
+    type: 'assistant',
+    message: { usage: { input_tokens: '12', cache_creation_input_tokens: '2000', cache_read_input_tokens: '40000', output_tokens: 5 } },
+  });
+
+  assert.equal(budget?.inputTokens, 42_012);
+});
+
 test('zero cache fields still count as an account', () => {
   // A first request against a cold cache reports both cache halves as zero.
   // Presence is the test, not the value, or the opening turn of every session
