@@ -1083,11 +1083,13 @@ async function queryClaudeSDK(
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
-  // Set once a turn's assistant messages carry usage, whether or not it was a
-  // complete reading. The turn-ending `result` is mined for usage only when
-  // none did: its usage is the turn's summed bill, which is only an honest
-  // stand-in on an SDK build that reports no per-assistant usage at all. A turn
-  // whose usage was all partial keeps the last complete reading instead.
+  // Set once the current turn's assistant messages carry usage, whether or not
+  // it was a complete reading, and cleared at that turn's `result`. The
+  // `result` is mined for usage only when none did: its usage is the turn's
+  // summed bill, which is only an honest stand-in on an SDK build that reports
+  // no per-assistant usage at all. A turn whose usage was all partial keeps the
+  // last complete reading instead. Per turn, because a held run goes on to
+  // further turns (background work reporting back) under the same loop.
   let assistantUsageSeen = false;
   // The window the SDK reported for this session's model (a resumed session
   // starts from the one its last run reported), the model the main thread's
@@ -1438,6 +1440,7 @@ async function queryClaudeSDK(
         const holdForTurn = sawTaskEventThisTurn ? stillOutstanding : backgroundWorkPending || stillOutstanding;
         backgroundWorkPending = false;
         sawTaskEventThisTurn = false;
+        assistantUsageSeen = false;
         if (holdForTurn) {
           heldForBackgroundWork = true;
           scheduleRelease();
