@@ -40,7 +40,8 @@ import {
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import {
   getReportedClaudeContextWindow,
-  rememberClaudeContextWindow
+  rememberClaudeContextWindow,
+  reportsUsageAccount
 } from '@/modules/providers/services/provider-token-usage.service.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 import type {
@@ -614,41 +615,11 @@ function buildTokenBudget(messageUsage: AnyRecord, reportedContextWindow?: numbe
 }
 
 /**
- * The two halves of a request's cache accounting, each in every casing the SDK
- * has used for it.
+ * Whether a main-thread message carries a usage payload at all, complete or not.
  */
-const CACHE_USAGE_KEY_GROUPS = [
-  ['cache_creation_input_tokens', 'cacheCreationInputTokens', 'cacheCreationTokens'],
-  ['cache_read_input_tokens', 'cacheReadInputTokens', 'cacheReadTokens'],
-];
-
-/**
- * Whether a usage field holds a token count: a finite number, or a string that
- * reads as one. An empty or blank string does not, though `Number('')` is 0.
- */
-function isTokenCount(value: unknown): boolean {
-  if (typeof value === 'string' && !value.trim()) {
-    return false;
-  }
-  return value != null && Number.isFinite(Number(value));
-}
-
-/**
- * Whether a usage payload accounts for the whole prompt.
- *
- * Anthropic usage reports the uncached input and both cache halves, as zero
- * when unused, so presence is the test and not the value. All three are
- * required: a field reported alone still leaves the others defaulting to zero
- * in the prompt total. Each is judged on the alias buildTokenBudget will read
- * (the first non-null one), not on any alias.
- * @param {Object} messageUsage - Anthropic usage payload
- * @returns {boolean} True when the input and both cache halves are reported
- */
-function reportsCacheAccount(messageUsage: AnyRecord): boolean {
-  return [['input_tokens', 'inputTokens'], ...CACHE_USAGE_KEY_GROUPS].every((keys) => {
-    const key = keys.find((k) => messageUsage[k] != null);
-    return key !== undefined && isTokenCount(messageUsage[key]);
-  });
+function hasUsage(message: AnyRecord): boolean {
+  const usage = message.message?.usage;
+  return Boolean(usage) && typeof usage === 'object';
 }
 
 /**
@@ -692,7 +663,7 @@ function extractTokenBudget(sdkMessage: unknown, reportedContextWindow?: number 
   // the cache halves its `input_tokens` is only the uncached remainder, single
   // digits against a warm cache — so publishing it replaces a real figure with
   // a wrong one.
-  if (!reportsCacheAccount(messageUsage)) {
+  if (!reportsUsageAccount(messageUsage)) {
     return null;
   }
 
@@ -1112,9 +1083,12 @@ async function queryClaudeSDK(
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
-  // Set once a turn publishes a budget read from an assistant message, so the
-  // turn-ending `result` is only mined for usage when nothing better arrived.
-  let assistantBudgetSent = false;
+  // Set once a turn's assistant messages carry usage, whether or not it was a
+  // complete reading. The turn-ending `result` is mined for usage only when
+  // none did: its usage is the turn's summed bill, which is only an honest
+  // stand-in on an SDK build that reports no per-assistant usage at all. A turn
+  // whose usage was all partial keeps the last complete reading instead.
+  let assistantUsageSeen = false;
   // The window the SDK reported for this session's model (a resumed session
   // starts from the one its last run reported), the model the main thread's
   // assistant rows name, and the budget last published — re-sent with the
@@ -1376,8 +1350,11 @@ async function queryClaudeSDK(
       // Extract and send token budget updates from assistant usage payloads,
       // falling back to the turn's cumulative bill only for SDK builds that
       // report no per-assistant usage at all.
+      if (message.type === 'assistant' && !message.parent_tool_use_id && hasUsage(message)) {
+        assistantUsageSeen = true;
+      }
       let tokenBudgetData = extractTokenBudget(message, reportedContextWindow)
-        || (assistantBudgetSent ? null : extractCumulativeTokenBudget(message, reportedContextWindow));
+        || (assistantUsageSeen ? null : extractCumulativeTokenBudget(message, reportedContextWindow));
       if (
         !tokenBudgetData
         && turnContextWindow
@@ -1388,9 +1365,6 @@ async function queryClaudeSDK(
         tokenBudgetData = { ...(lastSentTokenBudget as TokenBudget), total: turnContextWindow };
       }
       if (tokenBudgetData) {
-        if (message.type === 'assistant') {
-          assistantBudgetSent = true;
-        }
         lastSentTokenBudget = tokenBudgetData;
         ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       }

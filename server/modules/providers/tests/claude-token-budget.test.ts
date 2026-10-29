@@ -97,6 +97,16 @@ test('a payload without the uncached input emits no budget', () => {
   assert.equal(budget, null);
 });
 
+test('a negative count is not a count', () => {
+  // Summed into the prompt it would understate it, yet still clear the zero guard.
+  for (const usage of [
+    { input_tokens: -5, cache_creation_input_tokens: 2_000, cache_read_input_tokens: 40_000, output_tokens: 5 },
+    { input_tokens: 12, cache_creation_input_tokens: 2_000, cache_read_input_tokens: '-40000', output_tokens: 5 },
+  ]) {
+    assert.equal(extractTokenBudget({ type: 'assistant', message: { usage } }), null);
+  }
+});
+
 test('numeric strings still count', () => {
   const budget = extractTokenBudget({
     type: 'assistant',
