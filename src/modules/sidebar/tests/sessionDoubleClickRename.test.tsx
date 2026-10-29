@@ -27,8 +27,11 @@ function renderRow(overrides: { isSelecting?: boolean; isEditing?: boolean } = {
 }
 
 test('double-clicking a session title invokes the existing rename action', () => {
-  const { title, rename } = renderRow();
-  fireEvent.doubleClick(title);
+  const { title, rename, select } = renderRow();
+  fireEvent.click(title, { detail: 1 });
+  fireEvent.click(title, { detail: 2 });
+  fireEvent.doubleClick(title, { detail: 2 });
+  assert.deepEqual(select.mock.calls, [[session, 'project-1']]);
   assert.deepEqual(rename.mock.calls, [['project-1', 'session-1', 'Fix login']]);
 });
 

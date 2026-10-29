@@ -409,6 +409,7 @@ function SidebarSessionItem({
             }
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
+            if (event.detail > 1) return;
             onSessionSelect(session, project.projectId);
           }}
           onKeyDown={isSelecting ? handleSelectionKeyDown : undefined}
