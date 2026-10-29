@@ -144,6 +144,50 @@ export function getReportedClaudeContextWindow(providerSessionId: string | null 
   return providerSessionId ? reportedClaudeContextWindows.get(providerSessionId) : undefined;
 }
 
+/**
+ * The two halves of a request's cache accounting, each in every casing the SDK
+ * has used for it.
+ */
+const CACHE_USAGE_KEY_GROUPS = [
+  ['cache_creation_input_tokens', 'cacheCreationInputTokens', 'cacheCreationTokens'],
+  ['cache_read_input_tokens', 'cacheReadInputTokens', 'cacheReadTokens'],
+];
+
+/**
+ * Whether a usage field holds a token count: a finite, non-negative number, or
+ * a string that reads as one. An empty or blank string does not, though
+ * `Number('')` is 0, and a negative value would understate the prompt it is
+ * summed into.
+ */
+function isTokenCount(value: unknown): boolean {
+  if (value == null || (typeof value === 'string' && !value.trim())) {
+    return false;
+  }
+  const count = Number(value);
+  return Number.isFinite(count) && count >= 0;
+}
+
+/**
+ * Whether a Claude usage payload accounts for the whole prompt.
+ *
+ * Shared by the live reader (claude-runtime) and the history reader below, so
+ * a reload shows the same reading the stream did.
+ *
+ * Anthropic usage reports the uncached input and both cache halves, as zero
+ * when unused, so presence is the test and not the value. All three are
+ * required: a field reported alone still leaves the others defaulting to zero
+ * in the prompt total. Each is judged on the alias the readers sum (the first
+ * non-null one, as their `??` chains pick it), not on any alias.
+ * @param {Object} messageUsage - Anthropic usage payload
+ * @returns {boolean} True when the input and both cache halves are reported
+ */
+export function reportsUsageAccount(messageUsage: AnyRecord): boolean {
+  return [['input_tokens', 'inputTokens'], ...CACHE_USAGE_KEY_GROUPS].every((keys) => {
+    const key = keys.find((k) => messageUsage[k] != null);
+    return key !== undefined && isTokenCount(messageUsage[key]);
+  });
+}
+
 function readUsageNumber(value: unknown): number {
   const parsedValue = Number(value);
   return Number.isFinite(parsedValue) ? parsedValue : 0;
@@ -280,6 +324,13 @@ export function summarizeClaudeTokenUsage(
     );
     const rowInputTokens = directInputTokens + rowCacheReadTokens + rowCacheCreationTokens;
     const rowOutputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
+
+    // A row that does not account for the whole prompt is not a reading: its
+    // `input_tokens` is only the uncached remainder. The live reader skips it
+    // the same way, so a reload does not undo the reading the stream kept.
+    if (!reportsUsageAccount(usage)) {
+      continue;
+    }
 
     // `<synthetic>` rows — interrupts, API errors, "No response requested" —
     // are written with an all-zero usage block rather than none at all. They

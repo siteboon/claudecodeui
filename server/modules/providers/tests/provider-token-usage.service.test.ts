@@ -191,7 +191,7 @@ test('token usage reports SESSION_NOT_FOUND for an unknown app session id', asyn
 
 test('the Claude summarizer reads the newest assistant turn, not the whole conversation', () => {
   const entries = [
-    { type: 'assistant', message: { usage: { input_tokens: 5, cache_read_input_tokens: 1000, output_tokens: 50 } } },
+    { type: 'assistant', message: { usage: { input_tokens: 5, cache_read_input_tokens: 1000, cache_creation_input_tokens: 0, output_tokens: 50 } } },
     { type: 'user', message: { role: 'user', content: 'next' } },
     // The newest turn's prompt is the whole context, so its cache_read already
     // includes everything before it. Summing turns would double-count.
@@ -215,7 +215,7 @@ test('the Claude summarizer skips synthetic rows that carry an all-zero usage bl
   // assistant rows with a fully zeroed usage block. Reading one as the newest
   // turn dropped the composer counter to 0 until the next turn pushed it back.
   const entries = [
-    { type: 'assistant', message: { usage: { input_tokens: 3, cache_read_input_tokens: 4000, output_tokens: 80 } } },
+    { type: 'assistant', message: { usage: { input_tokens: 3, cache_read_input_tokens: 4000, cache_creation_input_tokens: 0, output_tokens: 80 } } },
     {
       type: 'assistant',
       message: {
@@ -233,15 +233,27 @@ test('the Claude summarizer skips synthetic rows that carry an all-zero usage bl
   assert.equal(summarizeClaudeTokenUsage(entries, '200000').used, 4083);
 });
 
+test('the Claude summarizer skips a row that does not account for the whole prompt', () => {
+  // A stack that streams `input_tokens` and `output_tokens` alone leaves the
+  // cache halves out, so `input_tokens` is only the uncached remainder. The
+  // live reader keeps the last complete reading; a reload has to as well.
+  const entries = [
+    { type: 'assistant', message: { usage: { input_tokens: 12, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 2_000, output_tokens: 5 } } },
+    { type: 'assistant', message: { usage: { input_tokens: 2, output_tokens: 3 } } },
+  ];
+
+  assert.equal(summarizeClaudeTokenUsage(entries, '200000').inputTokens, 42_012);
+});
+
 test('the Claude summarizer skips a subagent sidechain turn', () => {
   // A sidechain turn reports the subagent's own context window. Reading it
   // made the counter drop to the subagent's number mid-run.
   const entries = [
-    { type: 'assistant', message: { usage: { input_tokens: 3, cache_read_input_tokens: 4000, output_tokens: 80 } } },
+    { type: 'assistant', message: { usage: { input_tokens: 3, cache_read_input_tokens: 4000, cache_creation_input_tokens: 0, output_tokens: 80 } } },
     {
       type: 'assistant',
       isSidechain: true,
-      message: { usage: { input_tokens: 10, cache_read_input_tokens: 900, output_tokens: 5 } },
+      message: { usage: { input_tokens: 10, cache_read_input_tokens: 900, cache_creation_input_tokens: 0, output_tokens: 5 } },
     },
   ];
 
@@ -268,7 +280,7 @@ test('Claude token usage reads only the tail of a large transcript', async () =>
   try {
     await writeFile(sessionFilePath, [
       paddingLines(5 * 1024 * 1024),
-      JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 7, output_tokens: 2 } } }),
+      JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 7, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 2 } } }),
     ].join('\n'));
 
     const service = createProviderTokenUsageService({
@@ -292,7 +304,7 @@ test('Claude token usage falls back to the whole file when the tail has no usage
 
   try {
     await writeFile(sessionFilePath, [
-      JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 11, output_tokens: 3 } } }),
+      JSON.stringify({ type: 'assistant', message: { usage: { input_tokens: 11, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 3 } } }),
       paddingLines(5 * 1024 * 1024),
     ].join('\n'));
 
