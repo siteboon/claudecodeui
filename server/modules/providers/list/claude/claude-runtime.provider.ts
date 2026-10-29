@@ -245,11 +245,18 @@ function resolveToolApproval(requestId: string, decision: ToolApprovalDecision) 
   }
 }
 
+// Shell syntax that can run a second command or redirect output: separators,
+// pipes, background `&`, substitutions and redirections. A `Bash(git:*)` allow
+// rule must not approve `git status && rm -rf ~`.
+const SHELL_CONTROL_PATTERN = /[;&|`<>\n\r]|\$\(/;
+
 // Match stored permission entries against a tool + input combo.
 // This only supports exact tool names and the Bash(command:*) shorthand
 // used by the UI; it intentionally does not implement full glob semantics,
 // introduced to stay consistent with the UI's "Allow rule" format.
-function matchesToolPermission(entry: string, toolName: string, input: unknown) {
+// Allow rules match the prefix as a whole word and never match a command
+// that chains or redirects; deny rules keep the plain prefix match.
+export function matchesToolPermission(entry: string, toolName: string, input: unknown, kind: 'allow' | 'deny' = 'allow') {
   if (!entry || !toolName) {
     return false;
   }
@@ -273,7 +280,15 @@ function matchesToolPermission(entry: string, toolName: string, input: unknown) 
       return false;
     }
 
-    return command.startsWith(allowedPrefix);
+    if (kind === 'deny') {
+      return command.startsWith(allowedPrefix);
+    }
+
+    if (SHELL_CONTROL_PATTERN.test(command)) {
+      return false;
+    }
+
+    return command === allowedPrefix || command.startsWith(`${allowedPrefix} `);
   }
 
   return false;
@@ -1153,7 +1168,7 @@ async function queryClaudeSDK(
         }
 
         const isDisallowed = (sdkOptions.disallowedTools || []).some((entry: string) =>
-          matchesToolPermission(entry, toolName, input)
+          matchesToolPermission(entry, toolName, input, 'deny')
         );
         if (isDisallowed) {
           return { behavior: 'deny', message: 'Tool disallowed by settings' };
