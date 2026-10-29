@@ -93,3 +93,19 @@ test('an SDK build with no per-assistant usage still falls back to the bill', as
   const published = await publishedInputTokens([init, assistant(), result]);
   assert.deepEqual(published, [405_009]);
 });
+
+test('a later turn in a held run still falls back to its own bill', async () => {
+  // A run held open for background work goes on to further turns. The first
+  // turn's assistant usage must not stop the second, which carries none, from
+  // using its result.
+  const secondBill = { ...result, usage: { input_tokens: 4, cache_creation_input_tokens: 1_000, cache_read_input_tokens: 50_000, output_tokens: 70 } };
+  const published = await publishedInputTokens([
+    init,
+    assistant({ input_tokens: 12, cache_creation_input_tokens: 2_000, cache_read_input_tokens: 40_000, output_tokens: 5 }),
+    result,
+    assistant(),
+    secondBill,
+  ]);
+  assert.deepEqual(published, [42_012, 51_004]);
+});
+
