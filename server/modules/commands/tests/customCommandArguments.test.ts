@@ -5,7 +5,7 @@ import test from 'node:test';
 
 import express from 'express';
 
-import { createCommandsRouter } from '../commands.routes.js';
+import { createCommandsRouter } from '@/modules/commands/commands.routes.js';
 
 /**
  * Regression guard for #1523: a multi-line brief typed after a custom command
@@ -26,6 +26,12 @@ async function executeCustomCommand(
 ): Promise<Record<string, unknown>> {
   const router = createCommandsRouter({
     fileSystem: {
+      // These fixtures are ordinary files under the permitted command root.
+      // The router validates canonical paths before reading their content.
+      realpath: async (filePath: string) => {
+        assert.ok([CUSTOM_COMMAND_PATH, '/home/test/.claude/commands'].includes(filePath));
+        return filePath;
+      },
       readFile: async (filePath: string) => {
         assert.equal(filePath, CUSTOM_COMMAND_PATH);
         return template;

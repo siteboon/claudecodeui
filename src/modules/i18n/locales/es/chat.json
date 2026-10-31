@@ -14,6 +14,7 @@
     "textShort": "TXT"
   },
   "messageTypes": {
+    "kiro": "Kiro",
     "user": "U",
     "error": "Error",
     "tool": "Herramienta",
@@ -198,6 +199,7 @@
       "google": "de Google"
     },
     "readyPrompt": {
+      "kiro": "Listo para usar Kiro con {{model}}. Escribe tu mensaje abajo.",
       "claude": "Listo para usar Claude con {{model}}. Escribe tu mensaje abajo.",
       "cursor": "Listo para usar Cursor con {{model}}. Escribe tu mensaje abajo.",
       "codex": "Listo para usar Codex con {{model}}. Escribe tu mensaje abajo.",

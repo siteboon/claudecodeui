@@ -13,9 +13,10 @@ import { ClaudeProviderAuth } from '@/modules/providers/list/claude/claude-auth.
 import { CodexProviderAuth } from '@/modules/providers/list/codex/codex-auth.provider.js';
 import { CursorProviderAuth } from '@/modules/providers/list/cursor/cursor-auth.provider.js';
 import { OpenCodeProviderAuth } from '@/modules/providers/list/opencode/opencode-auth.provider.js';
+import { KiroProviderAuth } from '@/modules/providers/list/kiro/kiro-auth.provider.js';
 import { createProviderCliService } from '@/modules/providers/services/provider-cli.service.js';
-import type { LLMProvider } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import type { LLMProvider } from '@/shared/index.js';
+import { AppError } from '@/shared/index.js';
 
 const findEnvKey = (name: string) =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
@@ -43,13 +44,22 @@ const read = (name, fallback) => (fs.existsSync(path.join(dir, name)) ? fs.readF
 const command = process.argv[2];
 if (command === '--version') {
   fs.writeFileSync(path.join(dir, 'version-count'), String(Number(read('version-count', '0')) + 1));
+  const answer = () => {
   process.stdout.write(read('version', ''));
   if (read('lock-after-version', '')) {
     fs.chmodSync(path.join(dir, '..', path.basename(__filename, '.cjs')), 0o644);
   }
   process.exit(Number(read('version-exit', '0')));
-}
-if (command === 'update' || command === 'upgrade') {
+  };
+  if (read('version-wait', '')) {
+    const timer = setInterval(() => {
+      if (read('version-release', '')) { clearInterval(timer); answer(); }
+    }, 10);
+  } else {
+    answer();
+  }
+} else if (command === 'update' || command === 'upgrade') {
+  fs.writeFileSync(path.join(dir, 'update-args'), JSON.stringify(process.argv.slice(2)));
   fs.writeFileSync(path.join(dir, 'update-count'), String(Number(read('update-count', '0')) + 1));
   if (read('ignore-sigterm', '')) {
     process.on('SIGTERM', () => {});
@@ -118,10 +128,12 @@ async function withIsolatedCliEnv(fn: (binDir: string) => Promise<void>): Promis
     [pathKey]: process.env[pathKey],
     [pathExtKey]: process.env[pathExtKey],
     CLAUDE_CLI_PATH: process.env.CLAUDE_CLI_PATH,
+    KIRO_PATH: process.env.KIRO_PATH,
   };
 
   process.env[pathKey] = binDir;
   process.env.CLAUDE_CLI_PATH = path.join(binDir, process.platform === 'win32' ? 'claude.cmd' : 'claude');
+  process.env.KIRO_PATH = path.join(binDir, process.platform === 'win32' ? 'kiro-cli.cmd' : 'kiro-cli');
   if (process.platform === 'win32') {
     process.env[pathExtKey] = '.COM;.EXE;.BAT;.CMD';
   }
@@ -215,6 +227,11 @@ test('each provider reports the version its CLI prints for --version', async () 
     await cursor.set('version', '2026.07.20-8cc9c0b\n');
     const opencode = await createFakeCli(binDir, 'opencode');
     await opencode.set('version', '1.18.25\n');
+    const kiro = await createFakeCli(binDir, 'kiro-cli');
+    await kiro.set('version', '\u001b[32mkiro-cli 2.7.0\u001b[0m\n');
+    const kiroStatus = await new KiroProviderAuth().getStatus();
+    assert.equal(kiroStatus.installed, true);
+    assert.equal(kiroStatus.installedVersion, '2.7.0');
 
     assert.deepEqual(new ClaudeProviderAuth().checkInstalled(), { installed: true, exitCode: 0, version: '2.1.295' });
     assert.equal(new CursorProviderAuth().checkInstalled().version, '2026.07.20-8cc9c0b');
@@ -246,6 +263,92 @@ test('a CLI that cannot be started is reported as not installed, with no version
     const openCodeStatus = await new OpenCodeProviderAuth().getStatus();
     assert.equal(openCodeStatus.installed, false);
     assert.equal(openCodeStatus.installedVersion, null);
+    const kiroStatus = await new KiroProviderAuth().getStatus();
+    assert.equal(kiroStatus.installed, false);
+    assert.equal(kiroStatus.installedVersion, null);
+  });
+});
+
+test('Kiro version probes leave the event loop free and do not trust failed version output', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const kiro = await createFakeCli(binDir, 'kiro-cli');
+    await kiro.set('version', 'kiro-cli 2.7.0');
+    await kiro.set('version-wait', 'yes');
+    let settled = false;
+    const probe = new KiroProviderAuth().checkInstalled().then((value) => {
+      settled = true;
+      return value;
+    });
+    try {
+      await waitForFakeCliFile(kiro, 'version-count');
+      assert.equal(settled, false, 'the event loop must run while the CLI waits');
+    } finally {
+      await kiro.set('version-release', 'yes');
+    }
+    assert.deepEqual(await probe, { installed: true, exitCode: 0, version: '2.7.0' });
+    await kiro.set('version-exit', '1');
+    assert.deepEqual(await new KiroProviderAuth().checkInstalled(), {
+      installed: true, exitCode: 1, version: null,
+    });
+  });
+});
+
+test('Kiro uses its configured native updater once for concurrent requests and respects busy/platform guards', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    // A non-default executable proves that the probe and updater both honor KIRO_PATH.
+    const kiro = await createFakeCli(binDir, 'custom-kiro');
+    process.env.KIRO_PATH = path.join(binDir, process.platform === 'win32' ? 'custom-kiro.cmd' : 'custom-kiro');
+    await kiro.set('version', 'kiro-cli 2.7.0');
+    await kiro.set('update-new-version', 'kiro-cli 2.8.0');
+    await kiro.set('update-sleep-ms', '300');
+    const service = createService();
+    const status = await service.getCliStatus('kiro');
+    assert.equal(status.installedVersion, '2.7.0');
+    assert.equal(status.latestVersion, null);
+    assert.equal(status.updateAvailable, false);
+    assert.equal(status.updateUnavailableReason, null);
+    assert.ok(status.updateCommand?.endsWith(' update --non-interactive'));
+
+    await rejectsWithAppError(
+      createService({ listBusyProviders: async () => ['kiro'] }).updateCli('kiro'),
+      'PROVIDER_CLI_BUSY', 409,
+    );
+    const platform = createService({ platformMode: true });
+    assert.equal((await platform.getCliStatus('kiro')).updateUnavailableReason, 'platform');
+    await rejectsWithAppError(platform.updateCli('kiro'), 'PROVIDER_CLI_UPDATE_UNAVAILABLE', 403);
+    assert.equal(await kiro.read('update-count'), null);
+
+    const first = service.updateCli('kiro');
+    const second = service.updateCli('kiro');
+    await waitForFakeCliFile(kiro, 'update-count');
+    const probes = await kiro.read('version-count');
+    const during = await service.getCliStatus('kiro');
+    assert.equal(during.updateInProgress, true);
+    assert.equal(during.installedVersion, '2.7.0');
+    assert.equal(await kiro.read('version-count'), probes);
+    const [a, b] = await Promise.all([first, second]);
+    assert.deepEqual(a, b);
+    assert.equal(a.previousVersion, '2.7.0');
+    assert.equal(a.installedVersion, '2.8.0');
+    assert.equal(a.failure, null);
+    assert.equal(await kiro.read('update-count'), '1');
+    assert.deepEqual(JSON.parse((await kiro.read('update-args'))!), ['update', '--non-interactive']);
+    assert.deepEqual((await service.getCliStatus('kiro')).lastUpdate, a);
+  });
+});
+
+test('an update is refused if Kiro becomes busy during its asynchronous version probe', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const kiro = await createFakeCli(binDir, 'kiro-cli');
+    await kiro.set('version-wait', 'yes');
+    let busy: LLMProvider[] = [];
+    const service = createService({ listBusyProviders: async () => busy });
+    const refused = rejectsWithAppError(service.updateCli('kiro'), 'PROVIDER_CLI_BUSY', 409);
+    await waitForFakeCliFile(kiro, 'version-count');
+    busy = ['kiro'];
+    await kiro.set('version-release', 'yes');
+    await refused;
+    assert.equal(await kiro.read('update-count'), null);
   });
 });
 

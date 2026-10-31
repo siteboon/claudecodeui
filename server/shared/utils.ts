@@ -1381,9 +1381,10 @@ export const terminalTextStyles = {
  * `codex-cli 0.156.1`, a bare `1.18.25` from OpenCode, and the date-based
  * `2026.07.20-8cc9c0b` from cursor-agent. This returns the first
  * `major.minor.patch` token with any `-prerelease` or `+build` suffix, or null
- * when the text has none.
+ * when the text has none. Used by the shared synchronous probe and the
+ * providers module's asynchronous Kiro probe.
  */
-function parseCliVersion(output: string): string | null {
+export function parseCliVersion(output: string): string | null {
   const match = stripAnsiSequences(output).match(/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z][0-9A-Za-z.+-]*)?/);
   return match ? match[0] : null;
 }
