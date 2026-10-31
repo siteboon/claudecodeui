@@ -207,7 +207,6 @@ export function useChatComposerState({
   currentProviderEffort,
   isLoading,
   processingSessions,
-  canAbortSession,
   tokenBudget,
   sendMessage,
   sendByCtrlEnter,
@@ -1412,11 +1411,10 @@ export function useChatComposerState({
     setIsTextareaExpanded(false);
   }, [resetCommandMenuState]);
 
+  // Not gated on `canAbortSession`: the composer's Stop shows for any busy
+  // session, and a click that silently did nothing left turns running with
+  // no way to stop them. The server refuses what it cannot abort.
   const handleAbortSession = useCallback(() => {
-    if (!canAbortSession) {
-      return;
-    }
-
     const targetSessionId = selectedSession?.id || currentSessionId || null;
     if (!targetSessionId) {
       console.warn('Abort requested but no session ID is available.');
@@ -1429,7 +1427,7 @@ export function useChatComposerState({
       type: 'chat.abort',
       sessionId: targetSessionId,
     });
-  }, [canAbortSession, currentSessionId, selectedSession?.id, sendMessage]);
+  }, [currentSessionId, selectedSession?.id, sendMessage]);
 
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {

@@ -654,6 +654,8 @@ export type ProviderRuntimeContext = {
   createQuery?: (input: { prompt: AsyncIterable<unknown>; options: AnyRecord }) => AsyncIterable<unknown> & {
     interrupt(): Promise<void>;
     stopTask?(taskId: string): Promise<void>;
+    /** Ends the query and kills the CLI process. */
+    close?(): void;
   };
 };
 

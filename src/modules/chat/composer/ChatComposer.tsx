@@ -53,6 +53,7 @@ type ChatComposerProps = {
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
+  onStopBackgroundWork: () => void;
   permissionMode: PermissionMode;
   availablePermissionModes: PermissionMode[];
   onSelectPermissionMode: (mode: PermissionMode) => void;
@@ -130,6 +131,7 @@ export default function ChatComposer({
   activity,
   isLoading,
   onAbortSession,
+  onStopBackgroundWork,
   permissionMode,
   availablePermissionModes,
   onSelectPermissionMode,
@@ -258,6 +260,14 @@ export default function ChatComposer({
 
   const hasQueuedDraft = Boolean(queuedDraft);
   const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
+  // With only background work left the main button would be a greyed-out Send;
+  // until something is typed it stops that work instead.
+  const canStopBackgroundWork = Boolean(activity?.background)
+    && !isLoading
+    && !isRecording
+    && !isTranscribing
+    && !input.trim()
+    && attachedFiles.length === 0;
   const submitHint = canQueueDraft
     ? hasQueuedDraft
       ? t('input.hintText.appendQueued', { defaultValue: 'Enter to add to the queued message' })
@@ -269,7 +279,7 @@ export default function ChatComposer({
     ? hasQueuedDraft
       ? t('input.queue.append', { defaultValue: 'Add to queued message' })
       : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
-    : isLoading
+    : isLoading || canStopBackgroundWork
       ? t('input.stop')
       : t('input.send');
 
@@ -277,7 +287,12 @@ export default function ChatComposer({
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
       {!hasPendingPermissions && (
         <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] max-w-[54.25rem] -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
-          <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+          <ActivityIndicator
+            activity={activity}
+            onAbort={onAbortSession}
+            onStopBackground={onStopBackgroundWork}
+            isInputFocused={isInputFocused}
+          />
         </div>
       )}
 
@@ -374,7 +389,7 @@ export default function ChatComposer({
 
         <PromptInput
           onSubmit={onSubmit as (event: FormEvent<HTMLFormElement>) => void}
-          status={isLoading ? 'streaming' : 'ready'}
+          status={isLoading || canStopBackgroundWork ? 'streaming' : 'ready'}
           className={[
             isTextareaExpanded ? 'chat-input-expanded' : '',
             hasActivityIndicator ? 'rounded-t-none' : '',
@@ -514,15 +529,17 @@ export default function ChatComposer({
                     }
                   : isLoading
                     ? onAbortSession
-                    : isRecording
-                      ? (e: MouseEvent<HTMLButtonElement>) => {
-                          e.preventDefault();
-                          voiceStop({ send: true });
-                        }
-                      : undefined
+                    : canStopBackgroundWork
+                      ? onStopBackgroundWork
+                      : isRecording
+                        ? (e: MouseEvent<HTMLButtonElement>) => {
+                            e.preventDefault();
+                            voiceStop({ send: true });
+                          }
+                        : undefined
               }
               disabled={
-                isLoading
+                isLoading || canStopBackgroundWork
                   ? false
                   : isRecording
                     ? false

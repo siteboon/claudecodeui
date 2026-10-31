@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
+  abortClaudeSDKSession,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
   stopClaudeSDKTask,
@@ -28,6 +29,7 @@ type Scripted = {
   emit: (message: Record<string, unknown>) => void;
   end: () => void;
   released: () => boolean;
+  closed: () => boolean;
   stopped: string[];
 };
 
@@ -36,12 +38,14 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
   const queue: Array<Record<string, unknown> | null> = [];
   let wake: (() => void) | null = null;
   let released = false;
+  let closed = false;
   const stopped: string[] = [];
 
   const script: Scripted = {
     emit: (message) => { queue.push(message); wake?.(); },
     end: () => { queue.push(null); wake?.(); },
     released: () => released,
+    closed: () => closed,
     stopped,
   };
 
@@ -69,6 +73,8 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     return Object.assign(iterator, {
       interrupt: async () => {},
       stopTask: async (taskId: string) => { stopped.push(taskId); },
+      // Kills the CLI: the stream ends.
+      close: () => { closed = true; script.end(); },
     });
   };
 
@@ -306,4 +312,186 @@ test('a turn whose tool emits no task events still holds on the static rule', as
 
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
   });
+});
+
+// Timer-free yield, for tests that mock setTimeout.
+const flush = async () => {
+  for (let i = 0; i < 20; i += 1) {
+    await new Promise((resolve) => { setImmediate(resolve); });
+  }
+};
+
+/** Starts a run on SESSION_ID and holds it for a background agent. */
+async function startHeldRun(cwd: string, sent: NormalizedMessage[]) {
+  const held = createScriptedQuery();
+  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
+    resolveProviderSessionId: () => null,
+    resolveResumeModel: async () => undefined,
+    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
+    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
+    isProviderInstalled: async () => true,
+  };
+  const run = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: held.createQuery });
+  await settle();
+  held.script.emit(init());
+  held.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
+  held.script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
+  held.script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
+  held.script.emit(result());
+  await waitFor(() => sent.some((message) => message.kind === 'complete'));
+  return { held, run, writer, context };
+}
+
+test('a superseded process that does not exit is closed after its grace period', async () => {
+  // Closing stdin does not end a CLI still waiting on background work, and
+  // a process left running keeps acting on the session with no way to stop it.
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
+  const sent: NormalizedMessage[] = [];
+  try {
+    const { held, run, writer, context } = await startHeldRun(cwd, sent);
+    const next = createScriptedQuery();
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const nextRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: next.createQuery });
+      await flush();
+      assert.equal(held.script.released(), true);
+      mock.timers.tick(29_999);
+      await flush();
+      assert.equal(held.script.closed(), false, 'it gets the grace period to exit on its own');
+      mock.timers.tick(1);
+      await flush();
+      assert.equal(held.script.closed(), true, 'then it is killed');
+      assert.equal(next.script.closed(), false, 'the new process is untouched');
+      await run;
+      next.script.emit(init());
+      next.script.emit(result());
+      next.script.end();
+      await nextRun;
+    } finally {
+      mock.timers.reset();
+    }
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('a superseded process that exits within its grace period is not closed', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
+  const sent: NormalizedMessage[] = [];
+  try {
+    const { held, run, writer, context } = await startHeldRun(cwd, sent);
+    const next = createScriptedQuery();
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const nextRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: next.createQuery });
+      await flush();
+      held.script.end();
+      await run;
+      mock.timers.tick(30_000);
+      await flush();
+      assert.equal(held.script.closed(), false);
+      next.script.emit(init());
+      next.script.emit(result());
+      next.script.end();
+      await nextRun;
+    } finally {
+      mock.timers.reset();
+    }
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('stopping a session held for background work stops its tasks and kills the process if it lingers', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
+  const sent: NormalizedMessage[] = [];
+  try {
+    const { held, run } = await startHeldRun(cwd, sent);
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      assert.equal(await abortClaudeSDKSession(SESSION_ID), true);
+      assert.deepEqual(held.script.stopped, ['a1'], 'the agent is told to stop');
+      await flush();
+      assert.equal(held.script.released(), true);
+      assert.equal(held.script.closed(), false);
+      mock.timers.tick(5_000);
+      await flush();
+      assert.equal(held.script.closed(), true);
+      await run;
+      assert.deepEqual(listClaudeSDKBackgroundWork(), []);
+    } finally {
+      mock.timers.reset();
+    }
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('a turn sent while a stopped process is still winding down reports its own completion', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
+  const sent: NormalizedMessage[] = [];
+  try {
+    const { held, run, writer, context } = await startHeldRun(cwd, sent);
+    assert.equal(await abortClaudeSDKSession(SESSION_ID), true);
+    const completesBefore = sent.filter((message) => message.kind === 'complete').length;
+
+    const next = createScriptedQuery();
+    const nextRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: next.createQuery });
+    await settle();
+    next.script.emit(init());
+    next.script.emit(result());
+    await waitFor(() => sent.filter((message) => message.kind === 'complete').length > completesBefore);
+
+    held.script.end();
+    await run;
+    next.script.end();
+    await nextRun;
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('a stop whose interrupt resolves after a new turn started leaves the new turn stoppable', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
+  const sent: NormalizedMessage[] = [];
+  const first = createScriptedQuery();
+  const pendingInterrupts: Array<() => void> = [];
+  const slowInterrupt: NonNullable<ProviderRuntimeContext['createQuery']> = (options) =>
+    Object.assign(first.createQuery(options), {
+      interrupt: () => new Promise<void>((resolve) => { pendingInterrupts.push(resolve); }),
+    });
+  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
+    resolveProviderSessionId: () => null,
+    resolveResumeModel: async () => undefined,
+    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
+    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
+    isProviderInstalled: async () => true,
+  };
+
+  try {
+    const firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: slowInterrupt });
+    await settle();
+    first.script.emit(init());
+    first.script.emit(result());
+    await waitFor(() => sent.some((message) => message.kind === 'complete'));
+
+    const stopping = abortClaudeSDKSession(SESSION_ID);
+    const next = createScriptedQuery();
+    const nextRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: next.createQuery });
+    await settle();
+    for (const resolve of pendingInterrupts) resolve();
+    assert.equal(await stopping, true);
+
+    assert.equal(await abortClaudeSDKSession(SESSION_ID), true, 'the new turn is still registered');
+    first.script.end();
+    await firstRun;
+    next.script.end();
+    await nextRun;
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
 });
