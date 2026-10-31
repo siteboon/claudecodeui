@@ -78,10 +78,18 @@ export const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, React.Butt
 );
 CollapsibleTrigger.displayName = 'CollapsibleTrigger';
 
+type CollapsibleContentProps = React.HTMLAttributes<HTMLDivElement> & {
+  /** Avoid mounting expensive content while its section is closed. */
+  unmountOnClose?: boolean;
+};
+
 /** Body slot of Collapsible, used by the chat module and the shared Reasoning primitive. */
-export const CollapsibleContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, children, ...props }, ref) => {
+export const CollapsibleContent = React.forwardRef<HTMLDivElement, CollapsibleContentProps>(
+  ({ className, children, unmountOnClose = false, ...props }, ref) => {
     const { open } = useCollapsible();
+
+    // A zero-row grid still mounts and lays out its children.
+    if (unmountOnClose && !open) return null;
 
     return (
       <div
