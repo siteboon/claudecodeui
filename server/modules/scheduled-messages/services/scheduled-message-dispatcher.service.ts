@@ -24,6 +24,16 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeRunSettled: (() => void) | null = null;
 let dispatchInFlight = false;
 
+/**
+ * Sessions whose due scheduled messages are still being sent one by one.
+ *
+ * A run settling between two of them must not start that session's queued
+ * turn: the next due message interrupts whatever is running, so it would abort
+ * the queued turn after it was claimed. The pass that owns the batch sends
+ * queued turns right after it instead.
+ */
+const sessionsInDueBatch = new Set<string>();
+
 function readOptions(raw: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -166,8 +176,18 @@ export async function dispatchDueScheduledMessages(
 
   // Sequentially: a session can only have one run at a time, and two due
   // messages for the same session must not race each other into it.
-  for (const row of due) {
-    await sendClaimedMessage(row, runtime);
+  const batchSessions = new Set(due.map((row) => row.session_id));
+  for (const sessionId of batchSessions) {
+    sessionsInDueBatch.add(sessionId);
+  }
+  try {
+    for (const row of due) {
+      await sendClaimedMessage(row, runtime);
+    }
+  } finally {
+    for (const sessionId of batchSessions) {
+      sessionsInDueBatch.delete(sessionId);
+    }
   }
 
   return due.length;
@@ -216,6 +236,9 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   // the settled session, so several runs ending together do not each rescan
   // every queued turn.
   unsubscribeRunSettled = onRunSettled((appSessionId) => {
+    if (sessionsInDueBatch.has(appSessionId)) {
+      return;
+    }
     void dispatchQueuedMessages(runtime, appSessionId).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       console.error('[ScheduledMessages] Run-settled dispatch failed', { error: message });

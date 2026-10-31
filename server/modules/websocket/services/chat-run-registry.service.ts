@@ -155,6 +155,10 @@ export function onRunSettled(listener: (appSessionId: string) => void): () => vo
 function notifyRunSettled(appSessionId: string): void {
   for (const listener of settledListeners) {
     queueMicrotask(() => {
+      // Unsubscribed between the settle and this microtask: stay quiet.
+      if (!settledListeners.has(listener)) {
+        return;
+      }
       try {
         listener(appSessionId);
       } catch (error: unknown) {

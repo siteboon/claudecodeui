@@ -255,6 +255,82 @@ test('a closed dispatcher no longer sends on run settle', async () => {
   });
 });
 
+test('a run settling just before the dispatcher closes does not send', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const runs: RunCall[] = [];
+    initializeScheduledMessageDispatcher(createRuntime(runs));
+    await settle();
+
+    const run = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId,
+    });
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: { content: 'left for the poll' },
+    });
+    // Same tick: the settle notification is still pending when we close.
+    run!.writer.sendComplete({ exitCode: 0 });
+    closeScheduledMessageDispatcher();
+    await settle();
+
+    assert.equal(runs.length, 0);
+  });
+});
+
+test('a queued turn waits for the due messages of its session instead of being interrupted by them', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    for (const [content, ageMs] of [['due first', 120_000], ['due second', 60_000]] as const) {
+      scheduledMessagesService.schedule({
+        userId,
+        sessionId: SESSION_ID,
+        content,
+        scheduledFor: new Date(Date.now() - ageMs).toISOString(),
+      });
+    }
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, { text: '', queuedMessage: { content: 'queued' } });
+
+    // The queued turn keeps running until released, so a due message that
+    // lands after it would have to interrupt it.
+    const runs: string[] = [];
+    const aborts: string[] = [];
+    let releaseQueued: () => void = () => {};
+    const queuedDone = new Promise<void>((resolve) => {
+      releaseQueued = resolve;
+    });
+    const runtime = {
+      hasRuntime: () => true,
+      hasBackgroundWork: () => false,
+      run: async (_provider: string, command: string) => {
+        runs.push(command);
+        if (command === 'queued') {
+          await queuedDone;
+        }
+      },
+      abort: async (_provider: string, sessionId: string) => {
+        aborts.push(sessionId);
+        return true;
+      },
+    } as never;
+
+    initializeScheduledMessageDispatcher(runtime);
+    try {
+      for (let i = 0; i < 50 && runs.length < 3; i += 1) {
+        await settle();
+      }
+      assert.deepEqual(runs, ['due first', 'due second', 'queued']);
+      assert.deepEqual(aborts, []);
+    } finally {
+      releaseQueued();
+      await settle();
+      closeScheduledMessageDispatcher();
+    }
+  });
+});
+
 test('a scoped pass only looks at the given session', async () => {
   await withIsolatedDatabase(async (userId) => {
     sessionsDb.createAppSession('other-session', 'claude', '/tmp', 'Other session');
