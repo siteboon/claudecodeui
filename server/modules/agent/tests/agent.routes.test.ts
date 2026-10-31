@@ -34,6 +34,7 @@ function createDependencies(
       getSessionById: () => null,
       getSessionByProviderSessionId: () => null,
       createAppSession: () => ({ sessionId: 'app-session-1' }),
+      archiveSession: async () => undefined,
     },
     // A registry stand-in: the runtime writes straight to the audience, which
     // is all the tests above this file's registration tests need.
@@ -404,6 +405,7 @@ test('Agent route reads no model catalog for a continued session of an unregiste
       }),
       getSessionByProviderSessionId: () => null,
       createAppSession: () => { throw new Error('a continued session must not create a row'); },
+      archiveSession: async () => undefined,
     },
   }), async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/agent`, {
@@ -420,4 +422,46 @@ test('Agent route reads no model catalog for a continued session of an unregiste
   });
 
   assert.deepEqual(catalogReads, []);
+});
+
+test('Agent route archives a finished session by app or provider id and refuses busy or unknown ones', async () => {
+  const archived: string[] = [];
+  const row = { session_id: 'app-1', provider: 'claude', provider_session_id: 'claude-1', project_path: '/home/test/project' };
+  const base = createDependencies();
+  await withAgentServer(createDependencies({
+    sessions: {
+      ...base.sessions,
+      getSessionById: (id) => (id === 'app-1' || id === 'app-busy' ? { ...row, session_id: id } : null) as never,
+      getSessionByProviderSessionId: (id) => (id === 'claude-1' ? row : null) as never,
+      archiveSession: async (id) => { archived.push(id); },
+    },
+    runs: { ...base.runs, isProcessing: (id: string) => id === 'app-busy' },
+  }), async (baseUrl) => {
+    const archive = (id: string) => fetch(`${baseUrl}/api/agent/sessions/${id}/archive`, { method: 'POST' });
+
+    const byProviderId = await archive('claude-1');
+    assert.equal(byProviderId.status, 200);
+    assert.deepEqual(await byProviderId.json(), { success: true, sessionId: 'app-1', action: 'archived' });
+    assert.equal((await archive('app-busy')).status, 409);
+    assert.equal((await archive('missing')).status, 404);
+  });
+
+  assert.deepEqual(archived, ['app-1']);
+});
+
+test('Agent archive route checks the API key like the run route', async () => {
+  let archivedCalls = 0;
+  const base = createDependencies();
+  await withAgentServer(createDependencies({
+    platformMode: false,
+    sessions: { ...base.sessions, archiveSession: async () => { archivedCalls += 1; } },
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent/sessions/app-1/archive`, {
+      method: 'POST',
+      headers: { 'x-api-key': 'invalid-key' },
+    });
+    assert.equal(response.status, 401);
+  });
+
+  assert.equal(archivedCalls, 0);
 });
