@@ -15,6 +15,7 @@ type AgentCategoryContentSectionProps = {
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   projects: AgentSettingsProject[];
+  onProviderAuthRefresh?: (provider: AgentProvider) => void;
 };
 
 /** Rendered by AgentsSettingsTab to show the panel for the selected provider and category. */
@@ -29,6 +30,7 @@ export default function AgentCategoryContentSection({
   codexPermissionMode,
   onCodexPermissionModeChange,
   projects,
+  onProviderAuthRefresh,
 }: AgentCategoryContentSectionProps) {
   return (
     <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-4">
@@ -37,6 +39,7 @@ export default function AgentCategoryContentSection({
           agent={selectedAgent}
           authStatus={agentContextById[selectedAgent].authStatus}
           onLogin={agentContextById[selectedAgent].onLogin}
+          onAuthChanged={() => onProviderAuthRefresh?.(selectedAgent)}
         />
       )}
 

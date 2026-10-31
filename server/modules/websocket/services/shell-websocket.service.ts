@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { codexApiConnectionService } from '@/modules/providers/index.js';
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -646,6 +647,9 @@ export function handleShellConnection(
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
         const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
+        const codexEnvironment = provider === 'codex' || provider === 'plain-shell' || data.isPlainShell
+          ? codexApiConnectionService.getShellEnvironment(prioritizedPath.value)
+          : undefined;
 
         shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
           name: 'xterm-256color',
@@ -655,6 +659,7 @@ export function handleShellConnection(
           env: {
             ...process.env,
             [prioritizedPath.key]: prioritizedPath.value,
+            ...codexEnvironment,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',

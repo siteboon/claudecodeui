@@ -14,6 +14,7 @@
 import { Codex } from '@openai/codex-sdk';
 import type { ModelReasoningEffort, Thread, ThreadOptions } from '@openai/codex-sdk';
 
+import { codexApiConnectionService } from '@/modules/providers/services/codex-api-connection.service.js';
 import {
   appendFilesInputTag,
   buildCodexInputItems,
@@ -308,7 +309,10 @@ async function queryCodex(
   const sessionKey = () => sessionId || capturedSessionId || null;
 
   try {
-    codex = new Codex();
+    codex = new Codex({
+      ...codexApiConnectionService.getSdkOptions(),
+      codexPathOverride: process.env.CLOUDCLI_CODEX_PATH || undefined,
+    });
 
     const threadOptions: ThreadOptions = {
       workingDirectory,

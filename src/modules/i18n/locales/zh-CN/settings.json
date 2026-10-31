@@ -358,6 +358,23 @@
     }
   },
   "agents": {
+    "codexApi": {
+      "title": "使用 API Key 连接",
+      "description": "单独配置此 CloudCLI 的模型接口，无需登录 Codex 账号。",
+      "baseUrl": "接口地址（Base URL）",
+      "provider": "Provider 标识",
+      "providerHelp": "填写与已有 Codex 会话相同的自定义标识，例如 aicode。这会影响恢复列表显示哪些会话；修改后需重建已打开的终端。",
+      "apiKey": "API Key",
+      "keepKey": "已配置，留空保留现有密钥",
+      "enterKey": "输入 API Key",
+      "protocol": "接口需要支持 Responses API。模型在现有模型选择器中选择。",
+      "save": "保存 API 配置",
+      "clear": "移除 API 配置",
+      "saved": "已保存，新请求立即生效；尚未验证密钥是否有效。",
+      "cleared": "API 配置已移除。",
+      "failed": "保存 API 配置失败。"
+    },
+
     "authStatus": {
       "checking": "检查中...",
       "connected": "已连接",
