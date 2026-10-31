@@ -29,10 +29,13 @@ type ActiveCodexSession = {
   codex: Codex;
   status: 'running' | 'aborted' | 'completed';
   abortController: AbortController;
+  finished: Promise<void>;
+  settled: boolean;
   startedAt: string;
 };
 
 const activeCodexSessions = new Map<string, ActiveCodexSession>();
+const CODEX_ABORT_TIMEOUT_MS = 10_000;
 
 // Codex CLI requires non-whitespace stdin even when --image arguments are
 // present, so attachment-only turns need a small text instruction.
@@ -303,9 +306,14 @@ async function queryCodex(
   // when the stream already reported the failure.
   let errorSurfaced = false;
   const abortController = new AbortController();
+  let resolveFinished: () => void = () => undefined;
+  const finished = new Promise<void>((resolve) => {
+    resolveFinished = resolve;
+  });
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+  let sessionEntry: ActiveCodexSession | null = null;
 
   try {
     codex = new Codex();
@@ -327,19 +335,23 @@ async function queryCodex(
 
     const registerSession = (id: string | null) => {
       if (!id) {
-        return;
+        return null;
       }
-      activeCodexSessions.set(id, {
+      const entry: ActiveCodexSession = {
         thread,
         codex,
         status: 'running',
         abortController,
+        finished,
+        settled: false,
         startedAt: new Date().toISOString()
-      });
+      };
+      activeCodexSessions.set(id, entry);
+      return entry;
     };
 
     if (sessionKey()) {
-      registerSession(sessionKey());
+      sessionEntry = registerSession(sessionKey());
     }
 
     // Execute with streaming. Turns with image attachments send structured
@@ -362,7 +374,7 @@ async function queryCodex(
         const discoveredSessionId = event.thread_id || null;
         if (discoveredSessionId && !capturedSessionId) {
           capturedSessionId = discoveredSessionId;
-          registerSession(sessionKey());
+          sessionEntry = registerSession(sessionKey());
 
           if (ws.setSessionId && typeof ws.setSessionId === 'function') {
             ws.setSessionId(capturedSessionId);
@@ -491,13 +503,12 @@ async function queryCodex(
     }
 
   } finally {
-    // Update session status
-    if (sessionKey()) {
-      const session = activeCodexSessions.get(sessionKey() || '');
-      if (session) {
-        session.status = session.status === 'aborted' ? 'aborted' : 'completed';
-      }
+    // A queued run may have replaced the map entry after our completion event.
+    if (sessionEntry) {
+      sessionEntry.status = sessionEntry.status === 'aborted' ? 'aborted' : 'completed';
+      sessionEntry.settled = true;
     }
+    resolveFinished();
   }
 }
 
@@ -506,7 +517,7 @@ async function queryCodex(
  * @param {string} sessionId - Session ID to abort
  * @returns {boolean} - Whether abort was successful
  */
-function abortCodexSession(sessionId: string) {
+async function abortCodexSession(sessionId: string): Promise<boolean> {
   const session = activeCodexSessions.get(sessionId);
 
   if (!session) {
@@ -520,6 +531,23 @@ function abortCodexSession(sessionId: string) {
     console.warn(`[Codex] Failed to abort session ${sessionId}:`, error);
   }
 
+  // AbortController only requests termination. Wait until the SDK's stream
+  // has unwound and its child process has exited before another surface can
+  // resume this single-writer thread.
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      session.finished,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          // Reject so the gateway retains its active-run guard until the writer exits.
+          reject(new Error('Codex chat is still closing. Please retry stopping it before opening Shell.'));
+        }, CODEX_ABORT_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   return true;
 }
 
@@ -554,7 +582,8 @@ const completedSessionCleanupTimer = setInterval(() => {
   const maxAge = 30 * 60 * 1000; // 30 minutes
 
   for (const [id, session] of activeCodexSessions.entries()) {
-    if (session.status !== 'running') {
+    // An abort request is not proof that its writer has actually exited.
+    if (session.settled) {
       const startedAt = new Date(session.startedAt).getTime();
       if (now - startedAt > maxAge) {
         activeCodexSessions.delete(id);
