@@ -200,6 +200,29 @@ test('a huge tool output is capped, and says how much it dropped', () => {
   assert.equal(nested, content, 'the structured copy is capped the same way');
 });
 
+test('an MCP screenshot result drops its image data and stays parseable', () => {
+  const parts = [
+    { type: 'text', text: '### Result\n- [Screenshot of viewport](shot.jpeg)' },
+    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'A'.repeat(150_000) } },
+  ];
+  const [unified] = prepareTranscriptMessages([
+    message({
+      kind: 'tool_use',
+      toolName: 'mcp__playwright__browser_take_screenshot',
+      toolId: 's1',
+      toolInput: {},
+      toolResult: { content: JSON.stringify(parts), toolUseResult: parts },
+    }),
+  ]);
+
+  const content = JSON.parse(String(unified.toolResult?.content));
+  assert.equal(content[0].text, parts[0].text, 'the text part survives whole');
+  assert.equal(content[1].source.data, '', 'the image payload is gone');
+  assert.equal(content[1].source.media_type, 'image/jpeg', 'the rest of the image part stays');
+  const nested = unified.toolResult?.toolUseResult as Array<{ source?: { data: string } }>;
+  assert.equal(nested[1].source?.data, '');
+});
+
 test('a search result keeps every file it found', () => {
   const filenames = Array.from({ length: 900 }, (_, index) => `/repo/src/file-${index}.ts`);
   const [unified] = prepareTranscriptMessages([
