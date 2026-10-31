@@ -35,6 +35,7 @@ type ClaudeSettingsStorage = {
   disallowedTools?: string[];
   skipPermissions?: boolean;
   projectSortOrder?: ProjectSortOrder;
+  groupProjectsByName?: boolean;
 };
 
 type CursorSettingsStorage = {
@@ -126,6 +127,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
+  const [groupProjectsByName, setGroupProjectsByName] = useState<boolean>(false);
   const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(() => (
     readCodeEditorSettings()
   ));
@@ -158,6 +160,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
       });
       setProjectSortOrder(readUserPreference<ProjectSortOrder>('projectSortOrder', 'name') === 'date' ? 'date' : 'name');
+      setGroupProjectsByName(readUserPreference<boolean>('groupProjectsByName', false) === true);
 
       const savedCursorSettings = readUserPreference<CursorSettingsStorage>('cursorPermissions', {});
       setCursorPermissions({
@@ -192,6 +195,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
       setProjectSortOrder('name');
+      setGroupProjectsByName(false);
     }
   }, []);
 
@@ -229,6 +233,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
           skipPermissions: claudePermissions.skipPermissions,
         },
         projectSortOrder,
+        groupProjectsByName,
         cursorPermissions: {
           allowedCommands: cursorPermissions.allowedCommands,
           disallowedCommands: cursorPermissions.disallowedCommands,
@@ -261,6 +266,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     cursorPermissions.skipPermissions,
     notificationPreferences,
     projectSortOrder,
+    groupProjectsByName,
   ]);
 
   // Persist on the user's edit rather than in an effect keyed on the settings
@@ -358,6 +364,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     saveStatus,
     projectSortOrder,
     setProjectSortOrder,
+    groupProjectsByName,
+    setGroupProjectsByName,
     codeEditorSettings,
     updateCodeEditorSetting,
     claudePermissions,
