@@ -560,7 +560,7 @@ async function startOpenCodeServer(signal: AbortSignal): Promise<{ server: OpenC
     OPENCODE_SERVER_USERNAME: 'opencode',
   };
   if (process.env.OPENCODE_ENABLE_QUESTION_TOOL === undefined) {
-    childEnv.OPENCODE_ENABLE_QUESTION_TOOL = '1';
+    childEnv.OPENCODE_ENABLE_QUESTION_TOOL = 'true';
   }
 
   const previousEnv = new Map<string, string | undefined>();
