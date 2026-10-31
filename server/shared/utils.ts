@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import {
   access,
@@ -1101,6 +1101,41 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
   }
 
   return normalized;
+}
+
+// ---------------------------
+//----------------- CURSOR CHAT STORAGE UTILITIES ------------
+/**
+ * Resolves the directory where cursor-agent keeps one CLI chat:
+ * `~/.cursor/chats/<md5(workspace path)>/<sessionId>/`, holding the chat's
+ * `meta.json` and `store.db`.
+ *
+ * cursor-agent hashes `path.resolve(process.cwd())`. On macOS and Linux that is
+ * the physical path, so a project opened through a symlink only matches once
+ * resolved; elsewhere the path may be kept as given. Both forms are tried and
+ * the first one holding a `store.db` wins (the resolved form when neither
+ * does). Used by the Cursor sessions provider to load history and by
+ * the Cursor runtime to check that a session is a resumable CLI chat. Throws
+ * when `sessionId` is not a single directory name.
+ */
+export function resolveCursorChatDirectory(projectPath: string, sessionId: string): string {
+  const safeSessionId = sanitizeLeafDirectoryName(sessionId, 'cursor session id');
+  const givenPath = path.resolve(projectPath || process.cwd());
+  let realPath = givenPath;
+  try {
+    realPath = fs.realpathSync(givenPath);
+  } catch {
+    // Missing workspace: only the given form can be hashed.
+  }
+
+  const chatDirectories = [realPath, givenPath].map((workspacePath) => path.join(
+    os.homedir(),
+    '.cursor',
+    'chats',
+    createHash('md5').update(workspacePath).digest('hex'),
+    safeSessionId,
+  ));
+  return chatDirectories.find((directory) => fs.existsSync(path.join(directory, 'store.db'))) ?? chatDirectories[0];
 }
 
 // ---------------------------

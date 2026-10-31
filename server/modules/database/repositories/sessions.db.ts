@@ -722,4 +722,19 @@ export const sessionsDb = {
       )
       .all() as Array<{ session_id: string; jsonl_path: string }>;
   },
+
+  /**
+   * Lists one provider's indexed rows that point at a transcript file.
+   * Used by the Cursor synchronizer to drop rows an older indexer created.
+   */
+  getProviderSessionsWithTranscriptPath(provider: string): Array<{ session_id: string; jsonl_path: string }> {
+    const db = getConnection();
+    return db
+      .prepare(
+        `SELECT session_id, jsonl_path
+         FROM sessions
+         WHERE provider = ? AND jsonl_path IS NOT NULL AND jsonl_path <> ''`
+      )
+      .all(provider) as Array<{ session_id: string; jsonl_path: string }>;
+  },
 };
