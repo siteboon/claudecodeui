@@ -669,6 +669,33 @@ test('a live SDK tool result caps the strings inside its structured output', () 
   assert.match(forwarded?.originalFile ?? '', /… 10000 more characters$/);
 });
 
+test('a live MCP screenshot result reaches the client without its image data', () => {
+  // The live row skips the transcript pass, so it must apply the same cap
+  // itself. Uncapped, every screenshot reached the client as a full-size
+  // base64 string, which Safari could not lay out.
+  const parts = [
+    { type: 'text', text: 'Screenshot captured' },
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'A'.repeat(150_000) } },
+  ];
+  const [normalized] = new ClaudeSessionsProvider().normalizeMessage({
+    type: 'user',
+    session_id: SESSION_ID,
+    parent_tool_use_id: null,
+    uuid: 'screenshot-result-live',
+    message: {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 'toolu_shot', content: parts }],
+    },
+    tool_use_result: parts,
+  }, SESSION_ID);
+
+  const content = JSON.parse(String(normalized?.content));
+  assert.equal(content[0].text, 'Screenshot captured', 'the text part survives whole');
+  assert.equal(content[1].source.data, '', 'the image payload is gone');
+  const forwarded = normalized?.toolUseResult as Array<{ source?: { data: string } }>;
+  assert.equal(forwarded[1].source?.data, '');
+});
+
 const WORKFLOW_SESSION_ID = 'claude-workflow-session';
 const WORKFLOW_TOOL_USE_ID = 'toolu_workflow_1';
 const WORKFLOW_RUN_ID = 'wf_16fbf852-274';
