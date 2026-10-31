@@ -11,6 +11,8 @@ import MarkdownPreview from '@/modules/code-editor/markdown/MarkdownPreview';
 type CodeEditorSurfaceProps = {
   content: string;
   onChange: (value: string) => void;
+  /** A file opened from outside the project: viewable, not editable. */
+  readOnly?: boolean;
   markdownPreview: boolean;
   isMarkdownFile: boolean;
   isDarkMode: boolean;
@@ -25,6 +27,7 @@ type CodeEditorSurfaceProps = {
 export default function CodeEditorSurface({
   content,
   onChange,
+  readOnly = false,
   markdownPreview,
   isMarkdownFile,
   isDarkMode,
@@ -72,6 +75,8 @@ export default function CodeEditorSurface({
       onCreateEditor={setView}
       value={content}
       onChange={onChange}
+      editable={!readOnly}
+      readOnly={readOnly}
       extensions={extensions}
       theme={isDarkMode ? oneDark : undefined}
       height="100%"

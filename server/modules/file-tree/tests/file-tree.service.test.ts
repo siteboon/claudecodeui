@@ -506,7 +506,7 @@ test('the temp directory can be browsed and read, but never written to', async (
   }
 });
 
-test('reading through a symlink out of the temp directory is still refused', async () => {
+test('reading through a symlink out of the temp directory asks for confirmation first', async () => {
   const temporaryDirectory = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-tmp-'));
   const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
   // The link target has to sit under no read-only root. Beside this file is
@@ -523,7 +523,7 @@ test('reading through a symlink out of the temp directory is still refused', asy
     const service = createRealFileSystemService(projectRoot);
     await assert.rejects(
       service.readTextFile('project-1', path.join(temporaryDirectory, 'escape', 'secret.txt')),
-      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+      (error: unknown) => (error as AppError).code === 'OUTSIDE_PROJECT_CONFIRM',
     );
   } finally {
     await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
@@ -565,13 +565,126 @@ test('a file in another folder of the workspace can be read, but never written t
     );
     assert.equal(await fsPromises.readFile(reportPath, 'utf8'), 'what the run found');
 
-    // A link inside the workspace does not open what lies outside it.
+    // A link inside the workspace does not open what lies outside it without
+    // the user confirming, as for any other file outside the project.
     await assert.rejects(
       service.readTextFile('project-1', path.join(workspaceRoot, 'escape', 'secret.txt')),
-      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+      (error: unknown) => (error as AppError).code === 'OUTSIDE_PROJECT_CONFIRM',
+    );
+
+    // The workspace root is the home directory by default; its credential
+    // folders stay refused.
+    await fsPromises.mkdir(path.join(workspaceRoot, '.ssh'));
+    await fsPromises.writeFile(path.join(workspaceRoot, '.ssh', 'id_ed25519'), 'key', 'utf8');
+    await assert.rejects(
+      service.readTextFile('project-1', path.join(workspaceRoot, '.ssh', 'id_ed25519')),
+      (error: unknown) => (error as AppError).code === 'PATH_PROTECTED',
     );
   } finally {
     await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('a file outside the project is read only after the user confirms', async () => {
+  const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
+  const outsideDirectory = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-outside-'));
+  const target = path.join(outsideDirectory, 'chart.txt');
+
+  try {
+    await fsPromises.writeFile(target, 'plot', 'utf8');
+    const service = createRealFileSystemService(projectRoot);
+
+    await assert.rejects(
+      service.readTextFile('project-1', target),
+      (error: unknown) => (error as AppError).code === 'OUTSIDE_PROJECT_CONFIRM',
+    );
+    const confirmed = await service.readTextFile('project-1', target, { allowOutside: true });
+    assert.equal(confirmed.content, 'plot');
+    assert.equal(confirmed.outsideProject, true);
+    const opened = await service.openFile('project-1', target, { allowOutside: true });
+    opened.stream.destroy();
+
+    // Confirmation is for reading only: the write path still refuses it.
+    await assert.rejects(
+      service.saveTextFile('project-1', target, 'changed'),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+    assert.equal(await fsPromises.readFile(target, 'utf8'), 'plot');
+  } finally {
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
+    await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('credential files stay refused even when confirmed', async () => {
+  const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
+  const outsideDirectory = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-outside-'));
+  const sshDirectory = path.join(outsideDirectory, '.ssh');
+
+  try {
+    await fsPromises.mkdir(sshDirectory);
+    const protectedFiles = [
+      path.join(outsideDirectory, '.env.production'),
+      path.join(outsideDirectory, 'id_ed25519'),
+      path.join(outsideDirectory, 'server.key'),
+      path.join(outsideDirectory, '.credentials.json'),
+      path.join(outsideDirectory, '.git-credentials'),
+      path.join(outsideDirectory, '.npmrc'),
+      path.join(sshDirectory, 'config'),
+    ];
+    // A symlink named `.ssh` into a folder with another name is refused by its own name.
+    const keysDirectory = path.join(outsideDirectory, 'keys');
+    await fsPromises.mkdir(keysDirectory);
+    await fsPromises.writeFile(path.join(keysDirectory, 'known_hosts'), 'secret', 'utf8');
+    await fsPromises.mkdir(path.join(outsideDirectory, 'home'));
+    await fsPromises.symlink(keysDirectory, path.join(outsideDirectory, 'home', '.ssh'));
+    await assert.rejects(
+      createRealFileSystemService(projectRoot).readTextFile('project-1', path.join(outsideDirectory, 'home', '.ssh', 'known_hosts'), { allowOutside: true }),
+      (error: unknown) => (error as AppError).code === 'PATH_PROTECTED',
+    );
+    const service = createRealFileSystemService(projectRoot);
+    for (const file of protectedFiles) {
+      await fsPromises.writeFile(file, 'secret', 'utf8');
+      await assert.rejects(
+        service.readTextFile('project-1', file, { allowOutside: true }),
+        (error: unknown) => (error as AppError).code === 'PATH_PROTECTED',
+        file,
+      );
+    }
+  } finally {
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
+    await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('a relative path that escapes the project is refused outright, not offered for confirmation', async () => {
+  const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
+  try {
+    const service = createRealFileSystemService(projectRoot);
+    await assert.rejects(
+      service.readTextFile('project-1', '../secret.txt', { allowOutside: true }),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+  } finally {
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('a project file read by its absolute path stays the project\'s, editable and unguarded', async () => {
+  const workspaceRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-workspace-'));
+  const projectRoot = path.join(workspaceRoot, 'app');
+
+  try {
+    await fsPromises.mkdir(projectRoot);
+    const envPath = path.join(projectRoot, '.env');
+    await fsPromises.writeFile(envPath, 'PORT=1', 'utf8');
+    const service = createRealFileSystemService(projectRoot, workspaceRoot);
+
+    const opened = await service.readTextFile('project-1', envPath);
+    assert.equal(opened.content, 'PORT=1');
+    assert.equal(opened.outsideProject, false, 'the project\'s own files keep Save');
+  } finally {
+    await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
   }
 });
