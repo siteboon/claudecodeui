@@ -101,6 +101,11 @@ const abortedSessionIds = new Set<string>();
 // (see addSession). Their run loops must stay silent on wind-down: the map
 // entry, the abort flag, and all client-facing events belong to the new run.
 const supersededInstances = new WeakSet<ClaudeQuery>();
+// Per session key: settles when that session's current run loop has exited
+// (its finally ran). A new turn awaits it before spawning, so two CLI
+// processes never resume the same transcript — and work in the same cwd — at
+// once. See the hand-off at the top of queryClaudeSDK.
+const runExited = new Map<string, Promise<void>>();
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS ?? '', 10) || 55000;
 
@@ -122,6 +127,12 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 // that never reports at all, so an abandoned session cannot leak a CLI process
 // forever. The timer resets on every message, so it measures silence, not total time.
 const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
+
+// How long a new turn waits for the session's previous CLI process to exit
+// after being told to stop. Interrupt plus a closed stdin normally ends it
+// within a second; the cap only guards against a process that ignores both,
+// so a wedged run can never block the conversation.
+const HANDOFF_EXIT_TIMEOUT_MS = 20 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
@@ -1068,8 +1079,50 @@ async function queryClaudeSDK(
 
   // A new turn supersedes any earlier one still holding this session's process
   // open, so held runs cannot stack up across a conversation.
+  //
+  // The run registry frees the session the moment a turn's `result` lands,
+  // while the process behind it may stay up for the rest of its hold. Merely
+  // closing its stdin here (and interrupting it later, in addSession, without
+  // waiting) let the next turn spawn a second CLI that resumed the same
+  // transcript while the first was still winding down — for seconds normally,
+  // minutes when it was busy — so two processes wrote one session and worked in
+  // one cwd. Stop the previous run first, and wait for its loop to exit before
+  // spawning. The interrupt mirrors addSession's superseding path so the old
+  // run winds down silently; addSession still covers the timeout case.
   if (sessionKey()) {
-    releaseHeldSession(sessionKey()!);
+    const previousKey = sessionKey()!;
+    const previousInstance = getSession(previousKey)?.instance;
+    if (previousInstance) {
+      supersededInstances.add(previousInstance);
+      Promise.resolve()
+        .then(() => previousInstance.interrupt())
+        .catch((error: unknown) => {
+          console.error(`Error interrupting previous run for session ${previousKey}:`, error instanceof Error ? error.message : error);
+        });
+    }
+    // Stop the held run's outstanding background tasks, then close its stdin
+    // (#1395) — and still wait for its loop to exit before spawning (below).
+    releaseHeldSession(previousKey);
+    const exited = runExited.get(previousKey);
+    if (exited) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const outcome = await Promise.race([
+        exited.then(() => 'exited' as const),
+        new Promise<'timeout'>((resolve) => {
+          timer = setTimeout(() => resolve('timeout'), HANDOFF_EXIT_TIMEOUT_MS);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (outcome === 'timeout') {
+        console.warn(`[Claude SDK] Previous run for session ${previousKey} did not exit within ${HANDOFF_EXIT_TIMEOUT_MS}ms; starting the new turn anyway`);
+      }
+    }
+  }
+  // Registered before anything can throw so the finally always settles it.
+  let markExited: () => void = () => {};
+  const exitedPromise = new Promise<void>((resolve) => { markExited = resolve; });
+  if (sessionKey()) {
+    runExited.set(sessionKey()!, exitedPromise);
   }
 
   // Arms (or re-arms) the idle countdown that eventually closes stdin.
@@ -1502,6 +1555,13 @@ async function queryClaudeSDK(
       idleReleaseTimer = null;
     }
     releasePromptStream();
+    // Let a turn waiting in the hand-off above proceed. Only this run's own
+    // entry is dropped: a newer run has registered its own by the time this
+    // one is superseded.
+    if (sessionKey() && runExited.get(sessionKey()!) === exitedPromise) {
+      runExited.delete(sessionKey()!);
+    }
+    markExited();
   }
 }
 
