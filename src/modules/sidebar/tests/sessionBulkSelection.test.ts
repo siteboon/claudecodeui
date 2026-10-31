@@ -31,6 +31,10 @@ vi.mock('@/shared/api', () => ({
 
 const recordedOptionsProps: Record<string, unknown>[] = [];
 
+vi.mock('@/shared/hooks/useProviderCapabilities', () => ({
+  useSessionForkingProviders: () => new Set(),
+}));
+
 vi.mock('@/modules/sidebar/SessionOptions', () => ({
   default: (props: Record<string, unknown>) => {
     recordedOptionsProps.push(props);
