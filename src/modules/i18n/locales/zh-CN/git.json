@@ -245,5 +245,11 @@
     "explainerTitle": "并行处理多个分支",
     "explainerDescription": "工作树会在独立文件夹中检出一个分支，因此您可以同时运行多个聊天会话，并在结果就绪时将其合并回来。",
     "createFirst": "创建您的第一个工作树"
+  },
+  "repository": {
+    "label": "仓库",
+    "root": "项目根目录",
+    "search": "搜索仓库...",
+    "noMatches": "没有匹配的仓库"
   }
 }

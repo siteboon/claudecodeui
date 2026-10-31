@@ -245,5 +245,11 @@
     "explainerTitle": "並行處理多個分支",
     "explainerDescription": "工作樹會在獨立資料夾中檢出一個分支，因此您可以同時執行多個聊天工作階段，並在結果就緒時將其合併回來。",
     "createFirst": "建立您的第一個工作樹"
+  },
+  "repository": {
+    "label": "儲存庫",
+    "root": "專案根目錄",
+    "search": "搜尋儲存庫...",
+    "noMatches": "找不到符合的儲存庫"
   }
 }

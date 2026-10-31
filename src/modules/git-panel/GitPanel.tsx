@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useGitPanelController } from '@/modules/git-panel/hooks/useGitPanelController';
+import { useGitRepositories } from '@/modules/git-panel/hooks/useGitRepositories';
 import { useRevertLocalCommit } from '@/modules/git-panel/hooks/useRevertLocalCommit';
 import type { ConfirmationRequest, FileOpenHandler, GitPanelView, Project } from '@/shared/types';
 import { getChangedFileCount } from '@/modules/git-panel/utils/gitPanelUtils';
@@ -11,6 +12,7 @@ import HistoryView from '@/modules/git-panel/history/HistoryView';
 import BranchesView from '@/modules/git-panel/branches/BranchesView';
 import WorktreesView from '@/modules/git-panel/worktrees/WorktreesView';
 import GitPanelHeader from '@/modules/git-panel/GitPanelHeader';
+import GitRepositorySelector from '@/modules/git-panel/GitRepositorySelector';
 import GitRepositoryErrorState from '@/modules/git-panel/GitRepositoryErrorState';
 import GitViewTabs from '@/modules/git-panel/GitViewTabs';
 import ConfirmActionModal from '@/modules/git-panel/modals/ConfirmActionModal';
@@ -38,6 +40,12 @@ export default function GitPanel({
   const [wrapText, setWrapText] = useState(true);
   const [hasExpandedFiles, setHasExpandedFiles] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmationRequest | null>(null);
+
+  const { repositories, selectedRepositoryPath, selectRepository, isRepositoryScanComplete } = useGitRepositories(selectedProject);
+  // Absolute root of the repository on show; per-repository caches and keys hang off it.
+  const repositoryPath = selectedProject
+    ? (selectedRepositoryPath ? `${selectedProject.fullPath}/${selectedRepositoryPath}` : selectedProject.fullPath)
+    : '';
 
   const {
     gitStatus,
@@ -80,14 +88,15 @@ export default function GitPanel({
     openFile,
   } = useGitPanelController({
     selectedProject,
+    repoPath: selectedRepositoryPath,
     activeView,
     onFileOpen,
   });
 
   const { isRevertingLocalCommit, revertLatestLocalCommit } = useRevertLocalCommit({
-    // `projectId` (DB primary key) is forwarded to the revert API which uses it
-    // as the `project` body param.
-    projectId: selectedProject?.projectId ?? null,
+    target: selectedProject
+      ? { projectId: selectedProject.projectId, repo: selectedRepositoryPath || undefined }
+      : null,
     onSuccess: refreshAll,
   });
 
@@ -120,6 +129,15 @@ export default function GitPanel({
 
   return (
     <div className="flex h-full flex-col bg-background">
+      {repositories.length > 1 && (
+        <GitRepositorySelector
+          isMobile={isMobile}
+          repositories={repositories}
+          selectedPath={selectedRepositoryPath}
+          onSelect={selectRepository}
+        />
+      )}
+
       {!isMissingRepository && (
         <GitPanelHeader
           isMobile={isMobile}
@@ -151,10 +169,15 @@ export default function GitPanel({
         <GitRepositoryErrorState
           error={gitStatus.error}
           details={gitStatus.details}
-          canInitRepository={isMissingRepository}
+          // Before the repository scan settles the status may be for the
+          // project root rather than the selected nested repository.
+          canInitRepository={isMissingRepository && isRepositoryScanComplete}
           isInitializingRepository={isInitializingRepository}
           initError={isMissingRepository ? operationError : null}
           onInitRepository={() => {
+            if (!isRepositoryScanComplete) {
+              return;
+            }
             clearOperationError();
             void initRepository();
           }}
@@ -170,9 +193,9 @@ export default function GitPanel({
 
           {activeView === 'changes' && (
             <ChangesView
-              key={selectedProject.fullPath}
+              key={repositoryPath}
               isMobile={isMobile}
-              projectPath={selectedProject.fullPath}
+              projectPath={repositoryPath}
               gitStatus={gitStatus}
               gitDiff={gitDiff}
               isLoading={isLoading}
@@ -193,8 +216,9 @@ export default function GitPanel({
 
           {activeView === 'compare' && (
             <CompareView
-              key={selectedProject.fullPath}
+              key={`${selectedProject.fullPath}\0${selectedRepositoryPath}`}
               projectId={selectedProject.projectId}
+              repo={selectedRepositoryPath || undefined}
               currentBranch={currentBranch}
               localBranches={localBranches}
               remoteRefs={remoteRefs}
