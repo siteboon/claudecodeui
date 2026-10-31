@@ -351,6 +351,11 @@ export function truncateNestedOutput(value: unknown): unknown {
  * cap. Truncating it there cuts the serialized array mid-string, the client can
  * no longer parse the parts, and it falls back to showing the raw base64 as
  * text. Emptying the payload first keeps the array whole and small.
+ *
+ * Takes the parsed content array (or `toolUseResult`) and returns a copy; any
+ * other value comes back unchanged. Used here by `capToolResult`, and by the
+ * Claude sessions provider (`claude-sessions.provider.ts`) on the live
+ * `tool_use_result`, which never passes through `prepareTranscriptMessages`.
  */
 export function omitImageData(value: unknown): unknown {
   if (!Array.isArray(value)) {
@@ -429,10 +434,14 @@ function capSerializedParts(content: string): string | null {
 /**
  * Caps one serialized tool result the way the transcript does.
  *
- * Exported for the live stream, which sends each result as it arrives rather
- * than through `prepareTranscriptMessages`. Without it a running session hands
- * the client every screenshot at full size. A result with no content stays
- * without one.
+ * Used here by `capToolResult`, and by the Claude sessions provider
+ * (`claude-sessions.provider.ts`) for the live `tool_result` row, which is sent
+ * as it arrives rather than through `prepareTranscriptMessages`. Without it a
+ * running session hands the client every screenshot at full size.
+ *
+ * Image payloads are emptied first. A JSON content array still over the cap is
+ * trimmed through its text parts so it stays parseable; anything else gets the
+ * plain string cap. A result with no content stays without one.
  */
 export function capToolResultContent(content: string | undefined): string | undefined {
   if (typeof content !== 'string' || content.length <= MAX_TOOL_RESULT_CONTENT) {
