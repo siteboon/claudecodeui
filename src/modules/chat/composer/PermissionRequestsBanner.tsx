@@ -35,11 +35,11 @@ const readContextPatterns = (context: unknown, key: 'always' | 'patterns'): stri
 };
 
 const PatternList = ({ patterns }: { patterns: string[] }) => (
-  <>
+  <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
     {patterns.map((pattern) => (
-      <code key={pattern} className="ml-1 break-all rounded bg-muted px-1 py-0.5 text-xs">{pattern}</code>
+      <code key={pattern} className="break-all rounded bg-muted px-1 py-0.5 text-xs">{pattern}</code>
     ))}
-  </>
+  </span>
 );
 
 /**
@@ -104,28 +104,31 @@ export default function PermissionRequestsBanner({
             <ConfirmationTitle className="flex items-start gap-3">
               <ShieldAlertIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <ConfirmationRequest>
-                <div>
-                  <span className="font-medium text-foreground">Permission required</span>
-                  <span className="ml-2 text-muted-foreground">
-                    Tool: <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{request.toolName}</code>
-                  </span>
+                {/* One column beside the icon, so the detail lines stack under the title. */}
+                <div className="min-w-0 flex-1">
+                  <div>
+                    <span className="font-medium text-foreground">Permission required</span>
+                    <span className="ml-2 text-muted-foreground">
+                      Tool: <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{request.toolName}</code>
+                    </span>
+                  </div>
+                  {alwaysPatterns && requestedPatterns.length > 0 && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      <PatternList patterns={requestedPatterns} />
+                    </div>
+                  )}
+                  {alwaysPatterns && alwaysPatterns.length > 0 && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {t('chat:agentPrompts.alwaysAllowCovers', { defaultValue: 'Always allow covers' })}:
+                      <PatternList patterns={alwaysPatterns} />
+                    </div>
+                  )}
+                  {permissionEntry && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Allow rule: <code className="rounded bg-muted px-1 py-0.5 text-xs">{permissionEntry}</code>
+                    </div>
+                  )}
                 </div>
-                {alwaysPatterns && requestedPatterns.length > 0 && (
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    <PatternList patterns={requestedPatterns} />
-                  </div>
-                )}
-                {alwaysPatterns && alwaysPatterns.length > 0 && (
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {t('chat:agentPrompts.alwaysAllowCovers', { defaultValue: 'Always allow covers' })}:
-                    <PatternList patterns={alwaysPatterns} />
-                  </div>
-                )}
-                {permissionEntry && (
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Allow rule: <code className="rounded bg-muted px-1 py-0.5 text-xs">{permissionEntry}</code>
-                  </div>
-                )}
               </ConfirmationRequest>
             </ConfirmationTitle>
 
