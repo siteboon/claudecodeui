@@ -72,6 +72,12 @@
   "json": {
     "response": "תגובת JSON"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} צריך את התשובה שלך",
+    "dismiss": "דחייה",
+    "alwaysAllow": "לאפשר תמיד",
+    "alwaysAllowCovers": "\"לאפשר תמיד\" חל על"
+  },
   "permissions": {
     "grant": "מתן הרשאה ל-{{tool}}",
     "added": "ההרשאה נוספה",

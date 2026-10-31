@@ -285,6 +285,7 @@ export default function ChatComposer({
         <div className="mx-auto mb-3 max-w-[54.25rem]">
           <PermissionRequestsBanner
             pendingPermissionRequests={pendingPermissionRequests}
+            providerLabel={providerLabel}
             handlePermissionDecision={handlePermissionDecision}
             handleGrantToolPermission={handleGrantToolPermission}
           />
