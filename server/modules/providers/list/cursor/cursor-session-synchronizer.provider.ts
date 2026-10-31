@@ -7,7 +7,7 @@ import readline from 'node:readline';
 import { sessionsDb } from '@/modules/database/index.js';
 import {
   extractFirstValidJsonlData,
-  findFilesRecursivelyCreatedAfter,
+  findFilesRecursivelyChangedAfter,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
@@ -47,7 +47,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let processed = 0;
 
-    const files = await findFilesRecursivelyCreatedAfter(projectsDir, '.jsonl', since ?? null);
+    const files = await findFilesRecursivelyChangedAfter(projectsDir, '.jsonl', since ?? null);
 
     for (const filePath of files) {
       const parsed = await this.processSessionFile(filePath);
@@ -131,6 +131,22 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
 
     if (!projectPath) {
       return null;
+    }
+
+    // App-created sessions are keyed by an app id, so disk-discovered provider
+    // ids must be resolved through the provider-id mapping first. A name the
+    // app already set — a sidebar rename or an earlier scan's pick — is kept:
+    // the transcript only offers its first prompt, which is a weaker name, and
+    // a rescan (the watcher, or a modified-file scan) must not roll it back.
+    const existingSession = sessionsDb.getSessionByProviderSessionId(sessionId)
+      ?? sessionsDb.getSessionById(sessionId);
+    const existingSessionName = existingSession?.custom_name;
+    if (existingSessionName && existingSessionName !== 'Untitled Cursor Session') {
+      return {
+        sessionId,
+        projectPath,
+        sessionName: normalizeSessionName(existingSessionName, 'Untitled Cursor Session'),
+      };
     }
 
     return extractFirstValidJsonlData(filePath, (rawData) => {

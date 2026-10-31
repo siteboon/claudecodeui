@@ -558,6 +558,16 @@ export const runMigrations = (db: Database) => {
     }
 
     db.exec(LAST_SCANNED_AT_SQL);
+    // A cursor recorded before this column existed came from an older scanner
+    // whose semantics may have skipped files; a NULL kind makes the first
+    // post-upgrade scan a full rescan.
+    addColumnToTableIfNotExists(
+      db,
+      'scan_state',
+      getTableInfo(db, 'scan_state').map((column) => column.name),
+      'cursor_kind',
+      'TEXT'
+    );
     console.log('Database migrations completed successfully');
   } catch (error: any) {
     console.error('Error running migrations:', error.message);
