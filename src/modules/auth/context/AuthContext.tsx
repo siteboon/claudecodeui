@@ -218,8 +218,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const userResponse = await api.auth.user();
-      if (!userResponse.ok) {
+      if (userResponse.status === 401 || userResponse.status === 403) {
         clearSession();
+        return;
+      }
+
+      // Any other failure (a restarting server behind a proxy, or the Vite dev
+      // proxy's 500 while the backend is down) says nothing about the token.
+      // Keep it, so a reload signs the user back in once the server answers.
+      if (!userResponse.ok) {
+        setError(tRef.current(AUTH_ERROR_MESSAGES.authStatusCheckFailed));
         return;
       }
 
