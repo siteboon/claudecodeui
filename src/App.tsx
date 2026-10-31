@@ -6,7 +6,7 @@ import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
 import { AuthProvider, ProtectedRoute } from '@/modules/auth';
 import { TaskMasterProvider,TasksSettingsProvider } from '@/modules/task-master';
 import { WebSocketProvider } from '@/shared/context/WebSocketContext';
-import { PluginsProvider } from '@/modules/plugins';
+import { PluginGlobalAssets, PluginsProvider } from '@/modules/plugins';
 import { ProjectWorkspaceRoute } from '@/modules/project-workspace';
 import { i18n } from '@/modules/i18n';
 
@@ -105,7 +105,7 @@ function detectRouterBasename() {
   return detectedBasename;
 }
 
-/** Rendered by main.tsx; mounts the shared providers, the auth gate and the project workspace routes. */
+/** Rendered by main.tsx; mounts the shared providers, the auth gate, plugins' global assets and the project workspace routes. */
 export default function App() {
   const routerBasename = detectRouterBasename();
 
@@ -119,6 +119,7 @@ export default function App() {
               <TasksSettingsProvider>
                 <TaskMasterProvider>
                 <ProtectedRoute>
+                  <PluginGlobalAssets />
                   <Router basename={routerBasename}>
                     <Routes>
                       <Route path="/" element={<ProjectWorkspaceRoute />} />

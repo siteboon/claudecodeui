@@ -1244,6 +1244,9 @@ export type Plugin = {
   slot: 'tab';
   entry: string;
   server: string | null;
+  // Asset paths loaded on every page after login, not only when the tab opens.
+  scripts: string[];
+  styles: string[];
   permissions: string[];
   enabled: boolean;
   serverRunning: boolean;
