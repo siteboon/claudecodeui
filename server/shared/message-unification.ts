@@ -387,9 +387,10 @@ function capSerializedParts(content: string): string | null {
   }
 
   const parts = omitImageData(parsed) as unknown[];
+  // Each trimmed part's full text and how much of it is kept, so a second
+  // pass trims the original rather than stacking a second marker.
+  const trimmed = new Map<number, { original: string; keep: number }>();
   let serialized = JSON.stringify(parts);
-  // Escaping makes the serialized length differ from the text length, so
-  // trim the longest text part and measure again until it fits.
   while (serialized.length > MAX_TOOL_RESULT_CONTENT) {
     let longest = -1;
     let longestLength = 0;
@@ -405,9 +406,15 @@ function capSerializedParts(content: string): string | null {
     }
 
     const record = readObjectRecord(parts[longest]) as AnyRecord;
-    const text = record.text as string;
-    const keep = Math.max(0, text.length - (serialized.length - MAX_TOOL_RESULT_CONTENT) - 64);
-    parts[longest] = { ...record, text: `${text.slice(0, keep)}\n… ${text.length - keep} more characters` };
+    const current = record.text as string;
+    const { original, keep: kept } = trimmed.get(longest) ?? { original: current, keep: current.length };
+    // Escaping makes a character cost one to six in the serialized form, so
+    // scale the cut by what this part's text actually costs there.
+    const cost = JSON.stringify(current).length;
+    const budget = MAX_TOOL_RESULT_CONTENT - (serialized.length - cost) - 64;
+    const keep = budget <= 0 ? 0 : Math.max(0, Math.min(kept - 1, Math.floor((kept * budget) / cost)));
+    trimmed.set(longest, { original, keep });
+    parts[longest] = { ...record, text: `${original.slice(0, keep)}\n… ${original.length - keep} more characters` };
     const next = JSON.stringify(parts);
     // The text is already as short as it gets: something other than text
     // makes the array large, so let the plain string cap take it.

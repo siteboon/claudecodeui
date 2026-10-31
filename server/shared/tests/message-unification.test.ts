@@ -245,6 +245,8 @@ test('a content array too big even without images is capped and stays parseable'
   const content = JSON.parse(serialized);
   assert.equal(content[0].text, 'short note', 'the small part is left alone');
   assert.match(content[1].text, /… \d+ more characters$/);
+  assert.ok(content[1].text.length > 20_000, 'as much text is kept as fits, not cut to nothing');
+  assert.equal(content[1].text.match(/more characters/g)?.length, 1, 'one marker, not one per pass');
 });
 
 test('a search result keeps every file it found', () => {
