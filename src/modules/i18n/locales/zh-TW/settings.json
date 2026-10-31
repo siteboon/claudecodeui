@@ -333,6 +333,23 @@
     }
   },
   "agents": {
+    "codexApi": {
+      "title": "使用 API Key 連線",
+      "description": "獨立設定此 CloudCLI 的模型介面，無需登入 Codex 帳號。",
+      "baseUrl": "介面位址（Base URL）",
+      "provider": "Provider 識別碼",
+      "providerHelp": "填寫與既有 Codex 工作階段相同的自訂識別碼，例如 aicode。這會影響恢復清單顯示哪些工作階段；修改後需重新建立已開啟的終端。",
+      "apiKey": "API Key",
+      "keepKey": "已設定，留空保留現有金鑰",
+      "enterKey": "輸入 API Key",
+      "protocol": "介面需要支援 Responses API。模型在現有模型選擇器中選擇。",
+      "save": "儲存 API 設定",
+      "clear": "移除 API 設定",
+      "saved": "已儲存，新請求立即生效；尚未驗證金鑰是否有效。",
+      "cleared": "API 設定已移除。",
+      "failed": "儲存 API 設定失敗。"
+    },
+
     "authStatus": {
       "checking": "檢查中...",
       "connected": "已連線",

@@ -380,6 +380,23 @@
     }
   },
   "agents": {
+    "codexApi": {
+      "title": "Connect with an API key",
+      "description": "Configure this CloudCLI installation independently of Codex account login.",
+      "baseUrl": "Base URL",
+      "provider": "Provider ID",
+      "providerHelp": "Use the same custom provider ID as your existing Codex sessions (for example, aicode). This affects which sessions appear in resume. Restart open terminals after changing it.",
+      "apiKey": "API Key",
+      "keepKey": "Configured — leave blank to keep the saved key",
+      "enterKey": "Enter your API key",
+      "protocol": "The endpoint must support the Responses API. Select a model in the existing model picker.",
+      "save": "Save API configuration",
+      "clear": "Remove API configuration",
+      "saved": "Saved. New requests will use these settings; the key has not been tested.",
+      "cleared": "API configuration removed.",
+      "failed": "Could not save API configuration."
+    },
+
     "authStatus": {
       "checking": "Checking...",
       "connected": "Connected",
