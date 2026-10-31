@@ -223,6 +223,30 @@ test('an MCP screenshot result drops its image data and stays parseable', () => 
   assert.equal(nested[1].source?.data, '');
 });
 
+test('a content array too big even without images is capped and stays parseable', () => {
+  // Quotes and newlines escape to two characters each, so the serialized
+  // length is not the text length.
+  const parts = [
+    { type: 'text', text: 'short note' },
+    { type: 'text', text: 'line "quoted"\n'.repeat(10_000) },
+  ];
+  const [unified] = prepareTranscriptMessages([
+    message({
+      kind: 'tool_use',
+      toolName: 'mcp__fusion__fusion_mcp_execute',
+      toolId: 'f1',
+      toolInput: {},
+      toolResult: { content: JSON.stringify(parts) },
+    }),
+  ]);
+
+  const serialized = String(unified.toolResult?.content);
+  assert.ok(serialized.length <= 40_000, 'the array must fit the cap');
+  const content = JSON.parse(serialized);
+  assert.equal(content[0].text, 'short note', 'the small part is left alone');
+  assert.match(content[1].text, /… \d+ more characters$/);
+});
+
 test('a search result keeps every file it found', () => {
   const filenames = Array.from({ length: 900 }, (_, index) => `/repo/src/file-${index}.ts`);
   const [unified] = prepareTranscriptMessages([

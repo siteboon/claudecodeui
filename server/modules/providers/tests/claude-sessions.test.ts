@@ -696,6 +696,22 @@ test('a live MCP screenshot result reaches the client without its image data', (
   assert.equal(forwarded[1].source?.data, '');
 });
 
+test('a tool result with no content still normalizes', () => {
+  const [normalized] = new ClaudeSessionsProvider().normalizeMessage({
+    type: 'user',
+    session_id: SESSION_ID,
+    parent_tool_use_id: null,
+    uuid: 'empty-result-live',
+    message: {
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 'toolu_empty' }],
+    },
+  }, SESSION_ID);
+
+  assert.equal(normalized?.kind, 'tool_result');
+  assert.equal(normalized?.content, undefined);
+});
+
 const WORKFLOW_SESSION_ID = 'claude-workflow-session';
 const WORKFLOW_TOOL_USE_ID = 'toolu_workflow_1';
 const WORKFLOW_RUN_ID = 'wf_16fbf852-274';

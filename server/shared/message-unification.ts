@@ -367,17 +367,56 @@ export function omitImageData(value: unknown): unknown {
   });
 }
 
-function omitImageDataFromSerialized(content: string): string {
-  // Only an oversized result is worth parsing; a small one is shown as it is.
-  if (content.length <= MAX_TOOL_RESULT_CONTENT || !content.startsWith('[')) {
-    return content;
+/**
+ * Caps a serialized content array by shortening its text parts, so the
+ * result is still an array the client can parse.
+ *
+ * Cutting the serialized string instead would end it mid-part, and the
+ * client would fall back to drawing the raw JSON. Returns null when the
+ * content is not a JSON array, leaving it to the plain string cap.
+ */
+function capSerializedParts(content: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) {
+    return null;
   }
 
-  try {
-    return JSON.stringify(omitImageData(JSON.parse(content)));
-  } catch {
-    return content;
+  const parts = omitImageData(parsed) as unknown[];
+  let serialized = JSON.stringify(parts);
+  // Escaping makes the serialized length differ from the text length, so
+  // trim the longest text part and measure again until it fits.
+  while (serialized.length > MAX_TOOL_RESULT_CONTENT) {
+    let longest = -1;
+    let longestLength = 0;
+    parts.forEach((part, index) => {
+      const text = readObjectRecord(part)?.text;
+      if (typeof text === 'string' && text.length > longestLength) {
+        longest = index;
+        longestLength = text.length;
+      }
+    });
+    if (longest === -1) {
+      return null;
+    }
+
+    const record = readObjectRecord(parts[longest]) as AnyRecord;
+    const text = record.text as string;
+    const keep = Math.max(0, text.length - (serialized.length - MAX_TOOL_RESULT_CONTENT) - 64);
+    parts[longest] = { ...record, text: `${text.slice(0, keep)}\n… ${text.length - keep} more characters` };
+    const next = JSON.stringify(parts);
+    // The text is already as short as it gets: something other than text
+    // makes the array large, so let the plain string cap take it.
+    if (next.length >= serialized.length) {
+      return null;
+    }
+    serialized = next;
   }
+  return serialized;
 }
 
 /**
@@ -385,10 +424,20 @@ function omitImageDataFromSerialized(content: string): string {
  *
  * Exported for the live stream, which sends each result as it arrives rather
  * than through `prepareTranscriptMessages`. Without it a running session hands
- * the client every screenshot at full size.
+ * the client every screenshot at full size. A result with no content stays
+ * without one.
  */
-export function capToolResultContent(content: string): string {
-  return truncateOutput(omitImageDataFromSerialized(content));
+export function capToolResultContent(content: string | undefined): string | undefined {
+  if (typeof content !== 'string' || content.length <= MAX_TOOL_RESULT_CONTENT) {
+    return content;
+  }
+  if (content.startsWith('[')) {
+    const capped = capSerializedParts(content);
+    if (capped !== null) {
+      return capped;
+    }
+  }
+  return truncateOutput(content);
 }
 
 function capToolResult(message: NormalizedMessage): void {
