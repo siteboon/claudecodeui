@@ -257,3 +257,30 @@ test('signing in before onboarding shows onboarding without mounting the workspa
   assert.notEqual(localStorage.getItem('auth-token'), null);
   assert.equal(workspaceMounts, 0);
 });
+
+test('a refresh that finishes behind a newer token publishes the token storage kept', async () => {
+  const agedToken = makeToken(nowSeconds() - 4 * 86400);
+  const answeredToken = makeToken(nowSeconds() - 60);
+  const newestToken = makeToken(nowSeconds());
+  localStorage.setItem('auth-token', agedToken);
+
+  const baseFetch = vi.mocked(fetch).getMockImplementation()!;
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === '/api/auth/refresh') {
+      // Another request's X-Refreshed-Token lands first with a newer token.
+      storeAuthToken(newestToken);
+      return new Response(JSON.stringify({ token: answeredToken }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return baseFetch(url, init);
+  }));
+
+  renderApp();
+  await screen.findByText('workspace');
+  await waitFor(() => assert.equal(localStorage.getItem('auth-token'), newestToken));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+
+  assert.equal(localStorage.getItem('auth-token'), newestToken, 'storage keeps the newer token');
+  assert.equal(seenToken, newestToken, 'and the app publishes it, not the older answer');
+});
