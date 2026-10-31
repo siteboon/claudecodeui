@@ -177,6 +177,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       normalizeProviderTimestamp(row.time_created),
       normalizeProviderTimestamp(row.time_updated ?? row.time_created),
       null,
+      existingName ?? null,
     );
   }
 
