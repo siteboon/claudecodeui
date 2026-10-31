@@ -607,8 +607,9 @@ test('OpenCode sessions provider shows a live question call as the question card
   });
 
   assert.equal(message?.toolName, 'AskUserQuestion');
-  assert.equal((message?.toolInput as any).questions[1].multiSelect, true);
-  assert.deepEqual((message?.toolInput as any).answers, { 'Which color?': 'Red', 'Which sizes?': 'Small, Large, wide' });
+  const input = message?.toolInput as { questions: Array<{ multiSelect?: boolean }>; answers?: unknown } | undefined;
+  assert.equal(input?.questions[1]?.multiSelect, true);
+  assert.deepEqual(input?.answers, { 'Which color?': 'Red', 'Which sizes?': 'Small, Large, wide' });
   assert.equal(message?.toolResult?.isError, false);
 });
 
@@ -654,7 +655,8 @@ test('OpenCode history hides the error of a stopped turn and shows question call
 
     const card = history.messages.find((message) => message.toolId === 'call_q');
     assert.equal(card?.toolName, 'AskUserQuestion');
-    assert.deepEqual((card?.toolInput as any).answers, { 'Which color?': 'Red', 'Which sizes?': 'Small, Large, wide' });
+    const cardInput = card?.toolInput as { answers?: unknown } | undefined;
+    assert.deepEqual(cardInput?.answers, { 'Which color?': 'Red', 'Which sizes?': 'Small, Large, wide' });
   } finally {
     restoreHomeDir();
     await rm(tempRoot, { recursive: true, force: true });

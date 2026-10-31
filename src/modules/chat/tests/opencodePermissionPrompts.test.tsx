@@ -16,6 +16,8 @@ import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequests
 
 type Decision = { ids: string | string[]; decision: Record<string, unknown> };
 
+// Element checks compare booleans: a failing `assert.equal(element, null)` makes
+// node:assert print the jsdom element, whose object graph exhausts memory.
 const renderBanner = (requests: PendingPermissionRequest[], providerLabel: string) => {
   const decisions: Decision[] = [];
   const grants: unknown[] = [];
@@ -68,8 +70,8 @@ test('an OpenCode permission shows what Always allow covers and answers with Ope
   assert.ok(getByText('git status *'));
   assert.ok(getByText(/Always allow covers/));
   // Claude's allow-rule line and its settings-backed button do not apply.
-  assert.equal(queryByText(/Allow rule/), null);
-  assert.equal(queryByText('Allow & remember'), null);
+  assert.equal(queryByText(/Allow rule/) === null, true);
+  assert.equal(queryByText('Allow & remember') === null, true);
 
   fireEvent.click(getByText('Always allow'));
   assert.deepEqual(decisions, [{ ids: 'per_1', decision: { allow: true, rememberEntry: 'always' } }]);
@@ -116,7 +118,7 @@ test('an OpenCode question is answered with one label list per question, in opti
     ids: 'que_1',
     decision: { allow: true, updatedInput: { answers: [['Red'], ['Small', 'Large, wide']] } },
   }]);
-  assert.equal(queryByText('Skip all'), null);
+  assert.equal(queryByText('Skip all') === null, true);
 });
 
 test('an OpenCode question is dismissed, not skipped', () => {
@@ -141,7 +143,7 @@ test('a question that offers its options only has no typed answer', () => {
   }], 'OpenCode');
 
   assert.ok(getByText('Yes'));
-  assert.equal(queryByText('Other...'), null);
+  assert.equal(queryByText('Other...') === null, true);
 });
 
 test('a Claude question keeps Skip and its answers keyed by question text', () => {
