@@ -64,6 +64,7 @@
 - **Plugin System** - Extend CloudCLI with custom plugins — add new tabs, backend services, and integrations. [Build your own →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation
 - **Model Compatibility** - Works with Claude and GPT model families (the full list of supported models is available at runtime via `GET /api/providers/:provider/models`)
+- **Dynamic Codex Models** - Chat reads visible models, defaults, and reasoning efforts from the CLI's `app-server model/list`. A 60-second memory cache coalesces requests; visible Codex Chat checks every minute and on returning to the window/tab. Failed discovery retains the last successful list, or bundled defaults before the first success. Custom models remain available. See [feature details](features.md) and the [feature changelog](docs/changelog.md). Source deployments apply this change with `npm run build` and a restart of their existing CloudCLI service.
 
 
 ## Quick Start
@@ -275,3 +276,5 @@ CloudCLI UI - (https://cloudcli.ai).
 <div align="center">
  <strong>Made with care for the Claude Code, Cursor and Codex community.</strong>
 </div>
+
+Documentation maintenance (2026-10-12): manual records live in [docs/changelog.md](docs/changelog.md); root `CHANGELOG.md` remains release-generated. No case-only duplicate file is required. This documentation correction does not change runtime behavior or require a service restart.
