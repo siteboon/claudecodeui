@@ -12,3 +12,10 @@ export { sessionsService } from './services/sessions.service.js';
 
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
+
+export { pluginProvidersStore, type PluginProviderMeta } from './plugin-providers.store.js';
+export { providerRegistry } from './provider.registry.js';
+export { McpProvider } from './shared/mcp/mcp.provider.js';
+export { SkillsProvider } from './shared/skills/skills.provider.js';
+
+

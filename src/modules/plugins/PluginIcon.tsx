@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId, useMemo } from 'react';
 import DOMPurify from 'dompurify';
 
 import { api } from '@/shared/api';
@@ -54,6 +54,18 @@ function sanitizeSvg(svgText: string): string | null {
   }
 }
 
+/**
+ * Suffixes every id in the SVG, and every `url(#id)` reference to one, with
+ * `scope`. The same icon is often inlined several times on one page; with
+ * shared ids each copy's masks and filters resolve to the first copy, which
+ * breaks rendering when that copy is hidden.
+ */
+function scopeSvgIds(svg: string, scope: string): string {
+  return svg
+    .replace(/\bid="([^"]+)"/g, (_match, id: string) => `id="${id}-${scope}"`)
+    .replace(/url\(#([^)]+)\)/g, (_match, id: string) => `url(#${id}-${scope})`);
+}
+
 /** Used by the project-workspace module's tab bar and by this module's PluginSettingsTab to show a plugin's icon. */
 export default function PluginIcon({ pluginName, iconFile, className }: Props) {
   const url = iconFile ? api.plugins.assetUrl(pluginName, iconFile) : '';
@@ -77,9 +89,12 @@ export default function PluginIcon({ pluginName, iconFile, className }: Props) {
       .catch(() => {});
   }, [url, pluginName, iconFile]);
 
-  if (!svg) return <span className={className} />;
+  const scope = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const scopedSvg = useMemo(() => (svg ? scopeSvgIds(svg, scope) : null), [svg, scope]);
+
+  if (!scopedSvg) return <span className={className} />;
 
   return (
-    <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />
+    <span className={className} dangerouslySetInnerHTML={{ __html: scopedSvg }} />
   );
 }

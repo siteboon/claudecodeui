@@ -1,5 +1,6 @@
 import spawn from 'cross-spawn';
 
+import { pluginProvidersStore } from '@/modules/providers/plugin-providers.store.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
@@ -175,6 +176,12 @@ function formatCommand(command: string, args: string[]): string {
   return [command, ...args].map(quote).join(' ');
 }
 
+/**
+ * Resolves the display label for a provider, checking built-in names then plugin metadata.
+ *
+ * @param provider - Provider ID to look up.
+ * @returns Human-readable label for the provider.
+ */
 function getProviderLabel(provider: LLMProvider): string {
   const labels: Record<LLMProvider, string> = {
     claude: 'Claude Code',
@@ -182,7 +189,7 @@ function getProviderLabel(provider: LLMProvider): string {
     cursor: 'Cursor CLI',
     opencode: 'OpenCode',
   };
-  return labels[provider];
+  return labels[provider] ?? pluginProvidersStore.get(provider)?.meta.label ?? provider;
 }
 
 /**
@@ -358,7 +365,17 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
     return lookup;
   };
 
+  /**
+   * Resolves the update command and arguments for a provider, checking plugin metadata first.
+   *
+   * @param provider - Provider ID to check update command for.
+   * @returns Command and args object, or null if the provider is not updatable.
+   */
   const resolveUpdateCommand = (provider: LLMProvider): { command: string; args: string[] } | null => {
+    const pluginUpdater = pluginProvidersStore.get(provider)?.meta.cliUpdater;
+    if (pluginUpdater) {
+      return { command: pluginUpdater.command, args: pluginUpdater.args };
+    }
     const updater = CLI_UPDATERS[provider];
     const command = updater?.resolveCommand();
     return updater && command ? { command, args: updater.args } : null;

@@ -36,7 +36,7 @@ import BackgroundSendDialog from '@/modules/chat/composer/BackgroundSendDialog';
 import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessagePopover';
 import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
 import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
-import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
+import ComposerPermissionMenu, { type PermissionModeOptions } from '@/modules/chat/composer/ComposerPermissionMenu';
 
 type MentionableFile = {
   name: string;
@@ -55,6 +55,7 @@ type ChatComposerProps = {
   onAbortSession: () => void;
   permissionMode: PermissionMode;
   availablePermissionModes: PermissionMode[];
+  permissionModeOptions?: PermissionModeOptions;
   onSelectPermissionMode: (mode: PermissionMode) => void;
   providerLabel: string;
   effort: string;
@@ -132,6 +133,7 @@ export default function ChatComposer({
   onAbortSession,
   permissionMode,
   availablePermissionModes,
+  permissionModeOptions,
   onSelectPermissionMode,
   providerLabel,
   effort,
@@ -501,6 +503,7 @@ export default function ChatComposer({
             <ComposerPermissionMenu
               permissionMode={permissionMode}
               permissionModes={availablePermissionModes}
+              permissionModeOptions={permissionModeOptions}
               onSelectPermissionMode={onSelectPermissionMode}
               providerLabel={providerLabel}
             />

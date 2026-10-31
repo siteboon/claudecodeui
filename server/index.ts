@@ -36,6 +36,7 @@ import notificationRoutes from './modules/notifications/notifications.routes.js'
 import { userRoutes } from './modules/user/index.js';
 import {
     getPluginPort,
+    loadProviderPlugins,
     pluginsRoutes,
     startEnabledPluginServers,
     stopAllPlugins,
@@ -336,6 +337,9 @@ async function startServer() {
 
         // Configure Web Push (VAPID keys)
         configureWebPush();
+
+        // Chat providers from plugins, registered before the session watcher indexes sessions
+        await loadProviderPlugins();
 
         // Check if running in production mode (dist folder exists)
         const distIndexPath = path.join(APP_ROOT, 'dist', 'index.html');

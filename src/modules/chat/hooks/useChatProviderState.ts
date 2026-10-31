@@ -11,6 +11,7 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
+import { usePluginProviders, withPluginProviderIds } from '@/shared/providerRegistry';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
   // Superset used only before the model catalog loads; `ultracode` belongs to the
@@ -56,6 +57,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
 type ProviderCapabilities = {
   provider: LLMProvider;
   permissionModes: string[];
+  permissionModeOptions?: Record<string, { label: string; description: string }>;
   defaultPermissionMode: string;
   supportsImages: boolean;
   supportsFiles: boolean;
@@ -124,6 +126,12 @@ const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): strin
   `${provider}:${sessionId}`
 );
 
+/**
+ * Manages provider, model, capability, and permission state for the chat interface.
+ *
+ * @param args - The hook arguments containing the selected session and project.
+ * @returns An object containing the current provider state, models, and action handlers.
+ */
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
@@ -135,14 +143,14 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   // must restore the model that provider was last used with, and the catalogue
   // that validates them arrives asynchronously per provider.
   const [providerModels, setProviderModels] = useState<Record<LLMProvider, string>>(() => {
-    return PROVIDERS.reduce<Record<LLMProvider, string>>((acc, targetProvider) => {
+    return withPluginProviderIds(PROVIDERS).reduce<Record<LLMProvider, string>>((acc, targetProvider) => {
       acc[targetProvider] = localStorage.getItem(providerModelStorageKey(targetProvider))
-        || FALLBACK_DEFAULT_MODEL[targetProvider];
+        || (FALLBACK_DEFAULT_MODEL[targetProvider] ?? '');
       return acc;
     }, {} as Record<LLMProvider, string>);
   });
   const [providerEfforts, setProviderEfforts] = useState<Partial<Record<LLMProvider, string>>>(() => {
-    return PROVIDERS.reduce<Partial<Record<LLMProvider, string>>>((acc, targetProvider) => {
+    return withPluginProviderIds(PROVIDERS).reduce<Partial<Record<LLMProvider, string>>>((acc, targetProvider) => {
       acc[targetProvider] = localStorage.getItem(`${targetProvider}-effort`) || DEFAULT_EFFORT_VALUE;
       return acc;
     }, {});
@@ -163,6 +171,21 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     Partial<Record<LLMProvider, ProviderModelsDefinition>>
   >({});
   const [providerModelsLoading, setProviderModelsLoading] = useState(true);
+
+  // Built-ins plus plugin providers; grows once the plugin registry has loaded.
+  const pluginProviders = usePluginProviders();
+  const providerIds = useMemo(() => withPluginProviderIds(PROVIDERS), [pluginProviders]);
+
+  useEffect(() => {
+    if (selectedSession?.__provider) {
+      return;
+    }
+
+    const persistedProvider = readSelectedProvider();
+    if (persistedProvider !== provider) {
+      setProvider(persistedProvider);
+    }
+  }, [pluginProviders, provider, selectedSession?.__provider]);
 
   const providerModelsRequestIdRef = useRef(0);
   const sessionSelectionLoadRequestIdRef = useRef(0);
@@ -196,7 +219,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       // Each provider lands in the catalog as soon as it answers, so a slow
       // one (OpenCode shells out to its CLI) cannot hold back the others.
       await Promise.all(
-        PROVIDERS.map(async (p) => {
+        providerIds.map(async (p) => {
           try {
             const response = await api.providers.models(p);
             const body = (await response.json()) as ProviderModelsApiResponse;
@@ -216,7 +239,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
         setProviderModelsLoading(false);
       }
     }
-  }, []);
+  }, [providerIds]);
 
   useEffect(() => {
     void loadProviderModels();
@@ -350,7 +373,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   useEffect(() => {
     const reconciledModels: Partial<Record<LLMProvider, string>> = {};
 
-    for (const targetProvider of PROVIDERS) {
+    for (const targetProvider of providerIds) {
       const catalog = providerModelCatalog[targetProvider];
       if (!catalog) {
         continue;
@@ -371,13 +394,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (Object.keys(reconciledModels).length > 0) {
       setProviderModels((previous) => ({ ...previous, ...reconciledModels }));
     }
-  }, [providerModelCatalog, providerModels]);
+  }, [providerIds, providerModelCatalog, providerModels]);
 
   useEffect(() => {
     const nextEfforts: Partial<Record<LLMProvider, string>> = {};
     let hasUpdates = false;
 
-    for (const targetProvider of PROVIDERS) {
+    for (const targetProvider of providerIds) {
       const currentEffort = providerEfforts[targetProvider] ?? DEFAULT_EFFORT_VALUE;
       const nextEffort = reconcileStoredEffort(targetProvider, providerModels[targetProvider], currentEffort);
       if (nextEffort === currentEffort) {
@@ -392,7 +415,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     if (hasUpdates) {
       setProviderEfforts((previous) => ({ ...previous, ...nextEfforts }));
     }
-  }, [providerEfforts, providerModels, reconcileStoredEffort]);
+  }, [providerEfforts, providerIds, providerModels, reconcileStoredEffort]);
 
   useEffect(() => {
     const validModes = getPermissionModesForProvider(provider);
@@ -827,6 +850,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     pendingPermissionRequests,
     setPendingPermissionRequests,
     availablePermissionModes,
+    permissionModeOptions: providerCapabilities?.[provider]?.permissionModeOptions,
     selectPermissionMode,
     cyclePermissionMode,
     providerModelCatalog,

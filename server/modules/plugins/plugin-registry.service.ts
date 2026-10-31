@@ -27,7 +27,8 @@ function sanitizeRepoUrl(raw) {
   }
 }
 const ALLOWED_TYPES = ['react', 'module'];
-const ALLOWED_SLOTS = ['tab'];
+// 'provider' plugins add a chat provider instead of a tab (provider-plugin-loader.ts).
+const ALLOWED_SLOTS = ['tab', 'provider'];
 
 export function getPluginsDir() {
   if (!fs.existsSync(PLUGINS_DIR)) {
@@ -88,6 +89,16 @@ export function validateManifest(manifest) {
     if (typeof manifest.server !== 'string' || manifest.server.includes('..') || path.isAbsolute(manifest.server)) {
       return { valid: false, error: 'Server entry must be a relative path string without ".."' };
     }
+  }
+
+  if (manifest.provider !== undefined && manifest.provider !== null) {
+    if (typeof manifest.provider !== 'string' || manifest.provider.includes('..') || path.isAbsolute(manifest.provider)) {
+      return { valid: false, error: 'Provider entry must be a relative path string without ".."' };
+    }
+  }
+
+  if (manifest.slot === 'provider' && !manifest.provider) {
+    return { valid: false, error: 'Provider plugins must declare a "provider" entry' };
   }
 
   if (manifest.permissions !== undefined) {
@@ -215,6 +226,7 @@ export function scanPlugins() {
         slot: manifest.slot || 'tab',
         entry: manifest.entry,
         server: manifest.server || null,
+        provider: manifest.provider || null,
         permissions: manifest.permissions || [],
         enabled: config[manifest.name]?.enabled !== false, // enabled by default
         dirName: entry.name,

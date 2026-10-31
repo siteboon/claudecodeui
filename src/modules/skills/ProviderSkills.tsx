@@ -25,6 +25,7 @@ import {
   Input,
 } from '@/shared/ui';
 import { useProviderSkills } from '@/modules/skills/hooks/useProviderSkills';
+import { getPluginProvider, getPluginProviderLabel } from '@/shared/providerRegistry';
 import type { ProviderSkill, ProviderSkillCreateEntryPayload, SkillsProject, SkillsProvider, SkillsScope } from '@/shared/types';
 
 type ProviderSkillsProps = {
@@ -205,8 +206,10 @@ export default function ProviderSkills({ selectedProvider, currentProjects }: Pr
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
 
-  const providerName = PROVIDER_NAMES[selectedProvider];
-  const providerPath = selectedProvider === 'opencode' ? null : PROVIDER_SKILL_PATHS[selectedProvider];
+  const providerName = PROVIDER_NAMES[selectedProvider] ?? getPluginProviderLabel(selectedProvider, selectedProvider);
+  const providerPath = selectedProvider === 'opencode'
+    ? null
+    : PROVIDER_SKILL_PATHS[selectedProvider] ?? (getPluginProvider(selectedProvider)?.capabilities.skillsPath as string | undefined) ?? null;
 
   useEffect(() => {
     setQueuedFiles([]);

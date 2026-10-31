@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 
+import { pluginProvidersStore, providerRegistry } from './index.js';
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
@@ -321,6 +322,11 @@ const parseProvider = (value: unknown): LLMProvider => {
     || normalized === 'opencode'
   ) {
     return normalized;
+  }
+
+  // Plugin provider ids are outside the LLMProvider union by design.
+  if (providerRegistry.hasProvider(normalized)) {
+    return normalized as LLMProvider;
   }
 
   throw new AppError(`Unsupported provider "${normalized}".`, {
@@ -852,6 +858,28 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     res.json(createApiSuccessResponse({
       providers: providerCapabilitiesService.listAllProviderCapabilities(),
+    }));
+  }),
+);
+
+/**
+ * GET /api/providers/registry
+ * Returns providers loaded from plugins, with what the UI needs to show them (built-ins are hard-coded there).
+ */
+router.get(
+  '/registry',
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.json(createApiSuccessResponse({
+      providers: pluginProvidersStore.list().map(({ pluginName, pluginIcon, hasSettingsPanel, provider, meta }) => ({
+        id: provider.id,
+        pluginName,
+        pluginIcon,
+        label: meta.label,
+        description: meta.description ?? '',
+        loginCommand: meta.loginCommand ?? null,
+        capabilities: meta.capabilities,
+        settingsPanel: hasSettingsPanel,
+      })),
     }));
   }),
 );

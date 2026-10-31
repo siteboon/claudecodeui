@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
 import { StandaloneShell } from '@/modules/standalone-shell';
+import { getPluginProvider } from '@/shared/providerRegistry';
 import { IS_PLATFORM } from '@/shared/utils';
 import type { LLMProvider } from '@/shared/types';
 
@@ -59,6 +60,11 @@ const getProviderCommand = ({
     return 'opencode auth login';
   }
 
+  const pluginLoginCommand = getPluginProvider(provider)?.loginCommand;
+  if (pluginLoginCommand) {
+    return pluginLoginCommand;
+  }
+
   return 'claude --dangerously-skip-permissions /login';
 };
 
@@ -67,6 +73,8 @@ const getProviderTitle = (provider: LLMProvider) => {
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';
   if (provider === 'opencode') return 'OpenCode CLI Login';
+  const pluginLabel = getPluginProvider(provider)?.label;
+  if (pluginLabel) return `${pluginLabel} CLI Login`;
   return 'Claude CLI Login';
 };
 

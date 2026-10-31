@@ -25,6 +25,7 @@ import {
 import ModelGroupList, { type ModelGroup } from "@/modules/chat/composer/ModelGroupList";
 import ModelLibraryPanel from "@/modules/chat/modals/ModelLibraryPanel";
 import { writeSelectedProvider } from '@/shared/selectedProvider';
+import { getPluginProviderLabel, usePluginProviders } from '@/shared/providerRegistry';
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
@@ -78,7 +79,7 @@ function getProviderDisplayName(p: LLMProvider) {
   if (p === "cursor") return "Cursor";
   if (p === "codex") return "Codex";
   if (p === "opencode") return "OpenCode";
-  return "Claude";
+  return getPluginProviderLabel(p, "Claude");
 }
 
 /**
@@ -107,6 +108,15 @@ export default function ProviderSelectionEmptyState({
 
   const [modelSearch, setModelSearch] = useState("");
 
+  const pluginProviders = usePluginProviders();
+  const providerMeta = useMemo(
+    () => [
+      ...PROVIDER_META,
+      ...pluginProviders.map((plugin) => ({ id: plugin.id, name: plugin.label })),
+    ],
+    [pluginProviders],
+  );
+
   /**
    * Opens and closes the picker, clearing the search on the way out.
    *
@@ -123,13 +133,13 @@ export default function ProviderSelectionEmptyState({
 
   /** One collapsible branch per provider, in the order the picker lists them. */
   const visibleProviderGroups = useMemo<ModelGroup[]>(
-    () => PROVIDER_META.map((meta) => ({
+    () => providerMeta.map((meta) => ({
       key: meta.id,
       provider: meta.id,
       name: meta.name,
       models: providerModelCatalog[meta.id]?.OPTIONS ?? [],
     })),
-    [providerModelCatalog],
+    [providerMeta, providerModelCatalog],
   );
 
   /**
@@ -138,13 +148,13 @@ export default function ProviderSelectionEmptyState({
    * rather than promising built-in models there.
    */
   const customOnlyGroupNames = useMemo(
-    () => PROVIDER_META
+    () => providerMeta
       .filter((meta) => {
         const catalog = providerModelCatalog[meta.id];
         return catalog?.CUSTOM_MODELS_ONLY === true && catalog.OPTIONS.some((option) => option.isCustom);
       })
       .map((meta) => meta.name),
-    [providerModelCatalog],
+    [providerMeta, providerModelCatalog],
   );
 
   const nextTaskPrompt = t("tasks.nextTaskPrompt", {
@@ -329,7 +339,12 @@ export default function ProviderSelectionEmptyState({
                   model: providerModels.opencode,
                   defaultValue: "Ready with OpenCode {{model}}",
                 }),
-              }[provider]
+              }[provider as string]
+              ?? t("providerSelection.readyPrompt.plugin", {
+                provider: getProviderDisplayName(provider),
+                model: currentModelLabel,
+                defaultValue: "Ready with {{provider}} {{model}}",
+              })
             }
           </p>
 

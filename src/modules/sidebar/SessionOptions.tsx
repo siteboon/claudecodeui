@@ -7,7 +7,7 @@ import { cn } from '@/shared/utils';
 import type { LLMProvider } from '@/shared/types';
 import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
-import { PROVIDER_LABELS } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { getSidebarProviderLabel } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 
 type SessionOptionsProps = {
   sessionId: string;
@@ -63,7 +63,7 @@ export default function SessionOptions({
   t,
 }: SessionOptionsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const providerLabel = PROVIDER_LABELS[provider];
+  const providerLabel = getSidebarProviderLabel(provider);
   const { copyState, copyLabel, setOptionsOpen, handleCopyAction, isCopyPending, CopyStateIcon } =
     useProviderSessionIdCopy(sessionId, providerLabel);
 

@@ -4,6 +4,7 @@ import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSetting
 import AgentCategoryContentSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryContentSection';
 import AgentCategoryTabsSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryTabsSection';
 import AgentSelectorSection from '@/modules/settings/tabs/agents-settings/sections/AgentSelectorSection';
+import { usePluginProviders, withPluginProviderIds } from '@/shared/providerRegistry';
 
 type ProviderAuthStatusByProvider = Record<AgentProvider, ProviderAuthStatus>;
 
@@ -33,15 +34,27 @@ export default function AgentsSettingsTab({
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
-  const visibleCategories = useMemo<AgentCategory[]>(() => (
-    selectedAgent === 'opencode'
+  const pluginProviders = usePluginProviders();
+  const visibleCategories = useMemo<AgentCategory[]>(() => {
+    // Plugin providers show only the panels their capabilities declare.
+    const pluginProvider = pluginProviders.find((plugin) => plugin.id === selectedAgent);
+    if (pluginProvider) {
+      return [
+        'account',
+        ...(pluginProvider.settingsPanel ? ['permissions' as const] : []),
+        ...(pluginProvider.capabilities.supportsMcp ? ['mcp' as const] : []),
+        ...(pluginProvider.capabilities.supportsSkills ? ['skills' as const] : []),
+      ];
+    }
+
+    return selectedAgent === 'opencode'
       ? ['account', 'permissions', 'mcp']
-      : ['account', 'permissions', 'mcp', 'skills']
-  ), [selectedAgent]);
+      : ['account', 'permissions', 'mcp', 'skills'];
+  }, [pluginProviders, selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
-    return ['claude', 'cursor', 'codex', 'opencode'];
-  }, []);
+    return withPluginProviderIds(['claude', 'cursor', 'codex', 'opencode']);
+  }, [pluginProviders]);
 
   const agentContextById = useMemo<AgentContextByProvider>(() => ({
     claude: {
@@ -60,12 +73,15 @@ export default function AgentsSettingsTab({
       authStatus: providerAuthStatus.opencode,
       onLogin: () => onProviderLogin('opencode'),
     },
+    ...Object.fromEntries(pluginProviders.map((plugin) => [plugin.id, {
+      authStatus: providerAuthStatus[plugin.id]
+        ?? { authenticated: false, email: null, method: null, error: null, loading: true },
+      onLogin: () => onProviderLogin(plugin.id),
+    }])),
   }), [
     onProviderLogin,
-    providerAuthStatus.claude,
-    providerAuthStatus.codex,
-    providerAuthStatus.cursor,
-    providerAuthStatus.opencode,
+    pluginProviders,
+    providerAuthStatus,
   ]);
 
   useEffect(() => {

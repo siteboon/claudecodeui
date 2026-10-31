@@ -1,3 +1,4 @@
+import { pluginProvidersStore } from '@/modules/providers/plugin-providers.store.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 /**
@@ -126,11 +127,27 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
  * service, which reads `effortLevels` to validate custom-model effort.
  */
 export const providerCapabilitiesService = {
+  /**
+   * Resolves the capabilities object for a given provider, checking built-ins first
+   * and falling back to registered provider plugins.
+   *
+   * @param provider - Provider ID to query capabilities for.
+   * @returns Capabilities description object for the provider.
+   */
   getProviderCapabilities(provider: LLMProvider): ProviderCapabilities {
-    return PROVIDER_CAPABILITIES[provider];
+    return (Object.hasOwn(PROVIDER_CAPABILITIES, provider) ? PROVIDER_CAPABILITIES[provider] : undefined)
+      ?? (pluginProvidersStore.get(provider)?.meta.capabilities as ProviderCapabilities);
   },
 
+  /**
+   * Lists capabilities for all registered providers, including built-ins and plugins.
+   *
+   * @returns Array of ProviderCapabilities objects.
+   */
   listAllProviderCapabilities(): ProviderCapabilities[] {
-    return Object.values(PROVIDER_CAPABILITIES);
+    return [
+      ...Object.values(PROVIDER_CAPABILITIES),
+      ...pluginProvidersStore.list().map((entry) => entry.meta.capabilities as ProviderCapabilities),
+    ];
   },
 };
