@@ -3,6 +3,20 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.7](https://github.com/siteboon/claudecodeui/compare/v1.37.6...v1.37.7) (2026-10-31)
+
+### New Features
+
+* **browser-use:** let the user click and type in the Browser panel ([#1571](https://github.com/siteboon/claudecodeui/issues/1571)) ([a3a51d9](https://github.com/siteboon/claudecodeui/commit/a3a51d906ffb0906428f2fdbd13e2657441e96eb)), closes [#1570](https://github.com/siteboon/claudecodeui/issues/1570)
+* **sidebar:** rename sessions by double-clicking their title ([#1693](https://github.com/siteboon/claudecodeui/issues/1693)) ([fc2de9f](https://github.com/siteboon/claudecodeui/commit/fc2de9ff5742865f0fc51d2dcebb44057120f58a))
+
+### Bug Fixes
+
+* **chat:** keep Enter a newline on on-screen keyboards ([#1602](https://github.com/siteboon/claudecodeui/issues/1602)) ([a11e469](https://github.com/siteboon/claudecodeui/commit/a11e469a56e143865de868ad46a1ce30152e7c14))
+* **chat:** keep the composer buttons on one row as the token count grows ([#1683](https://github.com/siteboon/claudecodeui/issues/1683)) ([383e4f1](https://github.com/siteboon/claudecodeui/commit/383e4f1a67dd41e25a434770278d7707622cf8b4))
+* **claude:** label SDK sessions as claudecodeui ([#1677](https://github.com/siteboon/claudecodeui/issues/1677)) ([154b3b1](https://github.com/siteboon/claudecodeui/commit/154b3b14d350a372dc085a62fa70f7e5e1810305))
+* **sidebar:** offer session forking in the mobile options sheet ([#1597](https://github.com/siteboon/claudecodeui/issues/1597)) ([3491cf9](https://github.com/siteboon/claudecodeui/commit/3491cf9fa4262cf85bfffca4829d565ff959bcdf))
+
 ## [1.37.6](https://github.com/siteboon/claudecodeui/compare/v1.37.5...v1.37.6) (2026-10-27)
 
 ### New Features
