@@ -568,6 +568,8 @@
     "noPluginsInstalled": "未安装插件",
     "pullLatest": "从 git 拉取最新内容",
     "noGitRemote": "无 git 远程仓库 — 无法更新",
+    "residentBadge": "常驻",
+    "residentBadgeTitle": "应用启动后即挂载，不只是打开它的标签页时才生效",
     "uninstallPlugin": "卸载插件",
     "confirmUninstall": "再次点击确认",
     "confirmUninstallMessage": "移除 {{name}}？此操作无法撤销。",

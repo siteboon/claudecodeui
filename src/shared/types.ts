@@ -1245,6 +1245,8 @@ export type Plugin = {
   entry: string;
   server: string | null;
   permissions: string[];
+  /** True when the manifest asks to be mounted for the whole app session, not only while its tab is open. See PluginHostLayer. */
+  alwaysMount: boolean;
   enabled: boolean;
   serverRunning: boolean;
   dirName: string;

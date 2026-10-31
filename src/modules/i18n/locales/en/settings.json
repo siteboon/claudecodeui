@@ -603,6 +603,8 @@
     "noPluginsInstalled": "No plugins installed",
     "pullLatest": "Pull latest from git",
     "noGitRemote": "No git remote — update not available",
+    "residentBadge": "resident",
+    "residentBadgeTitle": "Mounted for the whole app session, not only while its tab is open",
     "uninstallPlugin": "Uninstall plugin",
     "confirmUninstall": "Click again to confirm",
     "confirmUninstallMessage": "Remove {{name}}? This cannot be undone.",
