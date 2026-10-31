@@ -579,6 +579,88 @@ test('OpenCode sessions provider reads sqlite history and token usage', { concur
   }
 });
 
+const QUESTION_TOOL_STATE = {
+  status: 'completed',
+  input: {
+    questions: [
+      { question: 'Which color?', header: 'Color', options: [{ label: 'Red', description: '' }, { label: 'Blue', description: '' }] },
+      {
+        question: 'Which sizes?',
+        header: 'Sizes',
+        multiple: true,
+        options: [{ label: 'Small', description: '' }, { label: 'Large, wide', description: '' }],
+      },
+    ],
+  },
+  output: 'User has answered your questions: "Which color?"="Red", "Which sizes?"="Small, Large, wide".',
+  title: 'Asked 2 questions',
+  // OpenCode keeps the picked labels as one list per question.
+  metadata: { answers: [['Red'], ['Small', 'Large, wide']] },
+  time: { start: 0, end: 1 },
+};
+
+test('OpenCode sessions provider shows a live question call as the question card with its answers', () => {
+  const [message] = normalizeLiveEvent({
+    type: 'tool_use',
+    sessionID: 'ses_1',
+    part: { type: 'tool', tool: 'question', callID: 'call_q', state: QUESTION_TOOL_STATE },
+  });
+
+  assert.equal(message?.toolName, 'AskUserQuestion');
+  assert.equal((message?.toolInput as any).questions[1].multiSelect, true);
+  assert.deepEqual((message?.toolInput as any).answers, { 'Which color?': 'Red', 'Which sizes?': 'Small, Large, wide' });
+  assert.equal(message?.toolResult?.isError, false);
+});
+
+test('OpenCode history hides the error of a stopped turn and shows question calls as question cards', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'opencode-session-stopped-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await createOpenCodeDatabase(tempRoot, workspacePath);
+    const db = new Database(path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db'));
+    try {
+      const insertMessage = db.prepare(
+        'INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)',
+      );
+      const insertPart = db.prepare(
+        'INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)',
+      );
+      // Stopping a turn aborts the session, which stores this on the message it interrupted.
+      insertMessage.run('message-stopped', 'open-session-1', 1_700_000_005_000, 1_700_000_005_000, JSON.stringify({
+        role: 'assistant',
+        error: { name: 'MessageAbortedError', data: { message: 'The operation was aborted.' } },
+      }));
+      insertMessage.run('message-failed', 'open-session-1', 1_700_000_006_000, 1_700_000_006_000, JSON.stringify({
+        role: 'assistant',
+        error: { name: 'APIError', data: { message: 'Rate limit exceeded' } },
+      }));
+      insertPart.run('part-question', 'message-failed', 'open-session-1', 1_700_000_006_000, 1_700_000_006_000, JSON.stringify({
+        type: 'tool',
+        tool: 'question',
+        callID: 'call_q',
+        state: QUESTION_TOOL_STATE,
+      }));
+    } finally {
+      db.close();
+    }
+
+    const history = await new OpenCodeSessionsProvider().fetchHistory('open-session-1');
+    const errors = history.messages.filter((message) => message.kind === 'error');
+    assert.equal(errors.length, 1, 'only the real failure shows as an error');
+    assert.match(String(errors[0]?.content), /Rate limit exceeded/);
+
+    const card = history.messages.find((message) => message.toolId === 'call_q');
+    assert.equal(card?.toolName, 'AskUserQuestion');
+    assert.deepEqual((card?.toolInput as any).answers, { 'Which color?': 'Red', 'Which sizes?': 'Small, Large, wide' });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 /**
  * Seeds a single OpenCode session with a controllable stored title and first
  * user message. Uses a minimal schema (only the columns the synchronizer reads)
