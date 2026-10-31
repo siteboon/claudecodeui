@@ -170,7 +170,22 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "Modo escuro",
-      "description": "Alternar entre temas claro e escuro"
+      "description": "Alternar entre temas claro e escuro",
+      "themeControlled": "Este tema define sua própria aparência clara ou escura"
+    },
+    "colorTheme": {
+      "label": "Tema de cores",
+      "description": "A paleta usada em todo o aplicativo",
+      "remove": "Remover tema",
+      "importFailed": "Não foi possível importar esse tema.",
+      "import": {
+        "label": "Importar um tema do VS Code",
+        "description": "Transforme um arquivo *-color-theme.json ou uma extensão .vsix em uma paleta",
+        "button": "Importar tema",
+        "urlLabel": "Ou cole a URL de uma extensão",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "Buscar"
+      }
     },
     "theme": {
       "label": "Tema",

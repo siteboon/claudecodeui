@@ -171,7 +171,22 @@
   "appearanceSettings": {
     "darkMode": {
       "label": "מצב כהה",
-      "description": "מעבר בין ערכת נושא בהירה לכהה"
+      "description": "מעבר בין ערכת נושא בהירה לכהה",
+      "themeControlled": "ערכת הנושא הזו קובעת בעצמה מראה בהיר או כהה"
+    },
+    "colorTheme": {
+      "label": "ערכת צבעים",
+      "description": "לוח הצבעים שבשימוש בכל האפליקציה",
+      "remove": "הסרת ערכת הנושא",
+      "importFailed": "לא ניתן היה לייבא את ערכת הנושא.",
+      "import": {
+        "label": "ייבוא ערכת נושא של VS Code",
+        "description": "המרת קובץ *-color-theme.json או הרחבת .vsix ללוח צבעים",
+        "button": "ייבוא ערכת נושא",
+        "urlLabel": "או הדבקת כתובת של הרחבה",
+        "urlPlaceholder": "https://marketplace.visualstudio.com/items?itemName=…",
+        "urlButton": "טעינה"
+      }
     },
     "theme": {
       "label": "ערכת נושא",
