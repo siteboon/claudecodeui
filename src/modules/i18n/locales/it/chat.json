@@ -80,6 +80,12 @@
   "json": {
     "response": "Risposta JSON"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} ha bisogno di una tua risposta",
+    "dismiss": "Rifiuta",
+    "alwaysAllow": "Consenti sempre",
+    "alwaysAllowCovers": "\"Consenti sempre\" copre"
+  },
   "permissions": {
     "grant": "Concedi permesso per {{tool}}",
     "added": "Permesso aggiunto",

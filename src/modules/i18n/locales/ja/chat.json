@@ -74,6 +74,12 @@
   "json": {
     "response": "JSONレスポンス"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} が入力を求めています",
+    "dismiss": "却下",
+    "alwaysAllow": "常に許可",
+    "alwaysAllowCovers": "「常に許可」の対象"
+  },
   "permissions": {
     "grant": "{{tool}}に権限を付与",
     "added": "権限を追加しました",

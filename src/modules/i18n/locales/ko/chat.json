@@ -75,6 +75,12 @@
   "json": {
     "response": "JSON 응답"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}}에서 입력이 필요합니다",
+    "dismiss": "거절",
+    "alwaysAllow": "항상 허용",
+    "alwaysAllowCovers": "'항상 허용' 적용 대상"
+  },
   "permissions": {
     "grant": "{{tool}}에 대한 권한 부여",
     "added": "권한이 추가되었습니다",
