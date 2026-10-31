@@ -46,19 +46,30 @@ function createFakeSocket() {
 const findEnvKey = (name: string) =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
 
-const waitForFrame = (socket: ReturnType<typeof createFakeSocket>, matches: (frame: Frame) => boolean) =>
-  new Promise<Frame>((resolve) => {
+/** Waits for a matching frame; rejects instead of hanging the file when none comes. */
+const waitForFrame = (
+  socket: ReturnType<typeof createFakeSocket>,
+  matches: (frame: Frame) => boolean,
+  timeoutMs = 15_000,
+) =>
+  new Promise<Frame>((resolve, reject) => {
     const existing = socket.frames.find(matches);
     if (existing) {
       resolve(existing);
       return;
     }
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const onFrame = (frame: Frame) => {
       if (matches(frame)) {
+        clearTimeout(timer);
         socket.off('frame', onFrame);
         resolve(frame);
       }
     };
+    timer = setTimeout(() => {
+      socket.off('frame', onFrame);
+      reject(new Error(`No matching frame within ${timeoutMs} ms.`));
+    }, timeoutMs);
     socket.on('frame', onFrame);
   });
 
@@ -112,6 +123,8 @@ async function withOpenCodeGateway(runTest: (socket: ReturnType<typeof createFak
     handleChatConnection(socket as never, { user: { id: 1 } } as never, { runtime: providerRuntimeService });
     await runTest(socket);
   } finally {
+    // A test that failed half-way leaves its turn and fake server running.
+    await providerRuntimeService.abort('opencode', SESSION_ID).catch(() => false);
     connectedClients.clear();
     chatRunRegistry.clearAll();
     closeConnection();

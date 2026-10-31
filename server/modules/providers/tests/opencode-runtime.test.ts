@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
@@ -30,6 +30,8 @@ const { OpenCodeSessionsProvider } = await import('@/modules/providers/list/open
 
 type Frame = Record<string, any>;
 type LogEntry = Record<string, any>;
+
+const TURN_DEADLINE_MS = 30_000;
 
 const FIXTURE_PATH = fileURLToPath(new URL('./fixtures/fake-opencode-serve.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx/esm');
@@ -157,18 +159,28 @@ async function runTurn(options: TurnOptions) {
     isProviderInstalled: async () => options.installed ?? true,
   };
 
-  let error: Error | null = null;
-  try {
-    await opencodeRuntime.run(options.command ?? 'Hi', {
-      sessionId: options.appSessionId ?? 'app-session',
-      cwd: projectDir,
-      model: 'github-copilot/gpt-5.6-terra',
-      permissionMode: options.permissionMode,
-      files: options.files,
-    }, writer, context);
-  } catch (caught) {
-    error = caught as Error;
+  const appSessionId = options.appSessionId ?? 'app-session';
+  const running = opencodeRuntime.run(options.command ?? 'Hi', {
+    sessionId: appSessionId,
+    cwd: projectDir,
+    model: 'github-copilot/gpt-5.6-terra',
+    permissionMode: options.permissionMode,
+    files: options.files,
+  }, writer, context).then(() => null, (caught: unknown) => caught as Error);
+  // A turn that never ends fails its test instead of hanging the whole file.
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  const outcome = await Promise.race([
+    running,
+    new Promise<'timeout'>((resolve) => {
+      deadline = setTimeout(() => resolve('timeout'), TURN_DEADLINE_MS);
+    }),
+  ]);
+  clearTimeout(deadline);
+  if (outcome === 'timeout') {
+    await Promise.race([opencodeRuntime.abort(appSessionId), new Promise((resolve) => setTimeout(resolve, 5000))]);
+    throw new Error(`The turn did not finish within ${TURN_DEADLINE_MS / 1000} s.`);
   }
+  const error = outcome;
 
   let requests: LogEntry[] = [];
   try {
@@ -335,6 +347,20 @@ test('Deny rejects the request, which ends the turn like OpenCode\'s own Reject'
   assert.equal(turn.frames.find((frame) => frame.kind === 'tool_use')?.toolResult?.isError, true);
   assert.equal(turn.frames.some((frame) => frame.kind === 'text'), false);
   assert.equal(turn.frames.at(-1)?.kind, 'complete');
+});
+
+test('a reply OpenCode has already settled is not a failure', async () => {
+  // The chat's answer and OpenCode's own cascade raced: the reply gets the 404
+  // OpenCode sends for a request it no longer knows.
+  const turn = await runTurn({
+    scenario: { replyNotFound: ['per_1'], steps: [permissionStep(['git push'], ['git push *']), { type: 'text', text: 'never reached' }] },
+    onFrame: (frame) => (frame.kind === 'permission_request' ? { allow: true } : undefined),
+  });
+
+  assert.equal(turn.error, null);
+  assert.ok(findRequest(turn.requests, 'POST', /\/permission\/per_1\/reply$/));
+  assert.equal(turn.frames.some((frame) => frame.kind === 'error'), false);
+  assert.equal(turn.frames.at(-1)?.exitCode, 0);
 });
 
 test('an unanswered permission is rejected once its timeout runs out', async () => {
@@ -548,6 +574,42 @@ test('turn servers a killed CloudCLI left running are stopped, and nothing else'
     for (const child of [orphan, ownedByLiveCloudCli, leftoverCommand]) {
       child.kill('SIGKILL');
     }
+  }
+});
+
+test('the leftover-server sweep only trusts owner pids from its own PID namespace', { skip: process.platform !== 'linux' }, async () => {
+  // A CloudCLI on the host also sees a container's processes in /proc; their
+  // owner pid is the container's and would look dead from the host.
+  const deadOwner = spawn(process.execPath, ['-e', '']);
+  await new Promise((resolve) => deadOwner.once('exit', resolve));
+  const keepAlive = 'setInterval(() => {}, 1000)';
+  const sameNamespace = spawn(process.execPath, ['-e', keepAlive], { stdio: 'ignore' });
+  const otherNamespace = spawn(process.execPath, ['-e', keepAlive], { stdio: 'ignore' });
+
+  const procRoot = path.join(tempRoot, 'fake-proc');
+  const addProcess = async (pid: number, namespace: string) => {
+    const dir = path.join(procRoot, String(pid));
+    await mkdir(path.join(dir, 'ns'), { recursive: true });
+    await writeFile(path.join(dir, 'environ'), `PATH=/usr/bin\0CLOUDCLI_OPENCODE_OWNER_PID=${deadOwner.pid}\0`);
+    await writeFile(path.join(dir, 'cmdline'), 'opencode\0serve\0--hostname=127.0.0.1\0--port=4242\0');
+    await symlink(namespace, path.join(dir, 'ns', 'pid'));
+  };
+  await mkdir(path.join(procRoot, 'self', 'ns'), { recursive: true });
+  await symlink('pid:[4026531836]', path.join(procRoot, 'self', 'ns', 'pid'));
+  await addProcess(sameNamespace.pid!, 'pid:[4026531836]');
+  await addProcess(otherNamespace.pid!, 'pid:[4026532999]');
+
+  try {
+    // Without its own namespace to compare against, it stops nothing.
+    await mkdir(path.join(tempRoot, 'proc-without-self'), { recursive: true });
+    assert.equal(await reapOrphanedOpenCodeServers(path.join(tempRoot, 'proc-without-self')), 0);
+
+    assert.equal(await reapOrphanedOpenCodeServers(procRoot), 1);
+    assert.ok(await waitForExit(sameNamespace.pid!), 'the leftover server of this namespace is stopped');
+    assert.equal(isProcessAlive(otherNamespace.pid!), true, 'a process of another PID namespace is left alone');
+  } finally {
+    sameNamespace.kill('SIGKILL');
+    otherNamespace.kill('SIGKILL');
   }
 });
 

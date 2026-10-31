@@ -18,8 +18,8 @@ exception is `stream_delta`. Deltas do not reach the store directly; they pile u
 ref and a 100 ms timer publishes the whole accumulated string into a single synthetic row
 with a well-known id, so a reply that streams for thirty seconds is one row whose content
 grows rather than a thousand rows. Everything a newcomer finds confusing here comes from
-that one exception and from the fact that **only two of the four providers ever send a
-`stream_delta` at all.**
+that one exception and from the fact that **only one of the four providers (Cursor) ever
+sends a `stream_delta` at all.**
 
 ## Mental model
 
@@ -84,7 +84,7 @@ it.
 | `server/modules/websocket/services/chat-session-writer.service.ts` | The object provider runtimes think is their socket. Swallows `session_created`; `forward` at `:160` fans out to every watching connection and collects dead ones. |
 | `server/shared/utils.ts` | `createNormalizedMessage` at `:348` and `createCompleteMessage` — the envelope every provider event is built with. **Not** `message-unification.ts`; that file exports only `prepareTranscriptMessages`, which runs on REST history reads and never on the live path. |
 | `server/shared/types.ts` | `MessageKind` at `:178` — the fifteen kinds a provider can emit. `GatewayEventKind` at `:204` — the four the gateway adds. |
-| `server/modules/providers/list/*/` | Per provider, a `*-runtime.provider.js` that drives the CLI or SDK and a `*-sessions.provider.ts` whose `normalizeMessage` converts one raw event into `NormalizedMessage[]`. |
+| `server/modules/providers/list/*/` | Per provider, a `*-runtime.provider.ts` (still `.js` for Cursor) that drives the CLI or SDK and a `*-sessions.provider.ts` whose `normalizeMessage` converts one raw event into `NormalizedMessage[]`. |
 
 Tests worth knowing about: `streamingMarkdown.test.ts` and
 `streamingMarkdownRenderEquivalence.test.tsx` pin the split; `messageStreamEnd.test.tsx`

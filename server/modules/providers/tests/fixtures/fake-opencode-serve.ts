@@ -50,6 +50,12 @@ type Scenario = {
   version?: string | null;
   /** How long POST /session/:id/abort takes to answer. */
   abortDelayMs?: number;
+  /**
+   * Requests OpenCode has already settled by the time the chat's reply lands
+   * (a cascade raced it): the reply gets the 404 OpenCode sends, and the
+   * request is settled as rejected.
+   */
+  replyNotFound?: string[];
   /** A question OpenCode raises while the abort is being handled. */
   askOnAbort?: { id: string; questions: unknown[] };
   steps: Step[];
@@ -338,8 +344,19 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && (match = /^\/(permission|question)\/([^/]+)\/(reply|reject)$/.exec(path))) {
     const [, kind, requestID, action] = match;
     const resolve = waiting.get(requestID);
+    // The body OpenCode answers an unknown request id with (checked on 1.18.25).
+    const notFound = kind === 'permission'
+      ? { _tag: 'PermissionNotFoundError', requestID, message: `Permission request not found: ${requestID}` }
+      : { _tag: 'QuestionNotFoundError', requestID, message: `Question request not found: ${requestID}` };
     if (!resolve) {
-      sendJson(res, 404, { name: 'NotFoundError', data: { message: `Request not found: ${requestID}` } });
+      sendJson(res, 404, notFound);
+      return;
+    }
+    if (scenario.replyNotFound?.includes(requestID)) {
+      waiting.delete(requestID);
+      emit('permission.replied', { sessionID: 'any', requestID, reply: 'reject' });
+      resolve({ kind: kind as 'permission' | 'question', value: 'reject' });
+      sendJson(res, 404, notFound);
       return;
     }
     waiting.delete(requestID);

@@ -34,8 +34,9 @@
 
 import crypto from 'node:crypto';
 import fsSync from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, readlink } from 'node:fs/promises';
 import net from 'node:net';
+import path from 'node:path';
 
 import Database from 'better-sqlite3';
 import { createOpencodeClient, createOpencodeServer } from '@opencode-ai/sdk/v2';
@@ -557,17 +558,26 @@ const isProcessAlive = (pid: number): boolean => {
  * A process is only stopped when its environment names a CloudCLI owner that
  * is gone and its arguments are a turn server's (`serve --hostname=127.0.0.1
  * --port=…`), so commands the agent left running in the background are never
- * touched. Linux only: the environment is read from /proc.
+ * touched. The owner pid only means something inside the PID namespace that
+ * issued it: a CloudCLI on the host also sees a container's processes in
+ * /proc, and their owner pid would look dead from out here, so processes of
+ * another (or an unreadable) namespace are skipped. Linux only: the
+ * environment is read from /proc, which tests point at a fake tree.
  *
  * Used by the server entrypoint once at startup, through the providers module.
  */
-export async function reapOrphanedOpenCodeServers(): Promise<number> {
+export async function reapOrphanedOpenCodeServers(procRoot = '/proc'): Promise<number> {
   if (process.platform !== 'linux') {
     return 0;
   }
 
+  const ownNamespace = await readlink(path.join(procRoot, 'self', 'ns', 'pid')).catch(() => null);
+  if (!ownNamespace) {
+    return 0;
+  }
+
   let reaped = 0;
-  const entries = await readdir('/proc').catch(() => [] as string[]);
+  const entries = await readdir(procRoot).catch(() => [] as string[]);
   for (const entry of entries) {
     if (!/^\d+$/.test(entry) || Number(entry) === process.pid) {
       continue;
@@ -575,9 +585,10 @@ export async function reapOrphanedOpenCodeServers(): Promise<number> {
 
     const pid = Number(entry);
     // Other users' processes are unreadable and skipped.
-    const [environ, cmdline] = await Promise.all([
-      readFile(`/proc/${pid}/environ`, 'utf8').catch(() => ''),
-      readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => ''),
+    const [environ, cmdline, namespace] = await Promise.all([
+      readFile(path.join(procRoot, entry, 'environ'), 'utf8').catch(() => ''),
+      readFile(path.join(procRoot, entry, 'cmdline'), 'utf8').catch(() => ''),
+      readlink(path.join(procRoot, entry, 'ns', 'pid')).catch(() => null),
     ]);
     const owner = environ.split('\0').find((variable) => variable.startsWith(`${OWNER_PID_ENV}=`));
     const ownerPid = Number(owner?.slice(OWNER_PID_ENV.length + 1));
@@ -585,7 +596,13 @@ export async function reapOrphanedOpenCodeServers(): Promise<number> {
     const isTurnServer = args.includes('serve')
       && args.includes('--hostname=127.0.0.1')
       && args.some((arg) => arg.startsWith('--port='));
-    if (!isTurnServer || !Number.isInteger(ownerPid) || ownerPid <= 0 || isProcessAlive(ownerPid)) {
+    if (
+      !isTurnServer
+      || namespace !== ownNamespace
+      || !Number.isInteger(ownerPid)
+      || ownerPid <= 0
+      || isProcessAlive(ownerPid)
+    ) {
       continue;
     }
 
