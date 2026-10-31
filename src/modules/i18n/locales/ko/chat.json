@@ -98,14 +98,14 @@
     "permissionMode": "권한 모드",
     "modes": {
       "default": "기본 모드",
-      "auto": "Auto Mode",
+      "auto": "자동 모드",
       "acceptEdits": "편집 허용",
       "bypassPermissions": "권한 우회",
       "plan": "Plan 모드"
     },
     "descriptions": {
       "default": "신뢰할 수 있는 명령어(ls, cat, grep, git status 등)만 자동 실행됩니다. 다른 명령어는 건너뜁니다. 워크스페이스에 쓰기 가능.",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "모델 기반 분류기가 도구 호출마다 승인 또는 거부를 결정합니다. 직접 승인할 필요는 없지만 권한 우회보다 안전하며, 거부되는 경우도 있습니다.",
       "acceptEdits": "워크스페이스 내에서 모든 명령어가 자동 실행됩니다. 샌드박스 내 완전 자동 모드.",
       "bypassPermissions": "제한 없는 전체 시스템 접근. 모든 명령어가 전체 디스크 및 네트워크 접근 권한으로 자동 실행됩니다. 주의해서 사용하세요.",
       "plan": "계획 모드 - 명령어가 실행되지 않습니다"
@@ -132,7 +132,7 @@
       "ctrlEnter": "Ctrl+Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어",
       "enter": "Enter로 전송 • Shift+Enter로 줄바꿈 • Tab으로 모드 변경 • /로 슬래시 명령어",
       "queue": "Enter로 다음 메시지 대기열에 추가",
-      "updateQueued": "Enter로 대기 중인 메시지 업데이트"
+      "appendQueued": "Enter로 대기 중인 메시지에 추가"
     },
     "clickToChangeMode": "클릭하여 권한 모드 변경 (또는 입력창에서 Tab)",
     "showAllCommands": "모든 명령어 보기",
@@ -140,7 +140,8 @@
     "scrollToBottom": "맨 아래로 스크롤",
     "queue": {
       "sendNext": "다음 메시지 대기열에 추가",
-      "update": "대기 중인 메시지 업데이트",
+      "append": "대기 중인 메시지에 추가",
+      "notCombinable": "메시지를 대기열에 추가하지 못했습니다: 슬래시 명령어는 단독으로 실행되므로 대기 중인 메시지와 합칠 수 없습니다. 대기 중인 메시지가 전송된 후에 보내세요.",
       "label": "대기 중",
       "willSend": "완료되면 전송됩니다",
       "edit": "대기 중인 메시지 편집",
@@ -257,6 +258,9 @@
     "answeredBy": "{{model}}이(가) 응답함"
   },
   "composer": {
+    "permissionHeading": "{{provider}} 작업을 어떻게 승인할까요?",
+    "permissionCycleHint": "입력창에서 Tab을 누르면 모드를 전환할 수 있습니다",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "이전 메시지를 교체하는 중",
       "filesNotReverted": "이미 변경된 파일은 되돌리지 않습니다",
