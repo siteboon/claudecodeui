@@ -194,6 +194,12 @@ export async function dispatchDueScheduledMessages(
       logPassFailure(error);
     } finally {
       sessionsSending.delete(sessionId);
+      // A run that settled while this session's sends were going was skipped
+      // by the run-settled listener (isSessionBusy), so the queued turn it
+      // unblocked goes now instead of waiting for the next poll.
+      if (unsubscribeRunSettled) {
+        void dispatchQueuedMessages(runtime, sessionId).catch(logPassFailure);
+      }
     }
   }));
 
@@ -246,8 +252,9 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   // this the only sender is the poll above, so the user watches an idle
   // session for up to POLL_INTERVAL_MS before their queued turn starts — the
   // frontend deliberately does not send it ("the VPS dispatcher owns sending",
-  // useChatComposerState.ts). `dispatchQueuedMessages` re-checks `isProcessing`
-  // and claims transactionally, so racing with the poll is harmless. Scoped to
+  // useChatComposerState.ts). `dispatchQueuedMessages` re-checks `isSessionBusy`
+  // (which also covers a session whose scheduled sends are still going) and
+  // claims transactionally, so racing with the poll is harmless. Scoped to
   // the settled session, so several runs ending together do not each rescan
   // every queued turn.
   unsubscribeRunSettled = onRunSettled((appSessionId) => {
