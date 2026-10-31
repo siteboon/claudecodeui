@@ -353,6 +353,37 @@
       }
     },
     "connectionStatus": "接続状態",
+    "cli": {
+      "title": "CLI のバージョン",
+      "checking": "バージョンを確認中…",
+      "installed": "インストール済み: v{{version}}",
+      "installedUnknown": "インストール済み (バージョン不明)",
+      "versionUnavailable": "バージョンを取得できませんでした",
+      "updateAvailable": "アップデートあり: v{{version}}",
+      "upToDate": "最新です",
+      "bundled": "CloudCLI に同梱されており、CloudCLI と一緒に更新されます。",
+      "platform": "ホスティングプラットフォームが管理しています。",
+      "updateTo": "v{{version}} に更新",
+      "runUpdater": "アップデーターを実行",
+      "updating": "更新中…",
+      "updatingHint": "サーバーで {{command}} を実行しています。数分かかる場合があります。",
+      "runsCommand": "サーバーで {{command}} を実行します",
+      "output": "{{command}} の出力",
+      "result": {
+        "updated": "v{{version}} に更新しました。",
+        "alreadyUpToDate": "すでに最新です (v{{version}})。",
+        "unchanged": "アップデーターは終了しましたが、バージョンは v{{version}} のままです。理由は下の出力を確認してください。",
+        "unchangedUnknown": "アップデーターが終了しました。出力は下にあります。",
+        "permissionDenied": "サーバーのユーザーには、この CLI のインストール先に書き込む権限がありません。そのインストールの所有者としてサーバーで {{command}} を実行してください (例: sudo を使用)。",
+        "timedOut": "アップデートが時間内に終わらなかったため停止しました。完了するにはサーバーで {{command}} を実行してください。",
+        "failed": "アップデートに失敗しました (終了コード {{exitCode}})。出力は下にあります。",
+        "failedQuietly": "アップデーターが失敗を報告しました。出力は下にあります。",
+        "notStarted": "アップデーターを起動できませんでした。",
+        "busy": "このエージェントはセッションで作業中です。終了するまで待つか停止してから更新してください。",
+        "requestFailed": "アップデートは実行されませんでした: {{error}}",
+        "unconfirmed": "サーバーから応答がありませんでした ({{error}})。アップデートは実行された可能性があります。上のバージョンはサーバーが最後に報告したものです。"
+      }
+    },
     "login": {
       "title": "ログイン",
       "reAuthenticate": "再認証",
