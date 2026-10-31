@@ -2,7 +2,7 @@
 
 Open **Settings → Agents → Codex → Account → Connect with an API key** to configure:
 
-- **Provider ID**: a custom Codex provider identifier, such as `my-api`. Use the same ID as existing sessions to keep them visible in Codex's provider-filtered resume picker. The built-in `openai` ID is reserved.
+- **Provider ID**: a custom Codex provider identifier, such as `my-api`. Use the same ID as existing sessions to keep them visible in Codex's provider-filtered resume picker. The built-in `openai`, `ollama` and `lmstudio` IDs are reserved.
 - **Base URL**: the provider's Responses API base URL, such as `https://api.openai.com/v1`.
 - **API Key**: the credential for that endpoint. A blank key preserves the saved credential when updating a connection.
 

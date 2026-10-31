@@ -49,7 +49,7 @@ test('provider IDs are configurable, retained on updates and validated without o
   assert.equal(service.getPublic().provider, 'aicode');
   service.save({ provider: 'my-api_2', baseUrl: 'https://example.com/v1' });
   assert.equal(service.getSdkOptions()?.config?.model_provider, 'my-api_2');
-  for (const provider of ['', 'openai', 'bad.id', 'bad key', '$(touch /tmp/bad)', 'a\ninvalid']) {
+  for (const provider of ['', 'openai', 'ollama', 'lmstudio', 'bad.id', 'bad key', '$(touch /tmp/bad)', 'a\ninvalid']) {
     assert.throws(() => service.save({ provider, baseUrl: 'https://example.com/v1' }));
   }
   assert.equal(service.getPublic().provider, 'my-api_2');

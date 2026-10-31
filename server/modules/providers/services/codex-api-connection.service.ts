@@ -11,6 +11,7 @@ import { AppError } from '@/shared/utils.js';
 type Connection = { provider: string; baseUrl: string; apiKey: string };
 type Store = Pick<typeof appConfigDb, 'get' | 'set'>;
 const CONFIG_KEY = 'codex_api_connection';
+const RESERVED_PROVIDER_IDS = new Set(['openai', 'ollama', 'lmstudio']);
 // This launcher contains no credentials. Quoted environment expansions keep URL/key data out of shell code.
 const SHELL_LAUNCHER = `#!/bin/sh
 exec "$CLOUDCLI_CODEX_EXECUTABLE" \\
@@ -24,8 +25,8 @@ exec "$CLOUDCLI_CODEX_EXECUTABLE" \\
 
 function validateProvider(value: string): string {
   const provider = value.trim();
-  if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(provider) || provider === 'openai') {
-    throw new AppError('Use a custom provider ID: start with a letter, then letters, digits, underscores or hyphens (up to 64 characters). The built-in openai ID is reserved.', {
+  if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(provider) || RESERVED_PROVIDER_IDS.has(provider)) {
+    throw new AppError('Use a custom provider ID: start with a letter, then letters, digits, underscores or hyphens (up to 64 characters). The built-in openai, ollama and lmstudio IDs are reserved.', {
       code: 'INVALID_CODEX_PROVIDER', statusCode: 400,
     });
   }
