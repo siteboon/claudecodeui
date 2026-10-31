@@ -123,6 +123,27 @@ test('copied legacy forks do not duplicate history using forked_from_id', async 
   });
 });
 
+test('same-thread continuations read their original rollout when the index points at the continuation', async () => {
+  await withRollouts(async (root) => {
+    const source = await rollout(root, 'original', turn('turn-a', 'original context'));
+    const metadata = await reference('original', source);
+    const continuation = path.join(path.dirname(source), 'rollout-original_continuation.jsonl');
+    await writeFile(continuation, encode([
+      { type: 'session_meta', payload: { id: 'original', cwd: root, ...metadata } },
+      ...turn('turn-b', 'continued context'),
+    ]));
+    sessionsDb.createSession('original', 'codex', root, 'original', undefined, undefined, continuation);
+    const provider = new CodexSessionsProvider();
+    const history = await provider.fetchHistory('original');
+    assert.deepEqual(history.messages.map(message => message.content), [
+      'original context', 'answer: original context', 'continued context', 'answer: continued context',
+    ]);
+    assert.deepEqual(await provider.resolveEditAnchor('original', 'turn-b'), {
+      found: true, resumeThroughId: 'turn-a',
+    });
+  });
+});
+
 test('missing and invalid inherited history fail visibly instead of returning an empty conversation', async () => {
   await withRollouts(async (root) => {
     const provider = new CodexSessionsProvider();

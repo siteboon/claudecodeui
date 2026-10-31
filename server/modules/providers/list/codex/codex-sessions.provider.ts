@@ -162,7 +162,11 @@ async function findCodexHistorySource(filePath: string, threadId: string): Promi
   if (indexed?.provider === PROVIDER && indexed.jsonl_path) {
     try {
       if ((await fsp.stat(indexed.jsonl_path)).isFile()) {
-        return indexed.jsonl_path;
+        const indexedPath = await fsp.realpath(indexed.jsonl_path);
+        // A continuation can retain its thread id while referencing an older
+        // rollout. The index now points to the continuation, so resolve the
+        // original file from storage rather than recursing into this file.
+        if (indexedPath !== filePath) return indexedPath;
       }
     } catch {
       // The native CLI can archive a rollout without updating the app row.
