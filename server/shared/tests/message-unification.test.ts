@@ -249,6 +249,49 @@ test('a content array too big even without images is capped and stays parseable'
   assert.equal(content[1].text.match(/more characters/g)?.length, 1, 'one marker, not one per pass');
 });
 
+test('a plain JSON array printed by a tool is cut as text, not rewritten', () => {
+  // Pretty-printed, so a parse and re-serialize would visibly change it.
+  const printed = JSON.stringify(Array.from({ length: 3_000 }, (_, id) => ({ id, name: `row ${id}` })), null, 2);
+  const [unified] = prepareTranscriptMessages([
+    message({
+      kind: 'tool_use',
+      toolName: 'Bash',
+      toolId: 'b1',
+      toolInput: { command: 'cat rows.json' },
+      toolResult: { content: printed },
+    }),
+  ]);
+
+  const content = String(unified.toolResult?.content);
+  assert.ok(content.startsWith(printed.slice(0, 40_000)), 'the text the tool printed is kept as it was');
+  assert.match(content, /… \d+ more characters$/);
+});
+
+test('an image part nested inside an object-valued toolUseResult is emptied too', () => {
+  const nested = {
+    content: [
+      { type: 'text', text: 'Screenshot captured' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'A'.repeat(150_000) } },
+    ],
+  };
+  const [unified] = prepareTranscriptMessages([
+    message({
+      kind: 'tool_use',
+      toolName: 'mcp__fusion__fusion_mcp_read',
+      toolId: 'n1',
+      toolInput: {},
+      toolResult: { content: 'Screenshot captured', toolUseResult: nested },
+    }),
+  ]);
+
+  const forwarded = unified.toolResult?.toolUseResult as {
+    content: Array<{ text?: string; source?: { data: string; media_type: string } }>;
+  };
+  assert.equal(forwarded.content[0].text, 'Screenshot captured');
+  assert.equal(forwarded.content[1].source?.data, '', 'the nested image payload is gone');
+  assert.equal(forwarded.content[1].source?.media_type, 'image/png');
+});
+
 test('a search result keeps every file it found', () => {
   const filenames = Array.from({ length: 900 }, (_, index) => `/repo/src/file-${index}.ts`);
   const [unified] = prepareTranscriptMessages([

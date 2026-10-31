@@ -352,24 +352,33 @@ export function truncateNestedOutput(value: unknown): unknown {
  * no longer parse the parts, and it falls back to showing the raw base64 as
  * text. Emptying the payload first keeps the array whole and small.
  *
- * Takes the parsed content array (or `toolUseResult`) and returns a copy; any
- * other value comes back unchanged. Used here by `capToolResult`, and by the
- * Claude sessions provider (`claude-sessions.provider.ts`) on the live
- * `tool_use_result`, which never passes through `prepareTranscriptMessages`.
+ * Takes a parsed content array or a `toolUseResult` and returns a copy with
+ * every image part emptied, however deeply it is nested: some tools keep their
+ * content array inside an object. Values with no image part come back as they
+ * were. Used here by `capToolResult`, and by the Claude sessions provider
+ * (`claude-sessions.provider.ts`) on the live `tool_use_result`, which never
+ * passes through `prepareTranscriptMessages`.
  */
 export function omitImageData(value: unknown): unknown {
-  if (!Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    return value.map(omitImageData);
+  }
+
+  const record = readObjectRecord(value);
+  if (!record) {
     return value;
   }
 
-  return value.map((part) => {
-    const record = readObjectRecord(part);
-    const source = readObjectRecord(record?.source);
-    if (record?.type !== 'image' || typeof source?.data !== 'string') {
-      return part;
-    }
+  const source = readObjectRecord(record.source);
+  if (record.type === 'image' && typeof source?.data === 'string') {
     return { ...record, source: { ...source, data: '' } };
-  });
+  }
+
+  const omitted: AnyRecord = {};
+  for (const [key, entry] of Object.entries(record)) {
+    omitted[key] = omitImageData(entry);
+  }
+  return omitted;
 }
 
 /**
@@ -378,7 +387,8 @@ export function omitImageData(value: unknown): unknown {
  *
  * Cutting the serialized string instead would end it mid-part, and the
  * client would fall back to drawing the raw JSON. Returns null when the
- * content is not a JSON array, leaving it to the plain string cap.
+ * content is not a JSON array of content parts, leaving it to the plain
+ * string cap.
  */
 function capSerializedParts(content: string): string | null {
   let parsed: unknown;
@@ -387,7 +397,10 @@ function capSerializedParts(content: string): string | null {
   } catch {
     return null;
   }
-  if (!Array.isArray(parsed)) {
+  // Only an MCP content array, every entry a typed part. Any other array is a
+  // tool's own text (a Bash run printing JSON, say), and re-serializing it would
+  // change what the tool printed.
+  if (!Array.isArray(parsed) || !parsed.every((entry) => typeof readObjectRecord(entry)?.type === 'string')) {
     return null;
   }
 
