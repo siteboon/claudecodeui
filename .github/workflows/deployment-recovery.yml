@@ -1,0 +1,37 @@
+name: Deployment session recovery
+
+on:
+  pull_request:
+    paths:
+      - scripts/deployment-recovery.mjs
+      - scripts/tests/deployment-recovery.test.mjs
+      - docs/deployment-recovery.md
+      - package.json
+      - package-lock.json
+      - .github/workflows/deployment-recovery.yml
+  push:
+    branches: [main, feat/deployment-session-recovery]
+    paths:
+      - scripts/deployment-recovery.mjs
+      - scripts/tests/deployment-recovery.test.mjs
+      - package.json
+      - package-lock.json
+      - .github/workflows/deployment-recovery.yml
+
+permissions:
+  contents: read
+
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --include=dev
+      - run: npm run test:deployment-recovery
+      - run: npx --no-install oxlint scripts/deployment-recovery.mjs scripts/tests/deployment-recovery.test.mjs
