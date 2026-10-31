@@ -5,7 +5,12 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionDraftsDb, sessionsDb, userDb } from '@/modules/database/index.js';
-import { dispatchDueScheduledMessages, dispatchQueuedMessages } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
+import {
+  closeScheduledMessageDispatcher,
+  dispatchDueScheduledMessages,
+  dispatchQueuedMessages,
+  initializeScheduledMessageDispatcher,
+} from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
 import { scheduledMessagesService } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry, connectedClients } from '@/modules/websocket/index.js';
 
@@ -180,6 +185,87 @@ test('a queued message waits for background work its session\'s last turn left r
     assert.equal(runs.length, 1);
     assert.equal(runs[0].command, 'send after the background job');
     assert.equal(sessionDraftsDb.getDrafts(userId).length, 0);
+  });
+});
+
+/** Lets the run-settled microtask and the detached turn it starts finish. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 5; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+test('a queued message is sent as soon as the run it waited on settles, not on the next poll', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const runs: RunCall[] = [];
+    initializeScheduledMessageDispatcher(createRuntime(runs));
+    // The catch-up pass that init starts finds nothing; only the settle can send.
+    await settle();
+    try {
+      const run = chatRunRegistry.startRun({
+        appSessionId: SESSION_ID,
+        provider: 'claude',
+        providerSessionId: null,
+        connection: null,
+        userId,
+      });
+      sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+        text: '',
+        queuedMessage: { content: 'send when this turn ends' },
+      });
+      await settle();
+      assert.equal(runs.length, 0, 'the session is still busy');
+
+      run!.writer.sendComplete({ exitCode: 0 });
+      await settle();
+
+      assert.equal(runs.length, 1);
+      assert.equal(runs[0].command, 'send when this turn ends');
+      assert.equal(sessionDraftsDb.getDrafts(userId).length, 0);
+    } finally {
+      closeScheduledMessageDispatcher();
+    }
+  });
+});
+
+test('a closed dispatcher no longer sends on run settle', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const runs: RunCall[] = [];
+    initializeScheduledMessageDispatcher(createRuntime(runs));
+    // Let the catch-up pass that init starts finish before shutting down.
+    await settle();
+    closeScheduledMessageDispatcher();
+
+    const run = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId,
+    });
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, {
+      text: '',
+      queuedMessage: { content: 'left for the poll' },
+    });
+    run!.writer.sendComplete({ exitCode: 0 });
+    await settle();
+
+    assert.equal(runs.length, 0);
+    assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, { content: 'left for the poll' });
+  });
+});
+
+test('a scoped pass only looks at the given session', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionsDb.createAppSession('other-session', 'claude', '/tmp', 'Other session');
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, { text: '', queuedMessage: { content: 'mine' } });
+    sessionDraftsDb.saveDraft(userId, 'other-session', { text: '', queuedMessage: { content: 'theirs' } });
+
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs), SESSION_ID), 1);
+    assert.deepEqual(runs.map((run) => run.command), ['mine']);
+    assert.equal(sessionDraftsDb.listQueuedMessages().length, 1);
+    assert.equal(sessionDraftsDb.listQueuedMessages()[0].sessionId, 'other-session');
   });
 });
 

@@ -77,9 +77,17 @@ function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): bool
   return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
 }
 
-/** Sends every persisted queued turn whose session is currently idle. */
-export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
-  const candidates = sessionDraftsDb.listQueuedMessages();
+/**
+ * Sends every persisted queued turn whose session is currently idle.
+ *
+ * With a `sessionId`, only that session's queued turn is looked at: a run that
+ * settles can only have unblocked its own session.
+ */
+export async function dispatchQueuedMessages(
+  runtime: ProviderRuntimeGateway,
+  sessionId?: string,
+): Promise<number> {
+  const candidates = sessionDraftsDb.listQueuedMessages(sessionId);
   let claimed = 0;
 
   await Promise.all(candidates.map(async (candidate) => {
@@ -204,9 +212,11 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   // session for up to POLL_INTERVAL_MS before their queued turn starts — the
   // frontend deliberately does not send it ("the VPS dispatcher owns sending",
   // useChatComposerState.ts). `dispatchQueuedMessages` re-checks `isProcessing`
-  // and claims transactionally, so racing with the poll is harmless.
-  unsubscribeRunSettled = onRunSettled(() => {
-    void dispatchQueuedMessages(runtime).catch((error: unknown) => {
+  // and claims transactionally, so racing with the poll is harmless. Scoped to
+  // the settled session, so several runs ending together do not each rescan
+  // every queued turn.
+  unsubscribeRunSettled = onRunSettled((appSessionId) => {
+    void dispatchQueuedMessages(runtime, appSessionId).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       console.error('[ScheduledMessages] Run-settled dispatch failed', { error: message });
     });
