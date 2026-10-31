@@ -286,6 +286,8 @@ export type SessionUpsertedEvent = {
     summary: string;
     messageCount: number;
     lastActivity: string;
+    /** The session can be read but not continued (a Cursor IDE chat). */
+    readOnly: boolean;
   };
   project: SessionUpsertedProject | null;
   timestamp: string;
@@ -646,6 +648,12 @@ export type ProviderRuntimeContext = {
   getProviderModels(): Promise<ProviderModelsDefinition>;
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   isProviderInstalled(): Promise<boolean>;
+  /**
+   * The transcript of the read-only session this one was started to continue,
+   * while it has not run yet; `null` otherwise. Used by the Cursor runtime to
+   * point a new CLI chat at the Cursor IDE chat it continues.
+   */
+  resolveContinuedTranscriptPath?(sessionId: string | null | undefined): string | null;
   /**
    * Builds the SDK query for a run. Production leaves this unset and the
    * runtime uses the SDK's own; tests supply a scripted stream so the hold

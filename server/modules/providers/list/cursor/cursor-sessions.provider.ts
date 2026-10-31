@@ -1,5 +1,5 @@
-import crypto from 'node:crypto';
-import os from 'node:os';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
@@ -9,8 +9,10 @@ import {
   createNormalizedMessage,
   generateMessageId,
   readObjectRecord,
-  sanitizeLeafDirectoryName,
+  resolveCursorChatDirectory,
+  resolveCursorTranscriptPath,
   sliceTailPage,
+  stripCursorContinuedChatTag,
 } from '@/shared/utils.js';
 
 const PROVIDER = 'cursor';
@@ -95,7 +97,9 @@ function extractUserTextAndImages(
     return { text: unwrapped };
   }
 
-  const parsedImages = parseImagesInputTag(unwrapped);
+  // A CLI chat continuing an IDE chat starts with a pointer to its transcript;
+  // only what the user typed is shown.
+  const parsedImages = parseImagesInputTag(stripCursorContinuedChatTag(unwrapped));
   const parsedFiles = parseFilesInputTag(parsedImages.text);
   return {
     text: parsedFiles.text,
@@ -233,18 +237,10 @@ export class CursorSessionsProvider implements IProviderSessions {
     // Lazy-import better-sqlite3 so the module doesn't fail if it's unavailable
     const { default: Database } = await import('better-sqlite3');
 
-    const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
-    const safeSessionId = sanitizeLeafDirectoryName(sessionId, 'cursor session id');
-    const baseChatsPath = path.join(os.homedir(), '.cursor', 'chats', cwdId);
-    const storeDbPath = path.join(baseChatsPath, safeSessionId, 'store.db');
-    const resolvedBaseChatsPath = path.resolve(baseChatsPath);
-    const resolvedStoreDbPath = path.resolve(storeDbPath);
-    const relativeStorePath = path.relative(resolvedBaseChatsPath, resolvedStoreDbPath);
-    if (relativeStorePath.startsWith('..') || path.isAbsolute(relativeStorePath)) {
-      throw new Error(`Invalid cursor session path for "${sessionId}".`);
-    }
+    // Rejects ids that are not a single directory name, so the path stays under the chats root.
+    const storeDbPath = path.join(resolveCursorChatDirectory(projectPath, sessionId), 'store.db');
 
-    const db = new Database(resolvedStoreDbPath, { readonly: true, fileMustExist: true });
+    const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
 
     try {
       const allBlobs = db.prepare<[], CursorDbBlob>('SELECT rowid, id, data FROM blobs').all();
@@ -368,6 +364,46 @@ export class CursorSessionsProvider implements IProviderSessions {
   }
 
   /**
+   * Reads a Cursor IDE chat's transcript as message blobs in conversation
+   * order. IDE chats have no CLI `store.db`; their transcript lines carry the
+   * same `{ role, content }` parts (with `tool_use` calls but no results), so
+   * they go through the same normalization as store blobs.
+   */
+  private async loadIdeTranscriptBlobs(sessionId: string, projectPath: string): Promise<CursorMessageBlob[]> {
+    const transcriptPath = resolveCursorTranscriptPath(projectPath, sessionId);
+    const lines = (await fsp.readFile(transcriptPath, 'utf8')).split('\n');
+    const blobs: CursorMessageBlob[] = [];
+
+    for (const line of lines) {
+      if (!line.trim()) {
+        continue;
+      }
+
+      let entry: AnyRecord;
+      try {
+        entry = JSON.parse(line) as AnyRecord;
+      } catch {
+        // A line still being written by the IDE.
+        continue;
+      }
+
+      if ((entry.role !== 'user' && entry.role !== 'assistant') || !Array.isArray(entry.message?.content)) {
+        continue;
+      }
+
+      const sequence = blobs.length;
+      blobs.push({
+        id: `${sessionId}_${sequence}`,
+        sequence,
+        rowid: sequence,
+        content: { role: entry.role, content: entry.message.content },
+      });
+    }
+
+    return blobs;
+  }
+
+  /**
    * Normalizes live Cursor CLI NDJSON events. Persisted Cursor history is
    * normalized from SQLite blobs in fetchHistory().
    */
@@ -395,7 +431,8 @@ export class CursorSessionsProvider implements IProviderSessions {
   }
 
   /**
-   * Fetches and paginates Cursor session history from its project-scoped store.db.
+   * Fetches and paginates Cursor session history from its project-scoped
+   * store.db, or, for a Cursor IDE chat that has none, from its transcript.
    *
    * Pagination follows the shared tail contract (`sliceTailPage`): offset 0 is
    * the most recent page, matching every other provider.
@@ -410,7 +447,10 @@ export class CursorSessionsProvider implements IProviderSessions {
     const providerSessionId = options.providerSessionId ?? sessionId;
 
     try {
-      const blobs = await this.loadCursorBlobs(providerSessionId, projectPath);
+      const hasStore = fs.existsSync(path.join(resolveCursorChatDirectory(projectPath, providerSessionId), 'store.db'));
+      const blobs = hasStore
+        ? await this.loadCursorBlobs(providerSessionId, projectPath)
+        : await this.loadIdeTranscriptBlobs(providerSessionId, projectPath);
       const allNormalized = this.normalizeCursorBlobs(blobs, sessionId);
       const renderableMessages = allNormalized.filter((msg) => msg.kind !== 'tool_result');
       const total = renderableMessages.length;

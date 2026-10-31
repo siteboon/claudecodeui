@@ -66,6 +66,7 @@ type SessionDetailsApiPayload = {
     summary?: string;
     createdAt?: string | null;
     lastActivity?: string | null;
+    readOnly?: boolean;
     project?: {
       projectId?: string;
       path?: string;
@@ -1006,6 +1007,7 @@ export function useProjectsState({
         summary: details.summary ?? '',
         createdAt: details.createdAt ?? undefined,
         lastActivity: details.lastActivity ?? undefined,
+        readOnly: Boolean(details.readOnly),
         __provider:
           typeof details.provider === 'string' && details.provider.trim()
             ? (details.provider as LLMProvider)
