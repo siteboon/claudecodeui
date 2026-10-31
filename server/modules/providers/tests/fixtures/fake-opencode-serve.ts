@@ -44,6 +44,8 @@ type Scenario = {
   defaultAgent?: string;
   /** Answered with a status instead of 204, as OpenCode does for a bad prompt. */
   promptStatus?: number;
+  /** Version /global/health reports; null makes the route missing, as before OpenCode 1.0.224. */
+  version?: string | null;
   steps: Step[];
 };
 
@@ -252,6 +254,15 @@ const server = http.createServer(async (req, res) => {
       session.permission = [...(session.permission ?? []), ...added];
     }
     sendJson(res, 200, { id: match[1], title: 'Session', permission: session.permission });
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/global/health') {
+    if (scenario.version === null) {
+      sendJson(res, 404, { name: 'NotFoundError', data: { message: 'No route' } });
+      return;
+    }
+    sendJson(res, 200, { healthy: true, version: scenario.version ?? '1.19.5' });
     return;
   }
 

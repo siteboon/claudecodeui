@@ -483,6 +483,20 @@ test('a server that dies mid-turn fails the turn', async () => {
   assert.equal(turn.frames.at(-1)?.exitCode, 1);
 });
 
+test('an OpenCode too old for permission and question replies is refused before any prompt', async () => {
+  const old = await runTurn({ scenario: { version: '1.0.200', steps: [{ type: 'text', text: 'never sent' }] } });
+  assert.match(String(old.frames.find((frame) => frame.kind === 'error')?.content), /OpenCode 1\.0\.200 is too old.*1\.1\.7/);
+  assert.equal(old.frames.at(-1)?.exitCode, 1);
+  assert.equal(findRequest(old.requests, 'POST', /\/prompt_async$/), undefined);
+
+  const unversioned = await runTurn({ scenario: { version: null, steps: [] } });
+  assert.match(String(unversioned.frames.find((frame) => frame.kind === 'error')?.content), /needs OpenCode 1\.1\.7 or newer/);
+
+  // Snapshot builds report 0.0.0 and are let through.
+  const snapshot = await runTurn({ scenario: { version: '0.0.0-dev-202610300000', steps: [{ type: 'text', text: 'ok' }] } });
+  assert.equal(snapshot.error, null);
+});
+
 test('a missing CLI is reported as not installed', async () => {
   const pathKey = findEnvKey('PATH');
   const previousPath = process.env[pathKey];

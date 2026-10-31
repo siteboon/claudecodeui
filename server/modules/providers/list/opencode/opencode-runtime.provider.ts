@@ -85,6 +85,14 @@ const PROVIDER = 'opencode';
 const NOT_INSTALLED_MESSAGE = 'OpenCode CLI is not installed. Install it from https://opencode.ai/docs/';
 
 /**
+ * First OpenCode release with both APIs the runtime answers through: the
+ * permission requests (`permission.asked` and its reply route, 1.0.224) and the
+ * question tool's (1.1.7). An older server would wait forever for a reply to a
+ * request the runtime never sees, so it is refused up front instead.
+ */
+const MIN_OPENCODE_VERSION = '1.1.7';
+
+/**
  * How long `opencode serve` may take to print its address. The SDK's own
  * default is 5 s, which a first start (database migration, plugin install) or a
  * busy machine can exceed.
@@ -618,6 +626,45 @@ function isNotFoundError(error: unknown): boolean {
   return cause?.status === 404;
 }
 
+/**
+ * Whether a reported OpenCode version is at least `minimum`. Snapshot and
+ * development builds (`0.0.0-…`) and unparsable versions are let through.
+ */
+function isSupportedOpenCodeVersion(version: string, minimum: string): boolean {
+  const parse = (value: string) => /^(\d+)\.(\d+)\.(\d+)/.exec(value)?.slice(1).map(Number);
+  const reported = parse(version);
+  const required = parse(minimum);
+  if (!reported || !required || reported.every((part) => part === 0)) {
+    return true;
+  }
+
+  for (let index = 0; index < 3; index += 1) {
+    if (reported[index] !== required[index]) {
+      return reported[index] > required[index];
+    }
+  }
+  return true;
+}
+
+/** Refuses an OpenCode too old to send the requests this runtime answers. */
+async function assertSupportedOpenCode(client: OpencodeClient): Promise<void> {
+  const upgradeHint = 'Update it, for example with `opencode upgrade`.';
+  let version: string | undefined;
+  try {
+    version = (await client.global.health()).data?.version;
+  } catch (error) {
+    // `/global/health` itself only exists from 1.0.224 on.
+    throw new Error(
+      `CloudCLI needs OpenCode ${MIN_OPENCODE_VERSION} or newer, and this OpenCode did not report its version `
+      + `(${readErrorMessage(error)}). ${upgradeHint}`,
+    );
+  }
+
+  if (version && !isSupportedOpenCodeVersion(version, MIN_OPENCODE_VERSION)) {
+    throw new Error(`OpenCode ${version} is too old for CloudCLI, which needs ${MIN_OPENCODE_VERSION} or newer. ${upgradeHint}`);
+  }
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -1049,6 +1096,7 @@ async function runOpenCodeTurn(
       throwOnError: true,
     });
     turn.client = client;
+    await assertSupportedOpenCode(client);
 
     // Subscribe before anything is sent, so no event of the turn is missed.
     // One attempt only: a private server that drops the stream has stopped.
