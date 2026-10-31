@@ -139,7 +139,7 @@
       "ctrlEnter": "Ctrl+Enter untuk mengirim • Shift+Enter untuk baris baru • Tab untuk mengganti mode • / untuk slash command",
       "enter": "Enter untuk mengirim • Shift+Enter untuk baris baru • Tab untuk mengganti mode • / untuk slash command",
       "queue": "Enter untuk mengantrekan pesan berikutnya",
-      "updateQueued": "Enter untuk memperbarui pesan yang diantrekan"
+      "appendQueued": "Enter untuk menambahkan ke pesan yang diantrekan"
     },
     "clickToChangeMode": "Klik untuk mengganti mode izin (atau tekan Tab di input)",
     "showAllCommands": "Tampilkan semua perintah",
@@ -147,7 +147,8 @@
     "scrollToBottom": "Gulir ke bawah",
     "queue": {
       "sendNext": "Antrekan pesan berikutnya",
-      "update": "Perbarui pesan antrean",
+      "append": "Tambahkan ke pesan antrean",
+      "notCombinable": "Gagal mengantrekan pesan: slash command dijalankan tersendiri, jadi tidak dapat digabungkan dengan pesan antrean. Kirim setelah pesan antrean terkirim.",
       "label": "Diantrekan",
       "willSend": "Akan dikirim setelah proses ini selesai",
       "edit": "Edit pesan antrean",
@@ -161,6 +162,8 @@
     "loadingModels": "Memuat model…",
     "modelMenu": "Pilih model dan tingkat penalaran",
     "permissionHeading": "Bagaimana tindakan {{provider}} harus disetujui?",
+    "permissionCycleHint": "Tekan Tab di kolom input untuk mengganti mode",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Mengganti pesan sebelumnya",
       "filesNotReverted": "file yang sudah diubah agen tidak dikembalikan",

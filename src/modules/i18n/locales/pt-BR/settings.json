@@ -399,6 +399,37 @@
       }
     },
     "connectionStatus": "Status da conexão",
+    "cli": {
+      "title": "Versão da CLI",
+      "checking": "Verificando a versão…",
+      "installed": "Instalada: v{{version}}",
+      "installedUnknown": "Instalada (versão desconhecida)",
+      "versionUnavailable": "Não foi possível ler a versão",
+      "updateAvailable": "Atualização disponível: v{{version}}",
+      "upToDate": "Atualizada",
+      "bundled": "Vem com o CloudCLI e é atualizada junto com ele.",
+      "platform": "Gerenciada pela plataforma de hospedagem.",
+      "updateTo": "Atualizar para v{{version}}",
+      "runUpdater": "Executar atualizador",
+      "updating": "Atualizando…",
+      "updatingHint": "Executando {{command}} no servidor. Isso pode levar alguns minutos.",
+      "runsCommand": "Executa {{command}} no servidor",
+      "output": "Saída de {{command}}",
+      "result": {
+        "updated": "Atualizada para v{{version}}.",
+        "alreadyUpToDate": "Já está atualizada (v{{version}}).",
+        "unchanged": "O atualizador terminou, mas a versão continua v{{version}}. A saída abaixo explica o motivo.",
+        "unchangedUnknown": "O atualizador terminou. A saída está abaixo.",
+        "permissionDenied": "O usuário do servidor não tem permissão para gravar onde esta CLI está instalada. Execute {{command}} no servidor como dono dessa instalação (por exemplo, com sudo).",
+        "timedOut": "A atualização não terminou a tempo e foi interrompida. Execute {{command}} no servidor para concluí-la.",
+        "failed": "A atualização falhou (código de saída {{exitCode}}). A saída está abaixo.",
+        "failedQuietly": "O atualizador informou uma falha. A saída está abaixo.",
+        "notStarted": "Não foi possível iniciar o atualizador.",
+        "busy": "Este agente está trabalhando em uma sessão. Espere ele terminar ou pare-o e depois atualize.",
+        "requestFailed": "A atualização não foi executada: {{error}}",
+        "unconfirmed": "Nenhuma resposta chegou do servidor ({{error}}). A atualização pode ter sido executada mesmo assim; a versão acima é a última informada pelo servidor."
+      }
+    },
     "subscriptionOverride": {
       "title": "Seu login de assinatura não está sendo usado",
       "description": "{{variable}} está definido em {{source}}, então o Claude Code cobra cada requisição para essa chave como uso pay-as-you-go da API em vez de usar seu login de assinatura.",

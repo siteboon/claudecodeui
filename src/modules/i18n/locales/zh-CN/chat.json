@@ -98,14 +98,14 @@
     "permissionMode": "权限模式",
     "modes": {
       "default": "默认模式",
-      "auto": "Auto Mode",
+      "auto": "自动模式",
       "acceptEdits": "编辑模式",
       "bypassPermissions": "无限制模式",
       "plan": "计划模式"
     },
     "descriptions": {
       "default": "只有受信任的命令（ls、cat、grep、git status 等）自动运行。其他命令将被跳过。可以写入工作区。",
-      "auto": "A model classifier decides per tool call whether to approve or deny. Hands-off, but safer than Bypass — denials still happen.",
+      "auto": "由模型分类器针对每次工具调用决定批准或拒绝。无需手动操作，但比无限制模式更安全——仍可能被拒绝。",
       "acceptEdits": "工作区内的所有命令自动运行。完全自动模式，具有沙盒执行功能。",
       "bypassPermissions": "完全的系统访问，无限制。所有命令自动运行，具有完整的磁盘和网络访问权限。请谨慎使用。",
       "plan": "计划模式 - 不执行任何命令"
@@ -132,7 +132,7 @@
       "ctrlEnter": "Ctrl+Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令",
       "enter": "Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令",
       "queue": "Enter 排队发送下一条消息",
-      "updateQueued": "Enter 更新排队消息"
+      "appendQueued": "Enter 添加到排队消息"
     },
     "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",
     "showAllCommands": "显示所有命令",
@@ -140,7 +140,8 @@
     "scrollToBottom": "滚动到底部",
     "queue": {
       "sendNext": "排队发送下一条消息",
-      "update": "更新排队消息",
+      "append": "添加到排队消息",
+      "notCombinable": "无法排队发送消息：斜杠命令会单独运行，因此不能与排队消息合并。请在排队消息发送后再发送。",
       "label": "已排队",
       "willSend": "将在当前完成后发送",
       "edit": "编辑排队消息",
@@ -257,6 +258,9 @@
     "answeredBy": "由 {{model}} 回答"
   },
   "composer": {
+    "permissionHeading": "如何批准 {{provider}} 的操作？",
+    "permissionCycleHint": "在输入框中按 Tab 切换模式",
+    "permissionTriggerLabel": "{{mode}}：{{heading}}",
     "editing": {
       "title": "正在替换先前的消息",
       "filesNotReverted": "已修改的文件不会被还原",

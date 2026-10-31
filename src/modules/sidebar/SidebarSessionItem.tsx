@@ -434,6 +434,7 @@ function SidebarSessionItem({
             }
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
+            if (event.detail > 1) return;
             onSessionSelect(session, project.projectId);
           }}
           onKeyDown={isSelecting ? handleSelectionKeyDown : undefined}
@@ -453,6 +454,12 @@ function SidebarSessionItem({
                 <div
                   className="min-w-0 flex-1 truncate text-sm font-normal text-foreground"
                   title={sessionView.sessionName}
+                  onDoubleClick={(event) => {
+                    if (isSelecting || isEditing || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onStartEditingSession(project.projectId, session.id, sessionView.sessionName);
+                  }}
                 >
                   {sessionView.sessionName}
                 </div>
