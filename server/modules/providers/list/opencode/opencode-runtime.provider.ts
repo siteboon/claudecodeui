@@ -34,6 +34,7 @@
 
 import crypto from 'node:crypto';
 import fsSync from 'node:fs';
+import { readdir, readFile } from 'node:fs/promises';
 import net from 'node:net';
 
 import Database from 'better-sqlite3';
@@ -64,6 +65,8 @@ import {
   createNormalizedMessage,
   getOpenCodeDatabasePath,
   readObjectRecord,
+  stripJsonComments,
+  stripTrailingCommas,
 } from '@/shared/utils.js';
 import type {
   AnyRecord,
@@ -86,11 +89,12 @@ const NOT_INSTALLED_MESSAGE = 'OpenCode CLI is not installed. Install it from ht
 
 /**
  * First OpenCode release with both APIs the runtime answers through: the
- * permission requests (`permission.asked` and its reply route, 1.0.224) and the
- * question tool's (1.1.7). An older server would wait forever for a reply to a
- * request the runtime never sees, so it is refused up front instead.
+ * permission requests (`permission.asked` and its reply route, 1.0.224) and
+ * questions answered with one label list per question (1.1.8; 1.1.7 took one
+ * string per question). An older server would wait forever for a reply the
+ * runtime cannot give, so it is refused up front instead.
  */
-const MIN_OPENCODE_VERSION = '1.1.7';
+const MIN_OPENCODE_VERSION = '1.1.8';
 
 /**
  * How long `opencode serve` may take to print its address. The SDK's own
@@ -99,8 +103,20 @@ const MIN_OPENCODE_VERSION = '1.1.7';
  */
 const SERVER_START_TIMEOUT_MS = 60_000;
 
-/** How long the event stream may take to confirm it is connected. */
-const EVENT_STREAM_CONNECT_TIMEOUT_MS = 15_000;
+/**
+ * How long the event stream may take to confirm it is connected. The first
+ * request for a project waits while OpenCode opens it (config, plugins, MCP
+ * servers), which a project with slow plugins can stretch well past a few
+ * seconds, so it gets the same budget as the server start.
+ */
+const EVENT_STREAM_CONNECT_TIMEOUT_MS = SERVER_START_TIMEOUT_MS;
+
+/**
+ * Names, in each turn server's environment, the CloudCLI process that started
+ * it, so a later CloudCLI can tell the servers of a process that died without
+ * stopping them.
+ */
+const OWNER_PID_ENV = 'CLOUDCLI_OPENCODE_OWNER_PID';
 
 /** How long stopping a turn waits for OpenCode's session abort before stopping the server anyway. */
 const SESSION_ABORT_TIMEOUT_MS = 5_000;
@@ -515,10 +531,73 @@ function readInlineConfig(): OpenCodeConfig | undefined {
   }
 
   try {
-    return readObjectRecord(JSON.parse(raw)) as OpenCodeConfig | null ?? undefined;
-  } catch {
+    // OpenCode accepts JSONC here, like in its config files.
+    return readObjectRecord(JSON.parse(stripTrailingCommas(stripJsonComments(raw)))) as OpenCodeConfig | null ?? undefined;
+  } catch (error) {
+    console.warn('[OpenCode] OPENCODE_CONFIG_CONTENT is not valid JSON, so the chat\'s OpenCode server runs without it:', readErrorMessage(error));
     return undefined;
   }
+}
+
+const isProcessAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: it exists but belongs to someone else.
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+};
+
+/**
+ * Stops turn servers that a CloudCLI process started and never stopped because
+ * it was killed (SIGKILL, the OOM killer) before its exit hook could run. Such a
+ * server never exits by itself, unlike the `opencode run` process it replaces.
+ *
+ * A process is only stopped when its environment names a CloudCLI owner that
+ * is gone and its arguments are a turn server's (`serve --hostname=127.0.0.1
+ * --port=…`), so commands the agent left running in the background are never
+ * touched. Linux only: the environment is read from /proc.
+ *
+ * Used by the server entrypoint once at startup, through the providers module.
+ */
+export async function reapOrphanedOpenCodeServers(): Promise<number> {
+  if (process.platform !== 'linux') {
+    return 0;
+  }
+
+  let reaped = 0;
+  const entries = await readdir('/proc').catch(() => [] as string[]);
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry) || Number(entry) === process.pid) {
+      continue;
+    }
+
+    const pid = Number(entry);
+    // Other users' processes are unreadable and skipped.
+    const [environ, cmdline] = await Promise.all([
+      readFile(`/proc/${pid}/environ`, 'utf8').catch(() => ''),
+      readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => ''),
+    ]);
+    const owner = environ.split('\0').find((variable) => variable.startsWith(`${OWNER_PID_ENV}=`));
+    const ownerPid = Number(owner?.slice(OWNER_PID_ENV.length + 1));
+    const args = cmdline.split('\0');
+    const isTurnServer = args.includes('serve')
+      && args.includes('--hostname=127.0.0.1')
+      && args.some((arg) => arg.startsWith('--port='));
+    if (!isTurnServer || !Number.isInteger(ownerPid) || ownerPid <= 0 || isProcessAlive(ownerPid)) {
+      continue;
+    }
+
+    try {
+      process.kill(pid, 'SIGTERM');
+      reaped += 1;
+    } catch {
+      // Gone already.
+    }
+  }
+
+  return reaped;
 }
 
 /**
@@ -558,6 +637,7 @@ async function startOpenCodeServer(signal: AbortSignal): Promise<{ server: OpenC
   const childEnv: Record<string, string> = {
     OPENCODE_SERVER_PASSWORD: password,
     OPENCODE_SERVER_USERNAME: 'opencode',
+    [OWNER_PID_ENV]: String(process.pid),
   };
   if (process.env.OPENCODE_ENABLE_QUESTION_TOOL === undefined) {
     childEnv.OPENCODE_ENABLE_QUESTION_TOOL = 'true';
@@ -875,6 +955,10 @@ async function runOpenCodeTurn(
   };
 
   const handlePermissionAsked = (request: OpenCodePermissionRequest) => {
+    // A stopping or finished turn asks nobody; its server is about to go.
+    if (turn.aborted || turnEnded) {
+      return;
+    }
     const automaticReply = resolveAutomaticPermissionReply(permissionMode, request.permission)
       ?? (isCoveredByApprovals(rememberedApprovals.get(approvalsKey()), request.permission, request.patterns) ? 'once' : null);
     if (automaticReply) {
@@ -912,6 +996,9 @@ async function runOpenCodeTurn(
   };
 
   const handleQuestionAsked = (request: OpenCodeQuestionRequest) => {
+    if (turn.aborted || turnEnded) {
+      return;
+    }
     // Nobody is asked in bypassPermissions (also how /api/agent runs), and a
     // dismissed question would end the turn, so the agent is told the
     // questions went unanswered and carries on.
@@ -1115,7 +1202,12 @@ async function runOpenCodeTurn(
             connected();
             continue;
           }
-          handleEvent(event);
+          try {
+            handleEvent(event);
+          } catch (error) {
+            // One event that cannot be handled must not end the turn.
+            console.error('[OpenCode] Failed to handle an event:', event.type, readErrorMessage(error));
+          }
         }
       } catch (error) {
         streamError ??= error;
@@ -1188,6 +1280,9 @@ async function runOpenCodeTurn(
     turn.abortController.abort();
     turn.server?.close();
     await eventLoop;
+    for (const requestId of Array.from(turnPromptIds)) {
+      pendingPrompts.get(requestId)?.settle('cancelled');
+    }
     if (activeTurns.get(turn.key) === turn) {
       activeTurns.delete(turn.key);
     }
@@ -1196,8 +1291,10 @@ async function runOpenCodeTurn(
   const finalSessionId = turnSessionId();
   if (turn.aborted) {
     // The abort handler sends the terminal `complete` (aborted: true) on this
-    // turn's behalf. Settling only after it has done so keeps the chat's
+    // turn's behalf. Settling only after the stop has finished — including a
+    // stop that landed while the stream was draining — keeps the chat's
     // safety-net `complete` from arriving first.
+    await turn.abortFinished;
     await nextMacrotask();
     return;
   }
@@ -1244,8 +1341,15 @@ async function runOpenCodeTurn(
  */
 async function abortOpenCodeSession(sessionId: string): Promise<boolean> {
   const turn = activeTurns.get(sessionId);
-  if (!turn || turn.aborted) {
+  if (!turn) {
     return false;
+  }
+
+  // A second stop (Stop pressed twice, Esc twice) waits for the first one, so
+  // the run is reported stopped only once the turn really has been.
+  if (turn.aborted) {
+    await turn.abortFinished;
+    return true;
   }
 
   // Flagged synchronously so the turn emits no `complete` of its own.

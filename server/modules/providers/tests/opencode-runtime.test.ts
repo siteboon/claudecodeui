@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,6 +22,7 @@ const {
   isCoveredByApprovals,
   opencodeRuntime,
   readQuestionAnswers,
+  reapOrphanedOpenCodeServers,
   resolveAutomaticPermissionReply,
   toOpenCodePermissionReply,
 } = await import('@/modules/providers/list/opencode/opencode-runtime.provider.js');
@@ -121,6 +123,7 @@ type TurnOptions = {
   permissionMode?: string;
   files?: unknown[];
   installed?: boolean;
+  normalizeMessage?: ProviderRuntimeContext['normalizeMessage'];
   /** Called for every frame the chat receives; return a decision to answer a permission_request. */
   onFrame?: (frame: Frame) => ProviderPermissionDecision | void;
 };
@@ -150,7 +153,7 @@ async function runTurn(options: TurnOptions) {
     resolveProviderSessionId: () => options.resumeSessionId ?? null,
     resolveResumeModel: async (_sessionId, requestedModel) => requestedModel || undefined,
     getProviderModels: async () => ({ OPTIONS: [], DEFAULT: '' }),
-    normalizeMessage: (raw, sessionId) => sessionsProvider.normalizeMessage(raw, sessionId),
+    normalizeMessage: options.normalizeMessage ?? ((raw, sessionId) => sessionsProvider.normalizeMessage(raw, sessionId)),
     isProviderInstalled: async () => options.installed ?? true,
   };
 
@@ -180,6 +183,7 @@ async function runTurn(options: TurnOptions) {
     writer,
     requests: requests.filter((entry) => !entry.started),
     serverPid: started?.pid as number | undefined,
+    started,
   };
 }
 
@@ -232,6 +236,12 @@ test('a new session runs on a private, authenticated server that stops with the 
   assert.deepEqual(prompt?.body.model, { providerID: 'github-copilot', modelID: 'gpt-5.6-terra' });
   assert.deepEqual(prompt?.body.parts, [{ type: 'text', text: 'Hi' }]);
   assert.equal(prompt?.body.agent, undefined);
+
+  // Loopback only, with a password of its own that never stays in CloudCLI's environment.
+  assert.ok(turn.started?.args.includes('--hostname=127.0.0.1'));
+  assert.equal(turn.started?.passwordSet, true);
+  assert.equal(process.env.OPENCODE_SERVER_PASSWORD, undefined);
+  assert.equal(process.env.CLOUDCLI_OPENCODE_OWNER_PID, undefined);
 
   assert.ok(turn.serverPid, 'the fake server reported its pid');
   assert.ok(await waitForExit(turn.serverPid!), 'the turn\'s server process is gone');
@@ -433,6 +443,114 @@ test('stopping a turn withdraws its prompt, aborts the session and settles after
   assert.equal(await opencodeRuntime.abort('app-abort'), false);
 });
 
+test('a second stop waits for the first and reports the turn stopped only once it is', async () => {
+  const results: boolean[] = [];
+  let abortsSettledAt = 0;
+  const turn = await runTurn({
+    appSessionId: 'app-double-stop',
+    // OpenCode takes a while to confirm the first stop.
+    scenario: { abortDelayMs: 600, steps: [permissionStep(['sleep 100'], ['sleep *'])] },
+    onFrame: (frame) => {
+      if (frame.kind === 'permission_request') {
+        void Promise.all([
+          opencodeRuntime.abort('app-double-stop'),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(opencodeRuntime.abort('app-double-stop')), 50)),
+        ]).then((values) => {
+          results.push(...values);
+          abortsSettledAt = performance.now();
+        });
+      }
+    },
+  });
+  const settledAt = performance.now();
+
+  assert.equal(turn.error, null);
+  assert.deepEqual(results, [true, true]);
+  assert.ok(abortsSettledAt > 0 && abortsSettledAt <= settledAt);
+  assert.equal(turn.frames.filter((frame) => frame.kind === 'complete').length, 0);
+});
+
+test('a request raised while the turn is stopping never reaches the chat', async () => {
+  const turn = await runTurn({
+    appSessionId: 'app-late-ask',
+    scenario: {
+      // The abort takes a moment, so the late question arrives while it is pending.
+      abortDelayMs: 300,
+      askOnAbort: { id: 'que_late', questions: questionStep.questions },
+      steps: [permissionStep(['sleep 100'], ['sleep *'])],
+    },
+    onFrame: (frame) => {
+      if (frame.kind === 'permission_request' && frame.requestId === 'per_1') {
+        void opencodeRuntime.abort('app-late-ask');
+      }
+    },
+  });
+
+  assert.equal(turn.frames.some((frame) => frame.requestId === 'que_late'), false);
+  assert.deepEqual(opencodeRuntime.permissions.listPending('app-late-ask'), []);
+});
+
+test('requests OpenCode settles itself are withdrawn from the chat', async () => {
+  const turn = await runTurn({
+    appSessionId: 'app-cascade',
+    scenario: { steps: [{
+      type: 'parallel-permissions',
+      requests: [
+        { id: 'per_a', permission: 'bash', patterns: ['npm test'], always: ['npm *'] },
+        { id: 'per_b', permission: 'bash', patterns: ['npm run lint'], always: ['npm *'] },
+      ],
+    }] },
+    // Only the first is answered; OpenCode's reject cascade settles the second.
+    onFrame: (frame) => (frame.kind === 'permission_request' && frame.requestId === 'per_a' ? { allow: false } : undefined),
+  });
+
+  const settledB = turn.frames.find((frame) => frame.requestId === 'per_b' && frame.kind !== 'permission_request');
+  assert.equal(settledB?.kind, 'permission_resolved');
+  assert.equal(findRequest(turn.requests, 'POST', /\/permission\/per_b\/reply$/), undefined);
+  assert.deepEqual(opencodeRuntime.permissions.listPending('app-cascade'), []);
+});
+
+test('an event that cannot be handled does not end the turn', async () => {
+  const turn = await runTurn({
+    scenario: { steps: [{ type: 'reasoning', text: 'thinking' }, { type: 'text', text: 'still answered' }] },
+    normalizeMessage: (raw, sessionId) => {
+      if ((raw as { type?: string }).type === 'reasoning') {
+        throw new Error('cannot normalize this one');
+      }
+      return sessionsProvider.normalizeMessage(raw, sessionId);
+    },
+  });
+
+  assert.equal(turn.error, null);
+  assert.ok(turn.frames.some((frame) => frame.kind === 'text' && frame.content === 'still answered'));
+  assert.equal(turn.frames.at(-1)?.exitCode, 0);
+});
+
+test('turn servers a killed CloudCLI left running are stopped, and nothing else', { skip: process.platform !== 'linux' }, async () => {
+  const deadOwner = spawn(process.execPath, ['-e', '']);
+  await new Promise((resolve) => deadOwner.once('exit', resolve));
+  const keepAlive = 'setInterval(() => {}, 1000)';
+  const start = (args: string[], ownerPid: number) => spawn(process.execPath, ['-e', keepAlive, ...args], {
+    env: { ...process.env, CLOUDCLI_OPENCODE_OWNER_PID: String(ownerPid) },
+    stdio: 'ignore',
+  });
+  const orphan = start(['serve', '--hostname=127.0.0.1', '--port=1'], deadOwner.pid!);
+  const ownedByLiveCloudCli = start(['serve', '--hostname=127.0.0.1', '--port=2'], process.pid);
+  const leftoverCommand = start(['npm', 'run', 'dev'], deadOwner.pid!);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  try {
+    assert.ok(await reapOrphanedOpenCodeServers() >= 1);
+    assert.ok(await waitForExit(orphan.pid!), 'the orphaned turn server is stopped');
+    assert.equal(isProcessAlive(ownedByLiveCloudCli.pid!), true, 'a live CloudCLI\'s server is left alone');
+    assert.equal(isProcessAlive(leftoverCommand.pid!), true, 'a command the agent left running is left alone');
+  } finally {
+    for (const child of [orphan, ownedByLiveCloudCli, leftoverCommand]) {
+      child.kill('SIGKILL');
+    }
+  }
+});
+
 test('a session `opencode run` created gets its question tool back unless the agent denies questions', async () => {
   const legacyRules = [
     { permission: 'question', pattern: '*', action: 'deny' },
@@ -485,12 +603,16 @@ test('a server that dies mid-turn fails the turn', async () => {
 
 test('an OpenCode too old for permission and question replies is refused before any prompt', async () => {
   const old = await runTurn({ scenario: { version: '1.0.200', steps: [{ type: 'text', text: 'never sent' }] } });
-  assert.match(String(old.frames.find((frame) => frame.kind === 'error')?.content), /OpenCode 1\.0\.200 is too old.*1\.1\.7/);
+  assert.match(String(old.frames.find((frame) => frame.kind === 'error')?.content), /OpenCode 1\.0\.200 is too old.*1\.1\.8/);
   assert.equal(old.frames.at(-1)?.exitCode, 1);
   assert.equal(findRequest(old.requests, 'POST', /\/prompt_async$/), undefined);
 
+  // 1.1.7 took one answer string per question, not label lists.
+  const oneOneSeven = await runTurn({ scenario: { version: '1.1.7', steps: [] } });
+  assert.match(String(oneOneSeven.frames.find((frame) => frame.kind === 'error')?.content), /OpenCode 1\.1\.7 is too old/);
+
   const unversioned = await runTurn({ scenario: { version: null, steps: [] } });
-  assert.match(String(unversioned.frames.find((frame) => frame.kind === 'error')?.content), /needs OpenCode 1\.1\.7 or newer/);
+  assert.match(String(unversioned.frames.find((frame) => frame.kind === 'error')?.content), /needs OpenCode 1\.1\.8 or newer/);
 
   // Snapshot builds report 0.0.0 and are let through.
   const snapshot = await runTurn({ scenario: { version: '0.0.0-dev-202610300000', steps: [{ type: 'text', text: 'ok' }] } });

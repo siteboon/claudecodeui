@@ -7,36 +7,36 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
-import { isOpenCodeSessionActive, opencodeRuntime } from '@/modules/providers/list/opencode/opencode-runtime.provider.js';
-import { OpenCodeSessionsProvider } from '@/modules/providers/list/opencode/opencode-sessions.provider.js';
-import { createProviderRuntimeService } from '@/modules/providers/services/provider-runtime.service.js';
+import { providerRuntimeService } from '@/modules/providers/index.js';
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
-import type { IProvider } from '@/shared/interfaces.js';
 
 /**
  * Stopping an OpenCode turn from the chat, end to end through the chat gateway
- * and the real OpenCode runtime against a fake `opencode serve`: the open
- * prompt is withdrawn, and the chat gets exactly one terminal `complete`, the
- * aborted one the abort handler sends — not the failed one the gateway sends
- * for a runtime that settles before the abort has been reported.
+ * and the real provider runtime against a fake `opencode serve` (the providers
+ * module's test fixture, put on PATH as `opencode`): the open prompt is
+ * withdrawn, and the chat gets exactly one terminal `complete`, the aborted one
+ * the abort handler sends — not the failed one the gateway sends for a runtime
+ * that settles before the abort has been reported.
  */
 
 const SESSION_ID = 'opencode-chat';
 const FIXTURE_PATH = fileURLToPath(new URL('../../providers/tests/fixtures/fake-opencode-serve.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx/esm');
 
+type Frame = Record<string, unknown>;
+
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
     readyState: number;
-    frames: Array<Record<string, unknown>>;
+    frames: Frame[];
     send: (data: string) => void;
   };
   socket.readyState = 1;
   socket.frames = [];
   socket.send = (data: string) => {
-    const frame = JSON.parse(data) as Record<string, unknown>;
+    const frame = JSON.parse(data) as Frame;
     socket.frames.push(frame);
     socket.emit('frame', frame);
   };
@@ -46,7 +46,34 @@ function createFakeSocket() {
 const findEnvKey = (name: string) =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
 
-test('stopping an OpenCode turn sends one aborted complete and withdraws its prompt', async () => {
+const waitForFrame = (socket: ReturnType<typeof createFakeSocket>, matches: (frame: Frame) => boolean) =>
+  new Promise<Frame>((resolve) => {
+    const existing = socket.frames.find(matches);
+    if (existing) {
+      resolve(existing);
+      return;
+    }
+    const onFrame = (frame: Frame) => {
+      if (matches(frame)) {
+        socket.off('frame', onFrame);
+        resolve(frame);
+      }
+    };
+    socket.on('frame', onFrame);
+  });
+
+const sendFrame = (socket: ReturnType<typeof createFakeSocket>, payload: Frame) =>
+  socket.emit('message', Buffer.from(JSON.stringify(payload)));
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const permissionScenario = (id: string, extra: Frame = {}) => JSON.stringify({
+  ...extra,
+  steps: [{ type: 'permission', id, permission: 'bash', patterns: ['sleep 100'], always: ['sleep *'] }],
+});
+
+/** A chat gateway on a temp database, with a fake `opencode` first on PATH. */
+async function withOpenCodeGateway(runTest: (socket: ReturnType<typeof createFakeSocket>) => Promise<void>) {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'chat-abort-opencode-'));
   const binDir = path.join(tempRoot, 'bin');
   const projectDir = path.join(tempRoot, 'project');
@@ -60,22 +87,18 @@ test('stopping an OpenCode turn sends one aborted complete and withdraws its pro
 
   const pathKey = findEnvKey('PATH');
   const pathExtKey = findEnvKey('PATHEXT');
-  const saved = {
-    path: process.env[pathKey],
-    pathExt: process.env[pathExtKey],
-    home: process.env.HOME,
-    databasePath: process.env.DATABASE_PATH,
-    scenario: process.env.FAKE_OPENCODE_SCENARIO,
+  const saved: Record<string, string | undefined> = {
+    [pathKey]: process.env[pathKey],
+    [pathExtKey]: process.env[pathExtKey],
+    HOME: process.env.HOME,
+    DATABASE_PATH: process.env.DATABASE_PATH,
+    FAKE_OPENCODE_SCENARIO: process.env.FAKE_OPENCODE_SCENARIO,
   };
-  process.env[pathKey] = `${binDir}${path.delimiter}${saved.path || ''}`;
-  if (process.platform === 'win32' && !saved.pathExt?.toUpperCase().includes('.CMD')) {
-    process.env[pathExtKey] = `.COM;.EXE;.BAT;.CMD${saved.pathExt ? `;${saved.pathExt}` : ''}`;
+  process.env[pathKey] = `${binDir}${path.delimiter}${saved[pathKey] || ''}`;
+  if (process.platform === 'win32' && !saved[pathExtKey]?.toUpperCase().includes('.CMD')) {
+    process.env[pathExtKey] = `.COM;.EXE;.BAT;.CMD${saved[pathExtKey] ? `;${saved[pathExtKey]}` : ''}`;
   }
   process.env.HOME = tempRoot;
-  process.env.FAKE_OPENCODE_SCENARIO = JSON.stringify({
-    newSessionId: 'ses_abort',
-    steps: [{ type: 'permission', id: 'per_abort', permission: 'bash', patterns: ['sleep 100'], always: ['sleep *'] }],
-  });
 
   closeConnection();
   process.env.DATABASE_PATH = path.join(tempRoot, 'auth.db');
@@ -83,66 +106,16 @@ test('stopping an OpenCode turn sends one aborted complete and withdraws its pro
 
   try {
     sessionsDb.createAppSession(SESSION_ID, 'opencode', projectDir);
-
-    // The real runtime service, so the abort travels through the same async
-    // layers as in production; only the registry lookups are stubbed.
-    const sessions = new OpenCodeSessionsProvider();
-    const provider = {
-      id: 'opencode',
-      runtime: opencodeRuntime,
-      sessions,
-      auth: { getStatus: async () => ({ installed: true }) },
-    } as unknown as IProvider;
-    const runtime = createProviderRuntimeService({
-      listProviders: () => [provider],
-      resolveProvider: () => provider,
-      resolveProviderSessionId: () => null,
-      resolveResumeModel: async () => 'fake/model',
-      getProviderModels: async () => ({ OPTIONS: [], DEFAULT: '' }),
-    });
-
     const socket = createFakeSocket();
-    handleChatConnection(socket as never, { user: { id: 1 } } as never, { runtime });
-
-    const prompted = new Promise<void>((resolve) => {
-      socket.on('frame', (frame: Record<string, unknown>) => {
-        if (frame.kind === 'permission_request') {
-          resolve();
-        }
-      });
-    });
-    socket.emit('message', Buffer.from(JSON.stringify({ type: 'chat.send', sessionId: SESSION_ID, content: 'Hi' })));
-    await prompted;
-
-    socket.emit('message', Buffer.from(JSON.stringify({ type: 'chat.abort', sessionId: SESSION_ID })));
-
-    // Settled once the run left the registry's running state and the
-    // runtime no longer tracks the turn.
-    const deadline = Date.now() + 15_000;
-    while ((chatRunRegistry.isProcessing(SESSION_ID) || isOpenCodeSessionActive(SESSION_ID)) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    // Room for a late safety-net complete to show up if the order were wrong.
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const completes = socket.frames.filter((frame) => frame.kind === 'complete');
-    assert.equal(completes.length, 1, 'exactly one terminal complete');
-    assert.equal(completes[0].aborted, true);
-    assert.equal(completes[0].exitCode, 0);
-    const cancelled = socket.frames.find((frame) => frame.kind === 'permission_cancelled');
-    assert.equal(cancelled?.requestId, 'per_abort');
-    assert.equal(socket.frames.some((frame) => frame.kind === 'error' || frame.kind === 'protocol_error'), false);
+    // The real runtime service and provider registry, so the abort travels
+    // through the same layers as in production.
+    handleChatConnection(socket as never, { user: { id: 1 } } as never, { runtime: providerRuntimeService });
+    await runTest(socket);
   } finally {
     connectedClients.clear();
     chatRunRegistry.clearAll();
     closeConnection();
-    for (const [key, value] of [
-      [pathKey, saved.path],
-      [pathExtKey, saved.pathExt],
-      ['HOME', saved.home],
-      ['DATABASE_PATH', saved.databasePath],
-      ['FAKE_OPENCODE_SCENARIO', saved.scenario],
-    ] as const) {
+    for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) {
         delete process.env[key];
       } else {
@@ -151,4 +124,62 @@ test('stopping an OpenCode turn sends one aborted complete and withdraws its pro
     }
     await rm(tempRoot, { recursive: true, force: true });
   }
+}
+
+/** Waits until the session has no running run, then a little longer for any late frame. */
+async function waitForSettledRun() {
+  const deadline = Date.now() + 15_000;
+  while (chatRunRegistry.isProcessing(SESSION_ID) && Date.now() < deadline) {
+    await delay(20);
+  }
+  await delay(300);
+}
+
+test('stopping an OpenCode turn sends one aborted complete and withdraws its prompt', async () => {
+  await withOpenCodeGateway(async (socket) => {
+    process.env.FAKE_OPENCODE_SCENARIO = permissionScenario('per_abort');
+    sendFrame(socket, { type: 'chat.send', sessionId: SESSION_ID, content: 'Hi', options: { model: 'fake/model' } });
+    await waitForFrame(socket, (frame) => frame.kind === 'permission_request');
+
+    sendFrame(socket, { type: 'chat.abort', sessionId: SESSION_ID });
+    await waitForSettledRun();
+
+    const completes = socket.frames.filter((frame) => frame.kind === 'complete');
+    assert.equal(completes.length, 1, 'exactly one terminal complete');
+    assert.equal(completes[0].aborted, true);
+    assert.equal(completes[0].exitCode, 0);
+    assert.equal(socket.frames.find((frame) => frame.kind === 'permission_cancelled')?.requestId, 'per_abort');
+    assert.equal(socket.frames.some((frame) => frame.kind === 'error' || frame.kind === 'protocol_error'), false);
+    assert.deepEqual(providerRuntimeService.getPendingApprovalsForSession(SESSION_ID), []);
+  });
+});
+
+test('a second stop neither ends the turn early nor the next turn later', async () => {
+  await withOpenCodeGateway(async (socket) => {
+    // OpenCode takes a while to confirm the stop, so the second Stop (or a
+    // second Esc) lands while the first is still in progress.
+    process.env.FAKE_OPENCODE_SCENARIO = permissionScenario('per_first', { abortDelayMs: 800 });
+    sendFrame(socket, { type: 'chat.send', sessionId: SESSION_ID, content: 'Hi', options: { model: 'fake/model' } });
+    await waitForFrame(socket, (frame) => frame.kind === 'permission_request');
+
+    sendFrame(socket, { type: 'chat.abort', sessionId: SESSION_ID });
+    await delay(50);
+    sendFrame(socket, { type: 'chat.abort', sessionId: SESSION_ID });
+
+    const firstComplete = await waitForFrame(socket, (frame) => frame.kind === 'complete');
+    assert.equal(firstComplete.aborted, true);
+    assert.equal(firstComplete.exitCode, 0, 'the turn is reported stopped only once its stop has finished');
+
+    // The next message, sent the moment the chat sees the turn end.
+    process.env.FAKE_OPENCODE_SCENARIO = permissionScenario('per_second');
+    sendFrame(socket, { type: 'chat.send', sessionId: SESSION_ID, content: 'Again', options: { model: 'fake/model' } });
+    await waitForFrame(socket, (frame) => frame.kind === 'permission_request' && frame.requestId === 'per_second');
+    await delay(1000);
+
+    assert.equal(chatRunRegistry.isProcessing(SESSION_ID), true, 'the new turn is still running');
+    assert.equal(socket.frames.filter((frame) => frame.kind === 'complete').length, 1);
+
+    sendFrame(socket, { type: 'chat.abort', sessionId: SESSION_ID });
+    await waitForSettledRun();
+  });
 });

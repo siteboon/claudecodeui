@@ -31,6 +31,8 @@ type Step =
     metadata?: Record<string, unknown>;
   }
   | { type: 'question'; id: string; questions: unknown[] }
+  /** Several requests asked at once; a reject of one rejects the rest, as OpenCode does. */
+  | { type: 'parallel-permissions'; requests: Array<{ id: string; permission: string; patterns: string[]; always: string[] }> }
   | { type: 'error'; name: string; message: string }
   | { type: 'crash' }
   | { type: 'hang' };
@@ -46,6 +48,10 @@ type Scenario = {
   promptStatus?: number;
   /** Version /global/health reports; null makes the route missing, as before OpenCode 1.0.224. */
   version?: string | null;
+  /** How long POST /session/:id/abort takes to answer. */
+  abortDelayMs?: number;
+  /** A question OpenCode raises while the abort is being handled. */
+  askOnAbort?: { id: string; questions: unknown[] };
   steps: Step[];
 };
 
@@ -176,6 +182,33 @@ async function runTurn(sessionID: string): Promise<void> {
       continue;
     }
 
+    if (step.type === 'parallel-permissions') {
+      const answers = step.requests.map((request) => {
+        const answer = new Promise<{ kind: string; value: unknown }>((resolve) => waiting.set(request.id, resolve));
+        emit('permission.asked', { ...request, sessionID, metadata: {} });
+        return answer;
+      });
+      const first = await Promise.race([Promise.race(answers), aborted]);
+      if (first === 'aborted') {
+        emit('session.status', { sessionID, status: { type: 'idle' } });
+        return;
+      }
+      if (first.value === 'reject') {
+        // OpenCode rejects every other pending request of the session too.
+        for (const request of step.requests) {
+          const resolve = waiting.get(request.id);
+          if (resolve) {
+            waiting.delete(request.id);
+            emit('permission.replied', { sessionID, requestID: request.id, reply: 'reject' });
+            resolve({ kind: 'permission', value: 'reject' });
+          }
+        }
+        break;
+      }
+      await Promise.all(answers);
+      continue;
+    }
+
     if (step.type === 'question') {
       const answer = new Promise<{ kind: string; value: unknown }>((resolve) => waiting.set(step.id, resolve));
       emit('question.asked', { id: step.id, sessionID, questions: step.questions });
@@ -291,6 +324,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && (match = /^\/session\/([^/]+)\/abort$/.exec(path))) {
+    if (scenario.askOnAbort) {
+      emit('question.asked', { ...scenario.askOnAbort, sessionID: match[1] });
+    }
+    if (scenario.abortDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, scenario.abortDelayMs));
+    }
     turnAborted?.();
     sendJson(res, 200, true);
     return;
@@ -322,6 +361,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(Number(readFlag('port') ?? 0), readFlag('hostname') ?? '127.0.0.1', () => {
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : 0;
-  log({ started: true, pid: process.pid, port });
+  log({ started: true, pid: process.pid, port, args, passwordSet: Boolean(password) });
   console.log(`opencode server listening on http://${readFlag('hostname') ?? '127.0.0.1'}:${port}`);
 });

@@ -1076,6 +1076,78 @@ export function unwrapJsonStringLiteral(value: string): string {
 }
 
 // ---------------------------
+//----------------- JSONC UTILITIES ------------
+/**
+ * Removes JSONC comments (`//` line and `/*` block comments) without touching comment-like
+ * text inside string literals, so the result can go to `JSON.parse` once
+ * trailing commas are gone too (`stripTrailingCommas`).
+ *
+ * Used by the OpenCode provider, whose config files and inline
+ * `OPENCODE_CONFIG_CONTENT` are JSONC: its MCP config reader and its runtime.
+ */
+export function stripJsonComments(content: string): string {
+  let output = '';
+  let inString = false;
+  let quote = '';
+  let escaped = false;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    const next = content[index + 1];
+
+    if (inString) {
+      output += char;
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === quote) {
+        inString = false;
+        quote = '';
+      }
+      continue;
+    }
+
+    if (char === '"' || char === '\'') {
+      inString = true;
+      quote = char;
+      output += char;
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      while (index < content.length && content[index] !== '\n') {
+        index += 1;
+      }
+      output += '\n';
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      index += 2;
+      while (index < content.length && !(content[index] === '*' && content[index + 1] === '/')) {
+        index += 1;
+      }
+      index += 1;
+      continue;
+    }
+
+    output += char;
+  }
+
+  return output;
+}
+
+/**
+ * Removes the trailing commas JSONC allows before a closing `}` or `]`. Run it
+ * after `stripJsonComments`; like that helper it is used by the OpenCode
+ * provider's MCP config reader and runtime.
+ */
+export function stripTrailingCommas(content: string): string {
+  return content.replace(/,\s*([}\]])/g, '$1');
+}
+
+// ---------------------------
 //----------------- SAFE DIRECTORY NAME UTILITIES ------------
 /**
  * Validates that a user or provider supplied identifier can safely be treated
