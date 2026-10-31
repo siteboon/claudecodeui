@@ -785,18 +785,34 @@ export function useProjectsState({
       // no run is active here (e.g. edited from another client or the CLI):
       // signal the chat view to reload its messages.
       const currentSelectedSession = selectedSessionRef.current;
-      if (
-        currentSelectedSession
-        && upsert.sessionId === currentSelectedSession.id
-        && !isSessionProcessing(upsert.sessionId)
-      ) {
-        setExternalMessageUpdate((prev) => prev + 1);
+      // The open session may still be selected under its provider-native id.
+      const aliasIds = getSessionAliasIds(upsert);
+      const isViewedSession = currentSelectedSession != null && aliasIds.has(String(currentSelectedSession.id));
+      if (isViewedSession) {
+        // A run may be tracked under either id; never reload over a live stream.
+        if (![...aliasIds].some((id) => isSessionProcessing(id))) {
+          setExternalMessageUpdate((prev) => prev + 1);
+        }
       } else {
         markSessionAttention(upsert.sessionId);
       }
 
-      setProjects((previousProjects) => {
+      setProjects((currentProjects) => {
         const targetProjectId = upsert.project?.projectId;
+        // A session that now names another project was moved there: drop it
+        // (under any of its ids) from wherever this client still lists it.
+        // Checked first so the common, non-move upsert stays a single scan.
+        const listedElsewhere = Boolean(targetProjectId) && currentProjects.some((project) => (
+          project.projectId !== targetProjectId
+          && getProjectSessions(project).some((session) => aliasIds.has(String(session.id)))
+        ));
+        const previousProjects = listedElsewhere
+          ? currentProjects.map((project) => (
+            project.projectId === targetProjectId
+              ? project
+              : [...aliasIds].reduce(removeSessionFromProject, project)
+          ))
+          : currentProjects;
         const existingProject = previousProjects.find((project) =>
           targetProjectId ? project.projectId === targetProjectId : getProjectSessions(project).some((session) => session.id === upsert.sessionId),
         );
@@ -839,10 +855,26 @@ export function useProjectsState({
           return previousProject;
         }
         if (previousProject.projectId !== upsert.project.projectId) {
-          return previousProject;
+          // The open session was moved to another project: the workspace (and
+          // the cwd the chat sends) has to follow it.
+          if (!isViewedSession) {
+            return previousProject;
+          }
+          const knownTarget = projectsRef.current.find((project) => project.projectId === upsert.project?.projectId);
+          return knownTarget
+            ? mergeProjectSelectionMetadata(knownTarget, upsert.project)
+            : projectFromRegistration({ ...upsert.project, sessions: [] } as Project);
         }
         return mergeProjectSelectionMetadata(previousProject, upsert.project);
       });
+      if (isViewedSession && upsert.project && currentSelectedSession.__projectId !== upsert.project.projectId) {
+        const movedToProjectId = upsert.project.projectId;
+        setSelectedSession((previousSession) => (
+          previousSession && aliasIds.has(String(previousSession.id))
+            ? { ...previousSession, __projectId: movedToProjectId }
+            : previousSession
+        ));
+      }
 
       const aliasedSelectedSessionId =
         typeof upsert.providerSessionId === 'string' && upsert.providerSessionId !== upsert.sessionId

@@ -114,7 +114,7 @@ test('the rename open elsewhere does not put this row into editing', () => {
 });
 
 test('a project rename never puts a session row into editing', () => {
-  const activeRename: ActiveSidebarRename = { target: 'project', id: 's1', draft: 'x' };
+  const activeRename: ActiveSidebarRename = { target: 'project', id: 's1', draft: 'x', pathDraft: '/tmp/s1' };
   renderList([conversation('s1')], makeActions({ activeRename }));
 
   assert.equal(recordedOptionsProps[0].isEditing, false);

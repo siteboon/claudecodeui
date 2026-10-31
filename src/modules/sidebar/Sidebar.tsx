@@ -121,6 +121,7 @@ function Sidebar({
     startEditingProject,
     startEditingSession,
     updateRenameDraft,
+    updateRenamePathDraft,
     cancelRename,
     saveProjectName,
     showDeleteSessionConfirmation,
@@ -140,6 +141,9 @@ function Sidebar({
     refreshProjects,
     updateSessionSummary,
     forkSession,
+    pendingMove,
+    setPendingMove,
+    confirmMoveSession,
     collapseSidebar: handleCollapseSidebar,
     expandSidebar: handleExpandSidebar,
     setShowNewProject,
@@ -182,8 +186,8 @@ function Sidebar({
 
   // Stable so memo() on the row components can bail out; an inline arrow here
   // would give every row a new callback on each sidebar render.
-  const handleSaveProjectName = useCallback((projectId: string, nextName: string) => {
-    void saveProjectName(projectId, nextName);
+  const handleSaveProjectName = useCallback((projectId: string, nextName: string, nextPath: string) => {
+    void saveProjectName(projectId, nextName, nextPath);
   }, [saveProjectName]);
 
   const handleSaveSessionName = useCallback(
@@ -214,6 +218,7 @@ function Sidebar({
     attentionSessionIds,
     isProjectStarred,
     onRenameDraftChange: updateRenameDraft,
+    onRenamePathDraftChange: updateRenamePathDraft,
     onToggleProject: toggleProject,
     onProjectSelect: handleProjectSelect,
     onToggleStarProject: toggleStarProject,
@@ -224,6 +229,7 @@ function Sidebar({
     onSessionSelect: handleSessionClick,
     onDeleteSession: showDeleteSessionConfirmation,
     onForkSession: forkSession,
+    onMoveSession: setPendingMove,
     onLoadMoreSessions: loadMoreSessionsForProject,
     onNewSession,
     onStartEditingSession: startEditingSession,
@@ -252,6 +258,11 @@ function Sidebar({
         onConfirmDeleteProject={confirmDeleteProject}
         onConfirmDeleteSession={confirmDeleteSession}
         onConfirmDeleteSessions={confirmDeleteSessions}
+        pendingMove={pendingMove}
+        onCancelMove={() => setPendingMove(null)}
+        onConfirmMove={(projectId) => {
+          void confirmMoveSession(projectId);
+        }}
         showVersionModal={showVersionModal}
         onCloseVersionModal={() => setShowVersionModal(false)}
         releaseInfo={releaseInfo}

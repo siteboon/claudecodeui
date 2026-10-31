@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { Check, Edit2, GitBranch, MoreHorizontal, Trash2, X } from 'lucide-react';
+import { Check, Edit2, FolderInput, GitBranch, MoreHorizontal, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { ActionMenu } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider } from '@/shared/types';
-import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
+import { useSessionForkingProviders, useSessionMovingProviders } from '@/shared/hooks/useProviderCapabilities';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
 import { PROVIDER_LABELS } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 
@@ -20,6 +20,8 @@ type SessionOptionsProps = {
   projectId: string | null;
   /** A running session cannot be deleted or forked, matching the Projects row. */
   isProcessing: boolean;
+  /** Background work outliving the turn still writes the transcript, so the server refuses a move. */
+  hasBackgroundWork: boolean;
   isEditing: boolean;
   renameDraft: string;
   onRenameDraftChange: (draft: string) => void;
@@ -29,6 +31,8 @@ type SessionOptionsProps = {
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Bound by the caller, which owns the session object the fork needs. */
   onFork?: () => void;
+  /** Opens the target-project picker; bound by the caller like `onFork`. */
+  onMove?: () => void;
   /** Withheld where the row has nowhere to send a delete. */
   canDelete?: boolean;
   className?: string;
@@ -50,6 +54,7 @@ export default function SessionOptions({
   provider,
   projectId,
   isProcessing,
+  hasBackgroundWork,
   isEditing,
   renameDraft,
   onRenameDraftChange,
@@ -58,6 +63,7 @@ export default function SessionOptions({
   onSaveEditingSession,
   onDeleteSession,
   onFork,
+  onMove,
   canDelete = true,
   className,
   t,
@@ -71,6 +77,8 @@ export default function SessionOptions({
   // provider id here; the request is cached module-side, so every row shares one.
   const forkableProviders = useSessionForkingProviders();
   const canFork = Boolean(onFork) && forkableProviders.has(provider) && !isProcessing;
+  const movableProviders = useSessionMovingProviders();
+  const canMove = Boolean(onMove) && movableProviders.has(provider) && !isProcessing && !hasBackgroundWork;
 
   // While editing, dismiss only when the click lands outside the rename panel,
   // matching Escape and the cancel button.
@@ -181,6 +189,12 @@ export default function SessionOptions({
               description: 'Continue from a copy, leaving this one untouched.',
               icon: GitBranch,
               onSelect: onFork,
+            }] : []),
+            ...(canMove && onMove ? [{
+              key: 'move',
+              label: t('actions.moveSession'),
+              icon: FolderInput,
+              onSelect: onMove,
             }] : []),
             ...(canDelete && !isProcessing ? [{
               key: 'delete',
