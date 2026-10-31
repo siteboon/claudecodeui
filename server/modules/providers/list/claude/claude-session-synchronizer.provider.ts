@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
+  buildCloudCliSessionName,
   buildLookupMap,
   extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
@@ -140,7 +141,27 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
-    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
+    if (existingSession && existingSessionName && existingSessionName !== 'Untitled Claude Session') {
+      // A session created in the app starts out named from its first message,
+      // and Claude titles it soon after (`ai-title`, re-written as the
+      // conversation moves on). A name the app generated gives way to that
+      // title; a name someone chose, in the app or with `/rename`, never does.
+      // The createSession upsert keeps an app session's name, so the title is
+      // written explicitly, and below only if the name is still the one read.
+      if (this.isGeneratedName(existingSession.session_id, existingSessionName, await this.readFirstPrompt(filePath))) {
+        const title = await this.extractSessionTitle(filePath, parsed.sessionId, { promptFallback: false });
+        const sessionName = title ? normalizeSessionName(title, 'Untitled Claude Session') : undefined;
+        // Conditional on the name read above: the reads in between await I/O,
+        // and a rename that lands meanwhile has to win.
+        if (
+          sessionName
+          && sessionName !== existingSessionName
+          && sessionsDb.replaceSessionCustomName(existingSession.session_id, existingSessionName, sessionName)
+        ) {
+          this.titledAs.set(existingSession.session_id, sessionName);
+          return { ...parsed, sessionName };
+        }
+      }
       return {
         ...parsed,
         sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
@@ -159,6 +180,46 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
+   * The title this synchronizer last gave each app session, so that a later,
+   * better title can replace it while a name someone typed since cannot. In
+   * memory only: after a restart a name is judged against the first prompt.
+   */
+  private readonly titledAs = new Map<string, string>();
+
+  /**
+   * Whether a stored name is one CloudCLI produced rather than one someone
+   * chose: the placeholder built from the first prompt, or a title this
+   * synchronizer set and nobody has changed since.
+   */
+  private isGeneratedName(appSessionId: string, name: string, firstPrompt: string | undefined): boolean {
+    return this.titledAs.get(appSessionId) === name
+      || (firstPrompt !== undefined && name === buildCloudCliSessionName(firstPrompt));
+  }
+
+  /**
+   * The first prompt a transcript records: the user's text, whether the message
+   * carried it as a string or as a text block beside attachments.
+   */
+  private async readFirstPrompt(filePath: string): Promise<string | undefined> {
+    const prompt = await extractFirstValidJsonlData(filePath, (rawData) => {
+      const data = rawData as Record<string, unknown>;
+      if (data.type !== 'user' || data.isMeta) {
+        return null;
+      }
+      const content = (data.message as { content?: unknown } | undefined)?.content;
+      if (typeof content === 'string') {
+        return content.trim() ? content : null;
+      }
+      if (Array.isArray(content)) {
+        const text = content.find((block) => (block as { type?: unknown })?.type === 'text') as { text?: unknown } | undefined;
+        return typeof text?.text === 'string' && text.text.trim() ? text.text : null;
+      }
+      return null;
+    });
+    return prompt ?? undefined;
+  }
+
+  /**
    * Returns the best available title for one session from its transcript.
    *
    * Scans forward keeping the last match of each event type, then prefers
@@ -166,11 +227,15 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * Claude writes `custom-title` immediately before `ai-title`, so a reverse
    * scan that returns its first hit would always lose the manual rename.
    *
+   * With `promptFallback: false`, only a real title counts: the last prompt is
+   * no better a name than the placeholder it would replace.
+   *
    * Returns undefined on a missing or unreadable file so sync can continue.
    */
   private async extractSessionTitle(
     filePath: string,
-    sessionId: string
+    sessionId: string,
+    { promptFallback = true }: { promptFallback?: boolean } = {}
   ): Promise<string | undefined> {
     try {
       const content = await readFile(filePath, 'utf8');
@@ -219,7 +284,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         }
       }
 
-      return foundCustomTitle || foundAiTitle || foundLastPrompt;
+      return foundCustomTitle || foundAiTitle || (promptFallback ? foundLastPrompt : undefined);
     } catch {
       // Ignore missing/unreadable files so sync can continue.
     }

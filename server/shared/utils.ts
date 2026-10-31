@@ -970,6 +970,18 @@ export function readProviderSkillMarkdownDefinitionFromContent(
 
 // ---------------------------
 //----------------- SESSION SYNCHRONIZER TITLE HELPERS ------------
+const MAX_CLOUDCLI_SESSION_NAME_WORDS = 4;
+
+/**
+ * The name CloudCLI gives a session it creates, before the provider has titled
+ * it: the first words of the opening message. Shared so a synchronizer can tell
+ * this placeholder from a name someone chose.
+ */
+export function buildCloudCliSessionName(initialMessage: string): string {
+  const words = initialMessage.trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, MAX_CLOUDCLI_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
+}
+
 /**
  * Produces a compact session title suitable for UI rendering and DB storage.
  *
