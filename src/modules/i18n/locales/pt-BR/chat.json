@@ -310,6 +310,7 @@
     "trigger": "Exportar conversa",
     "heading": "Exportar como",
     "untitled": "Conversa",
+    "error": "Não foi possível carregar a conversa inteira. Tente novamente.",
     "html": {
       "label": "Página web (.html)",
       "description": "Autocontido, parece o app, imprime para PDF."

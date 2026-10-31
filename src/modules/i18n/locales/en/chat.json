@@ -311,6 +311,7 @@
     "trigger": "Export conversation",
     "heading": "Export as",
     "untitled": "Conversation",
+    "error": "Couldn't load the whole conversation. Try again.",
     "html": {
       "label": "Web page (.html)",
       "description": "Self-contained, looks like the app, prints to PDF."

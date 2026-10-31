@@ -260,6 +260,7 @@
     "trigger": "Unterhaltung exportieren",
     "heading": "Exportieren als",
     "untitled": "Unterhaltung",
+    "error": "Die gesamte Unterhaltung konnte nicht geladen werden. Versuche es erneut.",
     "html": {
       "label": "Webseite (.html)",
       "description": "Eigenständig, sieht aus wie die App, druckbar als PDF."
