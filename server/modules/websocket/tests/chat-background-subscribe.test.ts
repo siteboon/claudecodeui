@@ -117,6 +117,47 @@ test('a tab that subscribes to an idle session is not attached to its old run', 
   });
 });
 
+test('a tab whose position is from an earlier run is replayed the current run from its start', async () => {
+  await withIsolatedDatabase(async () => {
+    const watching = createFakeSocket();
+    const earlier = startAndCompleteRun(watching);
+    // The earlier run's background work kept reporting after its `complete`.
+    earlier.writer.send({ kind: 'text', role: 'assistant', provider: 'claude', sessionId: 'native-1', content: 'tail' } as never);
+    const lastFrame = watching.frames.at(-1)!;
+
+    // The server then sends a queued message: a run nobody is attached to.
+    const current = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: 'native-1',
+      connection: null,
+      userId: 1,
+    });
+    assert.ok(current);
+    current.writer.send({ kind: 'text', role: 'user', provider: 'claude', sessionId: 'native-1', content: 'queued question' } as never);
+    current.writer.send({ kind: 'text', role: 'assistant', provider: 'claude', sessionId: 'native-1', content: 'answer' } as never);
+
+    handleChatConnection(
+      watching as never,
+      { user: { id: 1 } } as never,
+      { runtime: { hasBackgroundWork: () => false, getPendingApprovalsForSession: () => [] } as never },
+    );
+    watching.frames.length = 0;
+    watching.emit('message', JSON.stringify({
+      type: 'chat.subscribe',
+      sessions: [{ sessionId: SESSION_ID, lastSeq: lastFrame.seq, runId: lastFrame.runId }],
+    }));
+    await settle();
+
+    const [ack, ...replayed] = watching.frames;
+    assert.equal(ack.kind, 'chat_subscribed');
+    assert.equal(typeof ack.runId, 'string');
+    assert.notEqual(ack.runId, lastFrame.runId);
+    assert.deepEqual(replayed.map((frame) => frame.content), ['queued question', 'answer']);
+    assert.ok(replayed.every((frame) => frame.runId === ack.runId));
+  });
+});
+
 test('a completed run stays registered while its session still has background work', async () => {
   mock.timers.enable({ apis: ['setTimeout'] });
   try {
