@@ -56,7 +56,7 @@ Each provider lives under its own folder in `server/modules/providers/list/`:
 ```text
 server/modules/providers/list/<provider>/
   <provider>.provider.ts
-  <provider>-runtime.provider.js
+  <provider>-runtime.provider.ts
   <provider>-auth.provider.ts
   <provider>-models.provider.ts
   <provider>-mcp.provider.ts
@@ -110,7 +110,7 @@ import the service from `server/modules/providers/index.ts`.
 2. Create the wrapper class.
 
 - Add `server/modules/providers/list/<provider>/<provider>.provider.ts`.
-- Add `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+- Add `server/modules/providers/list/<provider>/<provider>-runtime.provider.ts`
   when the provider supports live SDK/CLI execution.
 - Extend `AbstractProvider`.
 - Expose readonly `auth`, `mcp`, `skills`, `sessions`, and `sessionSynchronizer`.
@@ -223,7 +223,7 @@ Current session sync roots are:
 
 If the provider can run live chat sessions, update the runtime entrypoints too:
 
-- `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+- `server/modules/providers/list/<provider>/<provider>-runtime.provider.ts`
 - `server/modules/providers/list/<provider>/<provider>.provider.ts`
 - `server/modules/agent/agent.routes.ts`
 - `server/index.ts`
@@ -324,7 +324,7 @@ Add a new provider "<provider>" using the current provider module architecture.
 Requirements:
 1) Create:
     - server/modules/providers/list/<provider>/<provider>.provider.ts
-    - server/modules/providers/list/<provider>/<provider>-runtime.provider.js
+    - server/modules/providers/list/<provider>/<provider>-runtime.provider.ts
    - server/modules/providers/list/<provider>/<provider>-auth.provider.ts
    - server/modules/providers/list/<provider>/<provider>-models.provider.ts
    - server/modules/providers/list/<provider>/<provider>-mcp.provider.ts

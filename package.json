@@ -153,6 +153,7 @@
     "@octokit/rest": "^22.0.0",
     "@openai/codex": "0.156.1",
     "@openai/codex-sdk": "^0.156.0",
+    "@opencode-ai/sdk": "^1.19.5",
     "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",

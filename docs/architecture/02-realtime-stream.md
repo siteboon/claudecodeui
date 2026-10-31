@@ -42,10 +42,11 @@ it.
    row count stays flat while the text grows. `finalizeStreaming` rewrites that same array
    slot — new id, `kind: 'text'`, `role: 'assistant'` — so React reconciles instead of
    remounting.
-4. **Whether you see deltas at all depends on the provider.** Cursor and OpenCode stream;
-   Claude and Codex do not. Claude's live prose arrives as complete `text` rows, one per
-   assistant message. Code that assumes "assistant reply implies `stream_delta`" is wrong
-   for half the providers, and the half it is wrong for is the default one.
+4. **Whether you see deltas at all depends on the provider.** Cursor streams; Claude,
+   Codex and OpenCode do not. Claude's live prose arrives as complete `text` rows, one per
+   assistant message, and OpenCode's as one `text` row per finished text part. Code that
+   assumes "assistant reply implies `stream_delta`" is wrong for most providers, the
+   default one included.
 5. **`complete` is the only terminal event. `error` is just a row.** Providers emit
    `error` for mid-run stderr and keep running. Clearing the busy state on `error` leaves
    a live run writing into a UI that believes it is idle.
@@ -108,7 +109,7 @@ sequenceDiagram
     GW->>CLI: runtime.run with the app session id
     CLI-->>REG: session_created announcing the provider-native id
     Note over REG: swallowed and recorded, never forwarded
-    CLI-->>REG: text rows for Claude and Codex, stream_delta for Cursor and OpenCode
+    CLI-->>REG: text rows for Claude, Codex and OpenCode, stream_delta for Cursor
     REG-->>WSC: sessionId rewritten to the app id, seq stamped, buffered
     WSC-->>UI: dispatched to every listener
     CLI-->>REG: tool_use carrying a toolId
@@ -147,15 +148,15 @@ reload can make the transcript look completely different from what streamed.
 
 | Kind | Claude | Codex | Cursor | OpenCode |
 | --- | --- | --- | --- | --- |
-| `text` | yes, whole assistant messages | yes | history only | history only |
-| `stream_delta` | **no** | **no** | yes, one per assistant chunk | yes, from `text` parts |
-| `stream_end` | **no** | **no** | **never** | yes, from `step_finish` |
-| `thinking` | yes | yes | history only | yes, from `reasoning` parts |
-| `tool_use` | yes | yes | history only | yes |
+| `text` | yes, whole assistant messages | yes | history only | yes, one per finished `text` part |
+| `stream_delta` | **no** | **no** | yes, one per assistant chunk | **no** |
+| `stream_end` | **no** | **no** | **never** | yes, from `step-finish` parts |
+| `thinking` | yes | yes | history only | yes, from finished `reasoning` parts |
+| `tool_use` | yes | yes | history only | yes, once the call has finished |
 | `tool_result` | yes, a separate frame | yes, a separate frame | history only | **never** — attached to the `tool_use` frame instead |
 | `error` | yes | yes | yes, from stderr and spawn failures | yes |
-| `status` with `text: 'token_budget'` | yes | yes | no | yes, once at process exit |
-| `permission_request` / `permission_resolved` / `permission_cancelled` | yes, the only provider | no | no | no |
+| `status` with `text: 'token_budget'` | yes | yes | no | yes, once at the end of the turn |
+| `permission_request` / `permission_resolved` / `permission_cancelled` | yes | no | no | yes, from OpenCode's permission and question requests |
 | `complete` | yes, exactly one | yes | yes | yes |
 
 Two entries deserve the emphasis:
@@ -364,17 +365,30 @@ feeding it a summed `result.usage` is what made it bounce before commit `ab13376
 The other arm of the `status` branch — the one that writes `statusText` and `canInterrupt`
 into the activity map — **has no producer today.** All three `status` emitters
 (`claude-runtime.provider.js:968`, `codex-runtime.provider.js:406`,
-`opencode-runtime.provider.js:338`) send `text: 'token_budget'`. The arm is live code
+`opencode-runtime.provider.ts`, at the end of `runOpenCodeTurn`) send `text: 'token_budget'`. The arm is live code
 kept for a provider that reports progress text; do not delete it expecting nothing to
 change, and do not assume the status text you see in the UI came from it.
 
 ## Permission requests
 
-Claude is the only provider with interactive tool approvals. Its runtime's `canUseTool`
+Claude and OpenCode have interactive tool approvals. Claude's runtime's `canUseTool`
 callback emits `permission_request` with a `requestId` and blocks until the client answers
 with `chat.permission-response`. When an answer arrives it emits `permission_resolved`
 with the same id; if the run ends or the request times out it emits `permission_cancelled`
-instead. The distinction matters because the answer itself travels only on the inbound
+instead.
+
+OpenCode's runtime drives a private `opencode serve` per turn through `@opencode-ai/sdk`
+and turns the server's `permission.asked` and `question.asked` events into the same
+frames. A permission request carries OpenCode's permission name as `toolName` and, in
+`context.always`, the patterns "Always allow" approves; Allow once, Always allow and Deny
+go back as OpenCode's `once`, `always` and `reject` (a plain reject ends the turn, as
+OpenCode's own Reject does). A question arrives as an `AskUserQuestion` request with
+`context.answerFormat: 'label-lists'`: the panel answers with one label list per question,
+and its Dismiss rejects the question. OpenCode remembers "Always allow" only for its
+server's lifetime, so the runtime keeps the approved patterns per chat in memory and
+answers later matching requests itself. In bypassPermissions (also how `/api/agent`
+runs) every request is approved once and questions are answered as unanswered, so such a
+turn never waits for anyone. The distinction matters because the answer itself travels only on the inbound
 socket: without the outbound `permission_resolved`, the `permission_request` sitting in
 the replay buffer had nothing to retract it, so a mid-run page refresh resurrected an
 already-answered prompt — and a second tab kept it forever. `permissionPromptReplay.test.tsx`
