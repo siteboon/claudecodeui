@@ -30,6 +30,7 @@ import {
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import { askClaudeSideQuestion } from '@/modules/providers/list/claude/claude-side-question.provider.js';
 import {
   createNotificationEvent,
   notifyBackgroundWorkCompleted,
@@ -42,13 +43,16 @@ import {
   getReportedClaudeContextWindow,
   rememberClaudeContextWindow
 } from '@/modules/providers/services/provider-token-usage.service.js';
-import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, errorMessage } from '@/shared/utils.js';
 import type {
   AnyRecord,
   BackgroundTaskSummary,
   ProviderModelsDefinition,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
+  SideQuestionRequest,
+  SideQuestionSink,
+  SideQuestionOutcome,
 } from '@/shared/types.js';
 
 // The notifications module is still JavaScript, and its defaults (`dedupeKey = null`)
@@ -66,6 +70,20 @@ type ActiveSession = {
   status: 'active' | 'aborted';
   writer: ClaudeRuntimeWriter | null;
   releaseInput: (() => void) | null;
+  // Set the moment `releaseInput` actually runs (idle ceiling, or the turn
+  // ending with no background work left). A native side question writes
+  // into that same stdin, and the SDK drops a write after it has been
+  // released rather than erroring, so this flag is the only signal
+  // `askSideQuestion` has to fall back to the read-only fork instead.
+  inputReleased: boolean;
+  // Count of `askSideQuestion` native calls currently in flight against
+  // this entry's live query. Carried across the mid-run re-registration
+  // below (same process, same question), reset only when superseded.
+  pendingNativeSideQuestions: number;
+  // Set when a release was requested (turn end, idle ceiling) while the
+  // count above was still positive, so the last question to settle knows
+  // to pick the deferred release back up.
+  releaseDeferred: boolean;
 };
 
 type ToolApprovalDecision = AnyRecord | null;
@@ -423,14 +441,36 @@ function addSession(
     backgroundWork.clear(sessionId);
   }
   const carried = superseding ? null : existing;
-  activeSessions.set(sessionId, {
+  const sessionEntry: ActiveSession = {
     instance: queryInstance,
     startTime: carried?.startTime || Date.now(),
     status: 'active',
     writer,
-    // Re-registered mid-run once the provider session id lands; keep the closer.
-    releaseInput: releaseInput || carried?.releaseInput || null
-  });
+    // Set the moment `releaseInput` actually runs (idle ceiling, or the turn
+    // ending with no background work left). A native side question writes
+    // into that same stdin, and the SDK drops a write after it has been
+    // released rather than erroring, so this flag is the only signal
+    // `askSideQuestion` has to fall back to the read-only fork instead.
+    inputReleased: false,
+    releaseInput: null,
+    // Count of `askSideQuestion` native calls currently in flight against
+    // this entry's live query. Carried across the mid-run re-registration
+    // below (same process, same question), reset only when superseded.
+    pendingNativeSideQuestions: carried?.pendingNativeSideQuestions || 0,
+    // Set when a release was requested (turn end, idle ceiling) while the
+    // count above was still positive, so the last question to settle knows
+    // to pick the deferred release back up.
+    releaseDeferred: carried?.releaseDeferred || false
+  };
+  // Re-registered mid-run once the provider session id lands; keep the closer.
+  const effectiveReleaseInput = releaseInput || carried?.releaseInput || null;
+  sessionEntry.releaseInput = effectiveReleaseInput
+    ? () => {
+      sessionEntry.inputReleased = true;
+      effectiveReleaseInput();
+    }
+    : null;
+  activeSessions.set(sessionId, sessionEntry);
   // The history reader reports a background agent as running or stopped by
   // whether this entry exists, and the cached history does not see this map.
   sessionHistoryCache.invalidate(sessionId);
@@ -1072,6 +1112,53 @@ async function queryClaudeSDK(
     releaseHeldSession(sessionKey()!);
   }
 
+  // Closes the held stdin, going through the activeSessions entry so
+  // `inputReleased` is set accurately for `askSideQuestion`'s own check —
+  // unless a native side question (`askSideQuestion` below) is still
+  // waiting on this same query. The SDK drops a write made after release
+  // instead of erroring, so releasing under a pending question would have
+  // the CLI cancel it ("Side question cancelled") instead of answering it.
+  // `askSideQuestion`'s `finally` calls this again once the count drops back
+  // to zero, picking the deferred release back up.
+  //
+  // The map entry under this session's key may belong to a newer run that
+  // superseded this one (a turn started while this one was still held) — in
+  // that case `addSession` already released this run's stdin directly via
+  // its own closure when it superseded it, and the entry's pending count and
+  // `releaseInput` belong to the new run, not this one. Only read or write
+  // the entry when it is still this run's own (`entry.instance ===
+  // queryInstance`); otherwise fall back to this run's own closer so a late
+  // call here cannot touch the run that replaced it.
+  //
+  // `isIdleCeiling` is true only when this call is the idle timer itself
+  // firing. A normal call (turn end, background work settling) still defers
+  // under a pending native side question and arms the ceiling as a backstop;
+  // the ceiling's own call must not defer again on top of itself — a side
+  // question the CLI never answers would otherwise hold the process (and its
+  // MCP servers) forever, so the ceiling forces the release through instead.
+  const maybeReleasePromptStream = (isIdleCeiling = false) => {
+    const found = sessionKey() ? getSession(sessionKey()!) : undefined;
+    const entry = found && found.instance === queryInstance ? found : null;
+    if (entry && entry.pendingNativeSideQuestions > 0 && !isIdleCeiling) {
+      entry.releaseDeferred = true;
+      // Re-arm (rather than drop) the same idle ceiling that governs every
+      // other hold, so an unanswered question is rechecked instead of being
+      // left to wait on `askSideQuestion`'s own resolution alone.
+      scheduleRelease();
+      return;
+    }
+    if (entry) {
+      entry.releaseDeferred = false;
+      if (entry.releaseInput) {
+        entry.releaseInput();
+      } else {
+        releasePromptStream();
+      }
+    } else {
+      releasePromptStream();
+    }
+  };
+
   // Arms (or re-arms) the idle countdown that eventually closes stdin.
   const scheduleRelease = () => {
     if (idleReleaseTimer) {
@@ -1080,7 +1167,7 @@ async function queryClaudeSDK(
     }
     idleReleaseTimer = setTimeout(() => {
       idleReleaseTimer = null;
-      releasePromptStream();
+      maybeReleasePromptStream(true);
     }, BG_WAIT_CEILING_MS);
     // Never let the hold keep the server process alive on its own.
     idleReleaseTimer?.unref?.();
@@ -1360,7 +1447,7 @@ async function queryClaudeSDK(
         && !backgroundWork.hasOutstanding(sessionKey()!)
       ) {
         heldForBackgroundWork = false;
-        releasePromptStream();
+        maybeReleasePromptStream();
       }
 
       if (message.type === 'result') {
@@ -1412,9 +1499,11 @@ async function queryClaudeSDK(
           scheduleRelease();
         } else {
           // Either nothing was backgrounded, or the background work just
-          // reported in — let the CLI exit now, as it always has.
+          // reported in — let the CLI exit now, as it always has (unless a
+          // native side question is still in flight; see
+          // `maybeReleasePromptStream`).
           heldForBackgroundWork = false;
-          releasePromptStream();
+          maybeReleasePromptStream();
         }
       } else if (idleReleaseTimer) {
         // Background activity after the turn — push the countdown back out.
@@ -1646,6 +1735,134 @@ function reconnectSessionWriter(sessionId: string, newRawWs: unknown) {
   return true;
 }
 
+/**
+ * SDK 0.3.311 ships `Query.prototype.askSideQuestion` without it in the SDK's
+ * own typings (checked in node_modules/@anthropic-ai/claude-agent-sdk) — hence
+ * the local types below rather than an imported one.
+ */
+type NativeSideQuestionResult = {
+  response: string;
+  synthetic: boolean;
+  refusalFallback?: AnyRecord;
+};
+
+type NativeSideQuestionCapableInstance = {
+  askSideQuestion: (
+    question: string,
+    options?: { signal?: AbortSignal },
+  ) => Promise<NativeSideQuestionResult | null>;
+};
+
+/**
+ * Asks a side question on the live query of `request.appSessionId`, when one
+ * is up and ships the method, or on a read-only fork otherwise.
+ *
+ * Measured 2026-10-27 (`claude-measurement`, SDK 0.3.311, five calls each,
+ * alternating): median response time, native vs the fork —
+ *   mid-turn (process mid-generation):        native 1504 ms, fork 7476 ms
+ *   background (held only for background work): native 2141 ms, fork 5016 ms
+ * Native wins in both busy states, so the path taken here does not depend on
+ * which one the process is in: any live query with the method answers
+ * natively. Caveat: the CLI refused a foreground `sleep 240` during
+ * measurement, so most "mid-turn" calls likely ran after the turn ended too
+ * — the gap there may be narrower than measured, not wider.
+ *
+ * `liveTasks` for the fork path comes from this runtime's own background
+ * work tracker, keyed by the app session id, so the fork's prompt can say
+ * which of the session's own tasks are still running.
+ */
+async function askSideQuestion(
+  request: SideQuestionRequest,
+  sink: SideQuestionSink,
+  context: ProviderRuntimeContext,
+): Promise<SideQuestionOutcome> {
+  const session = getSession(request.appSessionId);
+  // The SDK does not type this method (see above), so the instance is read
+  // through the local type rather than `ClaudeQuery`. Kept alongside the
+  // original (`session.instance`, typed `ClaudeQuery`) so the `finally`
+  // below can compare identity without comparing through this cast — the
+  // cast's structural type and `ClaudeQuery` share no members TS can see,
+  // so a `===` between two values of those two types reads as a mistake.
+  const instance = session?.instance as NativeSideQuestionCapableInstance | undefined;
+
+  // A session whose stdin was already released (turn ended with no
+  // background work, or the idle ceiling) still has `instance` around, but
+  // a write into its input stream is silently dropped rather than answered.
+  // The fork path below spawns its own process instead, so it is the only
+  // one that can still reach this session's transcript.
+  // `session &&` (not just `instance &&`) narrows `session` itself for the
+  // rest of this block, since `instance` was read off it through a cast TS
+  // cannot trace back.
+  if (session && instance && typeof instance.askSideQuestion === 'function' && !session.inputReleased) {
+    // Counted on the session entry so `queryClaudeSDK`'s
+    // `maybeReleasePromptStream` defers a release requested while this is
+    // still above zero, instead of closing stdin under the question.
+    session.pendingNativeSideQuestions = (session.pendingNativeSideQuestions || 0) + 1;
+    try {
+      const result = await instance.askSideQuestion(request.question, { signal: request.signal });
+      const response = result?.response;
+      if (typeof response === 'string' && response.length > 0) {
+        sink.delta(response);
+        return { status: 'done', answer: response };
+      }
+      return { status: 'error', error: 'Claude returned no answer.', answer: '' };
+    } catch (error) {
+      // `request.signal` is what `dismiss` aborts to end this ask at once —
+      // a deliberate drop, never retried. A session whose stdin was
+      // released while this ask was still outstanding (a new turn
+      // superseding this one via `releaseHeldSession`, which lets the old
+      // process go directly and does not consult the pending count above)
+      // is the CLI cancelling the question for a reason that was not that
+      // signal — most of all "Side question cancelled" — so it gets one
+      // more try on the read-only fork instead of surfacing the CLI's own
+      // error. A plain failure with the session still live is not retried.
+      // `session` (not a fresh lookup) so a map entry replaced meanwhile by
+      // a new turn's own registration does not hide this very query's
+      // release, which `releaseHeldSession` sets on this same object.
+      // Cast through `unknown`: the `if` above narrowed `session.inputReleased`
+      // to the literal `false`, but that narrowing does not survive the
+      // `await` above in reality — `releaseHeldSession` can flip it from
+      // other code while this call is in flight — so TS's belief that this
+      // comparison can never be true is the stale part, not the check.
+      if (!request.signal?.aborted && (session.inputReleased as unknown) === true) {
+        return askClaudeSideQuestion(request, sink, {
+          createQuery: context.createQuery,
+          liveTasks: backgroundWork.outstanding(request.appSessionId),
+        });
+      }
+      return { status: 'error', error: errorMessage(error), answer: '' };
+    } finally {
+      // Re-fetched: a mid-run re-registration (`addSession`, once the
+      // provider session id lands) carries this count onto a new entry
+      // object for the same instance, so the one to decrement is whichever
+      // is current now — but only when it is still the entry for the
+      // instance this question was asked on. A turn that superseded this
+      // run while the question was in flight replaced the map entry with
+      // the new run's own (a different `instance`, a `pendingNativeSideQuestions`
+      // count that was never incremented for this question), and must not
+      // be decremented or released on this question's account.
+      const entry = getSession(request.appSessionId);
+      // Compared through `unknown`, not through the `NativeSideQuestionCapableInstance`
+      // cast above: `entry.instance` is `ClaudeQuery` and `instance` is that
+      // cast's type, and the two share no member TS can see, so a direct
+      // `===` between them reads as unintentional even though both sides
+      // are (or were) the very same object.
+      if (entry && (entry.instance as unknown) === (instance as unknown)) {
+        entry.pendingNativeSideQuestions = Math.max(0, (entry.pendingNativeSideQuestions || 0) - 1);
+        if (entry.pendingNativeSideQuestions === 0 && entry.releaseDeferred) {
+          entry.releaseDeferred = false;
+          entry.releaseInput?.();
+        }
+      }
+    }
+  }
+
+  return askClaudeSideQuestion(request, sink, {
+    createQuery: context.createQuery,
+    liveTasks: backgroundWork.outstanding(request.appSessionId),
+  });
+}
+
 export const claudeRuntime = {
   run: queryClaudeSDK,
   abort: abortClaudeSDKSession,
@@ -1655,6 +1872,7 @@ export const claudeRuntime = {
   },
   listBackgroundWork: listClaudeSDKBackgroundWork,
   stopBackgroundTask: stopClaudeSDKTask,
+  askSideQuestion,
 };
 
 // Export public API

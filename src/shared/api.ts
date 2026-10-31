@@ -434,6 +434,10 @@ export const api = {
       del(`/api/providers/${provider}/models/${recordId}`),
     setCustomModelsOnly: (provider: string, enabled: boolean) =>
       put(`/api/providers/${provider}/models/custom-only`, { enabled }),
+    dismissSideQuestion: (sessionId: string, sideQuestionId: string) =>
+      del(
+        `/api/providers/sessions/${encodeURIComponent(sessionId)}/side-questions/${encodeURIComponent(sideQuestionId)}`,
+      ),
 
     createSession: (payload: {
       provider: string;

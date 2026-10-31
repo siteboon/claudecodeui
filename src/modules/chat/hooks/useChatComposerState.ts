@@ -31,6 +31,7 @@ import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
+import { useAskSideQuestion } from '@/modules/chat/hooks/useSideQuestions';
 
 type UseChatComposerStateArgs = {
   selectedProject: Project | null;
@@ -51,6 +52,8 @@ type UseChatComposerStateArgs = {
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   sendMessage: (message: unknown) => void;
+  /** Whether the chat socket is currently open; a side-question ask while it is not would send nothing and leave the optimistic entry pending forever. */
+  isConnected?: boolean;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -67,6 +70,8 @@ type UseChatComposerStateArgs = {
   addMessage: (msg: ChatMessage) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
+  /** From the capability matrix, exactly like `supportsSessionForking`; false until it has loaded. Gates the `/btw` branch. */
+  supportsSideQuestions?: boolean;
 };
 
 type MentionableFile = {
@@ -96,6 +101,11 @@ type SubmitOptions = {
    * run that command instead of being sent.
    */
   skipCommandInterception?: boolean;
+  /**
+   * The send menu already answered the background-work question before
+   * `submitMessage` runs, so the dialog that would ask it again never opens.
+   */
+  presetBackgroundChoice?: 'queue' | 'send';
 };
 
 const createFakeSubmitEvent = () => {
@@ -210,6 +220,8 @@ export function useChatComposerState({
   canAbortSession,
   tokenBudget,
   sendMessage,
+  isConnected = true,
+  supportsSideQuestions = false,
   sendByCtrlEnter,
   onSessionProcessing,
   onSessionEstablished,
@@ -274,6 +286,9 @@ export function useChatComposerState({
   // to currentSessionId for a just-established session that hasn't been
   // handed back to the parent's `selectedSession` prop yet.
   const sessionKey = selectedSession?.id || currentSessionId || null;
+  // Always the composer's own `sendMessage`, never `useWebSocket()` directly,
+  // which throws outside a provider and would break the composer's tests.
+  const askSideQuestion = useAskSideQuestion(sendMessage);
   // The chat scope a draft belongs to: the open session, or the project for a
   // chat that has not been sent yet and so has no session id. Drafts used to be
   // keyed by project alone, so every session in a project shared one draft.
@@ -729,6 +744,48 @@ export function useChatComposerState({
     backgroundSendResolverRef.current = null;
   }, []);
 
+  // A side question never touches the session: on a successful ask, the
+  // typed text is cleared the same way a sent message is, without the parts
+  // (queued draft, session processing) that belong only to an actual turn.
+  // A side question cannot carry attachments, so they are left untouched — unlike a real
+  // send, which takes them. Called only when `askSideQuestion` returned
+  // `true`; a refusal (no connection) leaves the text in place too, so the
+  // user does not lose what they typed.
+  const clearComposerAfterSideQuestion = useCallback(() => {
+    setInput('');
+    inputValueRef.current = '';
+    resetCommandMenuState();
+    setIsTextareaExpanded(false);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+    if (draftScopeRef.current) {
+      writeDraftText(draftScopeRef.current, '');
+    }
+  }, [resetCommandMenuState, setInput]);
+
+  // Shared by the `/btw` command, the background-send dialog's side question choice and
+  // the send menu's side question row: all three ask the same way and clear the
+  // composer the same way on success, and do nothing extra when the ask was
+  // refused (no connection) — the caller's own `return` right after is what
+  // actually ends that branch either way.
+  const askSideQuestionAndClear = useCallback(
+    (sessionId: string | null, text: string) => {
+      if (!supportsSideQuestions) {
+        addMessage({
+          type: 'error',
+          content: t('sideQuestion.unsupported'),
+          timestamp: Date.now(),
+        });
+        return;
+      }
+      if (askSideQuestion(sessionId, text, { model: currentProviderModel }, isConnected)) {
+        clearComposerAfterSideQuestion();
+      }
+    },
+    [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, supportsSideQuestions],
+  );
+
   // Persist a message to send "when this finishes" and show it as the queued
   // card. Used while a turn is in flight and when the user chooses to queue
   // behind background work. Attachments must already be uploaded.
@@ -862,6 +919,18 @@ export function useChatComposerState({
         || !selectedProject
       ) {
         return;
+      }
+
+      // `/btw <question>` never becomes a turn: checked before the in-flight
+      // queue below, since that branch runs before slash-command
+      // interception ever would. Works in every state that has a session;
+      // a queued re-dispatch never carries this prefix, so it is skipped.
+      if (!queuedSubmission && !submitOptions?.skipCommandInterception && sessionKey) {
+        const btwMatch = currentInput.trim().match(/^\/btw(?:\s+([\s\S]*))?$/i);
+        if (btwMatch) {
+          askSideQuestionAndClear(sessionKey, btwMatch[1] ?? '');
+          return;
+        }
       }
 
       // A turn is already in flight: stash this message instead of sending it.
@@ -1022,8 +1091,12 @@ export function useChatComposerState({
       if (backgroundActivity?.background) {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
           .map((task) => describeBackgroundTask(task, t));
-        const choice = await askBeforeSendingOverBackgroundWork(work);
+        const choice = submitOptions?.presetBackgroundChoice ?? await askBeforeSendingOverBackgroundWork(work);
         if (choice === 'cancel') {
+          return;
+        }
+        if (choice === 'sideQuestion') {
+          askSideQuestionAndClear(targetSessionId, currentInput);
           return;
         }
         if (choice === 'queue') {
@@ -1109,6 +1182,7 @@ export function useChatComposerState({
     [
       selectedSession,
       askBeforeSendingOverBackgroundWork,
+      askSideQuestionAndClear,
       attachedFiles,
       buildSendOptions,
       currentSessionId,
@@ -1159,6 +1233,20 @@ export function useChatComposerState({
       }
     },
     [submitMessage],
+  );
+
+  // The send menu's entry point: side question never becomes a turn, so it never goes
+  // through `submitMessage`; Queue and Send anyway answer the background-work
+  // question the menu already asked, so the dialog never opens for them.
+  const handleSendMenuChoice = useCallback(
+    async (choice: 'queue' | 'sideQuestion' | 'send'): Promise<void> => {
+      if (choice === 'sideQuestion') {
+        askSideQuestionAndClear(sessionKey, inputValueRef.current);
+        return;
+      }
+      await handleSubmit(createFakeSubmitEvent(), undefined, { presetBackgroundChoice: choice });
+    },
+    [askSideQuestionAndClear, handleSubmit, sessionKey],
   );
 
   useEffect(() => {
@@ -1363,7 +1451,13 @@ export function useChatComposerState({
           return;
         }
 
-        if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
+        // Option/Alt+Enter asks a side question in every state (loading,
+        // background, idle), ahead of the ctrl/meta and plain-Enter submit
+        // branches below, which never see altKey set.
+        if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+          event.preventDefault();
+          askSideQuestionAndClear(sessionKey, inputValueRef.current);
+        } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
           event.preventDefault();
           handleSubmit(event);
         } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !sendByCtrlEnter) {
@@ -1373,12 +1467,14 @@ export function useChatComposerState({
       }
     },
     [
+      askSideQuestionAndClear,
       cyclePermissionMode,
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
       handleHistoryKeyDown,
       handleSubmit,
       sendByCtrlEnter,
+      sessionKey,
       showCommandMenu,
       showFileDropdown,
     ],
@@ -1525,6 +1621,7 @@ export function useChatComposerState({
     isDragActive,
     openAttachmentPicker: open,
     handleSubmit,
+    handleSendMenuChoice,
     backgroundSendPrompt,
     resolveBackgroundSendPrompt,
     queuedDraft,

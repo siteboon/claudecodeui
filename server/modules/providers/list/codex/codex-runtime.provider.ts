@@ -23,6 +23,11 @@ import {
 } from '@/shared/index.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
+// Not re-exported through the `@/shared/index.js` barrel yet (same seam the
+// Claude side-question provider already uses), so imported directly.
+import type { SideQuestionOutcome, SideQuestionRequest, SideQuestionSink } from '@/shared/types.js';
+
+import { codexAppServer } from './codex-app-server.client.js';
 
 type ActiveCodexSession = {
   thread: Thread;
@@ -523,10 +528,47 @@ function abortCodexSession(sessionId: string) {
   return true;
 }
 
+/**
+ * Answers one side question on `request.providerSessionId` through
+ * `codexAppServer.askSideQuestion` (an ephemeral, read-only fork — see its
+ * doc comment), without touching the parent thread or `activeCodexSessions`.
+ *
+ * Never throws: a missing provider session (no prior turn to fork from, or a
+ * resume id not yet captured) and any rejection from the app-server both
+ * resolve as an error outcome, as `SideQuestionRuntime` requires.
+ */
+async function askCodexSideQuestion(
+  request: SideQuestionRequest,
+  sink: SideQuestionSink,
+  _context: ProviderRuntimeContext,
+): Promise<SideQuestionOutcome> {
+  if (!request.providerSessionId) {
+    return { status: 'error', error: 'This Codex session has no provider thread to ask a side question on yet.', answer: '' };
+  }
+
+  let answer = '';
+  try {
+    const text = await codexAppServer.askSideQuestion({
+      threadId: request.providerSessionId,
+      cwd: request.projectPath || '',
+      model: request.model || '',
+      question: request.question,
+      signal: request.signal,
+    }, (delta) => {
+      answer += delta;
+      sink.delta(delta);
+    });
+    return { status: 'done', answer: text };
+  } catch (error) {
+    return { status: 'error', error: error instanceof Error ? error.message : String(error), answer };
+  }
+}
+
 /** Used by the providers module's CodexProvider to run and abort SDK turns. */
 export const codexRuntime = {
   run: queryCodex,
   abort: abortCodexSession,
+  askSideQuestion: askCodexSideQuestion,
 };
 
 /**

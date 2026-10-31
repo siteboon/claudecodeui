@@ -9,7 +9,16 @@ import {
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath, stripAnsiSequences } from '@/shared/utils.js';
+import {
+  createCompleteMessage,
+  createNormalizedMessage,
+  flattenPromptForWindowsShell,
+  getOpenCodeDatabasePath,
+  SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+  stripAnsiSequences,
+} from '@/shared/utils.js';
+
+import { opencodeSideQuestionForks } from './opencode-side-question-forks.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
@@ -424,9 +433,282 @@ function getActiveOpenCodeSessions() {
   return Array.from(activeOpenCodeProcesses.keys());
 }
 
+// What the sidequestion agent may use, read-only, with opencode's own
+// environment-file protection kept on `read` (a plain `read: 'allow'` would
+// re-open the patterns opencode's own defaults deny). Rules are ordered and
+// the last match wins, so the wildcard denial has to come first.
+function buildOpenCodeSideQuestionPermission() {
+  return {
+    '*': 'deny',
+    read: { '*': 'allow', '*.env': 'deny', '*.env.*': 'deny' },
+    grep: 'allow',
+    glob: 'allow',
+    list: 'allow',
+    edit: 'deny',
+    bash: 'deny',
+    task: 'deny',
+    webfetch: 'deny',
+    external_directory: 'deny',
+  };
+}
+
+function parseUserOpenCodeConfig() {
+  const raw = process.env.OPENCODE_CONFIG_CONTENT;
+  if (!raw) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+// The user's own config stays; our `sidequestion` agent entirely replaces
+// whatever the user may have defined under that name, so neither its prompt
+// nor its permission map can be loosened from outside.
+function buildOpenCodeSideQuestionConfigContent() {
+  const userConfig = parseUserOpenCodeConfig();
+  const sidequestionAgent = {
+    mode: 'primary',
+    description: 'Read-only fork answering a side question: looks, never touches.',
+    prompt: SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+    permission: buildOpenCodeSideQuestionPermission(),
+  };
+  return JSON.stringify({
+    ...userConfig,
+    agent: { ...(userConfig.agent || {}), sidequestion: sidequestionAgent },
+  });
+}
+
+// Fire-and-forget: the caller's outcome does not wait on this. The fork id
+// leaves the registry only once the delete itself has finished, so a
+// synchronizer race during the delete still sees the fork as one to skip.
+function deleteOpenCodeSideQuestionFork(forkId, workingDir) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawnFunction('opencode', ['session', 'delete', forkId], {
+        cwd: workingDir,
+        stdio: ['ignore', 'ignore', 'ignore'],
+        env: process.env,
+      });
+    } catch {
+      opencodeSideQuestionForks.delete(forkId);
+      resolve();
+      return;
+    }
+
+    const finish = () => {
+      opencodeSideQuestionForks.delete(forkId);
+      resolve();
+    };
+    child.on('close', finish);
+    child.on('error', finish);
+  });
+}
+
+// Cleanup for a fork whose id was never read off an event (dismissed or
+// failed before the run's first stdout line): finds it by the same
+// directory+start-time+title marker the synchronizer excludes from the
+// sidebar (see opencode-side-question-forks.ts) and deletes it the normal
+// way. A missing database or no match means there is nothing to clean up.
+async function deleteOpenCodePendingSideQuestionFork(workingDir, startedAt) {
+  const dbPath = getOpenCodeDatabasePath();
+  if (!fsSync.existsSync(dbPath)) {
+    return;
+  }
+
+  let forkId = null;
+  let db = null;
+  try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    const row = db.prepare(`
+      SELECT id FROM session
+      WHERE directory = ?
+        AND time_created >= ?
+        AND title LIKE '%(fork #%)'
+      ORDER BY time_created ASC
+      LIMIT 1
+    `).get(workingDir, startedAt);
+    forkId = row?.id || null;
+  } catch {
+    forkId = null;
+  } finally {
+    if (db) {
+      db.close();
+    }
+  }
+
+  if (forkId) {
+    await deleteOpenCodeSideQuestionFork(forkId, workingDir);
+  }
+}
+
+// Kept for the error message when a side question fails with no JSON `error`
+// event: long enough to carry a stack trace, short enough to stay readable in
+// one error frame.
+const SIDE_QUESTION_STDERR_TAIL_LIMIT = 4000;
+
+/**
+ * Asks a question on the side of an active opencode session: a forked,
+ * read-only run under the `sidequestion` agent. Never rejects: every
+ * failure, thrown or reported, comes back as an `error` outcome.
+ */
+async function askOpenCodeSideQuestion(request, sink) {
+  const { providerSessionId, projectPath, question, model, signal } = request;
+  const workingDir = projectPath || process.cwd();
+
+  const args = ['run', '--format', 'json', '--dir', workingDir];
+  if (providerSessionId) {
+    args.push('--session', providerSessionId);
+  }
+  args.push('--fork', '--agent', 'sidequestion');
+  if (model) {
+    args.push('--model', model);
+  }
+  args.push(flattenPromptForWindowsShell(question));
+
+  const env = { ...process.env };
+  delete env.OPENCODE_PERMISSION;
+  env.OPENCODE_CONFIG_CONTENT = buildOpenCodeSideQuestionConfigContent();
+
+  return new Promise((resolve) => {
+    let forkId = null;
+    let answer = '';
+    let errorMessage = null;
+    let settled = false;
+    let stdoutLineBuffer = '';
+    let stderrTail = '';
+
+    // Registered before spawning: opencode creates the fork row with `agent`
+    // still NULL, so the id-based registration below leaves a window right
+    // after spawn that only this directory+start-time marker can close (see
+    // opencode-side-question-forks.ts). It also doubles as the cleanup marker
+    // if the run ends before any id is read.
+    const startedAt = Date.now();
+    const pendingToken = opencodeSideQuestionForks.registerPending(workingDir, startedAt);
+
+    let sideQuestionProcess;
+    try {
+      sideQuestionProcess = spawnFunction('opencode', args, {
+        cwd: workingDir,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env,
+      });
+    } catch (error) {
+      opencodeSideQuestionForks.clearPending(pendingToken);
+      resolve({ status: 'error', error: error instanceof Error ? error.message : String(error), answer: '' });
+      return;
+    }
+
+    // opencode's `run` reads stdin to the end when it is not a TTY; nothing
+    // is ever sent on it here, so leaving it open hangs every real question
+    // forever (verified live, 2026-10-27). The normal run ends it the same
+    // way right after spawn.
+    sideQuestionProcess.stdin.end();
+
+    const onAbort = () => {
+      sideQuestionProcess.kill('SIGTERM');
+    };
+    signal.addEventListener('abort', onAbort);
+
+    const finish = async (outcome) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      // Awaited rather than fire-and-forget: a detached delete would still be
+      // running (and touching the registry) after this call has returned,
+      // free to race a later caller that reuses the same provider-native id.
+      if (forkId) {
+        await deleteOpenCodeSideQuestionFork(forkId, workingDir);
+      } else {
+        // Dismissed or failed before any event named the fork's id: the
+        // delete above never had a target, so find it by the pending marker.
+        await deleteOpenCodePendingSideQuestionFork(workingDir, startedAt);
+      }
+      opencodeSideQuestionForks.clearPending(pendingToken);
+      resolve(outcome);
+    };
+
+    const processLine = (line) => {
+      if (!line.trim()) {
+        return;
+      }
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        return;
+      }
+
+      const eventSessionId = readOpenCodeSessionId(event);
+      if (eventSessionId && !forkId) {
+        // Registered as soon as the fork's id is read, before any delete can
+        // run; clearing the pending marker right alongside it keeps the
+        // synchronizer's exclusion continuous (id-based takes over with no gap).
+        forkId = eventSessionId;
+        opencodeSideQuestionForks.add(forkId);
+        opencodeSideQuestionForks.clearPending(pendingToken);
+      }
+
+      if (event.type === 'text' && event.part && typeof event.part.text === 'string') {
+        answer += event.part.text;
+        sink.delta(event.part.text);
+      } else if (event.type === 'error') {
+        errorMessage = event.error?.data?.message || event.error?.name || 'opencode side question failed';
+      }
+    };
+
+    sideQuestionProcess.stdout.on('data', (data) => {
+      stdoutLineBuffer += data.toString();
+      const completeLines = stdoutLineBuffer.split(/\r?\n/);
+      stdoutLineBuffer = completeLines.pop() || '';
+      completeLines.forEach((line) => processLine(line.trim()));
+    });
+
+    // Drained unconditionally: an opencode process that fills stderr's pipe
+    // buffer with nobody reading it blocks on write, which hangs the run the
+    // same way an open stdin does. The tail is kept only for the error
+    // message a failing exit with no JSON `error` event would otherwise lack.
+    sideQuestionProcess.stderr.on('data', (data) => {
+      stderrTail = (stderrTail + stripAnsiSequences(data.toString())).slice(-SIDE_QUESTION_STDERR_TAIL_LIMIT);
+    });
+
+    sideQuestionProcess.on('close', (code) => {
+      if (stdoutLineBuffer.trim()) {
+        processLine(stdoutLineBuffer.trim());
+        stdoutLineBuffer = '';
+      }
+
+      if (signal.aborted) {
+        finish({ status: 'error', error: 'The side question was dismissed.', answer });
+        return;
+      }
+      if (errorMessage || code !== 0) {
+        finish({
+          status: 'error',
+          error: errorMessage || stderrTail.trim() || `opencode exited with code ${code}`,
+          answer,
+        });
+        return;
+      }
+      finish({ status: 'done', answer });
+    });
+
+    sideQuestionProcess.on('error', (error) => {
+      finish({ status: 'error', error: error.message, answer });
+    });
+  });
+}
+
 export const opencodeRuntime = {
   run: spawnOpenCode,
   abort: abortOpenCodeSession,
+  askSideQuestion: askOpenCodeSideQuestion,
 };
 
 export {

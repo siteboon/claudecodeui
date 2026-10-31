@@ -227,6 +227,16 @@
       "label": "{{time}} vergangen",
       "startingNow": "Startet jetzt"
     },
+    "backgroundTask": {
+      "prompt": {
+        "title": "Diese Sitzung hat noch Hintergrundarbeit laufen",
+        "description": "Eine neue Nachricht startet einen neuen Turn, der diese Arbeit stoppt; alles, was sie noch nicht gemeldet hat, geht verloren. Stell die Nachricht in die Warteschlange, um sie zu senden, wenn die Arbeit fertig ist.",
+        "cancel": "Abbrechen",
+        "queue": "Einreihen",
+        "sendAnyway": "Trotzdem senden",
+        "sideQuestion": "Nebenfrage"
+      }
+    },
     "controls": {
       "stopGeneration": "Generierung stoppen",
       "pressEscToStop": "Jederzeit Esc drücken, um zu stoppen"
@@ -271,7 +281,8 @@
     "json": {
       "label": "JSON (.json)",
       "description": "Alle Nachrichten, unformatiert, für Tools."
-    }
+    },
+    "includeSideQuestions": "Nebenfragen mitexportieren"
   },
   "schedule": {
     "trigger": "Nachricht planen",
@@ -288,6 +299,33 @@
     "failed": "Nicht gesendet – {{reason}}",
     "cancel": "Geplante Nachricht abbrechen",
     "dismiss": "Fehlerhinweis ausblenden"
+  },
+  "sideQuestion": {
+    "label": "Nebenfrage · gehört nicht zur Sitzung",
+    "pending": "Wird nebenbei beantwortet",
+    "failed": "Die Nebenfrage ist fehlgeschlagen.",
+    "dismiss": "Entfernen",
+    "unsupported": "Dieser Anbieter kann keine Nebenfragen beantworten."
+  },
+  "sendMenu": {
+    "trigger": "Sendeoptionen",
+    "queue": {
+      "label": "In Warteschlange stellen",
+      "descriptionResponding": "Senden, wenn dieser Durchlauf endet",
+      "descriptionBackground": "Senden, wenn die Hintergrundarbeit endet"
+    },
+    "sideQuestion": {
+      "label": "Nebenfrage",
+      "description": "Jetzt nebenbei fragen; die Sitzung sieht es nicht"
+    },
+    "stop": {
+      "label": "Stoppen",
+      "description": "Die Antwort beenden, die gerade geschrieben wird"
+    },
+    "sendAnyway": {
+      "label": "Trotzdem senden",
+      "description": "Jetzt senden; das beendet die Hintergrundarbeit"
+    }
   },
   "modelLibrary": {
     "effortLevels": "Reasoning-Stufen",

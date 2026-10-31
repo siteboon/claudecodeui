@@ -1,11 +1,11 @@
-import { memo, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranchIcon, PencilIcon } from 'lucide-react';
+import { Bot, GitBranchIcon, PencilIcon, XIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
-import { LLMProviderLogo } from '@/shared/ui';
+import { LLMProviderLogo, Shimmer } from '@/shared/ui';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
 import ChatMessageImages from '@/modules/chat/transcript/ChatMessageImages';
 import ChatMessageFiles from '@/modules/chat/transcript/ChatMessageFiles';
@@ -16,6 +16,7 @@ import MessageModelLabel from '@/modules/chat/transcript/MessageModelLabel';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
+import { useDismissSideQuestion } from '@/modules/chat/hooks/useSideQuestions';
 
 type MessageComponentProps = {
   message: ChatMessage;
@@ -43,18 +44,42 @@ type MessageComponentProps = {
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
 
+/** Used by MessageComponent's side-question header, to dismiss the whole question/answer pair. */
+function SideQuestionDismissButton({ label, onDismiss }: { label: string; onDismiss: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onDismiss}
+      title={label}
+      aria-label={label}
+      className="rounded p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-muted hover:opacity-100"
+    >
+      <XIcon className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
 /**
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
  * transcript entry — user turn, assistant turn, or a tool call and its result.
  */
 const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
-  const isGrouped = prevMessage && prevMessage.type === message.type &&
-    ((prevMessage.type === 'assistant') ||
-      (prevMessage.type === 'user') ||
-      (prevMessage.type === 'tool') ||
-      (prevMessage.type === 'error'));
+  // A side question never groups with its neighbours: it is drawn as its own
+  // tinted aside regardless of what came before or after it.
+  const isGrouped = Boolean(prevMessage) && !message.sideQuestion && !prevMessage?.sideQuestion && prevMessage?.type === message.type &&
+    ((prevMessage?.type === 'assistant') ||
+      (prevMessage?.type === 'user') ||
+      (prevMessage?.type === 'tool') ||
+      (prevMessage?.type === 'error'));
   const messageRef = useRef<HTMLDivElement | null>(null);
+  const dismissSideQuestion = useDismissSideQuestion();
+  const handleDismissSideQuestion = useCallback(() => {
+    if (!message.sideQuestion) {
+      return;
+    }
+    void dismissSideQuestion(message.sideQuestion.sessionId, message.sideQuestion.sideQuestionId);
+  }, [dismissSideQuestion, message.sideQuestion]);
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(
     () => {
@@ -89,6 +114,60 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
   if (shouldHideThinkingMessage) {
     return null;
+  }
+
+  if (message.sideQuestion) {
+    // A side question is one aside drawn as two rows: the question row is its
+    // top half, the answer row its bottom half, joined by the subagent rail
+    // and tint (the pane drops the gap between them). Who said what is told
+    // apart the way the session's own turns are: the asker's bubble on the
+    // right, the agent's plain text on the left. It never had edit, fork or
+    // grouping affordances, because the session itself never saw it.
+    const isAnswerRow = message.type === 'assistant';
+    const isPendingAnswer = isAnswerRow && message.sideQuestion.status === 'running' && !String(message.content || '').trim();
+    const railClassName = 'border-l-2 border-l-purple-500 bg-purple-500/5 px-3 dark:border-l-purple-400 dark:bg-purple-400/10';
+    return (
+      <div
+        ref={messageRef}
+        data-message-timestamp={message.timestamp || undefined}
+        className="chat-message side-question w-full px-3 sm:px-0"
+      >
+        {isAnswerRow ? (
+          <div className={`${railClassName} rounded-b-lg pb-2 pt-1.5`}>
+            <div dir="auto" className="text-sm">
+              {isPendingAnswer ? (
+                <Shimmer>{t('sideQuestion.pending')}</Shimmer>
+              ) : (
+                <Markdown className="prose prose-sm prose-gray max-w-none font-serif dark:prose-invert">
+                  {formattedMessageContent}
+                </Markdown>
+              )}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">{formattedTime}</div>
+          </div>
+        ) : (
+          <div className={`${railClassName} rounded-t-lg pb-1.5 pt-2`}>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Bot className="h-3.5 w-3.5 flex-shrink-0 text-purple-500 dark:text-purple-400" />
+              <span className="min-w-0 flex-1 truncate">{t('sideQuestion.label')}</span>
+              {!isExporting && (
+                <SideQuestionDismissButton label={t('sideQuestion.dismiss')} onDismiss={handleDismissSideQuestion} />
+              )}
+            </div>
+            <div className="mt-1.5 flex justify-end">
+              <div
+                dir="auto"
+                className="max-w-[85%] break-words rounded-2xl rounded-br-md border border-border bg-muted px-3 py-2 font-serif text-sm text-foreground shadow-sm dark:bg-gray-800"
+              >
+                <Markdown breaks className="prose prose-sm max-w-none font-serif dark:prose-invert">
+                  {message.content}
+                </Markdown>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (

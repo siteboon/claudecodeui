@@ -224,6 +224,33 @@
       "perfWarning": "All messages loaded — scrolling may be slower. Click \"Scroll to bottom\" to restore performance."
     }
   },
+  "sideQuestion": {
+    "label": "Side question · not part of the session",
+    "pending": "Answering on the side",
+    "failed": "The side question failed.",
+    "dismiss": "Dismiss",
+    "unsupported": "This provider cannot answer side questions."
+  },
+  "sendMenu": {
+    "trigger": "Send options",
+    "queue": {
+      "label": "Queue",
+      "descriptionResponding": "Send when this turn ends",
+      "descriptionBackground": "Send when the background work ends"
+    },
+    "sideQuestion": {
+      "label": "Side question",
+      "description": "Ask on the side now; the session never sees it"
+    },
+    "stop": {
+      "label": "Stop",
+      "description": "End the response being written"
+    },
+    "sendAnyway": {
+      "label": "Send anyway",
+      "description": "Send now; this stops the background work"
+    }
+  },
   "shell": {
     "selectProject": {
       "title": "Select a Project",
@@ -285,7 +312,8 @@
         "description": "A new message starts a new turn, which stops that work; anything it has not reported yet is lost. Queue the message to send it when the work finishes.",
         "cancel": "Cancel",
         "queue": "Queue",
-        "sendAnyway": "Send anyway"
+        "sendAnyway": "Send anyway",
+        "sideQuestion": "Side question"
       }
     },
     "controls": {
@@ -322,7 +350,8 @@
     "json": {
       "label": "JSON (.json)",
       "description": "Every message, unformatted, for tooling."
-    }
+    },
+    "includeSideQuestions": "Include side questions"
   },
   "schedule": {
     "trigger": "Schedule this message",

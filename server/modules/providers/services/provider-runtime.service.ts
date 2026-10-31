@@ -1,3 +1,4 @@
+import { errorMessage } from '@/shared/utils.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
@@ -9,6 +10,9 @@ import type {
   ProviderRunFunction,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
+  SideQuestionOutcome,
+  SideQuestionRequest,
+  SideQuestionSink,
 } from '@/shared/types.js';
 
 type ProviderRuntimeServiceDependencies = {
@@ -21,6 +25,11 @@ type ProviderRuntimeServiceDependencies = {
     requestedModel?: string | null,
   ): Promise<string | undefined>;
   getProviderModels: typeof providerModelsService.getProviderModels;
+  /**
+   * Builds the SDK query for a side-question run. Production leaves this
+   * unset so the runtime uses the SDK's own; tests supply a scripted stream.
+   */
+  createQuery?: ProviderRuntimeContext['createQuery'];
 };
 
 const defaultDependencies: ProviderRuntimeServiceDependencies = {
@@ -112,6 +121,29 @@ export function createProviderRuntimeService(
       return dependencies.listProviders().flatMap(
         (provider) => provider.runtime.permissions?.listPending(sessionId) ?? [],
       );
+    },
+
+    async askSideQuestion(
+      providerName: LLMProvider,
+      request: SideQuestionRequest,
+      sink: SideQuestionSink,
+    ): Promise<SideQuestionOutcome> {
+      try {
+        const provider = dependencies.resolveProvider(providerName);
+        const context: ProviderRuntimeContext = {
+          ...createRuntimeContext(provider),
+          createQuery: dependencies.createQuery,
+        };
+
+        if (provider.runtime.askSideQuestion) {
+          return await provider.runtime.askSideQuestion(request, sink, context);
+        }
+
+        // No runtime support: name it and stop, instead of guessing at an answer.
+        return { status: 'error', error: `Provider "${providerName}" has no side questions.`, answer: '' };
+      } catch (error) {
+        return { status: 'error', error: errorMessage(error), answer: '' };
+      }
     },
   };
 }
