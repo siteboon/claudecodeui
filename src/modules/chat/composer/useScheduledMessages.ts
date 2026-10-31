@@ -85,6 +85,7 @@ export function useScheduledMessages(
     content: string;
     scheduledFor: Date;
     options?: Record<string, unknown>;
+    repeatEveryMinutes?: number;
   }) => {
     if (!sessionId) return false;
 
@@ -94,6 +95,7 @@ export function useScheduledMessages(
         content: input.content,
         scheduledFor: input.scheduledFor.toISOString(),
         options: input.options,
+        repeatEveryMinutes: input.repeatEveryMinutes,
       });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);

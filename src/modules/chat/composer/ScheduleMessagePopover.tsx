@@ -14,11 +14,14 @@ import {
 
 type ScheduleMessagePopoverProps = {
   disabled: boolean;
-  onSchedule: (scheduledFor: Date) => void;
+  onSchedule: (scheduledFor: Date, repeatEveryMinutes?: number) => void;
 };
 
 /** Offsets people actually mean when they say "later". */
 const QUICK_OFFSETS_MINUTES = [15, 60, 8 * 60, 24 * 60];
+
+/** Repeat intervals offered; the server accepts any whole number of minutes from 5 to a week. */
+const REPEAT_OPTIONS_MINUTES = [0, 15, 30, 60, 4 * 60, 24 * 60];
 
 /**
  * Turns the picker's `datetime-local` value into an absolute instant.
@@ -52,9 +55,10 @@ export function ScheduleMessagePopover({ disabled, onSchedule }: ScheduleMessage
   // Seeded an hour out, because a picker that opens on "now" is never what
   // scheduling means.
   const [customValue, setCustomValue] = useState(() => toLocalInputValue(new Date(Date.now() + 3_600_000)));
+  const [repeatMinutes, setRepeatMinutes] = useState(0);
 
   const commit = (scheduledFor: Date) => {
-    onSchedule(scheduledFor);
+    onSchedule(scheduledFor, repeatMinutes || undefined);
     setIsOpen(false);
   };
 
@@ -86,6 +90,21 @@ export function ScheduleMessagePopover({ disabled, onSchedule }: ScheduleMessage
       {isOpen && anchor && createPortal(
         <ComposerMenuSurface anchor={anchor} menuRef={menuRef} ariaLabel={ariaLabel}>
           <ComposerMenuHeading>{t('schedule.heading')}</ComposerMenuHeading>
+          <div className="px-2.5 pb-1.5">
+            <label className="block text-[11px] font-medium text-muted-foreground" htmlFor="schedule-repeat">
+              {t('schedule.repeatLabel')}
+            </label>
+            <select
+              id="schedule-repeat"
+              value={repeatMinutes}
+              onChange={(event) => setRepeatMinutes(Number(event.target.value))}
+              className="mt-1 w-full rounded-md border border-border/60 bg-background px-2 py-1 text-xs text-foreground"
+            >
+              {REPEAT_OPTIONS_MINUTES.map((minutes) => (
+                <option key={minutes} value={minutes}>{t(`schedule.repeat.${minutes}`)}</option>
+              ))}
+            </select>
+          </div>
           {QUICK_OFFSETS_MINUTES.map((minutes) => (
             <ComposerMenuItem
               key={minutes}
