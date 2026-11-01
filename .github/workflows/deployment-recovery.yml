@@ -6,6 +6,9 @@ on:
       - scripts/deployment-recovery.mjs
       - scripts/tests/deployment-recovery.test.mjs
       - docs/deployment-recovery.md
+      - server/modules/websocket/services/chat-websocket.service.ts
+      - server/modules/websocket/tests/chat-recovery-send.test.ts
+      - server/modules/websocket/tests/chat-edit-send.test.ts
       - package.json
       - package-lock.json
       - .github/workflows/deployment-recovery.yml
@@ -14,6 +17,10 @@ on:
     paths:
       - scripts/deployment-recovery.mjs
       - scripts/tests/deployment-recovery.test.mjs
+      - docs/deployment-recovery.md
+      - server/modules/websocket/services/chat-websocket.service.ts
+      - server/modules/websocket/tests/chat-recovery-send.test.ts
+      - server/modules/websocket/tests/chat-edit-send.test.ts
       - package.json
       - package-lock.json
       - .github/workflows/deployment-recovery.yml
@@ -34,4 +41,5 @@ jobs:
           cache: npm
       - run: npm ci --include=dev
       - run: npm run test:deployment-recovery
+      - run: npx --no-install tsx --tsconfig server/tsconfig.json --test server/modules/websocket/tests/chat-recovery-send.test.ts server/modules/websocket/tests/chat-edit-send.test.ts
       - run: npx --no-install oxlint scripts/deployment-recovery.mjs scripts/tests/deployment-recovery.test.mjs

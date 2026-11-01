@@ -25,13 +25,14 @@ async function fixture(t) {
   database.prepare('INSERT INTO app_config VALUES (?, ?)').run('jwt_secret', SECRET);
   const running = [];
   const sent = [];
+  const received = [];
   const active = new Set();
   const children = new Set();
   let server;
   let ws;
   let port;
   const state = {
-    directory, database, running, sent, active,
+    directory, database, running, sent, received, active,
     health: 'ok', httpStatus: 200, overrides: {}, requests: [], redirect: null,
     onSend(socket, frame) {
       socket.send(JSON.stringify({ kind: 'complete', sessionId: frame.sessionId, exitCode: 0 }));
@@ -61,9 +62,10 @@ async function fixture(t) {
         assert.equal(jwt.verify(new URL(req.url, 'http://localhost').searchParams.get('token'), SECRET).userId, 1);
         socket.on('message', (raw) => {
           const frame = JSON.parse(raw.toString());
+          received.push(frame);
           if (frame.type === 'chat.subscribe') {
             state.onSubscribe(socket, frame);
-          } else if (frame.type === 'chat.send') {
+          } else if (frame.type === 'chat.recover') {
             sent.push(frame);
             state.onSend(socket, frame);
           }
@@ -164,6 +166,10 @@ test('restart resumes captured sessions once, preserves options, and skips compl
   let result = await f.run('resume', f.snapshotFile).done;
   assert.equal(result.code, 0, result.stderr);
   assert.deepEqual(f.sent.map((frame) => frame.sessionId), ['one', 'two']);
+  assert.deepEqual(f.sent.map((frame) => frame.expectedProviderMapping), [
+    { provider: 'codex', providerSessionId: 'native-one' },
+    { provider: 'claude', providerSessionId: 'native-two' },
+  ]);
   assert.deepEqual(f.sent[0].options, { model: 'custom-model', effort: 'high' });
   assert.match(f.sent[0].content, /^continue\./);
   assert.match(f.sent[0].content, /do not repeat completed side effects/);
@@ -173,12 +179,16 @@ test('restart resumes captured sessions once, preserves options, and skips compl
   assert.equal(result.code, 0, result.stderr); assert.equal(f.sent.length, 2);
 });
 
-test('already-running sessions receive no continuation', async (t) => {
+test('already-running results remain terminal after the active turn finishes', async (t) => {
   const f = await fixture(t);
   f.add('one'); f.active.add('one'); await f.capture();
-  const result = await f.run('resume', f.snapshotFile).done;
+  let result = await f.run('resume', f.snapshotFile).done;
   assert.equal(result.code, 0, result.stderr); assert.equal(f.sent.length, 0);
   assert.equal(f.status().results[0].state, 'already-running');
+  f.active.clear();
+  result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(f.sent.length, 0);
 });
 
 test('startup errors are recorded per session; failed attempts are never silently retried', async (t) => {
@@ -193,6 +203,36 @@ test('startup errors are recorded per session; failed attempts are never silentl
   assert.equal(f.status().state, 'partial');
   result = await f.run('resume', f.snapshotFile).done;
   assert.equal(result.code, 1); assert.equal(f.sent.length, 2);
+});
+
+test('a mapping rejection is recorded without retrying or falling back to an ordinary send', async (t) => {
+  const f = await fixture(t);
+  f.add('one'); await f.capture();
+  f.onSend = (socket, frame) => socket.send(JSON.stringify({
+    kind: 'protocol_error', code: 'RECOVERY_MAPPING_CHANGED', sessionId: frame.sessionId,
+  }));
+  let result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 1, result.stderr);
+  assert.equal(f.status().results[0].state, 'failed');
+  assert.equal(f.status().results[0].detail, 'RECOVERY_MAPPING_CHANGED');
+  result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 1);
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.received.some((frame) => frame.type === 'chat.send'), false);
+});
+
+test('an older server rejects recovery without an unchecked fallback or timeout', async (t) => {
+  const f = await fixture(t);
+  f.add('one'); await f.capture();
+  f.onSend = (socket) => socket.send(JSON.stringify({
+    kind: 'protocol_error', code: 'UNKNOWN_MESSAGE_TYPE', sessionId: null,
+  }));
+  const result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 1, result.stderr);
+  assert.equal(f.status().results[0].state, 'failed');
+  assert.match(f.status().results[0].detail, /does not support/);
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.received.some((frame) => frame.type === 'chat.send'), false);
 });
 
 test('journal survives worker death after send and blocks duplicate continuation', async (t) => {

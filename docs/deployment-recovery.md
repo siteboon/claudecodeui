@@ -77,9 +77,13 @@ with mode 0600; directories created by the tool use mode 0700.
 ## What the continued turn receives
 
 Recovery uses the existing app session id and verifies the captured provider
-mapping still exists after deployment. It preserves the session's saved model
-and reasoning effort, including custom model ids. Attachments and earlier
-prompts are not replayed. The provider's default permission behavior applies;
+mapping still exists after deployment. Every continuation uses `chat.recover`:
+the server compares the captured provider and native session id with the current
+mapping while reserving the run, before an edit can change that mapping. A
+mismatch is rejected without starting a turn. Older servers reject this frame;
+recovery never falls back to an unchecked send after a rollback. It preserves
+the session's saved model and reasoning effort, including custom model ids.
+Attachments and earlier prompts are not replayed. The provider's default permission behavior applies;
 the tool never copies `skipPermissions`, bypass modes, or tool allowlists.
 An approval may therefore require the user to return to that session.
 
@@ -96,9 +100,10 @@ Each snapshot has one fixed journal (`<snapshot>.status.json`) and lock
 Do not copy snapshots to create fresh journals: that bypasses duplicate
 protection. Existing snapshot files cannot be overwritten by `snapshot`.
 
-Before every `chat.send`, the worker durably records `dispatching`. Repeating
-`resume` skips every recorded attempt, even if the resumed turn already
-finished. An already-running session is recorded without sending anything.
+Before every `chat.recover`, the worker durably records `dispatching`. Repeating
+`resume` skips every recorded journal result, even if the resumed turn already
+finished. An already-running session is recorded without sending anything;
+that result remains terminal even after the active turn finishes.
 Concurrent workers are rejected by the exclusive lock. A journal is bound to
 its snapshot by a SHA-256 fingerprint; editing the snapshot causes recovery
 to fail rather than resetting its history.
@@ -119,7 +124,7 @@ If a worker is killed, its lock may remain. Check the PID in the lock and verify
 that worker has exited before removing the lock. The next `resume` converts a
 leftover `dispatching` entry to `unconfirmed` and **does not resend it**. Inspect
 the session history and actual effects before manually requesting another
-turn. Only sessions without any recorded dispatch attempt remain eligible for
+turn. Only sessions without any recorded journal result remain eligible for
 automatic recovery. Health/connection failures and subscription timeouts before
 dispatch leave affected sessions pending without a recorded attempt. The command
 reports the error and exits 1; rerun `resume` with the same snapshot to retry only

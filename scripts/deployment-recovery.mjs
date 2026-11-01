@@ -32,7 +32,7 @@ function writeJson(file, value, exclusive = false) {
     }
     if (exclusive) fs.linkSync(temporary, file);
     else fs.renameSync(temporary, file);
-    // Persist the rename before any chat.send. Directory fsync is unavailable
+    // Persist the rename before any recovery send. Directory fsync is unavailable
     // on Windows; the journal still protects against worker process crashes.
     if (process.platform !== 'win32') {
       const directory = fs.openSync(path.dirname(file), 'r');
@@ -178,6 +178,10 @@ function continueSession(socket, session, deploymentId, beforeSend) {
     const message = (raw) => {
       let frame;
       try { frame = JSON.parse(raw.toString()); } catch { return; }
+      if (sent && frame?.kind === 'protocol_error' && frame.code === 'UNKNOWN_MESSAGE_TYPE' && frame.sessionId == null) {
+        settle('failed', 'Server does not support mapping-checked deployment recovery; no unchecked fallback was sent.');
+        return;
+      }
       if (frame?.sessionId !== session.sessionId) return;
       if (frame.kind === 'protocol_error') {
         settle(frame.code === 'RUN_IN_PROGRESS' ? 'already-running' : 'failed', frame.code || 'PROTOCOL_ERROR');
@@ -189,7 +193,13 @@ function continueSession(socket, session, deploymentId, beforeSend) {
             // A worker crash after this point is intentionally not retried.
             beforeSend();
             sent = true;
-            socket.send(JSON.stringify({ type: 'chat.send', sessionId: session.sessionId, content: `${PROMPT} Deployment id: ${deploymentId}.`, options: session.options }));
+            // A distinct frame fails closed on older servers that cannot
+            // atomically check the captured mapping when admitting the run.
+            socket.send(JSON.stringify({
+              type: 'chat.recover', sessionId: session.sessionId,
+              expectedProviderMapping: { provider: session.provider, providerSessionId: session.providerSessionId },
+              content: `${PROMPT} Deployment id: ${deploymentId}.`, options: session.options,
+            }));
             subscribe();
           } catch (error) { cleanup(); reject(error); }
         } else if (frame.isProcessing) {
