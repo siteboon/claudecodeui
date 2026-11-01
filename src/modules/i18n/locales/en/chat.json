@@ -88,6 +88,12 @@
   "json": {
     "response": "JSON Response"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} needs your input",
+    "dismiss": "Dismiss",
+    "alwaysAllow": "Always allow",
+    "alwaysAllowCovers": "Always allow covers"
+  },
   "permissions": {
     "grant": "Grant permission for {{tool}}",
     "added": "Permission added",
