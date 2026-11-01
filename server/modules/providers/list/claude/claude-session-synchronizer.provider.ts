@@ -11,6 +11,7 @@ import {
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { SessionArtifactReadOptions } from '@/shared/types.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -51,17 +52,21 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       // A newly configured home can contain transcripts older than the global scan cursor.
       const homeSince = this.scannedHomes.has(claudeHome) ? since : undefined;
       processed += await this.synchronizeHome(claudeHome, profileId, homeSince);
+      // Failed discovery or transcript reads must leave this home eligible for a full retry.
       this.scannedHomes.add(claudeHome);
     }
     return processed;
   }
 
   private async synchronizeHome(claudeHome: string, profileId: string | null, since?: Date): Promise<number> {
+    const readOptions = { throwOnError: true };
     const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const files = await findFilesRecursivelyCreatedAfter(
       path.join(claudeHome, 'projects'),
       '.jsonl',
-      since ?? null
+      since ?? null,
+      [],
+      readOptions,
     );
 
     let processed = 0;
@@ -70,7 +75,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const parsed = await this.processSessionFile(filePath, nameMap);
+      const parsed = await this.processSessionFile(filePath, nameMap, readOptions);
       if (!parsed) {
         continue;
       }
@@ -136,7 +141,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   private async processSessionFile(
     filePath: string,
-    nameMap: Map<string, string>
+    nameMap: Map<string, string>,
+    options: SessionArtifactReadOptions = {},
   ): Promise<ParsedSession | null> {
     const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, unknown>;
@@ -151,7 +157,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         sessionId,
         projectPath,
       };
-    });
+    }, options);
 
     if (!parsed) {
       return null;

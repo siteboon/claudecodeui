@@ -27,6 +27,7 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderSkillSource,
+  SessionArtifactReadOptions,
   SubagentActivity,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
@@ -1045,12 +1046,15 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * home directories. Pass `lastScanAt` to include only files created after the
  * previous scan, or pass `null` to perform a full rescan. Missing directories
  * are treated as empty because not every provider exists on every machine.
+ * Enable `options.throwOnError` when a partial scan must not advance a cursor;
+ * other discovery/stat failures then reject instead of returning partial data.
  */
 export async function findFilesRecursivelyCreatedAfter(
   rootDir: string,
   extension: string,
   lastScanAt: Date | null,
-  fileList: string[] = []
+  fileList: string[] = [],
+  options: SessionArtifactReadOptions = {},
 ): Promise<string[]> {
   try {
     const entries = await readdir(rootDir, { withFileTypes: true });
@@ -1058,7 +1062,7 @@ export async function findFilesRecursivelyCreatedAfter(
       const fullPath = path.join(rootDir, entry.name);
 
       if (entry.isDirectory()) {
-        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList);
+        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList, options);
         continue;
       }
 
@@ -1076,7 +1080,10 @@ export async function findFilesRecursivelyCreatedAfter(
         fileList.push(fullPath);
       }
     }
-  } catch {
+  } catch (error) {
+    if (options.throwOnError && !(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+      throw error;
+    }
     // Missing provider folders are expected in first-run or partial setups.
   }
 
@@ -1150,16 +1157,20 @@ export async function buildLookupMap(
  *
  * The caller supplies an `extractor` that validates provider-specific row
  * shapes. This helper centralizes line-by-line parsing and lets indexers stop
- * scanning as soon as one valid row is found.
+ * scanning as soon as one valid row is found. Provider full scans can enable
+ * `options.throwOnError` to reject read/parse failures rather than treating an
+ * unreadable transcript as one with no matching metadata.
  */
 export async function extractFirstValidJsonlData<T>(
   filePath: string,
-  extractor: (parsedJson: unknown) => T | null | undefined
+  extractor: (parsedJson: unknown) => T | null | undefined,
+  options: SessionArtifactReadOptions = {},
 ): Promise<T | null> {
+  let fileStream: fs.ReadStream | undefined;
+  let lineReader: readline.Interface | undefined;
   try {
-    const fileStream = fs.createReadStream(filePath);
-    const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
+    fileStream = fs.createReadStream(filePath);
+    lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
     for await (const line of lineReader) {
       const trimmed = line.trim();
       if (!trimmed) {
@@ -1169,13 +1180,17 @@ export async function extractFirstValidJsonlData<T>(
       const parsed = JSON.parse(trimmed);
       const extracted = extractor(parsed);
       if (extracted) {
-        lineReader.close();
-        fileStream.close();
         return extracted;
       }
     }
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) {
+      throw error;
+    }
     // Ignore malformed or missing artifacts so full scans keep progressing.
+  } finally {
+    lineReader?.close();
+    fileStream?.destroy();
   }
 
   return null;

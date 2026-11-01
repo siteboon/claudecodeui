@@ -1,6 +1,21 @@
 import type { IncomingMessage } from 'node:http';
 import type { Readable } from 'node:stream';
 
+//----------------- SESSION ARTIFACT READ OPTIONS ------------
+/**
+ * Controls error reporting by the shared transcript discovery and JSONL readers.
+ *
+ * Provider indexers can enable `throwOnError` for full scans so read or parse
+ * failures prevent their synchronization cursor from advancing. Omitted or false
+ * retains best-effort reads for other callers. Directory discovery still treats
+ * ENOENT as empty because providers need not be installed; JSONL read failures
+ * always propagate when enabled, including files removed after discovery.
+ */
+export type SessionArtifactReadOptions = {
+  throwOnError?: boolean;
+};
+
+// ---------------------------
 //----------------- HTTP RESPONSE SHAPES ------------
 /**
  * Canonical success envelope used by backend APIs that return a structured payload.
