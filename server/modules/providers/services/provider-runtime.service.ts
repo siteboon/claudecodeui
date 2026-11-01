@@ -70,7 +70,7 @@ export function createProviderRuntimeService(
     },
   });
 
-  const run = (
+  const run = async (
     providerName: LLMProvider,
     command: string,
     options: AnyRecord,
@@ -125,4 +125,5 @@ export function createProviderRuntimeService(
   };
 }
 
+/** Used by provider, agent, Git, and WebSocket handlers to dispatch provider runs. */
 export const providerRuntimeService = createProviderRuntimeService();

@@ -163,3 +163,24 @@ test('routes permission decisions through provider-owned runtime capabilities', 
     { requestId: 'request-1', sessionId: 'session-1' },
   ]);
 });
+
+test('runtime setup failures reject promises for direct and bound runners', async () => {
+  const expected = new Error('Runtime profile is no longer configured');
+  let started = false;
+  const provider = createProvider('codex', createRuntime({
+    async run() { started = true; },
+  }));
+  const service = createProviderRuntimeService({
+    resolveProvider: () => provider,
+    resolveRuntimeProfile: () => { throw expected; },
+  });
+  const writer = { send() {} };
+
+  // Invoke before handing the result to assert.rejects: a synchronous throw
+  // must fail this test rather than being caught by the assertion's callback.
+  const direct = service.run('codex', 'hello', { sessionId: 'app-1' }, writer);
+  const bound = service.getRunner('codex')('hello', { sessionId: 'app-1' }, writer);
+  assert.equal(await direct.catch((error) => error), expected);
+  assert.equal(await bound.catch((error) => error), expected);
+  assert.equal(started, false);
+});
