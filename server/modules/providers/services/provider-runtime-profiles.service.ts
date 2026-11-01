@@ -1,3 +1,6 @@
+import os from 'node:os';
+import path from 'node:path';
+
 import type {
   LLMProvider,
   ProviderRuntimeProfile,
@@ -134,7 +137,7 @@ const toSummary = (profile: ProviderRuntimeProfile): ProviderRuntimeProfileSumma
 
 /**
  * Parses operator-owned runtime profiles and resolves safe/public and private
- * views from the same validated configuration.
+ * views for the providers module's routes, runtimes, and transcript indexers.
  */
 export function createProviderRuntimeProfilesService(
   dependencyOverrides: Partial<RuntimeProfilesServiceDependencies> = {},
@@ -176,6 +179,27 @@ export function createProviderRuntimeProfilesService(
 
     resolve,
 
+    /** Used by the Codex synchronizer and session watcher to share transcript roots. */
+    listCodexHomes(): Array<{ codexHome: string; profileId: string | null }> {
+      const profiles = [
+        defaultProfile('codex'),
+        ...listConfiguredProfiles().filter((profile) => profile.provider === 'codex'),
+      ];
+      const seen = new Set<string>();
+      return profiles.flatMap((profile) => {
+        const homeOverride = process.platform === 'win32' ? profile.env.USERPROFILE : profile.env.HOME;
+        const codexHome = path.resolve(
+          (profile.env.CODEX_HOME ?? process.env.CODEX_HOME)
+            || path.join(homeOverride || os.homedir(), '.codex'),
+        );
+        if (seen.has(codexHome)) {
+          return [];
+        }
+        seen.add(codexHome);
+        return [{ codexHome, profileId: profile.isDefault ? null : profile.id }];
+      });
+    },
+
     validateSelection(provider: LLMProvider, profileId: string | null | undefined): string | null {
       const profile = resolve(provider, profileId);
       return profile.isDefault ? null : profile.id;
@@ -183,4 +207,5 @@ export function createProviderRuntimeProfilesService(
   };
 }
 
+/** Used throughout the providers module for validated runtime settings and transcript roots. */
 export const providerRuntimeProfilesService = createProviderRuntimeProfilesService();

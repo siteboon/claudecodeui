@@ -5,12 +5,13 @@ import { promises as fsPromises } from 'node:fs';
 import chokidar, { type FSWatcher } from 'chokidar';
 
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
+import { providerRuntimeProfilesService } from '@/modules/providers/services/provider-runtime-profiles.service.js';
 import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 type WatcherEventType = 'add' | 'change';
 
-const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> = [
+const getProviderWatchPaths = (): Array<{ provider: LLMProvider; rootPath: string }> => [
   {
     provider: 'claude',
     rootPath: path.join(os.homedir(), '.claude', 'projects'),
@@ -19,10 +20,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     provider: 'cursor',
     rootPath: path.join(os.homedir(), '.cursor', 'projects'),
   },
-  {
-    provider: 'codex',
-    rootPath: path.join(os.homedir(), '.codex', 'sessions'),
-  },
+  ...providerRuntimeProfilesService.listCodexHomes().map(({ codexHome }) => ({
+    provider: 'codex' as const,
+    rootPath: path.join(codexHome, 'sessions'),
+  })),
   {
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
@@ -192,7 +193,7 @@ async function onUpdate(
 }
 
 /**
- * Starts provider filesystem watchers and performs initial DB synchronization.
+ * Used by server startup to initialize provider filesystem watchers and the session index.
  */
 export async function initializeSessionsWatcher(): Promise<void> {
   console.log('Setting up session watchers');
@@ -204,7 +205,7 @@ export async function initializeSessionsWatcher(): Promise<void> {
     failures: initialSync.failures,
   });
 
-  for (const { provider, rootPath } of PROVIDER_WATCH_PATHS) {
+  for (const { provider, rootPath } of getProviderWatchPaths()) {
     try {
       await fsPromises.mkdir(rootPath, { recursive: true });
 
@@ -243,7 +244,7 @@ export async function initializeSessionsWatcher(): Promise<void> {
 }
 
 /**
- * Stops all active provider session watchers.
+ * Used by server shutdown to stop all active provider session watchers.
  */
 export async function closeSessionsWatcher(): Promise<void> {
   clearPendingWatcherFlushTimer();

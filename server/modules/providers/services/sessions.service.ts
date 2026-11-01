@@ -339,6 +339,7 @@ export const sessionsService = {
       projectPath: source.project_path ?? '',
       upToAnchorId: options.upToAnchorId,
       title: sessionName,
+      runtimeProfile: providerRuntimeProfilesService.resolve(provider, source.runtime_profile_id),
     });
 
     const forkSessionId = randomUUID();

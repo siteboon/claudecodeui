@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import readline from 'node:readline';
 
 import { AppError } from '@/shared/utils.js';
+import type { ProviderRuntimeProfile } from '@/shared/types.js';
 
 /**
  * Minimal JSON-RPC client for `codex app-server`.
@@ -72,10 +74,11 @@ function resolveCodexLauncher(): string {
  */
 async function withAppServer<T>(
   run: (call: (method: string, params: unknown) => Promise<unknown>) => Promise<T>,
+  environment: NodeJS.ProcessEnv,
+  executable?: string,
 ): Promise<T> {
-  const launcher = resolveCodexLauncher();
-  const child = spawn(process.execPath, [launcher, 'app-server'], {
-    env: process.env,
+  const child = spawn(executable || process.execPath, executable ? ['app-server'] : [resolveCodexLauncher(), 'app-server'], {
+    env: environment,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
@@ -191,6 +194,7 @@ async function withAppServer<T>(
   }
 }
 
+/** Used by the Codex fork and history providers for transcript-only branch operations. */
 export const codexAppServer = {
   /**
    * Copies a thread into a new one that ends at `lastTurnId`, or copies the
@@ -208,7 +212,28 @@ export const codexAppServer = {
     threadId: string;
     lastTurnId?: string;
     cwd: string;
+    jsonlPath: string;
+    runtimeProfile?: ProviderRuntimeProfile;
   }): Promise<CodexThreadFork> {
+    // This CLI version looks up forks by id inside CODEX_HOME. Derive that
+    // home from the persisted transcript, never the server's default account.
+    let sessionsDirectory = path.dirname(path.resolve(input.jsonlPath));
+    while (path.basename(sessionsDirectory) !== 'sessions'
+      && path.dirname(sessionsDirectory) !== sessionsDirectory) {
+      sessionsDirectory = path.dirname(sessionsDirectory);
+    }
+    if (path.basename(sessionsDirectory) !== 'sessions') {
+      throw new AppError('The Codex transcript is outside a sessions directory.', {
+        code: 'CODEX_TRANSCRIPT_PATH_INVALID',
+        statusCode: 409,
+      });
+    }
+    await stat(input.jsonlPath);
+    const environment = {
+      ...process.env,
+      ...input.runtimeProfile?.env,
+      CODEX_HOME: path.dirname(sessionsDirectory),
+    };
     return withAppServer(async (call) => {
       const result = await call('thread/fork', {
         threadId: input.threadId,
@@ -238,6 +263,6 @@ export const codexAppServer = {
       }
 
       return { threadId, path };
-    });
+    }, environment, input.runtimeProfile?.executable);
   },
 };

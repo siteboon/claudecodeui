@@ -15,6 +15,7 @@ import type {
   ProviderSkillCreateInput,
   ProviderSkillRemoveInput,
   ProviderRuntimeContext,
+  ProviderRuntimeProfile,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
   UpsertProviderMcpServerInput,
@@ -97,6 +98,8 @@ export interface IProviderFork {
     projectPath: string;
     upToAnchorId?: string;
     title?: string;
+    /** Server-owned execution settings of the source session, retained for the fork. */
+    runtimeProfile?: ProviderRuntimeProfile;
   }): Promise<{ providerSessionId: string; jsonlPath: string }>;
 }
 

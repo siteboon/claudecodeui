@@ -5,6 +5,7 @@ import readline from 'node:readline';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
+import { providerRuntimeProfilesService } from '@/modules/providers/services/provider-runtime-profiles.service.js';
 import { parseFilesInputTag, toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import { prepareTranscriptMessages } from '@/shared/message-unification.js';
@@ -1852,6 +1853,7 @@ async function attachCodexSubagentTranscripts(
   }
 }
 
+/** Used by the providers registry to read Codex history and edit persisted sessions. */
 export class CodexSessionsProvider implements IProviderSessions {
   /**
    * Resolves the last turn to keep when the turn `anchorId` names is replaced.
@@ -1895,7 +1897,7 @@ export class CodexSessionsProvider implements IProviderSessions {
   async rewindSession(sessionId: string, keepThroughId: string | null): Promise<void> {
     const session = sessionsDb.getSessionById(sessionId);
     const supersededThreadId = session?.provider_session_id;
-    if (!session || !supersededThreadId) {
+    if (!session || !supersededThreadId || (keepThroughId !== null && !session.jsonl_path)) {
       throw new AppError('This session has not produced a transcript yet.', {
         code: 'EDIT_SOURCE_NOT_READY',
         statusCode: 409,
@@ -1920,6 +1922,8 @@ export class CodexSessionsProvider implements IProviderSessions {
       threadId: supersededThreadId,
       lastTurnId: keepThroughId,
       cwd: session.project_path ?? '',
+      jsonlPath: session.jsonl_path!,
+      runtimeProfile: providerRuntimeProfilesService.resolve('codex', session.runtime_profile_id),
     });
 
     sessionsDb.markProviderSessionSuperseded({
