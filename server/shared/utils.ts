@@ -1158,9 +1158,10 @@ export async function buildLookupMap(
  *
  * The caller supplies an `extractor` that validates provider-specific row
  * shapes. This helper centralizes line-by-line parsing and lets indexers stop
- * scanning as soon as one valid row is found. Provider full scans can enable
- * `options.throwOnError` to reject read/parse failures rather than treating an
- * unreadable transcript as one with no matching metadata.
+ * scanning as soon as one valid row is found, skipping malformed JSON lines.
+ * Provider full scans can enable `options.throwOnError` to reject read failures
+ * and parse errors when no matching payload is found, preserving retries for
+ * incomplete transcripts without hiding valid metadata after a malformed row.
  */
 export async function extractFirstValidJsonlData<T>(
   filePath: string,
@@ -1169,6 +1170,7 @@ export async function extractFirstValidJsonlData<T>(
 ): Promise<T | null> {
   let fileStream: fs.ReadStream | undefined;
   let lineReader: readline.Interface | undefined;
+  let parseError: unknown;
   try {
     fileStream = fs.createReadStream(filePath);
     lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
@@ -1178,7 +1180,13 @@ export async function extractFirstValidJsonlData<T>(
         continue;
       }
 
-      const parsed = JSON.parse(trimmed);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch (error) {
+        parseError ??= error;
+        continue;
+      }
       const extracted = extractor(parsed);
       if (extracted) {
         return extracted;
@@ -1188,10 +1196,14 @@ export async function extractFirstValidJsonlData<T>(
     if (options.throwOnError) {
       throw error;
     }
-    // Ignore malformed or missing artifacts so full scans keep progressing.
+    // Best-effort scans tolerate read or extractor failures.
   } finally {
     lineReader?.close();
     fileStream?.destroy();
+  }
+
+  if (options.throwOnError && parseError !== undefined) {
+    throw parseError;
   }
 
   return null;

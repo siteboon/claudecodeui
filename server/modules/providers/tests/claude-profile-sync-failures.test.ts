@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import fsPromises, { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import fsPromises, { appendFile, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +9,67 @@ import { closeConnection, initializeDatabase, scanStateDb, sessionsDb } from '@/
 import { ClaudeSessionSynchronizer } from '@/modules/providers/list/claude/claude-session-synchronizer.provider.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
+
+for (const initiallyComplete of [true, false]) {
+  test(initiallyComplete
+    ? 'Claude indexes valid profile metadata after malformed JSONL lines'
+    : 'Claude retries an incomplete profile transcript after valid metadata is appended', async (t) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'claude-profile-jsonl-recovery-'));
+    const saved = Object.fromEntries(['DATABASE_PATH', 'CLOUDCLI_RUNTIME_PROFILES', 'CLAUDE_CONFIG_DIR'].map((key) => [key, process.env[key]]));
+    const profileHome = path.join(root, 'work');
+    const projectDirectory = path.join(profileHome, 'projects', 'workspace');
+    const transcriptPath = path.join(projectDirectory, 'older-session.jsonl');
+    const validRecords = [
+      JSON.stringify({ sessionId: 'older-session', cwd: root }),
+      JSON.stringify({ sessionId: 'later-session', cwd: root }),
+    ].join('\n') + '\n';
+    process.env.DATABASE_PATH = path.join(root, 'auth.db');
+    process.env.CLAUDE_CONFIG_DIR = path.join(root, 'default');
+    process.env.CLOUDCLI_RUNTIME_PROFILES = JSON.stringify([
+      { id: 'work', name: 'Work', provider: 'claude', env: { CLAUDE_CONFIG_DIR: profileHome } },
+    ]);
+    const synchronizer = new ClaudeSessionSynchronizer();
+    const provider = providerRegistry.resolveProvider('claude');
+    t.mock.method(providerRegistry, 'listProviders', () => [{ ...provider, sessionSynchronizer: synchronizer }]);
+
+    try {
+      await mkdir(projectDirectory, { recursive: true });
+      // Valid but unrelated rows and malformed rows must not hide later session metadata.
+      await writeFile(transcriptPath, '  \n{"partial":\n{}\n{"broken"\n' + (initiallyComplete ? validRecords : ''));
+      closeConnection();
+      await initializeDatabase();
+      const previousCursor = new Date('2100-01-01T00:00:00Z');
+      scanStateDb.updateLastScannedAt(previousCursor);
+
+      // Single-file watcher updates use the reader's default best-effort mode.
+      assert.equal(await synchronizer.synchronizeFile(transcriptPath), initiallyComplete ? 'older-session' : null);
+      if (!initiallyComplete) {
+        const incomplete = await sessionSynchronizerService.synchronizeSessions();
+        assert.equal(incomplete.failures.length, 1);
+        assert.deepEqual(scanStateDb.getLastScannedAt(), previousCursor);
+        assert.equal(sessionsDb.getSessionById('older-session'), null);
+        await appendFile(transcriptPath, validRecords);
+      }
+
+      // Full scans use strict reads and must recover files older than the cursor.
+      const recovered = await sessionSynchronizerService.synchronizeSessions();
+      assert.deepEqual(recovered.failures, []);
+      assert.equal(recovered.processedByProvider.claude, 1);
+      assert.equal(sessionsDb.getSessionById('older-session')?.jsonl_path, transcriptPath);
+      assert.equal(sessionsDb.getSessionById('older-session')?.runtime_profile_id, 'work');
+      assert.equal(sessionsDb.getSessionById('later-session'), null, 'the first matching record wins');
+      assert.notDeepEqual(scanStateDb.getLastScannedAt(), previousCursor);
+    } finally {
+      closeConnection();
+      t.mock.restoreAll();
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
 
 for (const failure of ['directory', 'transcript'] as const) {
   test(`Claude retries older profile transcripts after a ${failure} read failure`, {
