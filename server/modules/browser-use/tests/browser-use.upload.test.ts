@@ -32,12 +32,13 @@ test('upload rejects more than ten files', async () => {
   await assert.rejects(upload(many), /at most 10/i);
 });
 
+// Whether agent tools are enabled depends on saved settings, so either message proves the files passed validation.
 test('upload accepts a valid file and then fails on the unknown session', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-upload-'));
   const file = path.join(dir, 'icon.png');
   fs.writeFileSync(file, 'x');
   try {
-    await assert.rejects(upload([file]), /session not found/i);
+    await assert.rejects(upload([file]), /disabled|session not found/i);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

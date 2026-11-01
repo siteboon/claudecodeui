@@ -802,19 +802,21 @@ export const browserUseService = {
   },
 
   async agentUploadFiles(sessionId: string, input: { selector?: string; paths: string[] }) {
-    // Validate the files first so bad input fails fast, before any session lookup.
+    // Validate the files first so bad input fails fast, before taking the session lock.
     const files = resolveUploadFiles(input.paths);
-    const session = await this.getAgentSession(sessionId);
-    const handle = handles.get(sessionId);
-    if (!handle?.page) {
-      throw new Error('Browser runtime handle is not available.');
-    }
-    const selector = input.selector || 'input[type="file"]';
-    // setInputFiles works on hidden inputs too, which is how most upload widgets are built.
-    await handle.page.locator(selector).first().setInputFiles(files, { timeout: 10_000 });
-    session.lastAction = `upload_files:${files.length}`;
-    await captureSession(session, handle.page);
-    return { session: publicSession(session), uploaded: files.map((file) => path.basename(file)) };
+    return withSessionLock(sessionId, async () => {
+      const session = await this.getAgentSession(sessionId);
+      const handle = handles.get(sessionId);
+      if (!handle?.page) {
+        throw new Error('Browser runtime handle is not available.');
+      }
+      const selector = input.selector || 'input[type="file"]';
+      // setInputFiles works on hidden inputs too, which is how most upload widgets are built.
+      await handle.page.locator(selector).first().setInputFiles(files, { timeout: 10_000 });
+      session.lastAction = `upload_files:${files.length}`;
+      await captureSession(session, handle.page);
+      return { session: publicSession(session), uploaded: files.map((file) => path.basename(file)) };
+    });
   },
 
   async agentWaitFor(sessionId: string, input: { text?: string; url?: string; timeoutMs?: number }) {
