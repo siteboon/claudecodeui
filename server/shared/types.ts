@@ -7,9 +7,9 @@ import type { Readable } from 'node:stream';
  *
  * Provider indexers can enable `throwOnError` for full scans so read or parse
  * failures prevent their synchronization cursor from advancing. Omitted or false
- * retains best-effort reads for other callers. Directory discovery still treats
- * ENOENT as empty because providers need not be installed; JSONL read failures
- * always propagate when enabled, including files removed after discovery.
+ * retains best-effort reads for other callers. Strict discovery also rejects
+ * ENOENT, so indexers must distinguish an absent provider root from entries
+ * removed during a scan before deciding whether the scan completed.
  */
 export type SessionArtifactReadOptions = {
   throwOnError?: boolean;

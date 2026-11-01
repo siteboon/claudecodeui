@@ -51,23 +51,35 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     for (const { claudeHome, profileId } of providerRuntimeProfilesService.listClaudeHomes()) {
       // A newly configured home can contain transcripts older than the global scan cursor.
       const homeSince = this.scannedHomes.has(claudeHome) ? since : undefined;
-      processed += await this.synchronizeHome(claudeHome, profileId, homeSince);
+      const homeProcessed = await this.synchronizeHome(claudeHome, profileId, homeSince);
+      if (homeProcessed === null) {
+        // A missing projects root must get a full scan when it becomes available.
+        this.scannedHomes.delete(claudeHome);
+        continue;
+      }
+      processed += homeProcessed;
       // Failed discovery or transcript reads must leave this home eligible for a full retry.
       this.scannedHomes.add(claudeHome);
     }
     return processed;
   }
 
-  private async synchronizeHome(claudeHome: string, profileId: string | null, since?: Date): Promise<number> {
+  /** Returns null when the projects root is absent, so it stays eligible for a full scan. */
+  private async synchronizeHome(claudeHome: string, profileId: string | null, since?: Date): Promise<number | null> {
     const readOptions = { throwOnError: true };
     const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
-    const files = await findFilesRecursivelyCreatedAfter(
-      path.join(claudeHome, 'projects'),
-      '.jsonl',
-      since ?? null,
-      [],
-      readOptions,
-    );
+    const projectsRoot = path.join(claudeHome, 'projects');
+    let files: string[];
+    try {
+      files = await findFilesRecursivelyCreatedAfter(projectsRoot, '.jsonl', since ?? null, [], readOptions);
+    } catch (error) {
+      // Only the initial root may be absent; a vanished entry makes the scan incomplete.
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT'
+        && 'path' in error && error.path === projectsRoot) {
+        return null;
+      }
+      throw error;
+    }
 
     let processed = 0;
     for (const filePath of files) {

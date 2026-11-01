@@ -1044,10 +1044,11 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  *
  * Provider synchronizers call this to find transcript artifacts under provider
  * home directories. Pass `lastScanAt` to include only files created after the
- * previous scan, or pass `null` to perform a full rescan. Missing directories
- * are treated as empty because not every provider exists on every machine.
+ * previous scan, or pass `null` to perform a full rescan. By default, missing
+ * directories are treated as empty because not every provider exists on every machine.
  * Enable `options.throwOnError` when a partial scan must not advance a cursor;
- * other discovery/stat failures then reject instead of returning partial data.
+ * every discovery/stat failure then rejects, including ENOENT during an active
+ * scan. Strict callers must handle an absent initial root separately.
  */
 export async function findFilesRecursivelyCreatedAfter(
   rootDir: string,
@@ -1081,7 +1082,7 @@ export async function findFilesRecursivelyCreatedAfter(
       }
     }
   } catch (error) {
-    if (options.throwOnError && !(error instanceof Error && 'code' in error && error.code === 'ENOENT')) {
+    if (options.throwOnError) {
       throw error;
     }
     // Missing provider folders are expected in first-run or partial setups.
