@@ -1,6 +1,6 @@
 # Features
 
-Upstream compatibility (2026-10-18): the shared Codex CLI feature is integrated with v1.37.5. CLI help documents `CODEX_CLI_PATH` alongside the upstream `CONTEXT_WINDOW` fallback setting.
+The shared Codex CLI feature is integrated with upstream v1.37.7. CLI help documents `CODEX_CLI_PATH` alongside the upstream `CONTEXT_WINDOW` fallback setting.
 
 ## Shared Codex CLI
 

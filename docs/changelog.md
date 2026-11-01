@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.37.7
+
+### 2026-11-01
+
+- Sync with upstream v1.37.7. Clarify Codex CLI path normalization and simplify the README while keeping dated review history here.
+
 ## 1.37.5
 
 ### 2026-10-18
