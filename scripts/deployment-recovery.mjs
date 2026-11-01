@@ -165,7 +165,9 @@ function continueSession(socket, session, deploymentId, beforeSend) {
       socket.off('message', message); socket.off('error', failed); socket.off('close', closed);
     };
     const settle = (state, detail) => { if (!settled) { cleanup(); resolve({ state, detail }); } };
-    const failed = () => settle(sent ? 'unconfirmed' : 'failed', 'Recovery websocket failed; inspect session history before retrying.');
+    const failed = () => settle(sent ? 'unconfirmed' : 'retryable', sent
+      ? 'Recovery websocket failed; inspect session history before retrying.'
+      : 'Recovery websocket failed before dispatch; resume with the same snapshot to retry.');
     const closed = () => failed();
     const subscribe = () => {
       if (settled) return;
@@ -203,7 +205,9 @@ function continueSession(socket, session, deploymentId, beforeSend) {
       }
       // Metadata and receipts alone do not prove successful provider startup.
     };
-    const timer = setTimeout(() => settle('unconfirmed', 'No continuation confirmation; inspect session history before retrying.'), TIMEOUT_MS);
+    const timer = setTimeout(() => settle(sent ? 'unconfirmed' : 'retryable', sent
+      ? 'No continuation confirmation; inspect session history before retrying.'
+      : 'Recovery subscription timed out before dispatch; resume with the same snapshot to retry.'), TIMEOUT_MS);
     socket.on('message', message); socket.once('error', failed); socket.once('close', closed);
     subscribe();
   });
@@ -271,6 +275,11 @@ async function resume(snapshotFile) {
           status.results.push(result);
           save();
         });
+        if (outcome.state === 'retryable') {
+          // No dispatch was attempted; keep this session eligible on the next run.
+          process.stderr.write(`Session ${session.sessionId}: ${outcome.detail}\n`);
+          continue;
+        }
         Object.assign(result, outcome);
         if (!status.results.includes(result)) status.results.push(result);
         save();
@@ -278,7 +287,7 @@ async function resume(snapshotFile) {
     }
     const accepted = status.results.filter((result) => ['accepted', 'already-running'].includes(result.state)).length;
     process.stdout.write(`Continuation confirmed for ${accepted}/${captured.sessions.length} session(s). Status: ${statusFile}\n`);
-    if (status.state === 'partial') process.exitCode = 1;
+    if (['partial', 'pending'].includes(status.state)) process.exitCode = 1;
   } finally {
     // Disconnecting the recovery client does not abort provider runs.
     socket?.terminate();

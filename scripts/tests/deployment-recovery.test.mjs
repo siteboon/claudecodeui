@@ -36,6 +36,11 @@ async function fixture(t) {
     onSend(socket, frame) {
       socket.send(JSON.stringify({ kind: 'complete', sessionId: frame.sessionId, exitCode: 0 }));
     },
+    onSubscribe(socket, frame) {
+      for (const target of frame.sessions) socket.send(JSON.stringify({
+        kind: 'chat_subscribed', sessionId: target.sessionId, isProcessing: active.has(target.sessionId),
+      }));
+    },
     add(id, provider = 'codex', nativeId = `native-${id}`) {
       database.prepare('INSERT INTO sessions VALUES (?, ?, ?, ?, ?)').run(id, provider, nativeId, 'custom-model', 'high');
       running.push({ sessionId: id, provider, startedAt: Date.now(), lastSeq: 42 });
@@ -57,9 +62,7 @@ async function fixture(t) {
         socket.on('message', (raw) => {
           const frame = JSON.parse(raw.toString());
           if (frame.type === 'chat.subscribe') {
-            for (const target of frame.sessions) socket.send(JSON.stringify({
-              kind: 'chat_subscribed', sessionId: target.sessionId, isProcessing: active.has(target.sessionId),
-            }));
+            state.onSubscribe(socket, frame);
           } else if (frame.type === 'chat.send') {
             sent.push(frame);
             state.onSend(socket, frame);
@@ -295,6 +298,61 @@ test('lost acknowledgment is unconfirmed and cannot cause another send', async (
   f.onSend = (socket) => socket.terminate();
   let result = await f.run('resume', f.snapshotFile).done;
   assert.equal(result.code, 1); assert.equal(f.status().results[0].state, 'unconfirmed');
+  result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 1); assert.equal(f.sent.length, 1);
+});
+
+test('socket loss before dispatch leaves the session pending for retry', async (t) => {
+  const f = await fixture(t);
+  f.add('one'); await f.capture();
+  const subscribe = f.onSubscribe;
+  f.onSubscribe = (socket) => socket.terminate();
+  let result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 1);
+  assert.equal(f.sent.length, 0);
+  assert.deepEqual(f.status().results, []);
+  assert.equal(f.status().state, 'pending');
+  assert.match(result.stderr, /before dispatch/);
+  f.onSubscribe = subscribe;
+  result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(f.status().state, 'success');
+  assert.equal(f.sent.length, 1);
+  result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 0, result.stderr); assert.equal(f.sent.length, 1);
+});
+
+test('timeout before dispatch retries only pending sessions and exits nonzero', async (t) => {
+  const f = await fixture(t);
+  f.add('confirmed'); f.add('waiting'); await f.capture();
+  const subscribe = f.onSubscribe;
+  f.onSubscribe = (socket, frame) => {
+    if (frame.sessions[0].sessionId !== 'waiting') subscribe(socket, frame);
+  };
+  let result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 1);
+  assert.deepEqual(f.sent.map((frame) => frame.sessionId), ['confirmed']);
+  assert.deepEqual(f.status().results.map((entry) => [entry.sessionId, entry.state]), [['confirmed', 'accepted']]);
+  assert.equal(f.status().state, 'pending');
+  assert.match(result.stderr, /before dispatch/);
+  f.onSubscribe = subscribe;
+  result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(f.status().state, 'success');
+  assert.deepEqual(f.sent.map((frame) => frame.sessionId), ['confirmed', 'waiting']);
+  result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 0, result.stderr); assert.equal(f.sent.length, 2);
+});
+
+test('timeout after dispatch stays unconfirmed and cannot cause another send', async (t) => {
+  const f = await fixture(t);
+  f.add('one'); await f.capture();
+  f.onSend = () => {};
+  let result = await f.run('resume', f.snapshotFile).done;
+  assert.equal(result.code, 1);
+  assert.equal(f.status().state, 'partial');
+  assert.equal(f.status().results[0].state, 'unconfirmed');
+  assert.match(f.status().results[0].detail, /inspect session history/);
   result = await f.run('resume', f.snapshotFile).done;
   assert.equal(result.code, 1); assert.equal(f.sent.length, 1);
 });

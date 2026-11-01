@@ -108,11 +108,11 @@ to fail rather than resetting its history.
 | `accepted` | The turn remained running through a one-second startup check, or completed successfully during that check |
 | `already-running` | Another turn was active; no additional continuation was needed |
 | `failed` | The server rejected the request or the provider failed during startup |
-| `unconfirmed` | Connection/acknowledgment was lost, timed out, or an earlier worker stopped during dispatch |
+| `unconfirmed` | Connection/acknowledgment was lost or timed out after dispatch began, or an earlier worker stopped during dispatch |
 
 Metadata and subscription receipts alone do not prove provider startup. The
 command exits 0 for fully confirmed recovery or an empty snapshot, 1 for errors
-or partial recovery, and 2 for incorrect command usage. `accepted` confirms
+or partial/pending recovery, and 2 for incorrect command usage. `accepted` confirms
 startup, not completion of the agent's whole task.
 
 If a worker is killed, its lock may remain. Check the PID in the lock and verify
@@ -120,8 +120,11 @@ that worker has exited before removing the lock. The next `resume` converts a
 leftover `dispatching` entry to `unconfirmed` and **does not resend it**. Inspect
 the session history and actual effects before manually requesting another
 turn. Only sessions without any recorded dispatch attempt remain eligible for
-automatic recovery. Connection/health failures before dispatch can be retried
-with the same snapshot.
+automatic recovery. Health/connection failures and subscription timeouts before
+dispatch leave affected sessions pending without a recorded attempt. The command
+reports the error and exits 1; rerun `resume` with the same snapshot to retry only
+those sessions. Socket loss or timeouts after dispatch remain `unconfirmed` and
+are never automatically retried.
 
 ## Tests
 
@@ -132,5 +135,6 @@ npm run test:deployment-recovery
 The tests use a disposable SQLite database, real local HTTP/WebSocket servers,
 and subprocess workers. They cover server restart, model/effort retention,
 provider initialization/mapping guards, completed retries, concurrent workers,
-worker death after dispatch, startup failure, unhealthy servers, and snapshot
-tampering. They do not start a real model or interrupt a live CloudCLI service.
+worker death after dispatch, startup failure, unhealthy servers, socket loss and
+timeouts before and after dispatch, and snapshot tampering. They do not start a
+real model or interrupt a live CloudCLI service.
