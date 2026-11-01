@@ -6,7 +6,7 @@ import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNoti
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
-import { collectRunningBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
+import { collectRunningBackgroundTasks, listRunningBackgroundLaunches, readBackgroundTaskId, readBackgroundTaskStatus } from '@/modules/chat/utils/backgroundTasks';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -171,6 +171,38 @@ export function useChatRealtimeHandlers({
 
         case 'protocol_error': {
           console.error('[Chat] Protocol error:', msg.code, msg.error);
+          // The ✕ on a task whose end never reached this client (its process
+          // went away, say): settle its card and chip instead of reporting a
+          // failure the user can do nothing about.
+          if (sid && msg.code === 'NO_SUCH_TASK' && typeof msg.taskId === 'string') {
+            const rows = normalizedToChatMessages(sessionStore.getMessages(sid))
+              .filter((message) => readBackgroundTaskId(message) === msg.taskId);
+            // A resumed agent can name the task on more than one running row.
+            const launches = listRunningBackgroundLaunches(rows);
+            for (const launch of launches) {
+              handleEvent({
+                kind: 'task_status',
+                event: 'updated',
+                id: `task_gone_${launch.toolId}`,
+                sessionId: sid,
+                provider,
+                timestamp: new Date().toISOString(),
+                taskId: msg.taskId,
+                toolUseId: launch.toolId,
+                status: 'stopped',
+              });
+            }
+            if (launches.length > 0) {
+              return;
+            }
+            // Its end arrived before the refusal: the card has settled already.
+            if (rows.some((message) => {
+              const status = readBackgroundTaskStatus(message);
+              return status !== undefined && status !== 'running';
+            })) {
+              return;
+            }
+          }
           if (sid) {
             // Surface the failure in the conversation and stop the spinner —
             // the run never started (or was rejected), so no `complete` follows.
@@ -195,6 +227,9 @@ export function useChatRealtimeHandlers({
         // Sidebar/global events — owned by useProjectsState.
         case 'session_upserted':
         case 'loading_progress':
+        // Owned by useScheduledMessages, which reads the composer banner's
+        // list again. Not a transcript row.
+        case 'scheduled_messages_changed':
           return;
 
         default:

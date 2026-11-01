@@ -7,7 +7,7 @@ import test from 'node:test';
 import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionDraftsDb, sessionsDb, userDb } from '@/modules/database/index.js';
 import { dispatchDueScheduledMessages, dispatchQueuedMessages } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
 import { scheduledMessagesService } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
-import { chatRunRegistry } from '@/modules/websocket/index.js';
+import { chatRunRegistry, connectedClients } from '@/modules/websocket/index.js';
 
 const SESSION_ID = 'scheduled-session';
 
@@ -25,6 +25,7 @@ async function withIsolatedDatabase(runTest: (userId: number) => void | Promise<
     await runTest(Number(user.id));
   } finally {
     chatRunRegistry.clearAll();
+    connectedClients.clear();
     closeConnection();
     if (previousDatabasePath === undefined) {
       delete process.env.DATABASE_PATH;
@@ -57,6 +58,27 @@ function createRuntime(
       return true;
     },
   } as never;
+}
+
+/** A chat socket that records what it is sent, standing in for an open browser tab. */
+class FakeConnection {
+  readyState = 1; // WS_OPEN_STATE
+  frames: Array<Record<string, unknown>> = [];
+
+  send(data: string): void {
+    this.frames.push(JSON.parse(data) as Record<string, unknown>);
+  }
+
+  /** The scheduled-message announcements among everything this socket received. */
+  announcements(): Array<Record<string, unknown>> {
+    return this.frames.filter((frame) => frame.kind === 'scheduled_messages_changed');
+  }
+}
+
+function openTab(): FakeConnection {
+  const connection = new FakeConnection();
+  connectedClients.add(connection as never);
+  return connection;
 }
 
 test('a message due in the past is sent on the next pass, not skipped', async () => {
@@ -382,5 +404,137 @@ test('scheduling validates its input', async () => {
       () => scheduledMessagesService.schedule({ ...base, sessionId: 'nope', content: 'hi' }),
       (error: Error & { code?: string }) => error.code === 'SESSION_NOT_FOUND',
     );
+  });
+});
+
+// The composer banner is read over REST, so these announcements are the only
+// way an open tab learns that its list changed without it doing anything
+// (#1546): the banner of a message the timer had already sent stayed up until
+// a reload.
+
+test('a due message is announced to open tabs as it is claimed, before its turn runs', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'run the nightly checks',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const tab = openTab();
+
+    let announcedBeforeTheTurn: Array<Record<string, unknown>> = [];
+    const runtime = {
+      hasRuntime: () => true,
+      hasBackgroundWork: () => false,
+      run: async () => {
+        announcedBeforeTheTurn = tab.announcements();
+      },
+      abort: async () => true,
+    } as never;
+    assert.equal(await dispatchDueScheduledMessages(runtime), 1);
+
+    // The banner comes down when the turn starts, not after it finishes,
+    // which for a long turn can be many minutes later.
+    assert.equal(announcedBeforeTheTurn.length, 1);
+    assert.equal(announcedBeforeTheTurn[0].sessionId, SESSION_ID);
+    assert.equal(tab.announcements().length, 1);
+  });
+});
+
+test('a pass announces each session it claimed from once, however many of its messages were due', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const otherSessionId = 'other-scheduled-session';
+    sessionsDb.createAppSession(otherSessionId, 'claude', tmpdir(), 'Other scheduled session');
+    for (const [sessionId, content] of [
+      [SESSION_ID, 'first for this session'],
+      [SESSION_ID, 'second for this session'],
+      [otherSessionId, 'only one for the other session'],
+    ]) {
+      scheduledMessagesService.schedule({
+        userId,
+        sessionId,
+        content,
+        scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+      });
+    }
+    const tab = openTab();
+
+    assert.equal(await dispatchDueScheduledMessages(createRuntime([])), 3);
+
+    // One read per session is enough: a single GET returns all of its rows.
+    assert.deepEqual(tab.announcements().map((frame) => frame.sessionId).sort(), [otherSessionId, SESSION_ID]);
+  });
+});
+
+test('a message that fails to send is announced again once the reason is recorded', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'will fail',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const tab = openTab();
+
+    await dispatchDueScheduledMessages(createRuntime([], 'throw'));
+
+    // Claimed (the banner comes down), then failed (it comes back as the
+    // failure notice).
+    assert.deepEqual(tab.announcements().map((frame) => frame.sessionId), [SESSION_ID, SESSION_ID]);
+    assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'failed');
+  });
+});
+
+test('scheduling and cancelling are announced, so other tabs and devices follow', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const tab = openTab();
+
+    const scheduled = scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'from another tab',
+      scheduledFor: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    assert.equal(tab.announcements().length, 1);
+
+    scheduledMessagesService.cancel(userId, scheduled.id);
+    assert.equal(tab.announcements().length, 2);
+
+    // A refused cancel changed nothing, so there is nothing to announce.
+    assert.throws(() => scheduledMessagesService.cancel(userId, scheduled.id));
+    assert.equal(tab.announcements().length, 2);
+
+    // The frame names the session and nothing else: each tab reads the list
+    // again through its own authenticated request.
+    for (const frame of tab.announcements()) {
+      assert.deepEqual(Object.keys(frame).sort(), ['kind', 'sessionId', 'timestamp']);
+      assert.equal(frame.sessionId, SESSION_ID);
+    }
+  });
+});
+
+test('a socket that cannot be written to does not stop a claimed message from being sent', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'still goes',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const closedTab = openTab();
+    closedTab.readyState = 3; // CLOSED
+    connectedClients.add({
+      readyState: 1,
+      send: () => {
+        throw new Error('socket went away mid-send');
+      },
+    } as never);
+
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchDueScheduledMessages(createRuntime(runs)), 1);
+
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0].command, 'still goes');
+    assert.equal(closedTab.frames.length, 0);
   });
 });

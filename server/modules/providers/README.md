@@ -56,7 +56,7 @@ Each provider lives under its own folder in `server/modules/providers/list/`:
 ```text
 server/modules/providers/list/<provider>/
   <provider>.provider.ts
-  <provider>-runtime.provider.js
+  <provider>-runtime.provider.ts
   <provider>-auth.provider.ts
   <provider>-models.provider.ts
   <provider>-mcp.provider.ts
@@ -80,7 +80,7 @@ import the service from `server/modules/providers/index.ts`.
 | --- | --- | --- |
 | `runtime` | Run and abort live SDK/CLI sessions | `IProviderRuntime` -> `providerRuntimeService` |
 | `models` | Resolve supported and active models | `IProviderModels` -> `providerModelsService` |
-| `auth` | Report install/auth state for the provider runtime | `IProviderAuth` -> `providerAuthService` |
+| `auth` | Report install/auth state and the CLI version for the provider runtime | `IProviderAuth` -> `providerAuthService`, `providerCliService` |
 | `mcp` | Read, list, write, and remove provider-native MCP config | `McpProvider` -> `providerMcpService` |
 | `skills` | Discover provider-native skill markdown files | `SkillsProvider` -> `providerSkillsService` |
 | `sessions` | Normalize live events and fetch session history | `IProviderSessions` -> `sessionsService` |
@@ -110,7 +110,7 @@ import the service from `server/modules/providers/index.ts`.
 2. Create the wrapper class.
 
 - Add `server/modules/providers/list/<provider>/<provider>.provider.ts`.
-- Add `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+- Add `server/modules/providers/list/<provider>/<provider>-runtime.provider.ts`
   when the provider supports live SDK/CLI execution.
 - Extend `AbstractProvider`.
 - Expose readonly `auth`, `mcp`, `skills`, `sessions`, and `sessionSynchronizer`.
@@ -119,6 +119,10 @@ import the service from `server/modules/providers/index.ts`.
 3. Implement auth.
 
 - Return a full `ProviderAuthStatus`.
+- Implement `checkInstalled()` with `probeCliVersion(...)` on the CLI the runtime
+  actually runs; it fills `installed` and `installedVersion`, and the CLI
+  update service reads versions through it. A CLI that updates itself can be
+  added to `CLI_UPDATERS` in `services/provider-cli.service.ts`.
 - Treat normal `not installed` / `not authenticated` states as data, not exceptions.
 - Keep provider-specific credential discovery inside the auth provider.
 - If the provider has no auth step, return a stable unauthenticated or not-installed status instead of omitting the facet.
@@ -219,7 +223,7 @@ Current session sync roots are:
 
 If the provider can run live chat sessions, update the runtime entrypoints too:
 
-- `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+- `server/modules/providers/list/<provider>/<provider>-runtime.provider.ts`
 - `server/modules/providers/list/<provider>/<provider>.provider.ts`
 - `server/modules/agent/agent.routes.ts`
 - `server/index.ts`
@@ -320,7 +324,7 @@ Add a new provider "<provider>" using the current provider module architecture.
 Requirements:
 1) Create:
     - server/modules/providers/list/<provider>/<provider>.provider.ts
-    - server/modules/providers/list/<provider>/<provider>-runtime.provider.js
+    - server/modules/providers/list/<provider>/<provider>-runtime.provider.ts
    - server/modules/providers/list/<provider>/<provider>-auth.provider.ts
    - server/modules/providers/list/<provider>/<provider>-models.provider.ts
    - server/modules/providers/list/<provider>/<provider>-mcp.provider.ts

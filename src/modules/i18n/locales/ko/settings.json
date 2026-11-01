@@ -382,6 +382,37 @@
       }
     },
     "connectionStatus": "연결 상태",
+    "cli": {
+      "title": "CLI 버전",
+      "checking": "버전 확인 중…",
+      "installed": "설치됨: v{{version}}",
+      "installedUnknown": "설치됨 (버전 알 수 없음)",
+      "versionUnavailable": "버전을 읽을 수 없습니다",
+      "updateAvailable": "업데이트 가능: v{{version}}",
+      "upToDate": "최신 버전",
+      "bundled": "CloudCLI에 포함되어 있으며 CloudCLI와 함께 업데이트됩니다.",
+      "platform": "호스팅 플랫폼에서 관리합니다.",
+      "updateTo": "v{{version}}(으)로 업데이트",
+      "runUpdater": "업데이트 실행",
+      "updating": "업데이트 중…",
+      "updatingHint": "서버에서 {{command}}을(를) 실행하고 있습니다. 몇 분 걸릴 수 있습니다.",
+      "runsCommand": "서버에서 {{command}}을(를) 실행합니다",
+      "output": "{{command}} 출력",
+      "result": {
+        "updated": "v{{version}}(으)로 업데이트했습니다.",
+        "alreadyUpToDate": "이미 최신 버전입니다 (v{{version}}).",
+        "unchanged": "업데이트 프로그램이 끝났지만 버전은 여전히 v{{version}}입니다. 아래 출력에서 이유를 확인하세요.",
+        "unchangedUnknown": "업데이트 프로그램이 끝났습니다. 출력은 아래에 있습니다.",
+        "permissionDenied": "서버 사용자에게 이 CLI가 설치된 위치에 쓸 권한이 없습니다. 해당 설치의 소유자로 서버에서 {{command}}을(를) 실행하세요(예: sudo 사용).",
+        "timedOut": "업데이트가 제시간에 끝나지 않아 중지되었습니다. 완료하려면 서버에서 {{command}}을(를) 실행하세요.",
+        "failed": "업데이트에 실패했습니다(종료 코드 {{exitCode}}). 출력은 아래에 있습니다.",
+        "failedQuietly": "업데이트 프로그램이 실패를 보고했습니다. 출력은 아래에 있습니다.",
+        "notStarted": "업데이트 프로그램을 시작할 수 없습니다.",
+        "busy": "이 에이전트가 세션에서 작업 중입니다. 끝날 때까지 기다리거나 중지한 후 업데이트하세요.",
+        "requestFailed": "업데이트가 실행되지 않았습니다: {{error}}",
+        "unconfirmed": "서버에서 응답이 오지 않았습니다 ({{error}}). 업데이트가 그래도 실행되었을 수 있습니다. 위의 버전은 서버가 마지막으로 보고한 버전입니다."
+      }
+    },
     "login": {
       "title": "로그인",
       "reAuthenticate": "재인증",

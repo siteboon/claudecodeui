@@ -353,6 +353,37 @@
       }
     },
     "connectionStatus": "Verbindungsstatus",
+    "cli": {
+      "title": "CLI-Version",
+      "checking": "Version wird geprüft…",
+      "installed": "Installiert: v{{version}}",
+      "installedUnknown": "Installiert (Version unbekannt)",
+      "versionUnavailable": "Version konnte nicht gelesen werden",
+      "updateAvailable": "Update verfügbar: v{{version}}",
+      "upToDate": "Aktuell",
+      "bundled": "Wird mit CloudCLI ausgeliefert und zusammen damit aktualisiert.",
+      "platform": "Wird von der Hosting-Plattform verwaltet.",
+      "updateTo": "Auf v{{version}} aktualisieren",
+      "runUpdater": "Updater ausführen",
+      "updating": "Wird aktualisiert…",
+      "updatingHint": "{{command}} läuft auf dem Server. Das kann einige Minuten dauern.",
+      "runsCommand": "Führt {{command}} auf dem Server aus",
+      "output": "Ausgabe von {{command}}",
+      "result": {
+        "updated": "Auf v{{version}} aktualisiert.",
+        "alreadyUpToDate": "Bereits aktuell (v{{version}}).",
+        "unchanged": "Der Updater ist fertig, die Version ist aber weiterhin v{{version}}. Seine Ausgabe unten nennt den Grund.",
+        "unchangedUnknown": "Der Updater ist fertig. Seine Ausgabe steht unten.",
+        "permissionDenied": "Der Benutzer des Servers darf dort nicht schreiben, wo diese CLI installiert ist. Führe {{command}} auf dem Server als Besitzer dieser Installation aus (zum Beispiel mit sudo).",
+        "timedOut": "Das Update wurde nicht rechtzeitig fertig und wurde abgebrochen. Führe {{command}} auf dem Server aus, um es abzuschließen.",
+        "failed": "Das Update ist fehlgeschlagen (Exit-Code {{exitCode}}). Die Ausgabe steht unten.",
+        "failedQuietly": "Der Updater hat einen Fehler gemeldet. Die Ausgabe steht unten.",
+        "notStarted": "Der Updater konnte nicht gestartet werden.",
+        "busy": "Dieser Agent arbeitet gerade in einer Sitzung. Warte, bis er fertig ist, oder stoppe ihn und aktualisiere dann.",
+        "requestFailed": "Das Update wurde nicht ausgeführt: {{error}}",
+        "unconfirmed": "Vom Server kam keine Antwort ({{error}}). Das Update kann trotzdem gelaufen sein; die Version oben ist die zuletzt vom Server gemeldete."
+      }
+    },
     "login": {
       "title": "Anmelden",
       "reAuthenticate": "Erneut authentifizieren",

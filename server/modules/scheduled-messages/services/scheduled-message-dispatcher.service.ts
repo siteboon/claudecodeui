@@ -1,5 +1,6 @@
 import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
 import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
+import { announceScheduledMessagesChanged } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 import { readQueuedChatMessage } from '@/shared/utils.js';
@@ -88,6 +89,12 @@ export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): P
   return claimed;
 }
 
+/** Records why a claimed message did not go, and shows it on its session's banner. */
+function recordFailure(row: ScheduledMessageRow, reason: string): void {
+  scheduledMessagesDb.markFailed(row.id, reason);
+  announceScheduledMessagesChanged(row.session_id);
+}
+
 async function sendClaimedMessage(
   row: ScheduledMessageRow,
   runtime: ProviderRuntimeGateway,
@@ -112,11 +119,11 @@ async function sendClaimedMessage(
     // Silently dropping a message the user scheduled is worse than telling
     // them it did not go.
     if (!result.started || result.error) {
-      scheduledMessagesDb.markFailed(row.id, result.error ?? 'The session was unavailable when this was due.');
+      recordFailure(row, result.error ?? 'The session was unavailable when this was due.');
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    scheduledMessagesDb.markFailed(row.id, message);
+    recordFailure(row, message);
   }
 }
 
@@ -134,6 +141,12 @@ export async function dispatchDueScheduledMessages(
   const due = scheduledMessagesDb.claimDue(now);
   if (due.length === 0) {
     return 0;
+  }
+
+  // The claim already recorded them as sent, so their banners come down now,
+  // as the turns start, rather than once the last turn has finished.
+  for (const sessionId of new Set(due.map((row) => row.session_id))) {
+    announceScheduledMessagesChanged(sessionId);
   }
 
   // Sequentially: a session can only have one run at a time, and two due

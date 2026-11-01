@@ -16,6 +16,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
+import spawn from 'cross-spawn';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import { parseFrontMatter } from '@/shared/frontmatter.js';
@@ -23,6 +24,7 @@ import type {
   AnyRecord,
   ApiSuccessShape,
   AppErrorOptions,
+  CliVersionProbe,
   NormalizedMessage,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
@@ -1074,6 +1076,78 @@ export function unwrapJsonStringLiteral(value: string): string {
 }
 
 // ---------------------------
+//----------------- JSONC UTILITIES ------------
+/**
+ * Removes JSONC comments (`//` line and `/*` block comments) without touching comment-like
+ * text inside string literals, so the result can go to `JSON.parse` once
+ * trailing commas are gone too (`stripTrailingCommas`).
+ *
+ * Used by the OpenCode provider, whose config files and inline
+ * `OPENCODE_CONFIG_CONTENT` are JSONC: its MCP config reader and its runtime.
+ */
+export function stripJsonComments(content: string): string {
+  let output = '';
+  let inString = false;
+  let quote = '';
+  let escaped = false;
+
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    const next = content[index + 1];
+
+    if (inString) {
+      output += char;
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === quote) {
+        inString = false;
+        quote = '';
+      }
+      continue;
+    }
+
+    if (char === '"' || char === '\'') {
+      inString = true;
+      quote = char;
+      output += char;
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      while (index < content.length && content[index] !== '\n') {
+        index += 1;
+      }
+      output += '\n';
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      index += 2;
+      while (index < content.length && !(content[index] === '*' && content[index + 1] === '/')) {
+        index += 1;
+      }
+      index += 1;
+      continue;
+    }
+
+    output += char;
+  }
+
+  return output;
+}
+
+/**
+ * Removes the trailing commas JSONC allows before a closing `}` or `]`. Run it
+ * after `stripJsonComments`; like that helper it is used by the OpenCode
+ * provider's MCP config reader and runtime.
+ */
+export function stripTrailingCommas(content: string): string {
+  return content.replace(/,\s*([}\]])/g, '$1');
+}
+
+// ---------------------------
 //----------------- SAFE DIRECTORY NAME UTILITIES ------------
 /**
  * Validates that a user or provider supplied identifier can safely be treated
@@ -1195,7 +1269,15 @@ export async function buildLookupMap(
         continue;
       }
 
-      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      } catch {
+        // A row can be half-written while the CLI is streaming into the file.
+        // Skip it rather than abandoning every later entry in the file.
+        continue;
+      }
+
       const key = parsed[keyField];
       const value = parsed[valueField];
 
@@ -1221,26 +1303,37 @@ export async function extractFirstValidJsonlData<T>(
   filePath: string,
   extractor: (parsedJson: unknown) => T | null | undefined
 ): Promise<T | null> {
-  try {
-    const fileStream = fs.createReadStream(filePath);
-    const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+  const fileStream = fs.createReadStream(filePath);
+  const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
+  try {
     for await (const line of lineReader) {
       const trimmed = line.trim();
       if (!trimmed) {
         continue;
       }
 
-      const parsed = JSON.parse(trimmed);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        // A row can be half-written while the CLI is streaming into the file.
+        // Skip it rather than giving up before a later valid row.
+        continue;
+      }
+
       const extracted = extractor(parsed);
       if (extracted) {
-        lineReader.close();
-        fileStream.close();
         return extracted;
       }
     }
   } catch {
     // Ignore malformed or missing artifacts so full scans keep progressing.
+  } finally {
+    // Close on every exit (match, no match, or stream error) so a malformed
+    // artifact cannot leak the file descriptor across repeated watcher scans.
+    lineReader.close();
+    fileStream.close();
   }
 
   return null;
@@ -1269,7 +1362,7 @@ export function isClaudeNonTurnMessageRow(row: AnyRecord): boolean {
 //----------------- CLI PROMPT ARGUMENT UTILITIES ------------
 /**
  * Makes a prompt safe to pass as one CLI argument to `.cmd`-shimmed tools on
- * Windows (cursor-agent and opencode installed via npm-style shims).
+ * Windows (cursor-agent installed via an npm-style shim).
  *
  * cmd.exe cannot carry newlines inside an argument: everything after the
  * first newline is silently dropped before the target CLI ever sees it, which
@@ -1277,7 +1370,7 @@ export function isClaudeNonTurnMessageRow(row: AnyRecord): boolean {
  * Collapsing newline runs to single spaces loses formatting but never loses
  * content, so runtimes should call this on win32 right before spawning.
  *
- * Used by the cursor and opencode spawn runtimes.
+ * Used by the cursor spawn runtime.
  */
 export function flattenPromptForWindowsShell(prompt: string): string {
   if (process.platform !== 'win32' || typeof prompt !== 'string') {
@@ -1350,6 +1443,57 @@ export const terminalTextStyles = {
   dim: (text: string): string =>
     `${ANSI_TERMINAL_STYLES.dim}${text}${ANSI_TERMINAL_STYLES.reset}`,
 };
+
+// ---------------------------
+//----------------- CLI VERSION PROBE UTILITIES ------------
+/**
+ * Pulls the version number out of what a CLI prints for `--version`.
+ *
+ * Each provider CLI wraps it differently: `2.1.295 (Claude Code)`,
+ * `codex-cli 0.156.1`, a bare `1.18.25` from OpenCode, and the date-based
+ * `2026.07.20-8cc9c0b` from cursor-agent. This returns the first
+ * `major.minor.patch` token with any `-prerelease` or `+build` suffix, or null
+ * when the text has none.
+ */
+function parseCliVersion(output: string): string | null {
+  const match = stripAnsiSequences(output).match(/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z][0-9A-Za-z.+-]*)?/);
+  return match ? match[0] : null;
+}
+
+/**
+ * Runs `<command> --version` and reports whether the CLI is there and which
+ * version it is.
+ *
+ * cross-spawn's sync form does not throw for a command it cannot start; it
+ * returns `{ error }` (ENOENT, EACCES, ...). Checks that only caught
+ * exceptions therefore reported a missing CLI as installed. Any such error now
+ * means "not installed", except ETIMEDOUT: that `--version` did start and was
+ * only slow, so the CLI counts as installed with an unknown version.
+ *
+ * Synchronous on purpose: provider status checks already ran `--version` this
+ * way, and the 5 s timeout bounds the wait. Used by every provider's auth
+ * status (`installed` and `installedVersion`) and by the providers module's
+ * CLI update service (the version before and after an update).
+ */
+export function probeCliVersion(command: string, args: string[] = ['--version']): CliVersionProbe {
+  const result = spawn.sync(command, args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 5000,
+    windowsHide: true,
+  });
+
+  if (result.error) {
+    const timedOut = (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT';
+    return { installed: timedOut, exitCode: null, version: null };
+  }
+
+  return {
+    installed: true,
+    exitCode: result.status,
+    version: result.status === 0 ? parseCliVersion(String(result.stdout ?? '')) : null,
+  };
+}
 
 // ---------------------------
 //----------------- RUNTIME PATH RESOLUTION UTILITIES ------------

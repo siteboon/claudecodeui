@@ -353,6 +353,37 @@
       }
     },
     "connectionStatus": "Stato connessione",
+    "cli": {
+      "title": "Versione della CLI",
+      "checking": "Verifica della versione…",
+      "installed": "Installata: v{{version}}",
+      "installedUnknown": "Installata (versione sconosciuta)",
+      "versionUnavailable": "Impossibile leggere la versione",
+      "updateAvailable": "Aggiornamento disponibile: v{{version}}",
+      "upToDate": "Aggiornata",
+      "bundled": "Inclusa in CloudCLI e aggiornata insieme a esso.",
+      "platform": "Gestita dalla piattaforma di hosting.",
+      "updateTo": "Aggiorna a v{{version}}",
+      "runUpdater": "Esegui aggiornamento",
+      "updating": "Aggiornamento…",
+      "updatingHint": "Esecuzione di {{command}} sul server. Può richiedere qualche minuto.",
+      "runsCommand": "Esegue {{command}} sul server",
+      "output": "Output di {{command}}",
+      "result": {
+        "updated": "Aggiornata a v{{version}}.",
+        "alreadyUpToDate": "Già aggiornata (v{{version}}).",
+        "unchanged": "L'aggiornamento è terminato, ma la versione è ancora v{{version}}. L'output qui sotto spiega perché.",
+        "unchangedUnknown": "L'aggiornamento è terminato. L'output è qui sotto.",
+        "permissionDenied": "L'utente del server non può scrivere dove è installata questa CLI. Esegui {{command}} sul server come proprietario di quell'installazione (ad esempio con sudo).",
+        "timedOut": "L'aggiornamento non è terminato in tempo ed è stato interrotto. Esegui {{command}} sul server per completarlo.",
+        "failed": "L'aggiornamento non è riuscito (codice di uscita {{exitCode}}). L'output è qui sotto.",
+        "failedQuietly": "L'aggiornamento ha segnalato un errore. L'output è qui sotto.",
+        "notStarted": "Impossibile avviare l'aggiornamento.",
+        "busy": "Questo agente sta lavorando in una sessione. Attendi che finisca o fermalo, poi aggiorna.",
+        "requestFailed": "L'aggiornamento non è stato eseguito: {{error}}",
+        "unconfirmed": "Nessuna risposta dal server ({{error}}). L'aggiornamento potrebbe essere stato eseguito comunque; la versione qui sopra è l'ultima comunicata dal server."
+      }
+    },
     "login": {
       "title": "Accedi",
       "reAuthenticate": "Ri-autenticati",

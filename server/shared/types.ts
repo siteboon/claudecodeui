@@ -234,16 +234,17 @@ export type MessageKind =
  * Event kinds added by the chat gateway layer on top of provider message kinds.
  *
  * These are app-level realtime events (subscription acks, sidebar deltas,
- * project loading progress, protocol failures) that are not produced by any
- * provider adapter. Together with `MessageKind` they form the complete set of
- * `kind` values a websocket client can receive, so the frontend only ever
- * needs one kind-based switch.
+ * project loading progress, protocol failures, scheduled-message changes) that
+ * are not produced by any provider adapter. Together with `MessageKind` they
+ * form the complete set of `kind` values a websocket client can receive, so
+ * the frontend only ever needs one kind-based switch.
  */
 export type GatewayEventKind =
   | 'chat_subscribed'
   | 'session_upserted'
   | 'loading_progress'
-  | 'protocol_error';
+  | 'protocol_error'
+  | 'scheduled_messages_changed';
 
 /**
  * Complete set of `kind` values emitted to websocket clients.
@@ -910,6 +911,12 @@ export type ProviderAuthSubscriptionOverride = {
 export type ProviderAuthStatus = {
   installed: boolean;
   provider: LLMProvider;
+  /**
+   * Version of the CLI the provider runs, as its `--version` printed it
+   * (`2.1.295`, `2026.07.20-8cc9c0b`), or null when it is not installed or
+   * printed no version.
+   */
+  installedVersion: string | null;
   authenticated: boolean;
   email: string | null;
   method: string | null;
@@ -920,6 +927,20 @@ export type ProviderAuthStatus = {
    * existing consumers that never look for it are unaffected.
    */
   subscriptionOverride?: ProviderAuthSubscriptionOverride;
+};
+
+/**
+ * What running a CLI's `--version` revealed, as returned by `probeCliVersion`.
+ *
+ * `installed` says only that the command could be started (or started and was
+ * too slow to answer); it ignores the exit code, which is reported separately
+ * for callers that also require a clean exit. `version` is null whenever the
+ * command did not exit 0 or printed nothing that looks like a version.
+ */
+export type CliVersionProbe = {
+  installed: boolean;
+  exitCode: number | null;
+  version: string | null;
 };
 
 // ---------------------------

@@ -108,6 +108,12 @@
   "json": {
     "response": "Odpověď JSON"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} potřebuje vaši odpověď",
+    "dismiss": "Odmítnout",
+    "alwaysAllow": "Vždy povolit",
+    "alwaysAllowCovers": "Vždy povolit se vztahuje na"
+  },
   "permissions": {
     "grant": "Udělit oprávnění pro nástroj {{tool}}",
     "added": "Oprávnění přidáno",

@@ -400,6 +400,37 @@
       }
     },
     "connectionStatus": "Estado de la conexión",
+    "cli": {
+      "title": "Versión de la CLI",
+      "checking": "Comprobando la versión…",
+      "installed": "Instalada: v{{version}}",
+      "installedUnknown": "Instalada (versión desconocida)",
+      "versionUnavailable": "No se pudo leer la versión",
+      "updateAvailable": "Actualización disponible: v{{version}}",
+      "upToDate": "Actualizada",
+      "bundled": "Se incluye con CloudCLI y se actualiza junto con él.",
+      "platform": "La gestiona la plataforma de alojamiento.",
+      "updateTo": "Actualizar a v{{version}}",
+      "runUpdater": "Ejecutar actualizador",
+      "updating": "Actualizando…",
+      "updatingHint": "Ejecutando {{command}} en el servidor. Puede tardar unos minutos.",
+      "runsCommand": "Ejecuta {{command}} en el servidor",
+      "output": "Salida de {{command}}",
+      "result": {
+        "updated": "Actualizada a v{{version}}.",
+        "alreadyUpToDate": "Ya está actualizada (v{{version}}).",
+        "unchanged": "El actualizador terminó, pero la versión sigue siendo v{{version}}. Su salida, más abajo, explica por qué.",
+        "unchangedUnknown": "El actualizador terminó. Su salida está más abajo.",
+        "permissionDenied": "El usuario del servidor no tiene permiso para escribir donde está instalada esta CLI. Ejecuta {{command}} en el servidor como propietario de esa instalación (por ejemplo, con sudo).",
+        "timedOut": "La actualización no terminó a tiempo y se detuvo. Ejecuta {{command}} en el servidor para completarla.",
+        "failed": "La actualización falló (código de salida {{exitCode}}). Su salida está más abajo.",
+        "failedQuietly": "El actualizador informó de un error. Su salida está más abajo.",
+        "notStarted": "No se pudo iniciar el actualizador.",
+        "busy": "Este agente está trabajando en una sesión. Espera a que termine o detenlo y luego actualiza.",
+        "requestFailed": "La actualización no se ejecutó: {{error}}",
+        "unconfirmed": "No llegó ninguna respuesta del servidor ({{error}}). Es posible que la actualización se haya ejecutado igualmente; la versión de arriba es la última que informó el servidor."
+      }
+    },
     "subscriptionOverride": {
       "title": "No se está usando el inicio de sesión de tu suscripción",
       "description": "{{variable}} está definida en {{source}}, así que Claude Code factura cada solicitud a esa clave como uso de API de pago por uso, en lugar del inicio de sesión de tu suscripción.",

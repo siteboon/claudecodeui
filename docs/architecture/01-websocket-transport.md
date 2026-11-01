@@ -70,6 +70,7 @@ every open `/ws` socket in the process. A run's writer holds only the sockets wa
 | `server/modules/websocket/services/chat-session-writer.service.ts` | `ChatSessionWriter` — the object runtimes write into; swallows `session_created`, fans out to every attached socket |
 | `server/modules/websocket/services/session-upsert-broadcast.service.ts` | The only builder of `session_upserted`, and the batched broadcast helper |
 | `server/modules/projects/services/projects-with-sessions-fetch.service.ts` | `broadcastProgress` — the `loading_progress` frames |
+| `server/modules/scheduled-messages/services/scheduled-messages.service.ts` | `announceScheduledMessagesChanged` — the `scheduled_messages_changed` frames |
 | `server/modules/taskmaster/taskmaster.routes.ts` | `broadcastTaskMasterUpdate` — the `type`-keyed exception |
 | `server/modules/websocket/services/shell-websocket.service.ts` | The `/shell` protocol, the PTY registry, output buffering and reattachment |
 | `server/modules/websocket/services/plugin-websocket-proxy.service.ts` | `/plugin-ws/:name` passthrough to a plugin's own websocket |
@@ -162,17 +163,19 @@ render carrying only the later one. A listener that throws is caught individuall
 (`:63-67`) so it cannot take the others down with it.
 
 There are exactly three `useWebSocket()` call sites, and two of them immediately hand
-`subscribe` to the hook that does the real work:
+`subscribe` to the hooks that do the real work:
 
 | Call site | Handler | Frames it acts on | State it owns |
 | --- | --- | --- | --- |
 | `ChatInterface.tsx:72` | `useChatRealtimeHandlers` | every provider `kind`, `chat_subscribed`, `history_truncated`, `protocol_error`, `websocket_reconnected` | session store, processing state, pending permissions, token budget |
+| `ChatInterface.tsx` | `useScheduledMessages` | `scheduled_messages_changed` for the open session, `websocket_reconnected` | the composer's scheduled-message banner |
 | `ProjectWorkspaceRoute.tsx:32` | `useProjectsState` | `session_upserted`, `loading_progress`, `websocket_reconnected`, plus a sessionId-keyed "attention" marker for background sessions | project list, sidebar rows, session aliasing, selection |
 | `TaskMasterContext.tsx:102` | itself | `taskmaster-project-updated`, `taskmaster-tasks-updated` (`type`-keyed) | task board data |
 
-Ownership is deliberately disjoint: the chat handler returns early on `session_upserted` and
-`loading_progress` (`useChatRealtimeHandlers.ts:175-178`), and returns immediately on any
-frame with no `kind` at all (`:96-98`), which is how the Task Master frames pass it by.
+Ownership is deliberately disjoint: the chat handler returns early on `session_upserted`,
+`loading_progress` and `scheduled_messages_changed` (`useChatRealtimeHandlers.ts:175-178`),
+and returns immediately on any frame with no `kind` at all (`:96-98`), which is how the Task
+Master frames pass it by.
 
 ## The chat protocol going up
 
@@ -263,7 +266,8 @@ in `server/shared/types.ts`.**
 `history_truncated`, `task_notification`.
 
 **`GatewayEventKind` (`:204-208`) — produced by the gateway, no provider involved:**
-`chat_subscribed`, `session_upserted`, `loading_progress`, `protocol_error`.
+`chat_subscribed`, `session_upserted`, `loading_progress`, `protocol_error`,
+`scheduled_messages_changed`.
 
 `ServerEventKind` (`:217`) is their union, and its doc comment claims every server-to-client
 frame carries a `kind` from it. That is true of everything the *chat gateway* sends and not
@@ -291,6 +295,7 @@ Two kinds in those unions never appear where you would look for them:
 | `protocol_error` | `chat-websocket.service.ts:127` | Error row, spinner cleared |
 | `session_upserted` | `session-upsert-broadcast.service.ts:81-105` | `useProjectsState` — sidebar rows and alias folding |
 | `loading_progress` | `projects-with-sessions-fetch.service.ts:164-175` | `useProjectsState` — project scan progress (`:720-736`) |
+| `scheduled_messages_changed` | `scheduled-messages.service.ts` (`announceScheduledMessagesChanged`), on schedule, cancel, claim and failure | `useScheduledMessages` — reads the open session's scheduled list again |
 
 ### The one exception
 
@@ -521,6 +526,7 @@ flowchart TD
     SET --> E1["loading_progress"]
     SET --> E2["session_upserted"]
     SET --> E3["taskmaster frames"]
+    SET --> E5["scheduled_messages_changed"]
   end
   subgraph PerRun["Per-run, this run's audience only"]
     W["ChatSessionWriter connections set"]
