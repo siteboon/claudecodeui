@@ -92,10 +92,19 @@ const CREDENTIAL_FILE_PATTERN = /^(\.env(\..*)?|\.netrc|\.npmrc|\.pgpass|\.git-c
 const CASE_INSENSITIVE_FS = process.platform === 'win32' || process.platform === 'darwin';
 const foldCase = (value: string) => (CASE_INSENSITIVE_FS ? value.toLowerCase() : value);
 
+// The same folders matched by name anywhere in the path, so they stay refused
+// under a workspace or read-only root, or when no home directory was found.
+const CREDENTIAL_DIR_SEGMENTS = CREDENTIAL_DIR_NAMES.map((dir) => dir.split(path.sep));
+
+function containsSegments(segments: string[], wanted: string[]): boolean {
+  return segments.some((_, start) => wanted.every((part, offset) => segments[start + offset] === foldCase(part)));
+}
+
 function isCredentialPath(candidate: string): boolean {
   const folded = foldCase(candidate);
+  const segments = folded.split(path.sep);
   return CREDENTIAL_DIRS.some((dir) => folded.startsWith(foldCase(dir)))
-    || folded.split(path.sep).some((segment) => segment === '.ssh' || segment === '.gnupg')
+    || CREDENTIAL_DIR_SEGMENTS.some((wanted) => containsSegments(segments, wanted))
     || CREDENTIAL_FILE_PATTERN.test(path.basename(candidate));
 }
 

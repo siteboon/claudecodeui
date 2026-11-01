@@ -580,9 +580,36 @@ test('a file in another folder of the workspace can be read, but never written t
       service.readTextFile('project-1', path.join(workspaceRoot, '.ssh', 'id_ed25519')),
       (error: unknown) => (error as AppError).code === 'PATH_PROTECTED',
     );
+
+    // Every credentials folder is refused by name, not only the ones under a
+    // home directory that was found: this workspace is not the home directory.
+    for (const parts of [['.aws', 'sso', 'cache', 'token.json'], ['.config', 'gh', 'hosts.yml'], ['.kube', 'config']]) {
+      const file = path.join(workspaceRoot, ...parts);
+      await fsPromises.mkdir(path.dirname(file), { recursive: true });
+      await fsPromises.writeFile(file, 'secret', 'utf8');
+      await assert.rejects(
+        service.readTextFile('project-1', file),
+        (error: unknown) => (error as AppError).code === 'PATH_PROTECTED',
+        file,
+      );
+    }
   } finally {
     await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('folders named like credential stores inside the project still read', async () => {
+  const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-project-'));
+
+  try {
+    const file = path.join(projectRoot, '.docker', 'compose.yml');
+    await fsPromises.mkdir(path.dirname(file), { recursive: true });
+    await fsPromises.writeFile(file, 'services: {}', 'utf8');
+    const result = await createRealFileSystemService(projectRoot).readTextFile('project-1', file);
+    assert.equal(result.content, 'services: {}');
+  } finally {
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
   }
 });
 
