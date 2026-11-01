@@ -17,6 +17,7 @@ import Database from 'better-sqlite3';
 import { AppError, WORKSPACES_ROOT, getOpenCodeDatabasePath, validateWorkspacePath } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
+import { validateFrontendAuthMode } from '@/modules/auth/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
@@ -67,7 +68,7 @@ import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './util
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
-import { TRUST_LOCAL_AUTH_BYPASS } from './constants/config.js';
+import { AUTH_MODE, TRUST_LOCAL_AUTH_BYPASS } from './constants/config.js';
 import { c } from './utils/colors.js';
 
 const __dirname = getModuleDir(import.meta.url);
@@ -1575,6 +1576,8 @@ async function removeLocalServerMarker() {
 // Initialize database and start server
 async function startServer() {
     try {
+        validateFrontendAuthMode(path.join(APP_ROOT, 'dist'), AUTH_MODE);
+
         // Initialize authentication database
         await initializeDatabase();
 

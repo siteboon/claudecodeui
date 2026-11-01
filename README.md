@@ -112,6 +112,13 @@ DISABLE_AUTH=true
 VITE_DISABLE_AUTH=true
 ```
 
+`DISABLE_AUTH` is the canonical setting for both the Vite build and server
+runtime. `VITE_DISABLE_AUTH` remains a compatible alias; if both are set, they
+must agree. The server refuses to start with a frontend built for different
+authentication settings. Rebuild with `npm run build` and restart CloudCLI after
+changing these settings. To return to first-user setup, set both flags to
+`false`, rebuild, and restart before completing setup.
+
 This mode uses the installation's existing single local user. Complete the
 normal first-user setup before enabling it. Bind CloudCLI to `127.0.0.1` (or an
 otherwise private interface), point `cloudflared` at that private origin, and do

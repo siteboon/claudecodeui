@@ -1,7 +1,10 @@
-/**
- * Environment Flag: Is Platform
- * Indicates if the app is running in Platform mode (hosted) or OSS mode (self-hosted)
- */
-export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
-export const DISABLE_AUTH = process.env.DISABLE_AUTH === 'true' || process.env.VITE_DISABLE_AUTH === 'true';
-export const TRUST_LOCAL_AUTH_BYPASS = IS_PLATFORM || DISABLE_AUTH;
+import { resolveAuthMode } from '../../shared/authConfig.js';
+
+/** Used by server startup to check the frontend artifact before accepting connections. */
+export const AUTH_MODE = resolveAuthMode(process.env);
+/** Used by platform-specific backend integrations. */
+export const IS_PLATFORM = AUTH_MODE.isPlatform;
+/** Used by auth and onboarding routes to enforce the local bypass setup contract. */
+export const DISABLE_AUTH = AUTH_MODE.disableAuth;
+/** Used by REST middleware, WebSocket upgrades, and CLI status for the effective mode. */
+export const TRUST_LOCAL_AUTH_BYPASS = AUTH_MODE.trustLocalAuthBypass;

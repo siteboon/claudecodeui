@@ -14,7 +14,7 @@ router.get('/status', async (req, res) => {
       const user = getLocalBypassUser();
       if (!user) {
         return res.status(503).json({
-          error: 'DISABLE_AUTH requires an existing local user. Disable it temporarily to complete setup.'
+          error: 'DISABLE_AUTH requires an existing local user. Set both DISABLE_AUTH=false and VITE_DISABLE_AUTH=false, rebuild the frontend, and restart CloudCLI to complete setup. Re-enable bypass only after setup.'
         });
       }
 
@@ -41,7 +41,7 @@ router.post('/register', async (req, res) => {
   try {
     if (DISABLE_AUTH && !getLocalBypassUser()) {
       return res.status(503).json({
-        error: 'DISABLE_AUTH requires an existing local user. Disable it temporarily to complete setup.'
+        error: 'DISABLE_AUTH requires an existing local user. Set both DISABLE_AUTH=false and VITE_DISABLE_AUTH=false, rebuild the frontend, and restart CloudCLI to complete setup. Re-enable bypass only after setup.'
       });
     }
 

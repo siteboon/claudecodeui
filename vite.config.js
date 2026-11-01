@@ -2,10 +2,12 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { getConnectableHost, normalizeLoopbackHost } from './shared/networkHosts.js'
+import { resolveAuthMode } from './shared/authConfig.ts'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
   const env = loadEnv(mode, process.cwd(), '')
+  const authMode = resolveAuthMode(env)
 
   const configuredHost = env.HOST || '0.0.0.0'
   // if the host is not a loopback address, it should be used directly. 
@@ -19,7 +21,21 @@ export default defineConfig(({ mode }) => {
   const serverPort = env.SERVER_PORT || env.PORT || 3001
 
   return {
-    plugins: [react()],
+    plugins: [react(), {
+      name: 'cloudcli-auth-mode',
+      generateBundle() {
+        // Bind the frontend artifact to its build-time authentication settings.
+        this.emitFile({
+          type: 'asset',
+          fileName: 'auth-config.json',
+          source: JSON.stringify(authMode),
+        })
+      },
+    }],
+    define: {
+      'import.meta.env.VITE_IS_PLATFORM': JSON.stringify(String(authMode.isPlatform)),
+      'import.meta.env.VITE_DISABLE_AUTH': JSON.stringify(String(authMode.disableAuth)),
+    },
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url))
