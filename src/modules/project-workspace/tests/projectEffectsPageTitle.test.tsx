@@ -10,6 +10,8 @@ const refreshProjectsSilently = vi.fn();
 const setActiveTab = vi.fn();
 const setSidebarOpen = vi.fn();
 const navigate = vi.fn();
+const subscribe = vi.fn(() => () => undefined);
+const isSessionProcessing = () => false;
 
 const project: Project = {
   projectId: 'project-1',
@@ -33,21 +35,27 @@ const secondSession: ProjectSession = {
   __provider: 'codex',
 };
 
-let effectsState = {
+const createProjectsState = (
+  selectedProject: Project | null = project,
+  selectedSession: ProjectSession | null = firstSession,
+) => ({
   openSettings,
   refreshProjectsSilently,
-  selectedProject: project,
-  selectedSession: firstSession,
+  selectedProject,
+  selectedSession,
   setActiveTab,
   setSidebarOpen,
-};
+});
+
+// Keep callbacks stable so selection-only changes exercise the provider's memo dependencies.
+let projectsState = createProjectsState();
 
 vi.mock('@/modules/command-palette', () => ({
   usePaletteOpsRegister: () => undefined,
 }));
 
-vi.mock('@/modules/project-workspace/context/ProjectsStateContext', () => ({
-  useProjectEffectsState: () => effectsState,
+vi.mock('@/modules/project-workspace/hooks/useProjectsState', () => ({
+  useProjectsState: () => projectsState,
 }));
 
 vi.mock('@/shared/selectedProvider', () => ({
@@ -55,34 +63,54 @@ vi.mock('@/shared/selectedProvider', () => ({
 }));
 
 const { default: ProjectEffects } = await import('@/modules/project-workspace/controllers/ProjectEffects');
+const { ProjectsStateProvider } = await import('@/modules/project-workspace/context/ProjectsStateContext');
+
+function WorkspaceEffects() {
+  return (
+    <ProjectsStateProvider
+      navigate={navigate}
+      subscribe={subscribe}
+      isMobile={false}
+      isSessionProcessing={isSessionProcessing}
+    >
+      <ProjectEffects navigate={navigate} />
+    </ProjectsStateProvider>
+  );
+}
 
 beforeEach(() => {
-  effectsState = {
-    openSettings,
-    refreshProjectsSilently,
-    selectedProject: project,
-    selectedSession: firstSession,
-    setActiveTab,
-    setSidebarOpen,
-  };
+  projectsState = createProjectsState();
   document.title = 'CloudCLI UI';
 });
 
-test('updates the document title independently of the sidebar view', () => {
-  const view = render(<ProjectEffects navigate={navigate} />);
+test('updates the document title through the provider independently of the sidebar view', () => {
+  const view = render(<WorkspaceEffects />);
   assert.equal(document.title, 'First conversation');
 
-  effectsState = { ...effectsState, selectedSession: secondSession };
-  view.rerender(<ProjectEffects navigate={navigate} />);
+  projectsState = { ...projectsState, selectedSession: secondSession };
+  view.rerender(<WorkspaceEffects />);
 
   assert.equal(document.title, 'Conversation opened from Conversations');
 });
 
+test('updates the project and default titles through the provider without a selected session', () => {
+  projectsState = createProjectsState(project, null);
+  const view = render(<WorkspaceEffects />);
+  assert.equal(document.title, 'CloudCLI - CloudCLI UI');
+
+  projectsState = { ...projectsState, selectedProject: { ...project, displayName: 'Another project' } };
+  view.rerender(<WorkspaceEffects />);
+  assert.equal(document.title, 'Another project - CloudCLI UI');
+
+  projectsState = { ...projectsState, selectedProject: null };
+  view.rerender(<WorkspaceEffects />);
+  assert.equal(document.title, 'CloudCLI UI');
+});
 
 test('keeps an active completion marker while the selected conversation changes', () => {
-  const view = render(<ProjectEffects navigate={navigate} />);
+  const view = render(<WorkspaceEffects />);
   document.title = '[Done] First conversation';
-  effectsState = { ...effectsState, selectedSession: secondSession };
-  view.rerender(<ProjectEffects navigate={navigate} />);
+  projectsState = { ...projectsState, selectedSession: secondSession };
+  view.rerender(<WorkspaceEffects />);
   assert.equal(document.title, '[Done] Conversation opened from Conversations');
 });
