@@ -1,8 +1,8 @@
-import os from 'node:os';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { providerRuntimeProfilesService } from '@/modules/providers/services/provider-runtime-profiles.service.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
@@ -19,11 +19,11 @@ type ParsedSession = {
 };
 
 /**
- * Session indexer for Claude transcript artifacts.
+ * Used by the providers registry to index Claude transcripts in every configured home.
  */
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'claude' as const;
-  private readonly claudeHome = path.join(os.homedir(), '.claude');
+  private readonly scannedHomes = new Set<string>();
 
   /**
    * Returns true when a JSONL file is a subagent transcript or tool result
@@ -43,12 +43,23 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
-   * Scans ~/.claude/projects and upserts discovered sessions into DB.
+   * Scans default and profile project roots and preserves their runtime profile.
    */
   async synchronize(since?: Date): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
+    let processed = 0;
+    for (const { claudeHome, profileId } of providerRuntimeProfilesService.listClaudeHomes()) {
+      // A newly configured home can contain transcripts older than the global scan cursor.
+      const homeSince = this.scannedHomes.has(claudeHome) ? since : undefined;
+      processed += await this.synchronizeHome(claudeHome, profileId, homeSince);
+      this.scannedHomes.add(claudeHome);
+    }
+    return processed;
+  }
+
+  private async synchronizeHome(claudeHome: string, profileId: string | null, since?: Date): Promise<number> {
+    const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const files = await findFilesRecursivelyCreatedAfter(
-      path.join(this.claudeHome, 'projects'),
+      path.join(claudeHome, 'projects'),
       '.jsonl',
       since ?? null
     );
@@ -72,7 +83,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         parsed.sessionName,
         timestamps.createdAt,
         timestamps.updatedAt,
-        filePath
+        filePath,
+        profileId,
       );
       processed += 1;
     }
@@ -91,7 +103,16 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
-    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
+    const homes = providerRuntimeProfilesService.listClaudeHomes();
+    const location = [...homes]
+      .sort((left, right) => right.claudeHome.length - left.claudeHome.length)
+      .find(({ claudeHome }) => {
+        const relativePath = path.relative(path.join(claudeHome, 'projects'), filePath);
+        return relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relativePath);
+      }) ?? homes[0];
+    // Explicit file synchronization also supports paths outside watched roots.
+    const nameMap = await buildLookupMap(path.join(location.claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;
@@ -105,7 +126,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       parsed.sessionName,
       timestamps.createdAt,
       timestamps.updatedAt,
-      filePath
+      filePath,
+      location.profileId,
     );
   }
 

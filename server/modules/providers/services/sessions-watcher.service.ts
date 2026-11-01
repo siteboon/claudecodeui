@@ -12,10 +12,10 @@ import type { LLMProvider } from '@/shared/types.js';
 type WatcherEventType = 'add' | 'change';
 
 const getProviderWatchPaths = (): Array<{ provider: LLMProvider; rootPath: string }> => [
-  {
-    provider: 'claude',
-    rootPath: path.join(os.homedir(), '.claude', 'projects'),
-  },
+  ...providerRuntimeProfilesService.listClaudeHomes().map(({ claudeHome }) => ({
+    provider: 'claude' as const,
+    rootPath: path.join(claudeHome, 'projects'),
+  })),
   {
     provider: 'cursor',
     rootPath: path.join(os.homedir(), '.cursor', 'projects'),

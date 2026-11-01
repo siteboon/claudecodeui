@@ -179,6 +179,27 @@ export function createProviderRuntimeProfilesService(
 
     resolve,
 
+    /** Used by the Claude synchronizer and session watcher to share transcript roots. */
+    listClaudeHomes(): Array<{ claudeHome: string; profileId: string | null }> {
+      const profiles = [
+        defaultProfile('claude'),
+        ...listConfiguredProfiles().filter((profile) => profile.provider === 'claude'),
+      ];
+      const seen = new Set<string>();
+      return profiles.flatMap((profile) => {
+        const homeOverride = process.platform === 'win32' ? profile.env.USERPROFILE : profile.env.HOME;
+        const claudeHome = path.resolve(
+          (profile.env.CLAUDE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR)
+            || path.join(homeOverride || os.homedir(), '.claude'),
+        );
+        if (seen.has(claudeHome)) {
+          return [];
+        }
+        seen.add(claudeHome);
+        return [{ claudeHome, profileId: profile.isDefault ? null : profile.id }];
+      });
+    },
+
     /** Used by the Codex synchronizer and session watcher to share transcript roots. */
     listCodexHomes(): Array<{ codexHome: string; profileId: string | null }> {
       const profiles = [
