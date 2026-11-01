@@ -82,6 +82,12 @@
   "json": {
     "response": "Respons JSON"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} membutuhkan masukan Anda",
+    "dismiss": "Tolak",
+    "alwaysAllow": "Selalu izinkan",
+    "alwaysAllowCovers": "\"Selalu izinkan\" mencakup"
+  },
   "permissions": {
     "grant": "Berikan izin untuk {{tool}}",
     "added": "Izin ditambahkan",
