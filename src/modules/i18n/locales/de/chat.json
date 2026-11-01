@@ -17,7 +17,8 @@
     "tool": "Werkzeug",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "Werkzeugeinstellungen",
@@ -126,6 +127,7 @@
       "claude": "Bereit, Claude mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "cursor": "Bereit, Cursor mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "codex": "Bereit, Codex mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
+      "antigravity": "Bereit, Antigravity mit {{model}} zu verwenden. Gib unten deine Nachricht ein.",
       "default": "Wähl oben einen Anbieter, um zu beginnen"
     },
     "pressToSearch": "Drücke <kbd>{{shortcut}}</kbd>, um Sitzungen, Dateien und Commits zu durchsuchen"

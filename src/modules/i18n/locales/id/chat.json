@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "Pengaturan Tool",
@@ -166,6 +167,7 @@
       "cursor": "Siap menggunakan Cursor dengan {{model}}. Mulai ketik pesan di bawah.",
       "codex": "Siap menggunakan Codex dengan {{model}}. Mulai ketik pesan di bawah.",
       "opencode": "Siap menggunakan OpenCode dengan {{model}}. Mulai ketik pesan di bawah.",
+      "antigravity": "Siap menggunakan Antigravity dengan {{model}}. Mulai ketik pesan di bawah.",
       "default": "Pilih provider di atas untuk memulai"
     },
     "pressToSearch": "Tekan <kbd>{{shortcut}}</kbd> untuk mencari sesi, file, dan commit",

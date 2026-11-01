@@ -323,6 +323,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AI asistanı"
+      },
+      "antigravity": {
+        "description": "Antigravity CLI asistanı"
       }
     },
     "connectionStatus": "Bağlantı Durumu",
@@ -417,7 +420,8 @@
     "description": {
       "claude": "Model Context Protocol sunucuları Claude'a ek araçlar ve veri kaynakları sağlar",
       "cursor": "Model Context Protocol sunucuları Cursor'a ek araçlar ve veri kaynakları sağlar",
-      "codex": "Model Context Protocol sunucuları Codex'e ek araçlar ve veri kaynakları sağlar"
+      "codex": "Model Context Protocol sunucuları Codex'e ek araçlar ve veri kaynakları sağlar",
+      "antigravity": "Model Context Protocol sunucuları Antigravity için ek araçlar ve veri kaynakları sağlar"
     },
     "addButton": "MCP Sunucusu Ekle",
     "empty": "Yapılandırılmış MCP sunucusu yok",

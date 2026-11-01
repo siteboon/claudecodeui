@@ -322,6 +322,9 @@
       },
       "codex": {
         "description": "Assistente AI OpenAI Codex"
+      },
+      "antigravity": {
+        "description": "Assistente CLI Antigravity"
       }
     },
     "connectionStatus": "Stato connessione",
@@ -416,7 +419,8 @@
     "description": {
       "claude": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Claude",
       "cursor": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Cursor",
-      "codex": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Codex"
+      "codex": "I server Model Context Protocol forniscono strumenti e fonti dati aggiuntive a Codex",
+      "antigravity": "I server Model Context Protocol forniscono strumenti e fonti di dati aggiuntivi ad Antigravity"
     },
     "addButton": "Aggiungi server MCP",
     "empty": "Nessun server MCP configurato",

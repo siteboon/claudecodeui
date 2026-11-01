@@ -61,7 +61,7 @@ const PROVIDER_SKILL_PATHS: Record<Exclude<SkillsProvider, 'opencode'>, string> 
   claude: '~/.claude/skills/<skill-name>/SKILL.md',
   codex: '~/.agents/skills/<skill-name>/SKILL.md',
   cursor: '~/.cursor/skills/<skill-name>/SKILL.md',
-  antigravity: '~/.antigravity/skills/<skill-name>/SKILL.md',
+  antigravity: '~/.gemini/antigravity-cli/skills/<skill-name>/SKILL.md',
 };
 
 const SCOPE_BADGE_CLASSES: Record<SkillsScope, string> = {

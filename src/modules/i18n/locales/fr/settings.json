@@ -325,6 +325,9 @@
       },
       "opencode": {
         "description": "Assistant CLI OpenCode"
+      },
+      "antigravity": {
+        "description": "Assistant CLI Antigravity"
       }
     },
     "connectionStatus": "Statut de la connexion",
@@ -420,7 +423,8 @@
       "claude": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Claude",
       "cursor": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Cursor",
       "codex": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Codex",
-      "opencode": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à OpenCode"
+      "opencode": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à OpenCode",
+      "antigravity": "Les serveurs Model Context Protocol fournissent des outils et sources de données supplémentaires à Antigravity"
     },
     "addButton": "Ajouter un serveur MCP",
     "empty": "Aucun serveur MCP configuré",
