@@ -68,7 +68,7 @@ import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './util
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
-import { AUTH_MODE, TRUST_LOCAL_AUTH_BYPASS } from './constants/config.js';
+import { AUTH_MODE, IS_PLATFORM, TRUST_LOCAL_AUTH_BYPASS } from './constants/config.js';
 import { c } from './utils/colors.js';
 
 const __dirname = getModuleDir(import.meta.url);

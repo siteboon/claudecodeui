@@ -104,13 +104,47 @@ an Access policy that allows your Google Workspace identity (or selected Google
 users). Requests are then challenged by Google OAuth at Cloudflare before the
 tunnel forwards them to CloudCLI.
 
-After the upstream login is enforced, set both variables before building and
-starting CloudCLI:
+This mode requires a source checkout so you can build the frontend with the
+same authentication settings as the server. The `npx` and global npm packages
+ship a prebuilt frontend without its source or build tooling. Setting
+`DISABLE_AUTH=true` only at runtime does not reconfigure that frontend; startup
+rejects mismatched authentication settings. Use a source checkout instead:
 
 ```bash
+git clone https://github.com/siteboon/claudecodeui.git
+cd claudecodeui
+npm ci --include=dev
+cp .env.example .env
+```
+
+In the checkout's `.env`, set `HOST=127.0.0.1`, `DISABLE_AUTH=false`, and
+`VITE_DISABLE_AUTH=false` for initial setup. To reuse an existing installation's
+local user, keep the same `DATABASE_PATH` (shown by `cloudcli status`). Stop any
+existing CloudCLI process before starting this checkout:
+
+```bash
+npm run build
+npm run server
+```
+
+Open `http://127.0.0.1:3001` and complete first-user setup if no local user exists,
+then stop the server. After the upstream login is enforced, update `.env`:
+
+```bash
+HOST=127.0.0.1
 DISABLE_AUTH=true
 VITE_DISABLE_AUTH=true
 ```
+
+Rebuild and start from the same checkout:
+
+```bash
+npm run build
+npm run server
+```
+
+Continue using `npm run server` from this checkout; `npx` or a global `cloudcli`
+command starts its separately installed package.
 
 `DISABLE_AUTH` is the canonical setting for both the Vite build and server
 runtime. `VITE_DISABLE_AUTH` remains a compatible alias; if both are set, they
