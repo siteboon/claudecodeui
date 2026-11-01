@@ -89,6 +89,20 @@ export type ProviderRuntimeProfile = ProviderRuntimeProfileSummary & {
 };
 
 /**
+ * Dependencies for the shared Claude executable resolver, used by the providers
+ * module and resolver tests. Supply the effective subprocess environment so
+ * Windows command lookup uses the selected runtime profile's PATH. Omitted
+ * members use the host's platform, environment, and filesystem operations.
+ */
+export type ResolveClaudeCodeExecutablePathDependencies = {
+  execFileSync?: typeof import('node:child_process').execFileSync;
+  existsSync?: typeof import('node:fs').existsSync;
+  platform?: NodeJS.Platform;
+  readFileSync?: typeof import('node:fs').readFileSync;
+  env?: NodeJS.ProcessEnv;
+};
+
+/**
  * One selectable model row in a provider model catalog.
  */
 export type ProviderModelOption = {

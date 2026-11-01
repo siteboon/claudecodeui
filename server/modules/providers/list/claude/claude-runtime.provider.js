@@ -240,6 +240,7 @@ function mapCliOptionsToSDK(options = {}) {
   // binary it ships, which beats handing it a bare `claude` that raw spawn can never launch.
   const claudeExecutablePath = resolveClaudeCodeExecutablePath(
     runtimeProfile?.executable || process.env.CLAUDE_CLI_PATH,
+    { env: sdkOptions.env },
   );
   if (claudeExecutablePath) {
     sdkOptions.pathToClaudeCodeExecutable = claudeExecutablePath;
@@ -900,7 +901,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
     const mcpServers = await new ClaudeMcpProvider().loadRuntimeServers(
       options.cwd,
-      sdkOptions.env.CLAUDE_CONFIG_DIR || sdkOptions.env.HOME || os.homedir(),
+      sdkOptions.env.CLAUDE_CONFIG_DIR
+        || (process.platform === 'win32' ? sdkOptions.env.USERPROFILE : sdkOptions.env.HOME)
+        || os.homedir(),
     );
     if (mcpServers) {
       sdkOptions.mcpServers = mcpServers;
