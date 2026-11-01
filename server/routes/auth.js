@@ -1,7 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
-import { userDb } from '../modules/database/index.js';
-import { getConnection } from '../modules/database/connection.js';
+import { userDb, getConnection } from '../modules/database/index.js';
 import { generateToken, authenticateToken, getLocalBypassUser } from '../middleware/auth.js';
 import { DISABLE_AUTH } from '../constants/config.js';
 
@@ -40,6 +39,12 @@ router.get('/status', async (req, res) => {
 // User registration (setup) - only allowed if no users exist
 router.post('/register', async (req, res) => {
   try {
+    if (DISABLE_AUTH && !getLocalBypassUser()) {
+      return res.status(503).json({
+        error: 'DISABLE_AUTH requires an existing local user. Disable it temporarily to complete setup.'
+      });
+    }
+
     const { username, password } = req.body;
     
     // Validate input

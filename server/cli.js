@@ -89,7 +89,7 @@ function getInstallDir() {
 }
 
 // Show status command
-function showStatus() {
+async function showStatus() {
     console.log(`\n${c.bright('CloudCLI UI - Status')}\n`);
     console.log(c.dim('═'.repeat(60)));
 
@@ -103,6 +103,8 @@ function showStatus() {
 
     // Database location
     const dbPath = getDatabasePath();
+    // getDatabasePath loads .env; read the effective flags only after that happens.
+    const { TRUST_LOCAL_AUTH_BYPASS } = await import('./constants/config.js');
     const dbExists = fs.existsSync(dbPath);
     console.log(`\n${c.info('[INFO]')} Database Location:`);
     console.log(`       ${c.dim(dbPath)}`);
@@ -120,7 +122,7 @@ function showStatus() {
     console.log(`       DATABASE_PATH: ${c.dim(process.env.DATABASE_PATH || '(using default location)')}`);
     console.log(`       CLAUDE_CLI_PATH: ${c.dim(process.env.CLAUDE_CLI_PATH || 'claude (default)')}`);
     console.log(`       CONTEXT_WINDOW: ${c.dim(process.env.CONTEXT_WINDOW || '160000 (default)')}`);
-    console.log(`       DISABLE_AUTH: ${c.dim(process.env.DISABLE_AUTH || process.env.VITE_DISABLE_AUTH || 'false (default)')}`);
+    console.log(`       TRUST_LOCAL_AUTH_BYPASS: ${c.dim(String(TRUST_LOCAL_AUTH_BYPASS))}`);
 
     // Claude projects folder
     const claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
@@ -669,7 +671,7 @@ async function main() {
             break;
         case 'status':
         case 'info':
-            showStatus();
+            await showStatus();
             break;
         case 'help':
         case '-h':
