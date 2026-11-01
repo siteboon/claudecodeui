@@ -190,3 +190,17 @@ test('an upsert for a session that is already canonical does not renavigate', as
   assert.equal(result.current.selectedSession?.id, APP_SESSION_ID);
   assert.deepEqual(navigate.mock.calls, []);
 });
+
+
+test('canonical upserts refresh the selected title without a provider alias or navigation', async () => {
+  respondWith([buildProject([
+    { id: APP_SESSION_ID, summary: 'old title' } as ProjectSession,
+  ])]);
+  const navigate = vi.fn();
+  const { result } = await renderProjectsState(navigate, APP_SESSION_ID);
+  await waitFor(() => assert.equal(result.current.selectedSession?.id, APP_SESSION_ID));
+  navigate.mockClear();
+  await act(async () => { emit(buildUpsert(null)); });
+  assert.equal(result.current.selectedSession?.summary, 'merged session');
+  assert.deepEqual(navigate.mock.calls, []);
+});

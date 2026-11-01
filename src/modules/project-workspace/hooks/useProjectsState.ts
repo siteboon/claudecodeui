@@ -848,10 +848,6 @@ export function useProjectsState({
         typeof upsert.providerSessionId === 'string' && upsert.providerSessionId !== upsert.sessionId
           ? upsert.providerSessionId
           : null;
-      if (!aliasedSelectedSessionId) {
-        return;
-      }
-
       const normalizedSelectedSession: ProjectSession = {
         ...upsert.session,
         id: upsert.sessionId,
@@ -860,7 +856,7 @@ export function useProjectsState({
       };
 
       setSelectedSession((previousSession) => {
-        if (previousSession?.id !== aliasedSelectedSessionId) {
+        if (previousSession?.id !== upsert.sessionId && previousSession?.id !== aliasedSelectedSessionId) {
           return previousSession;
         }
 
@@ -870,7 +866,7 @@ export function useProjectsState({
         };
       });
 
-      if (sessionId === aliasedSelectedSessionId) {
+      if (aliasedSelectedSessionId && sessionId === aliasedSelectedSessionId) {
         navigate(`/session/${upsert.sessionId}`);
       }
     };

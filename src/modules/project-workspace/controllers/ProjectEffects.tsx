@@ -5,6 +5,7 @@ import { writeSelectedProvider } from '@/shared/selectedProvider';
 import { useProjectEffectsState } from '@/modules/project-workspace/context/ProjectsStateContext';
 import type { LLMProvider, ProjectWorkspaceShellProps } from '@/shared/types';
 import { getPageTitle } from '@/shared/utils';
+import { COMPLETION_TITLE_INDICATOR } from '@/shared/constants';
 
 /** Headless controller rendered by ProjectWorkspaceShell to register palette operations and handle service-worker navigation messages. */
 export default function ProjectEffects({
@@ -28,7 +29,10 @@ export default function ProjectEffects({
   // This controller stays mounted while every sidebar mode is visible, unlike
   // the Projects-only list that used to own the title update.
   useEffect(() => {
-    document.title = pageTitle;
+    const completionPrefix = `${COMPLETION_TITLE_INDICATOR} `;
+    document.title = document.title.startsWith(completionPrefix)
+      ? `${completionPrefix}${pageTitle}`
+      : pageTitle;
   }, [pageTitle]);
 
   useEffect(() => {

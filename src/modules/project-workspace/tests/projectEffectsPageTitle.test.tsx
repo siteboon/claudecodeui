@@ -77,3 +77,12 @@ test('updates the document title independently of the sidebar view', () => {
 
   assert.equal(document.title, 'Conversation opened from Conversations');
 });
+
+
+test('keeps an active completion marker while the selected conversation changes', () => {
+  const view = render(<ProjectEffects navigate={navigate} />);
+  document.title = '[Done] First conversation';
+  effectsState = { ...effectsState, selectedSession: secondSession };
+  view.rerender(<ProjectEffects navigate={navigate} />);
+  assert.equal(document.title, '[Done] Conversation opened from Conversations');
+});
