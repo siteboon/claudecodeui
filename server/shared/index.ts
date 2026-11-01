@@ -7,6 +7,10 @@ export type { IProviderAuth, IProviderModels } from './interfaces.js';
 export type { ProviderAuthStatus, ProviderCurrentActiveModel, ProviderModelsDefinition } from './types.js';
 export {
   buildDefaultProviderCurrentActiveModel,
+  buildProviderCliEnv,
+  parseIncomingJsonObject,
   resolveConfiguredCliExecutable,
   runProviderCliCommand,
+  stripAnsiSequences,
+  stripAntigravityTags,
 } from './utils.js';

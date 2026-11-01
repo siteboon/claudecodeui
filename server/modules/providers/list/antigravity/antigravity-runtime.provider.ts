@@ -164,11 +164,11 @@ async function runAntigravity(
   options: AnyRecord,
   writer: ProviderRuntimeWriter,
   context: ProviderRuntimeContext,
+  providerSessionId: string | null,
   dependencies: AntigravityRuntimeDependencies,
   activeProcesses: Map<string, AntigravityProcess>,
 ): Promise<void> {
   const appSessionId = readStringOption(options, 'sessionId');
-  const providerSessionId = context.resolveProviderSessionId(appSessionId);
   const fallbackSessionId = appSessionId ?? providerSessionId ?? `${Date.now()}`;
   const processKey = appSessionId ?? providerSessionId ?? fallbackSessionId;
   const workingDirectory = readStringOption(options, 'cwd')
@@ -279,16 +279,18 @@ async function runAntigravity(
     antigravityProcess.sessionId = processKey;
     antigravityProcess.stdin?.end();
 
+    antigravityProcess.stdout?.setEncoding('utf8');
     antigravityProcess.stdout?.on('data', (data: Buffer | string) => {
       const text = data.toString();
       if (text) stdoutFilter.write(text);
     });
 
+    antigravityProcess.stderr?.setEncoding('utf8');
     antigravityProcess.stderr?.on('data', (data: Buffer | string) => {
       stderrBuffer += data.toString();
     });
 
-    antigravityProcess.once('close', async (code) => {
+    const handleClose = async (code: number | null) => {
       stdoutFilter.finish();
       activeProcesses.delete(processKey);
       if (spawnError) {
@@ -356,9 +358,9 @@ async function runAntigravity(
       );
       notifyTerminalState({ code, error });
       settle(error);
-    });
+    };
 
-    antigravityProcess.once('error', async (error) => {
+    const handleError = async (error: Error) => {
       spawnError = error;
       activeProcesses.delete(processKey);
       if (antigravityProcess.aborted) {
@@ -388,6 +390,20 @@ async function runAntigravity(
       }
       notifyTerminalState({ error });
       settle(error);
+    };
+
+    // EventEmitter does not await async handlers. Propagate discovery/probe
+    // failures so they settle the run and release the fresh-conversation queue.
+    const handleLifecycleFailure = (error: unknown) => {
+      const resolvedError = error instanceof Error ? error : new Error(String(error));
+      notifyTerminalState({ error: resolvedError });
+      settle(resolvedError);
+    };
+    antigravityProcess.once('close', (code) => {
+      void handleClose(code).catch(handleLifecycleFailure);
+    });
+    antigravityProcess.once('error', (error) => {
+      void handleError(error).catch(handleLifecycleFailure);
     });
   });
 }
@@ -422,12 +438,54 @@ export function createAntigravityRuntime(
     ...overrides,
   };
   const activeProcesses = new Map<string, AntigravityProcess>();
+  const pendingFreshRuns = new Map<string, { aborted: boolean; cancel: () => void }>();
+  let freshRunQueue = Promise.resolve();
 
   return {
-    run: (command, options, writer, context) => (
-      runAntigravity(command, options, writer, context, dependencies, activeProcesses)
-    ),
-    abort: (sessionId) => abortAntigravitySession(sessionId, activeProcesses),
+    run: async (command, options, writer, context) => {
+      const appSessionId = readStringOption(options, 'sessionId');
+      const providerSessionId = context.resolveProviderSessionId(appSessionId);
+      if (providerSessionId) {
+        return runAntigravity(
+          command, options, writer, context, providerSessionId, dependencies, activeProcesses,
+        );
+      }
+
+      // AGY print output has no conversation id. Only one fresh run may own
+      // the snapshot-to-discovery interval; resumed conversations need no lock.
+      const previousRun = freshRunQueue;
+      let release = () => {};
+      const finished = new Promise<void>((resolve) => { release = resolve; });
+      freshRunQueue = previousRun.then(() => finished);
+      let cancel = () => {};
+      const cancelled = new Promise<void>((resolve) => { cancel = resolve; });
+      const pending = { aborted: false, cancel };
+      if (appSessionId) pendingFreshRuns.set(appSessionId, pending);
+
+      try {
+        await Promise.race([previousRun, cancelled]);
+        if (pending.aborted) return;
+        if (appSessionId) pendingFreshRuns.delete(appSessionId);
+        await runAntigravity(
+          command, options, writer, context, null, dependencies, activeProcesses,
+        );
+      } finally {
+        if (appSessionId && pendingFreshRuns.get(appSessionId) === pending) {
+          pendingFreshRuns.delete(appSessionId);
+        }
+        // A cancelled waiter releases its own gate, but its successor must
+        // still await previousRun before entering the discovery interval.
+        release();
+      }
+    },
+    abort: (sessionId) => {
+      if (abortAntigravitySession(sessionId, activeProcesses)) return true;
+      const pending = pendingFreshRuns.get(sessionId);
+      if (!pending) return false;
+      pending.aborted = true;
+      pending.cancel();
+      return true;
+    },
   };
 }
 

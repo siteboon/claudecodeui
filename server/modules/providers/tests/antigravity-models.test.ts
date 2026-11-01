@@ -98,7 +98,7 @@ test('Antigravity model discovery uses AGY_CLI_PATH', { concurrency: false }, as
 
   try {
     if (process.platform === 'win32') {
-      await writeFile(executablePath, '@echo custom-model\\tCustom Model\r\n', 'utf8');
+      await writeFile(executablePath, '@echo custom-model\tCustom Model\r\n', 'utf8');
     } else {
       await writeFile(executablePath, '#!/bin/sh\nprintf "custom-model\\tCustom Model\\n"\n', 'utf8');
       await chmod(executablePath, 0o755);

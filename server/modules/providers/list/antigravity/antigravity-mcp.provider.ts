@@ -23,8 +23,8 @@ export class AntigravityMcpProvider extends McpProvider {
   /** Reads the native MCP server map for one AGY scope. */
   protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
     const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.antigravity', 'mcp.json')
-      : path.join(workspacePath, '.antigravity', 'mcp.json');
+      ? path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json')
+      : path.join(workspacePath, '.agents', 'mcp_config.json');
     const config = await readJsonConfig(filePath);
     return readObjectRecord(config.mcpServers) ?? {};
   }
@@ -36,8 +36,8 @@ export class AntigravityMcpProvider extends McpProvider {
     servers: Record<string, unknown>,
   ): Promise<void> {
     const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.antigravity', 'mcp.json')
-      : path.join(workspacePath, '.antigravity', 'mcp.json');
+      ? path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json')
+      : path.join(workspacePath, '.agents', 'mcp_config.json');
     const config = await readJsonConfig(filePath);
     config.mcpServers = servers;
     await writeJsonConfig(filePath, config);
@@ -69,7 +69,7 @@ export class AntigravityMcpProvider extends McpProvider {
     }
 
     return {
-      url: input.url,
+      serverUrl: input.url,
       headers: input.headers ?? {},
     };
   }
@@ -99,7 +99,7 @@ export class AntigravityMcpProvider extends McpProvider {
       };
     }
 
-    const url = readOptionalString(config.url);
+    const url = readOptionalString(config.serverUrl);
     if (url) {
       return {
         provider: 'antigravity',

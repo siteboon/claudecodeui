@@ -1130,7 +1130,7 @@ export function flattenPromptForWindowsShell(prompt: string): string {
 //----------------- PROVIDER CLI ENVIRONMENT UTILITIES ------------
 /**
  * Resolves an operator-configured provider executable without invoking a
- * shell. Antigravity auth, model discovery, and runtime adapters share this
+ * shell. Antigravity auth, model discovery, runtime, and Websocket shell adapters share this
  * so every provider subprocess uses the same executable override. Matching
  * outer quotes are removed to support values copied from shell-style env files.
  */
@@ -1183,6 +1183,7 @@ function getUserExecutablePathCandidates(env: NodeJS.ProcessEnv): string[] {
   const appData = readEnvValue(env, 'APPDATA');
 
   return [
+    os.platform() === 'win32' && npmPrefix ? npmPrefix : '',
     npmPrefix ? path.join(npmPrefix, 'bin') : '',
     appData ? path.join(appData, 'npm') : '',
     os.platform() === 'win32' ? path.join(home, 'AppData', 'Roaming', 'npm') : '',
@@ -1197,7 +1198,7 @@ function getUserExecutablePathCandidates(env: NodeJS.ProcessEnv): string[] {
 /**
  * Builds the subprocess environment used by provider CLI adapters.
  *
- * Antigravity's runtime, auth probe, and model discovery use this helper so
+ * Antigravity's runtime, auth probe, model discovery, and Websocket PTYs use this helper so
  * user-level executable directories remain discoverable when CloudCLI starts
  * outside an interactive login shell. Existing variables and PATH ordering
  * are preserved after the deduplicated user-directory prefix.
@@ -1269,6 +1270,22 @@ export function runProviderCliCommand(
     child.once('error', (error) => finish(null, null, error));
     child.once('close', (exitCode, signal) => finish(exitCode, signal, null));
   });
+}
+
+// ---------------------------
+//----------------- ANTIGRAVITY TRANSCRIPT UTILITIES ------------
+/**
+ * Removes Antigravity metadata and settings blocks, unwraps user requests,
+ * and trims the visible text. The Providers session reader and synchronizer
+ * share this so transcript content and generated session titles stay aligned.
+ * This is text normalization for AGY transcripts, not an HTML sanitizer.
+ */
+export function stripAntigravityTags(content: string): string {
+  return content
+    .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, '')
+    .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, '')
+    .replace(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/g, '$1')
+    .trim();
 }
 
 // ---------------------------

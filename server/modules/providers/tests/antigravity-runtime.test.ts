@@ -174,6 +174,127 @@ test('Antigravity hides wait markers split across stdout chunks', async () => {
   assert.equal(messages.filter((message) => message.kind === 'complete').length, 1);
 });
 
+test('Antigravity decodes UTF-8 characters split across stdout and stderr chunks', async () => {
+  const child = createFakeProcess();
+  const runtime = createAntigravityRuntime({
+    spawnProcess: () => {
+      queueMicrotask(() => {
+        for (const stream of [child.stdout, child.stderr]) {
+          const bytes = Buffer.from('한🙂字');
+          for (const byte of bytes) stream.write(Buffer.from([byte]));
+          stream.end();
+        }
+        child.emit('close', 0, null);
+      });
+      return child as never;
+    },
+    readConversationDbFiles: async () => [],
+  });
+  const { writer, messages } = createWriter();
+  await runtime.run('Hi', {}, writer, createRuntimeContext());
+  assert.equal(messages.filter((message) => message.kind === 'stream_delta')
+    .map((message) => String(message.content)).join(''), '한🙂字한🙂字');
+});
+
+test('concurrent fresh Antigravity runs bind each writer to its own conversation', async () => {
+  const files: { id: string; mtimeMs: number }[] = [];
+  let active = 0;
+  let maximumActive = 0;
+  const runtime = createAntigravityRuntime({
+    spawnProcess: (_command, args) => {
+      const child = createFakeProcess();
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      files.push({ id: args.at(-1)!, mtimeMs: Date.now() + files.length });
+      setImmediate(() => {
+        active -= 1;
+        child.emit('close', 0, null);
+      });
+      return child as never;
+    },
+    readConversationDbFiles: async () => [...files],
+  });
+  const first = createWriter();
+  const second = createWriter();
+  await Promise.all([
+    runtime.run('first', { sessionId: 'first-app' }, first.writer, createRuntimeContext()),
+    runtime.run('second', { sessionId: 'second-app' }, second.writer, createRuntimeContext()),
+  ]);
+  assert.equal(first.getProviderSessionId(), 'first');
+  assert.equal(second.getProviderSessionId(), 'second');
+  assert.equal(maximumActive, 1);
+});
+
+test('Antigravity can cancel a queued fresh run while resumed sessions continue', async () => {
+  const freshChild = createFakeProcess();
+  const spawned: string[] = [];
+  const runtime = createAntigravityRuntime({
+    spawnProcess: (_command, args) => {
+      const prompt = args.at(-1)!;
+      spawned.push(prompt);
+      if (prompt === 'fresh') return freshChild as never;
+      const child = createFakeProcess();
+      queueMicrotask(() => child.emit('close', 0, null));
+      return child as never;
+    },
+    readConversationDbFiles: async () => [],
+  });
+  const freshRun = runtime.run('fresh', { sessionId: 'fresh-app' }, createWriter().writer, createRuntimeContext());
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const cancelledWriter = createWriter();
+  const cancelledRun = runtime.run('cancelled', { sessionId: 'queued-app' }, cancelledWriter.writer, createRuntimeContext());
+  assert.equal(await runtime.abort('queued-app'), true);
+  await cancelledRun;
+  const nextRun = runtime.run('next', { sessionId: 'next-app' }, createWriter().writer, createRuntimeContext());
+  await runtime.run('resumed', { sessionId: 'resumed-app' }, createWriter().writer,
+    createRuntimeContext({ resolveProviderSessionId: () => 'existing-conversation' }));
+  assert.deepEqual(spawned, ['fresh', 'resumed']);
+  assert.deepEqual(cancelledWriter.messages, []);
+  assert.equal(await runtime.abort('fresh-app'), true);
+  await Promise.all([freshRun, nextRun]);
+  assert.deepEqual(spawned, ['fresh', 'resumed', 'next']);
+});
+
+for (const failure of ['snapshot', 'model', 'spawn', 'error', 'discovery', 'probe']) {
+  test(`Antigravity releases the fresh-run queue after a ${failure} failure`, async () => {
+    let fail = true;
+    let reads = 0;
+    const runtime = createAntigravityRuntime({
+      readConversationDbFiles: async () => {
+        reads += 1;
+        if (fail && (failure === 'snapshot' || (failure === 'discovery' && reads === 2))) {
+          throw new Error('history failed');
+        }
+        return [];
+      },
+      spawnProcess: () => {
+        if (fail && failure === 'spawn') throw new Error('spawn failed');
+        const child = createFakeProcess();
+        queueMicrotask(() => {
+          if (fail && (failure === 'error' || failure === 'probe')) {
+            child.emit('error', new Error('spawn failed'));
+          }
+          child.emit('close', 0, null);
+        });
+        return child as never;
+      },
+    });
+    const context = createRuntimeContext({
+      resolveResumeModel: async () => {
+        if (fail && failure === 'model') throw new Error('model failed');
+        return undefined;
+      },
+      isProviderInstalled: async () => {
+        if (fail && failure === 'probe') throw new Error('probe failed');
+        return true;
+      },
+    });
+    await assert.rejects(runtime.run('fail', { sessionId: 'failed-app' }, createWriter().writer, context));
+    fail = false;
+    await runtime.run('recover', { sessionId: 'recovered-app' }, createWriter().writer, context);
+  });
+}
+
 test('Antigravity runtime uses the configured AGY executable', { concurrency: false }, async () => {
   const previousPath = process.env.AGY_CLI_PATH;
   const child = createFakeProcess();

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 import Database from 'better-sqlite3';
 
+import { stripAntigravityTags } from '@/shared/index.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import {
@@ -158,15 +159,6 @@ function resolveAntigravityTranscriptPath(options: FetchHistoryOptions): string 
     'logs',
     'transcript.jsonl',
   );
-}
-
-/** Removes provider metadata tags from user-facing transcript content. */
-function stripAntigravityTags(content: string): string {
-  return content
-    .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, '')
-    .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, '')
-    .replace(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/g, '$1')
-    .trim();
 }
 
 /** Converts a provider timestamp into the normalized ISO representation. */

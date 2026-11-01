@@ -155,7 +155,7 @@ Current MCP formats in this repo are:
 | Codex | `.codex/config.toml` | `user`, `project` | `stdio`, `http` |
 | Cursor | `.cursor/mcp.json` | `user`, `project` | `stdio`, `http` |
 | OpenCode | `~/.config/opencode/opencode.json` or `<workspace>/opencode.json` (`.jsonc` is read when present) | `user`, `project` | `stdio`, `http` |
-| Antigravity | `.antigravity/mcp.json` | `user`, `project` | `stdio`, `http` |
+| Antigravity | `~/.gemini/config/mcp_config.json`, `<workspace>/.agents/mcp_config.json` | `user`, `project` | `stdio`, `http` (`serverUrl`) |
 
 5. Implement skills.
 
@@ -176,7 +176,7 @@ Current skill discovery roots are:
 | Codex | `~/.agents/skills`, `~/.codex/skills/.system`, `/etc/codex/skills` | `<workspace>/.agents/skills`, `path.dirname(workspacePath)/.agents/skills`, topmost git root `.agents/skills` | `$` | Overlapping roots are deduplicated before scanning. |
 | Cursor | `~/.cursor/skills` | `<workspace>/.cursor/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 | OpenCode | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | Cwd-to-topmost-git-root `.opencode/skills`, `.claude/skills`, and `.agents/skills` | `/` | Reuses OpenCode, Claude, and Agents skill locations. Overlapping roots are deduplicated before scanning. |
-| Antigravity | `~/.antigravity/skills` | `<workspace>/.antigravity/skills` | `/` | Uses slash-style commands. |
+| Antigravity | `~/.gemini/antigravity-cli/skills` | `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 
 Command forms currently used by the providers are:
 

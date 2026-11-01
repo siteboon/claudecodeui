@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -224,4 +226,81 @@ test('a missing project directory is reported as an error frame and starts no pt
     socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>),
     [{ type: 'error', message: 'Invalid project path' }]
   );
+});
+
+test('Antigravity shells execute the configured path literally and inherit CLI search paths', { skip: process.platform === 'win32' }, () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'agy-shell-'));
+  const executable = path.join(tempRoot, "agent's tools $literal");
+  const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
+  const previousPath = process.env[pathKey];
+  const previousExecutable = process.env.AGY_CLI_PATH;
+  try {
+    writeFileSync(executable, '#!/bin/sh\nprintf "%s\\n" "$@"\n');
+    chmodSync(executable, 0o755);
+    process.env.AGY_CLI_PATH = `"${executable}"`;
+    process.env[pathKey] = '/only/system';
+    for (const hasSession of [false, true]) {
+      const pty = createFakePty();
+      const socket = createFakeSocket();
+      let capturedCommand = '';
+      let capturedEnv: NodeJS.ProcessEnv = {};
+      handleShellConnection(socket as never, {
+        resolveProviderSessionId: () => 'native-conversation',
+        spawnPty: (_shell, args, options) => {
+          capturedCommand = args.at(-1)!;
+          capturedEnv = options.env ?? {};
+          return pty as never;
+        },
+      });
+      socket.emit('message', JSON.stringify({
+        type: 'init', provider: 'antigravity', projectPath: process.cwd(),
+        sessionId: `agy-configured-${hasSession}`, hasSession,
+      }));
+      const result = spawnSync('/bin/bash', ['-c', capturedCommand], { env: capturedEnv, encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, hasSession ? '--conversation\nnative-conversation\n' : '\n');
+      const entries = capturedEnv[pathKey]?.split(path.delimiter) ?? [];
+      assert.ok(entries.includes(path.join(os.homedir(), '.local', 'bin')));
+      assert.ok(entries.includes('/only/system'));
+      pty.emitExit();
+    }
+  } finally {
+    if (previousPath === undefined) delete process.env[pathKey];
+    else process.env[pathKey] = previousPath;
+    if (previousExecutable === undefined) delete process.env.AGY_CLI_PATH;
+    else process.env.AGY_CLI_PATH = previousExecutable;
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Antigravity PowerShell commands quote configured executables and preserve explicit commands', (context) => {
+  context.mock.method(os, 'platform', () => 'win32');
+  const previousExecutable = process.env.AGY_CLI_PATH;
+  const commands: string[] = [];
+  try {
+    process.env.AGY_CLI_PATH = "C:\\Agent's tools\\agy.cmd";
+    for (const [hasSession, initialCommand] of [[true, ''], [false, 'Write-Output explicit']] as const) {
+      const pty = createFakePty();
+      const socket = createFakeSocket();
+      handleShellConnection(socket as never, {
+        resolveProviderSessionId: () => 'native-id',
+        spawnPty: (_shell, args) => {
+          commands.push(args.at(-1)!);
+          return pty as never;
+        },
+      });
+      socket.emit('message', JSON.stringify({
+        type: 'init', provider: 'antigravity', projectPath: process.cwd(),
+        sessionId: `agy-powershell-${hasSession}`, hasSession, initialCommand,
+      }));
+      pty.emitExit();
+    }
+    assert.deepEqual(commands, [
+      "& 'C:\\Agent''s tools\\agy.cmd' --conversation \"native-id\"",
+      'Write-Output explicit',
+    ]);
+  } finally {
+    if (previousExecutable === undefined) delete process.env.AGY_CLI_PATH;
+    else process.env.AGY_CLI_PATH = previousExecutable;
+  }
 });

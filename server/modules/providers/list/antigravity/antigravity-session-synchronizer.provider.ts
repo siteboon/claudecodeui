@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { stripAntigravityTags } from '@/shared/index.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 import {
   findFilesRecursivelyCreatedAfter,
@@ -32,15 +33,6 @@ function getSessionIdFromTranscriptPath(filePath: string): string | null {
   const brainIndex = parts.lastIndexOf('brain');
   const sessionId = brainIndex >= 0 ? parts[brainIndex + 1] : null;
   return sessionId?.trim() || null;
-}
-
-/** Removes AGY metadata wrappers before using text as a session title. */
-function stripAntigravityTags(content: string): string {
-  return content
-    .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, '')
-    .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, '')
-    .replace(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/g, '$1')
-    .trim();
 }
 
 /** Extracts workspace and first-user-message metadata from one transcript line. */

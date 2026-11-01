@@ -36,7 +36,7 @@ process.exit(1);
   }
 
   const commandPath = path.join(binDir, 'agy');
-  await writeFile(commandPath, '#!/bin/sh\nnode "$(dirname "$0")/agy.js" "$@"\n', 'utf8');
+  await writeFile(commandPath, '#!/bin/sh\nnode "${0%/*}/agy.js" "$@"\n', 'utf8');
   await chmod(commandPath, 0o755);
 }
 
@@ -54,7 +54,7 @@ test('Antigravity auth uses AGY_CLI_PATH for installation and model probes', { c
     await mkdir(binDir);
     await createFakeAntigravityExecutable(binDir);
 
-    process.env[pathKey] = '/usr/bin';
+    process.env[pathKey] = path.dirname(process.execPath);
     process.env.AGY_CLI_PATH = path.join(binDir, process.platform === 'win32' ? 'agy.cmd' : 'agy');
     process.env.npm_config_prefix = tempRoot;
     if (process.platform === 'win32') {

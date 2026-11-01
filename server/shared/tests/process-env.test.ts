@@ -24,3 +24,13 @@ test('buildProviderCliEnv preserves the existing PATH key casing', () => {
   assert.equal(result.PATH, undefined);
   assert.equal(result.Path?.split(path.delimiter).includes('/bin'), true);
 });
+
+test('buildProviderCliEnv includes Windows npm shims in the prefix itself', (context) => {
+  context.mock.method(os, 'platform', () => 'win32');
+  const prefix = path.join(os.tmpdir(), 'custom-npm-prefix');
+  const entries = buildProviderCliEnv({ Path: '/system/bin', NPM_CONFIG_PREFIX: prefix })
+    .Path?.split(path.delimiter) ?? [];
+  assert.equal(entries[0], prefix);
+  assert.ok(entries.includes(path.join(prefix, 'bin')));
+  assert.ok(entries.includes('/system/bin'));
+});

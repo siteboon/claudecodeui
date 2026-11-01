@@ -5,7 +5,12 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
+import {
+  buildProviderCliEnv,
+  parseIncomingJsonObject,
+  resolveConfiguredCliExecutable,
+  stripAnsiSequences,
+} from '@/shared/index.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -213,10 +218,14 @@ function buildShellCommand(
   }
 
   if (provider === 'antigravity') {
+    const executable = resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy');
+    const shellExecutable = os.platform() === 'win32'
+      ? `& '${executable.replaceAll("'", "''")}'`
+      : `'${executable.replaceAll("'", "'\"'\"'")}'`;
     if (resumeSessionId) {
-      return `agy --conversation "${resumeSessionId}"`;
+      return `${shellExecutable} --conversation "${resumeSessionId}"`;
     }
-    return initialCommand || 'agy';
+    return initialCommand || shellExecutable;
   }
 
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
@@ -233,62 +242,6 @@ function buildShellCommand(
     return `claude --resume "${resumeSessionId}"${bypassFlag} || claude${bypassFlag}`;
   }
   return command;
-}
-
-function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
-  const resolvedKey = Object.keys(env).find((envKey) => envKey.toLowerCase() === key.toLowerCase());
-  return resolvedKey ? env[resolvedKey] : undefined;
-}
-
-function getPathEnvKey(env: NodeJS.ProcessEnv): string {
-  return Object.keys(env).find((key) => key.toLowerCase() === 'path') || 'PATH';
-}
-
-function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; value: string | undefined } {
-  const pathKey = getPathEnvKey(env);
-  const currentPath = env[pathKey];
-  if (!currentPath) {
-    return { key: pathKey, value: currentPath };
-  }
-
-  const delimiter = path.delimiter;
-  const pathEntries = currentPath.split(delimiter).filter(Boolean);
-  const npmPrefix = readEnvValue(env, 'npm_config_prefix');
-  const appData = readEnvValue(env, 'APPDATA');
-  const candidates = [
-    npmPrefix || '',
-    npmPrefix ? path.join(npmPrefix, 'bin') : '',
-    appData ? path.join(appData, 'npm') : '',
-    path.join(os.homedir(), 'AppData', 'Roaming', 'npm'),
-    path.join(os.homedir(), '.npm-global', 'bin'),
-  ].filter(Boolean);
-
-  const normalizedPathEntries = pathEntries.map((entry) => os.platform() === 'win32' ? entry.toLowerCase() : entry);
-  const preferredEntries = candidates.filter((candidate, index) => {
-    const normalizedCandidate = os.platform() === 'win32' ? candidate.toLowerCase() : candidate;
-    return (
-      candidates.indexOf(candidate) === index &&
-      normalizedPathEntries.includes(normalizedCandidate)
-    );
-  });
-
-  if (preferredEntries.length === 0) {
-    return { key: pathKey, value: currentPath };
-  }
-
-  const normalizedPreferredEntries = preferredEntries.map((entry) =>
-    os.platform() === 'win32' ? entry.toLowerCase() : entry
-  );
-
-  const value = [
-    ...preferredEntries,
-    ...pathEntries.filter((entry) => {
-      const normalizedEntry = os.platform() === 'win32' ? entry.toLowerCase() : entry;
-      return !normalizedPreferredEntries.includes(normalizedEntry);
-    }),
-  ].join(delimiter);
-
-  return { key: pathKey, value };
 }
 
 /**
@@ -406,7 +359,6 @@ export function handleShellConnection(
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
-        const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
 
         shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
           name: 'xterm-256color',
@@ -414,8 +366,7 @@ export function handleShellConnection(
           rows: termRows,
           cwd: resolvedProjectPath,
           env: {
-            ...process.env,
-            [prioritizedPath.key]: prioritizedPath.value,
+            ...buildProviderCliEnv(),
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',
