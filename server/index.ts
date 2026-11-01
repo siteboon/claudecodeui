@@ -13,6 +13,7 @@ import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, termina
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
+    providerRuntimeProfilesService,
     providerRuntimeService,
 } from '@/modules/providers/index.js';
 import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
@@ -331,6 +332,9 @@ async function removeLocalServerMarker() {
 // Initialize database and start server
 async function startServer() {
     try {
+        // Validate here so the startup catch handles profile errors before server.listen().
+        providerRuntimeProfilesService.list();
+
         // Initialize authentication database
         await initializeDatabase();
 

@@ -228,5 +228,5 @@ export function createProviderRuntimeProfilesService(
   };
 }
 
-/** Used throughout the providers module for validated runtime settings and transcript roots. */
+/** Used by server startup to validate configuration and by providers for runtime settings and transcript roots. */
 export const providerRuntimeProfilesService = createProviderRuntimeProfilesService();
