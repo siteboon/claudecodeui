@@ -67,7 +67,7 @@ test('authentication bypass accepts WebSocket upgrades without a token', () => {
   };
 
   const accepted = verifyWebSocketClient({ req: request }, {
-    isPlatform: true,
+    isPlatform: false,
     authenticateWebSocket,
   });
 
