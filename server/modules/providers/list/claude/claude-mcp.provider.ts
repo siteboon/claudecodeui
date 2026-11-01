@@ -13,9 +13,31 @@ import {
   writeJsonConfig,
 } from '@/shared/utils.js';
 
+/** Used by the providers registry and Claude runtime to read and manage scoped MCP settings. */
 export class ClaudeMcpProvider extends McpProvider {
   constructor() {
     super('claude', ['user', 'local', 'project'], ['stdio', 'http', 'sse']);
+  }
+
+  /** Used by the Claude runtime to load MCP servers from its effective profile directory. */
+  async loadRuntimeServers(
+    workspacePath: string | undefined,
+    configDirectory: string,
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      const config = await readJsonConfig(path.join(configDirectory, '.claude.json'));
+      const projects = readObjectRecord(config.projects) ?? readObjectRecord(config.claudeProjects);
+      const project = workspacePath ? readObjectRecord(projects?.[workspacePath]) : null;
+      const servers = {
+        ...readObjectRecord(config.mcpServers),
+        ...readObjectRecord(project?.mcpServers),
+      };
+      return Object.keys(servers).length > 0 ? servers : null;
+    } catch (error) {
+      // An unreadable profile must never fall back to another account's servers.
+      console.error('Failed to load Claude runtime MCP configuration:', error);
+      return null;
+    }
   }
 
   protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
