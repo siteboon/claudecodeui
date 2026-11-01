@@ -68,3 +68,14 @@ test('deep fork chains are projected without recursive stack overflow', () => {
   assert.equal(rows[0].session.id, 's0');
   assert.equal(rows.at(-1)?.depth, 4999);
 });
+
+
+test('newest fork snapshot wins when siblings carry stale off-page ancestor metadata', () => {
+  const rows = buildProjectSessionTree([
+    session('new-fork', 'parent', { forkAncestors: [session('parent', null, { summary: 'Renamed parent', lastActivity: '2026-11-01' })] }),
+    session('old-fork', 'parent', { forkAncestors: [session('parent', null, { summary: 'Old title', lastActivity: '2026-10-01' })] }),
+  ], 'project');
+  assert.equal(rows[0].session.id, 'parent');
+  assert.equal(rows[0].session.summary, 'Renamed parent');
+  assert.equal(rows[0].session.lastActivity, '2026-11-01');
+});

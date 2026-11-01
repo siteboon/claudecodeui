@@ -382,6 +382,37 @@
       }
     },
     "connectionStatus": "连接状态",
+    "cli": {
+      "title": "CLI 版本",
+      "checking": "正在检查版本…",
+      "installed": "已安装：v{{version}}",
+      "installedUnknown": "已安装（版本未知）",
+      "versionUnavailable": "无法读取版本",
+      "updateAvailable": "有可用更新：v{{version}}",
+      "upToDate": "已是最新",
+      "bundled": "随 CloudCLI 一起提供，并随其一起更新。",
+      "platform": "由托管平台管理。",
+      "updateTo": "更新到 v{{version}}",
+      "runUpdater": "运行更新程序",
+      "updating": "正在更新…",
+      "updatingHint": "正在服务器上运行 {{command}}，可能需要几分钟。",
+      "runsCommand": "在服务器上运行 {{command}}",
+      "output": "{{command}} 的输出",
+      "result": {
+        "updated": "已更新到 v{{version}}。",
+        "alreadyUpToDate": "已是最新版本（v{{version}}）。",
+        "unchanged": "更新程序已结束，但版本仍为 v{{version}}。原因见下方输出。",
+        "unchangedUnknown": "更新程序已结束，输出见下方。",
+        "permissionDenied": "服务器用户无权写入此 CLI 的安装位置。请以该安装的所有者身份在服务器上运行 {{command}}（例如使用 sudo）。",
+        "timedOut": "更新未能按时完成，已被停止。请在服务器上运行 {{command}} 来完成更新。",
+        "failed": "更新失败（退出代码 {{exitCode}}），输出见下方。",
+        "failedQuietly": "更新程序报告了失败，输出见下方。",
+        "notStarted": "无法启动更新程序。",
+        "busy": "此智能体正在某个会话中工作。请等待其完成或将其停止，然后再更新。",
+        "requestFailed": "未执行更新：{{error}}",
+        "unconfirmed": "服务器没有返回响应（{{error}}）。更新可能已经运行；上方是服务器最后报告的版本。"
+      }
+    },
     "login": {
       "title": "登录",
       "reAuthenticate": "重新认证",

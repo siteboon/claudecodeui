@@ -399,6 +399,37 @@
       }
     },
     "connectionStatus": "Status Koneksi",
+    "cli": {
+      "title": "Versi CLI",
+      "checking": "Memeriksa versi…",
+      "installed": "Terpasang: v{{version}}",
+      "installedUnknown": "Terpasang (versi tidak diketahui)",
+      "versionUnavailable": "Versi tidak dapat dibaca",
+      "updateAvailable": "Pembaruan tersedia: v{{version}}",
+      "upToDate": "Sudah terbaru",
+      "bundled": "Disertakan bersama CloudCLI dan diperbarui bersamanya.",
+      "platform": "Dikelola oleh platform hosting.",
+      "updateTo": "Perbarui ke v{{version}}",
+      "runUpdater": "Jalankan pembaru",
+      "updating": "Memperbarui…",
+      "updatingHint": "Menjalankan {{command}} di server. Ini bisa memakan waktu beberapa menit.",
+      "runsCommand": "Menjalankan {{command}} di server",
+      "output": "Keluaran {{command}}",
+      "result": {
+        "updated": "Diperbarui ke v{{version}}.",
+        "alreadyUpToDate": "Sudah versi terbaru (v{{version}}).",
+        "unchanged": "Pembaru selesai, tetapi versinya masih v{{version}}. Keluarannya di bawah menjelaskan alasannya.",
+        "unchangedUnknown": "Pembaru selesai. Keluarannya ada di bawah.",
+        "permissionDenied": "Pengguna server tidak diizinkan menulis ke lokasi tempat CLI ini terpasang. Jalankan {{command}} di server sebagai pemilik instalasi tersebut (misalnya dengan sudo).",
+        "timedOut": "Pembaruan tidak selesai tepat waktu dan dihentikan. Jalankan {{command}} di server untuk menyelesaikannya.",
+        "failed": "Pembaruan gagal (kode keluar {{exitCode}}). Keluarannya ada di bawah.",
+        "failedQuietly": "Pembaru melaporkan kegagalan. Keluarannya ada di bawah.",
+        "notStarted": "Pembaru tidak dapat dijalankan.",
+        "busy": "Agen ini sedang bekerja dalam sebuah sesi. Tunggu hingga selesai atau hentikan, lalu perbarui.",
+        "requestFailed": "Pembaruan tidak dijalankan: {{error}}",
+        "unconfirmed": "Tidak ada jawaban dari server ({{error}}). Pembaruan mungkin tetap berjalan; versi di atas adalah yang terakhir dilaporkan server."
+      }
+    },
     "login": {
       "title": "Masuk",
       "reAuthenticate": "Autentikasi ulang",

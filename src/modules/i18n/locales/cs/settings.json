@@ -372,6 +372,37 @@
       }
     },
     "connectionStatus": "Stav připojení",
+    "cli": {
+      "title": "Verze CLI",
+      "checking": "Ověřování verze…",
+      "installed": "Nainstalováno: v{{version}}",
+      "installedUnknown": "Nainstalováno (verze neznámá)",
+      "versionUnavailable": "Verzi se nepodařilo zjistit",
+      "updateAvailable": "K dispozici je aktualizace: v{{version}}",
+      "upToDate": "Aktuální",
+      "bundled": "Dodává se s CloudCLI a aktualizuje se spolu s ním.",
+      "platform": "Spravováno hostingovou platformou.",
+      "updateTo": "Aktualizovat na v{{version}}",
+      "runUpdater": "Spustit aktualizaci",
+      "updating": "Aktualizace…",
+      "updatingHint": "Na serveru běží {{command}}. Může to trvat několik minut.",
+      "runsCommand": "Spustí na serveru {{command}}",
+      "output": "Výstup příkazu {{command}}",
+      "result": {
+        "updated": "Aktualizováno na v{{version}}.",
+        "alreadyUpToDate": "Již aktuální (v{{version}}).",
+        "unchanged": "Aktualizace doběhla, ale verze je stále v{{version}}. Důvod uvádí výstup níže.",
+        "unchangedUnknown": "Aktualizace doběhla. Výstup je níže.",
+        "permissionDenied": "Uživatel serveru nemá oprávnění zapisovat tam, kde je tato CLI nainstalována. Spusťte na serveru {{command}} jako vlastník této instalace (například pomocí sudo).",
+        "timedOut": "Aktualizace nedoběhla včas a byla zastavena. Dokončete ji spuštěním {{command}} na serveru.",
+        "failed": "Aktualizace selhala (návratový kód {{exitCode}}). Výstup je níže.",
+        "failedQuietly": "Aktualizační program ohlásil chybu. Výstup je níže.",
+        "notStarted": "Aktualizační program se nepodařilo spustit.",
+        "busy": "Tento agent právě pracuje v relaci. Počkejte, až skončí, nebo ho zastavte a pak aktualizujte.",
+        "requestFailed": "Aktualizace se nespustila: {{error}}",
+        "unconfirmed": "Ze serveru nepřišla žádná odpověď ({{error}}). Aktualizace mohla přesto proběhnout; verze výše je poslední, kterou server nahlásil."
+      }
+    },
     "login": {
       "title": "Přihlášení",
       "reAuthenticate": "Znovu ověřit",

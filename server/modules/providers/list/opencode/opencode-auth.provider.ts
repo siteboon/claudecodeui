@@ -2,11 +2,9 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import spawn from 'cross-spawn';
-
 import type { IProviderAuth } from '@/shared/interfaces.js';
-import type { ProviderAuthStatus } from '@/shared/types.js';
-import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
+import type { CliVersionProbe, ProviderAuthStatus } from '@/shared/types.js';
+import { probeCliVersion, readObjectRecord, readOptionalString } from '@/shared/utils.js';
 
 type OpenCodeCredentialsStatus = {
   authenticated: boolean;
@@ -25,27 +23,26 @@ const OPENCODE_ENV_CREDENTIAL_KEYS = [
 
 export class OpenCodeProviderAuth implements IProviderAuth {
   /**
-   * Checks whether the OpenCode CLI is available to the server process.
+   * Checks whether the OpenCode CLI is available to the server process, and
+   * which version it is. Unlike the other CLIs it has always needed a clean
+   * `--version` exit to count as installed.
    */
-  private checkInstalled(): boolean {
-    try {
-      const result = spawn.sync('opencode', ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return !result.error && result.status === 0;
-    } catch {
-      return false;
-    }
+  checkInstalled(): CliVersionProbe {
+    const probe = probeCliVersion('opencode');
+    return { ...probe, installed: probe.exitCode === 0 };
   }
 
   /**
    * Returns OpenCode CLI installation and credential status.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const { installed, version: installedVersion } = this.checkInstalled();
     const credentials = await this.checkCredentials();
 
     return {
       installed,
       provider: 'opencode',
+      installedVersion,
       authenticated: credentials.authenticated,
       email: credentials.email,
       method: credentials.method,

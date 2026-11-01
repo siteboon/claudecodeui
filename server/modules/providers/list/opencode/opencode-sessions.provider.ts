@@ -126,6 +126,57 @@ const isUserTextEcho = (raw: AnyRecord): boolean => {
     || hasUserRole(raw.part);
 };
 
+/** OpenCode's ask-the-user tool. */
+const QUESTION_TOOL_NAME = 'question';
+
+/**
+ * Rewrites a `question` call onto the AskUserQuestion card the chat already
+ * renders for Claude's and Codex's questions: OpenCode's `multiple` becomes
+ * `multiSelect`, and the labels the user picked, which OpenCode keeps in
+ * `metadata.answers` as one list per question, are folded into the input
+ * keyed by question text, the shape the card reads.
+ */
+const toAskUserQuestionCall = (toolMessage: NormalizedMessage, toolState: AnyRecord): void => {
+  const input = readObjectRecord(toolState.input) ?? readObjectRecord(toolMessage.toolInput);
+  if (!input || !Array.isArray(input.questions)) {
+    return;
+  }
+
+  const answerLists = readObjectRecord(toolState.metadata)?.answers;
+  const answers: Record<string, string> = {};
+  const questions = input.questions.map((entry: unknown, index: number) => {
+    const question = readObjectRecord(entry);
+    if (!question) {
+      return entry;
+    }
+
+    const text = readOptionalString(question.question);
+    const picked = Array.isArray(answerLists) && Array.isArray(answerLists[index])
+      ? (answerLists[index] as unknown[]).filter((label): label is string => typeof label === 'string' && label.trim().length > 0)
+      : [];
+    if (text && picked.length > 0) {
+      answers[text] = picked.join(', ');
+    }
+
+    const { multiple, ...rest } = question;
+    return { ...rest, multiSelect: multiple === true };
+  });
+
+  toolMessage.toolName = 'AskUserQuestion';
+  toolMessage.toolInput = Object.keys(answers).length > 0
+    ? { ...input, questions, answers }
+    : { ...input, questions };
+};
+
+/**
+ * Whether an assistant message's error only records that its turn was stopped.
+ * Stopping a turn aborts the OpenCode session, which stores this error on the
+ * message it interrupted; the live chat never shows it as a failure, so the
+ * history does not either.
+ */
+const isStoppedTurnError = (error: unknown): boolean =>
+  readOptionalString(readObjectRecord(error)?.name) === 'MessageAbortedError';
+
 const buildTokenUsage = (totals: OpenCodeTokenTotals | undefined): AnyRecord | undefined => {
   if (!totals) {
     return undefined;
@@ -381,7 +432,10 @@ const openOpenCodeDatabaseForLiveEvent = (): Database.Database | null => {
 
 export class OpenCodeSessionsProvider implements IProviderSessions {
   /**
-   * Normalizes live `opencode run --format json` events into frontend messages.
+   * Normalizes live OpenCode events into frontend messages. The OpenCode
+   * runtime forwards each finished part in the shape `opencode run --format json`
+   * printed (`{ type, timestamp, sessionID, part }`), so sessions recorded
+   * before the SDK runtime and live turns go through the same mapping.
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
@@ -481,9 +535,13 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         };
       }
 
+      if (toolName === QUESTION_TOOL_NAME) {
+        toAskUserQuestionCall(toolMessage, toolState);
+      }
+
       if (toolName === SUBAGENT_TOOL_NAME) {
-        // `opencode run` reports a task only once it has finished, so its
-        // child session is complete in the database by now.
+        // A task is forwarded only once it has finished, so its child session
+        // is complete in the database by now.
         const db = openOpenCodeDatabaseForLiveEvent();
         try {
           attachOpenCodeSubagent(toolMessage, toolState, db, true);
@@ -603,14 +661,16 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
         && !emittedMessageErrors.has(row.message_id)
       ) {
         emittedMessageErrors.add(row.message_id);
-        normalized.push(createNormalizedMessage({
-          id: `${baseId}_error`,
-          sessionId,
-          timestamp,
-          provider: PROVIDER,
-          kind: 'error',
-          content: formatToolContent(messageInfo.error),
-        }));
+        if (!isStoppedTurnError(messageInfo.error)) {
+          normalized.push(createNormalizedMessage({
+            id: `${baseId}_error`,
+            sessionId,
+            timestamp,
+            provider: PROVIDER,
+            kind: 'error',
+            content: formatToolContent(messageInfo.error),
+          }));
+        }
       }
 
       if (!row.part_id) {
@@ -687,6 +747,10 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
             content: formatToolContent(state.output ?? state.error),
             isError: status === 'error',
           };
+        }
+
+        if (toolMessage.toolName === QUESTION_TOOL_NAME) {
+          toAskUserQuestionCall(toolMessage, state);
         }
 
         attachOpenCodeSubagent(toolMessage, state, db, runIsLive);

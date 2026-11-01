@@ -22,7 +22,14 @@ export function buildProjectSessionTree(sessions: SessionWithProvider[], project
     }
   });
 
-  const hints = new Map(sessions.flatMap((session) => session.forkAncestors ?? []).map((ancestor) => [ancestor.id, ancestor]));
+  const hints = new Map<string, NonNullable<SessionWithProvider['forkAncestors']>[number]>();
+  // Newest sessions arrive first; keep their current ancestor snapshots when
+  // older siblings still carry an earlier title or activity timestamp.
+  for (const session of sessions) {
+    for (const ancestor of session.forkAncestors ?? []) {
+      if (!hints.has(ancestor.id)) hints.set(ancestor.id, ancestor);
+    }
+  }
   for (const session of sessions) {
     let child = session;
     const visited = new Set([child.id]);
