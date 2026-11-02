@@ -73,7 +73,14 @@ Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
   get: () => containerWidth,
 });
 
+// Takes its callback like the real constructor; the sidebar never needs it called here.
 globalThis.ResizeObserver = class {
+  callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+
   observe() {}
 
   unobserve() {}
