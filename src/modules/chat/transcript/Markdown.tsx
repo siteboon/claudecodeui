@@ -40,6 +40,17 @@ const lineFromRef = (value: string): number | null => {
 // Strip a trailing `:line` / `:line:col` suffix (e.g. `src/foo.ts:130`).
 const stripLineSuffix = (value: string): string => value.replace(/:\d+(?::\d+)?$/, '');
 
+// Markdown hrefs are URLs, while the editor needs a filesystem path. Decode
+// once at this boundary; repeated decoding would rename literal `%20` files.
+const decodeFileHref = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    // A malformed escape must not throw from a click handler.
+    return value;
+  }
+};
+
 // A usable file path contains a separator or a filename with an extension.
 const looksLikeFilePath = (value?: string): value is string => {
   if (!value) {
@@ -306,11 +317,16 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
                 // trailing space (``[`src/foo.ts:12` ]()``), and that space
                 // defeats the `$`-anchored suffix strip.
                 const reference = fileRef.trim();
-                if (reference.endsWith('/')) {
-                  openDirectory(reference);
+                // Strip line metadata before decoding so an encoded colon in
+                // a filename is not mistaken for a line suffix. Link text is
+                // already literal text and must not be URL-decoded.
+                const path = stripLineSuffix(reference);
+                const filePath = href === fileRef ? decodeFileHref(path) : path;
+                if (filePath.endsWith('/')) {
+                  openDirectory(filePath);
                   return;
                 }
-                openFileInEditor(stripLineSuffix(reference), lineFromRef(reference));
+                openFileInEditor(filePath, lineFromRef(reference));
               }}
             >
               {linkChildren}
