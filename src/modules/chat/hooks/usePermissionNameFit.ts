@@ -70,6 +70,15 @@ const getRootFontSize = (element: HTMLElement) =>
 
 type NameFit = { name: string; isShown: boolean };
 
+/** The widths around the trigger, which do not include it. */
+type FooterLayout = Pick<PermissionNameFitInput, 'room' | 'toolsWidth' | 'controlsWidth'>;
+
+const isSameFooterLayout = (a: FooterLayout, b: FooterLayout) =>
+  a.room === b.room && a.toolsWidth === b.toolsWidth && a.controlsWidth === b.controlsWidth;
+
+/** A hidden name shown again to be measured: the layout around its icon then, and whether it did not fit. */
+type Reveal = { name: string; layout: FooterLayout; isRefused: boolean };
+
 /**
  * Whether ComposerPermissionMenu's trigger shows the active mode's name. It
  * follows the room the composer footer actually has, not the viewport: the code
@@ -87,6 +96,8 @@ export function usePermissionNameFit(
   // The trigger's width with each name shown. A hidden name is not in the DOM
   // to measure, so it keeps the width it had when it was last shown.
   const namedWidthsRef = useRef(new Map<string, number>());
+  // The last hidden name shown again, until the layout around its icon changes.
+  const revealRef = useRef<Reveal | null>(null);
   // The last decision. It can only be made from a laid-out DOM, so a name that
   // has none yet is shown, and the layout pass corrects that before it paints.
   // Dropped back to null to show a hidden name again (see `measure`).
@@ -115,26 +126,51 @@ export function usePermissionNameFit(
       namedWidthsRef.current.set(name, triggerWidth);
     }
     const namedWidth = namedWidthsRef.current.get(name) ?? triggerWidth;
-
-    const next = fitsPermissionName({
+    const layout: FooterLayout = {
       room,
       toolsWidth: tools.getBoundingClientRect().width,
       controlsWidth: controls.getBoundingClientRect().width - triggerWidth,
+    };
+
+    const next = fitsPermissionName({
+      ...layout,
       namedTriggerWidth: namedWidth,
       mayWrap,
       margin: isDecided && isShown ? 0 : SHOW_MARGIN_REM * getRootFontSize(trigger),
     });
-    setFit((current) => {
+
+    if (!isShown) {
+      const reveal = revealRef.current;
+      const isSameReveal = reveal !== null && reveal.name === name && isSameFooterLayout(reveal.layout, layout);
+      if (!isSameReveal) {
+        revealRef.current = null;
+      }
       // A hidden name is judged by the width it had when it was last shown,
       // which can be out of date: the trigger's cap grows at `sm`, and the font
       // can have changed since. So that width never shows it. The decision is
       // dropped instead: the name is shown, measured and decided again, with
       // the margin, before it paints, like a new name.
-      if (!isShown && next) {
-        return null;
+      if (next) {
+        // Unless it was already shown again in this same layout and did not
+        // fit: trying again would only repeat that. Today the tools and
+        // controls measure the same beside the icon and the name, so this
+        // never changes a decision; if they ever did not, it keeps the name
+        // from being shown and hidden over and over.
+        if (isSameReveal && reveal.isRefused) {
+          return;
+        }
+        revealRef.current = { name, layout, isRefused: false };
+        setFit(null);
+        return;
       }
-      return current?.name === name && current.isShown === next ? current : { name, isShown: next };
-    });
+    } else if (!isDecided) {
+      // A name shown again is measured here for the first time: remember if
+      // it did not fit.
+      const reveal = revealRef.current;
+      revealRef.current = !next && reveal?.name === name ? { ...reveal, isRefused: true } : null;
+    }
+
+    setFit((current) => (current?.name === name && current.isShown === next ? current : { name, isShown: next }));
   }, [triggerRef, name, mayWrap, isDecided, isShown]);
 
   useLayoutEffect(() => {

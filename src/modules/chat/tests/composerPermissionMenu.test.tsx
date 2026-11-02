@@ -95,9 +95,16 @@ test('every mode leads the accessible name, a mode with no translation by its id
 // 12px padding on each side, which the room does not include.
 const FOOTER_PADDING = 12;
 
-type ComposerLayout = { room: number; tools: number; controls: number; cap: number };
+type ComposerLayout = {
+  room: number;
+  tools: number;
+  controls: number;
+  cap: number;
+  /** How much wider the tools are while the trigger shows a name: 0 in the real composer. */
+  namedToolsGrowth: number;
+};
 
-const layout: ComposerLayout = { room: 0, tools: 210, controls: 241, cap: 192 };
+const layout: ComposerLayout = { room: 0, tools: 210, controls: 241, cap: 192, namedToolsGrowth: 0 };
 
 const triggerWidth = (trigger: Element | null) => {
   const name = trigger?.querySelector('span')?.textContent;
@@ -109,7 +116,8 @@ const widthOf = (element: Element) => {
     return layout.room + 2 * FOOTER_PADDING;
   }
   if (element.matches('[data-slot="prompt-input-tools"]')) {
-    return layout.tools;
+    const isNamed = Boolean(element.parentElement?.querySelector('button[aria-haspopup="menu"] span'));
+    return layout.tools + (isNamed ? layout.namedToolsGrowth : 0);
   }
   if (element.matches('[data-testid="composer-controls"]')) {
     return layout.controls + triggerWidth(element.querySelector('button'));
@@ -181,7 +189,7 @@ const settle = () => {
 };
 
 const layOutComposer = (changes: Partial<ComposerLayout>) => {
-  Object.assign(layout, { tools: 210, controls: 241, cap: 192 }, changes);
+  Object.assign(layout, { tools: 210, controls: 241, cap: 192, namedToolsGrowth: 0 }, changes);
   vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
     return this.matches('[data-slot="prompt-input-footer"]') ? widthOf(this) : 0;
   });
@@ -359,6 +367,58 @@ test('a name hidden on a phone waits for room at its full width on a wider scree
       await i18n.changeLanguage('en');
     });
   }
+});
+
+test('a hidden name that did not fit when shown is not retried until the composer changes', () => {
+  // The tools and controls measure the same beside the icon and beside the
+  // name today. Nothing in the markup promises it, so here the tools are 1px
+  // wider while the name is shown.
+  layOutComposer({ room: 400, tools: 174, namedToolsGrowth: 1 });
+  const { getByRole } = renderInFooter('default');
+  const trigger = getByRole('button');
+  assert.equal(trigger.textContent, '');
+
+  // Beside the icon, 563px leaves the named toolbar (174 + 241 + 112) exactly
+  // the clear button's 36px. With the name shown the tools are 175px, which
+  // leaves 35px. The name is tried once and stays hidden; it is not shown and
+  // hidden over and over.
+  resizeComposer({ room: 563 });
+  assert.equal(trigger.textContent, '');
+
+  // A wider composer retries it...
+  resizeComposer({ room: 564 });
+  assert.equal(trigger.textContent, 'Default Mode');
+
+  // ...and so do narrower tools, here a token count with one digit fewer.
+  resizeComposer({ room: 500 });
+  resizeComposer({ room: 563 });
+  assert.equal(trigger.textContent, '');
+  resizeComposer({ tools: 173 });
+  assert.equal(trigger.textContent, 'Default Mode');
+});
+
+test('a name turned down while the window was still moving is shown where it fits', () => {
+  layOutComposer({ room: 400, tools: 174 });
+  const { getByRole } = renderInFooter('default');
+  const trigger = getByRole('button');
+  assert.equal(trigger.textContent, '');
+
+  // The window is being dragged. The composer reports 563px, where the name
+  // has exactly the clear button's 36px to spare, but by the time React
+  // renders that, the window is at 500px and the name is turned down there.
+  act(() => {
+    layout.room = 563;
+    for (const observer of [...liveObservers]) {
+      observer.deliver();
+    }
+    layout.room = 500;
+  });
+  settle();
+  assert.equal(trigger.textContent, '');
+
+  // Back at 563px it fits.
+  resizeComposer({ room: 563 });
+  assert.equal(trigger.textContent, 'Default Mode');
 });
 
 test('the trigger leaves no observer behind', () => {
