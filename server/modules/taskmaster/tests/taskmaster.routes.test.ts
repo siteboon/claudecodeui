@@ -6,6 +6,8 @@ import test from 'node:test';
 
 import express from 'express';
 
+import { connectedClients } from '@/modules/websocket/index.js';
+
 import { createTaskmasterRouter } from '../taskmaster.routes.js';
 
 test('tasks route resolves project ids through the injected project adapter', async () => {
@@ -139,6 +141,61 @@ test('TaskMaster process errors use the endpoint failure response and settle onc
       code: null,
     });
   } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test('TaskMaster broadcasts reach only the tracked chat clients', async () => {
+  const child = new EventEmitter() as EventEmitter & {
+    stdin: PassThrough;
+    stdout: PassThrough;
+    stderr: PassThrough;
+  };
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+
+  const chatClient = { readyState: 1, frames: [] as string[], send(data: string) { this.frames.push(data); } };
+  const closingClient = { readyState: 3, frames: [] as string[], send(data: string) { this.frames.push(data); } };
+
+  const router = createTaskmasterRouter({
+    fileSystem: { constants: { F_OK: 0 } } as typeof import('node:fs'),
+    fileSystemPromises: {
+      access: async () => { throw new Error('not initialized'); },
+    } as unknown as typeof import('node:fs/promises'),
+    spawnProcess: (() => {
+      process.nextTick(() => child.emit('close', 0));
+      return child;
+    }) as unknown as Parameters<typeof createTaskmasterRouter>[0]['spawnProcess'],
+    resolveProjectPathById: () => '/workspace/project',
+    taskmasterService: {
+      detectMcpServer: async () => ({
+        hasMCPServer: false,
+        reason: 'Not configured',
+        hasConfig: false,
+      }),
+    },
+  });
+  const app = express().use('/api/taskmaster', router);
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+
+  connectedClients.add(chatClient as never);
+  connectedClients.add(closingClient as never);
+  try {
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/taskmaster/init/project-1`, {
+      method: 'POST',
+    });
+    assert.equal(response.status, 200);
+
+    assert.equal(chatClient.frames.length, 1);
+    const frame = JSON.parse(chatClient.frames[0]) as Record<string, unknown>;
+    assert.equal(frame.type, 'taskmaster-project-updated');
+    assert.equal(frame.projectId, 'project-1');
+    assert.equal(closingClient.frames.length, 0);
+  } finally {
+    connectedClients.clear();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });

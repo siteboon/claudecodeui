@@ -9,11 +9,20 @@ import type {
   FileTreeServices,
   FileTreeUploadedFile,
 } from '@/shared/types.js';
-import { AppError, FORBIDDEN_WORKSPACE_PATHS, normalizeProjectPath } from '@/shared/utils.js';
+import {
+  AppError,
+  FORBIDDEN_WORKSPACE_PATHS,
+  normalizeProjectPath,
+  resolvePathUnderRoots,
+} from '@/shared/utils.js';
+
+const HARD_EXCLUDED_DIRECTORY_NAMES = new Set([
+  'node_modules', '.git', '.svn', '.hg',
+]);
 
 const IGNORED_DIRECTORY_NAMES = new Set([
-  'node_modules', 'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
-  '.git', '.svn', '.hg',
+  ...HARD_EXCLUDED_DIRECTORY_NAMES,
+  'dist', 'build', '.next', '.nuxt', '.cache', '.parcel-cache',
   '__pycache__', '.pytest_cache', '.mypy_cache', '.tox', 'venv', '.venv',
   'target', 'vendor',
   '.gradle', '.idea', 'coverage', '.nyc_output',
@@ -35,6 +44,15 @@ const COMMON_WORKSPACE_DIRECTORY_NAMES = [
 const MAXIMUM_FILE_TREE_ENTRIES = 10_000;
 
 type FileTreeEntryFilter = (entryPath: string, isDirectory: boolean) => boolean;
+
+function includeEntryByHardExclusions(entryPath: string, isDirectory: boolean): boolean {
+  return !isDirectory || !HARD_EXCLUDED_DIRECTORY_NAMES.has(path.basename(entryPath));
+}
+
+function includeEntryByFallbackDirectoryNames(entryPath: string, isDirectory: boolean): boolean {
+  return includeEntryByHardExclusions(entryPath, isDirectory)
+    && (!isDirectory || !IGNORED_DIRECTORY_NAMES.has(path.basename(entryPath)));
+}
 
 function createFileTreeError(message: string, statusCode: number, code: string): AppError {
   return new AppError(message, { statusCode, code });
@@ -146,6 +164,8 @@ function createGitignoreEntryFilter(
   const gitignore = ignore().add(gitignoreContent);
 
   return (entryPath, isDirectory) => {
+    if (!includeEntryByHardExclusions(entryPath, isDirectory)) return false;
+
     const relativePath = path.relative(projectRoot, entryPath).split(path.sep).join('/');
     const matchPath = isDirectory ? `${relativePath}/` : relativePath;
     return !gitignore.ignores(matchPath);
@@ -191,17 +211,13 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     try {
       for await (const entry of fileSystem.openDirectory(directoryPath)) {
         const isDirectory = entry.isDirectory();
-        if (isDirectory && IGNORED_DIRECTORY_NAMES.has(entry.name)) {
-          continue;
-        }
         if (!includeEntry(path.join(directoryPath, entry.name), isDirectory)) {
           continue;
         }
 
-        // Charged after ignore filtering so generated directories and
-        // .gitignore exclusions never consume the budget. Every recursive
-        // branch shares one counter, so the cap applies to the whole tree
-        // rather than per directory.
+        // Charged after visibility filtering so ignored entries never consume
+        // the budget. Every recursive branch shares one counter, so the cap
+        // applies to the whole tree rather than per directory.
         if (remainingEntries.value <= 0) {
           throw createFileTreeError(
             `Project file tree exceeds the ${MAXIMUM_FILE_TREE_ENTRIES.toLocaleString()} entry limit. Choose a narrower project directory or add ignore rules.`,
@@ -233,7 +249,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     directoryPath: string,
     maximumDepth: number,
     currentDepth = 0,
-    includeEntry: FileTreeEntryFilter = () => true,
+    includeEntry: FileTreeEntryFilter = includeEntryByFallbackDirectoryNames,
     remainingEntries = { value: MAXIMUM_FILE_TREE_ENTRIES },
   ): Promise<FileTreeNode[]> {
     const visibleEntries = await collectVisibleEntries(directoryPath, includeEntry, remainingEntries);
@@ -301,6 +317,60 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
     });
   }
 
+  /**
+   * Resolves a directory the browser may list.
+   *
+   * The read-only roots (the system temp directory and the Claude projects
+   * directory, see `READ_ONLY_ROOTS` in shared/utils) are browsable but never
+   * writable, so they are checked before the workspace policy rejects them.
+   * `createWorkspaceFolder` deliberately does not do this, which is what keeps
+   * them read-only.
+   */
+  async function resolveBrowsablePath(targetPath: string): Promise<string> {
+    const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
+    if (readOnlyPath) {
+      return readOnlyPath;
+    }
+
+    const validation = await dependencies.workspace.validatePath(targetPath);
+    if (!validation.valid) {
+      throw createFileTreeError(validation.error ?? 'Path is outside the workspace root', 403, 'INVALID_WORKSPACE_PATH');
+    }
+
+    return validation.resolvedPath || targetPath;
+  }
+
+  /**
+   * Resolves a path the viewer is allowed to read.
+   *
+   * A file reference in a transcript is normally inside the project, but a
+   * background command's log lives in the system temp directory and a
+   * background agent's output file is a link from there into the Claude
+   * projects directory, and the transcript quotes those paths verbatim. Those
+   * resolve through the read-only root policy instead of the project root.
+   *
+   * The agent may also point at a file in another folder of the workspace, the
+   * same tree `browseWorkspace` lists, so anything under the workspace root is
+   * readable too. Symlinks are resolved before that comparison. The writing
+   * endpoints keep using `resolvePathInsideProject` alone, so nothing outside
+   * the project can be changed.
+   */
+  async function resolveReadablePath(projectRoot: string, targetPath: string): Promise<string> {
+    if (path.isAbsolute(targetPath)) {
+      const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
+      if (readOnlyPath) {
+        return readOnlyPath;
+      }
+
+      const workspacePath = await resolvePathUnderRoots(targetPath, [dependencies.workspace.rootPath]);
+      if (workspacePath) {
+        return workspacePath;
+      }
+    }
+
+    return resolvePathInsideProject(projectRoot, targetPath);
+  }
+
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
     await Promise.all(files.map(async (file) => {
       try {
@@ -317,12 +387,8 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         ? expandWorkspacePath(dependencies.workspace.rootPath, inputPath)
         : dependencies.workspace.rootPath;
       const targetPath = path.resolve(requestedPath);
-      const validation = await dependencies.workspace.validatePath(targetPath);
-      if (!validation.valid) {
-        throw createFileTreeError(validation.error ?? 'Path is outside the workspace root', 403, 'INVALID_WORKSPACE_PATH');
-      }
+      const resolvedPath = await resolveBrowsablePath(targetPath);
 
-      const resolvedPath = validation.resolvedPath || targetPath;
       try {
         await fileSystem.access(resolvedPath);
         const stats = await fileSystem.stat(resolvedPath);
@@ -398,7 +464,7 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async readTextFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      const resolvedPath = await resolveReadablePath(projectRoot, filePath);
       try {
         const content = await fileSystem.readTextFile(resolvedPath);
         return { content, path: resolvedPath };
@@ -406,13 +472,14 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
         mapFileSystemError(error, {
           ENOENT: { message: 'File not found', statusCode: 404 },
           EACCES: { message: 'Permission denied', statusCode: 403 },
+          EISDIR: { message: 'Path is a directory, not a file', statusCode: 400 },
         });
       }
     },
 
     async openFile(projectId, filePath) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      const resolvedPath = await resolveReadablePath(projectRoot, filePath);
       try {
         await fileSystem.access(resolvedPath);
       } catch {

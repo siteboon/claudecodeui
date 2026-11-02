@@ -7,7 +7,7 @@ import type {
 import { createCompleteMessage, readObjectRecord } from '@/shared/utils.js';
 
 type ChatSessionWriterOptions = {
-  connection: RealtimeClientConnection;
+  connection: RealtimeClientConnection | null;
   userId: string | number | null;
   provider: LLMProvider;
   /** Provider-native id when resuming an existing session, otherwise null. */
@@ -44,7 +44,6 @@ type ChatSessionWriterOptions = {
  *   intercepted and recorded as the provider-id mapping as well.
  */
 export class ChatSessionWriter {
-  ws: RealtimeClientConnection;
   userId: string | number | null;
   /**
    * Some runtimes feature-detect their writer with this flag; keep it so the
@@ -53,6 +52,17 @@ export class ChatSessionWriter {
   isWebSocketWriter = true;
 
   private readonly options: ChatSessionWriterOptions;
+  /**
+   * Every socket currently watching this run, not just the one that started
+   * it. A session can legitimately be open in more than one place — a second
+   * browser tab, a phone alongside a laptop, the desktop app beside the web
+   * app — and each of those subscribes through `attachConnection`.
+   *
+   * Holding a single connection here meant the newest subscriber took the
+   * stream away from everyone before it, so a second tab silently froze
+   * mid-run and only caught up on the next REST history refresh.
+   */
+  private readonly connections = new Set<RealtimeClientConnection>();
   /**
    * The provider-native session id as the runtime knows it. Kept locally
    * (besides the registry) because runtimes read it back via `getSessionId()`
@@ -63,7 +73,12 @@ export class ChatSessionWriter {
 
   constructor(options: ChatSessionWriterOptions) {
     this.options = options;
-    this.ws = options.connection;
+    // A run started by a timer has no audience yet. Everything still goes
+    // through `decorateOutboundEvent` into the run's replay buffer, so a
+    // client that subscribes mid-run catches up from the beginning.
+    if (options.connection) {
+      this.connections.add(options.connection);
+    }
     this.userId = options.userId;
     this.providerSessionId = options.providerSessionId;
   }
@@ -116,8 +131,13 @@ export class ChatSessionWriter {
     }
   }
 
+  /**
+   * Adds a socket to the run's live audience. Named for the `WebSocketWriter`
+   * method it stands in for, so runtime adapters keep working unchanged —
+   * but it adds rather than replaces.
+   */
   updateWebSocket(newConnection: RealtimeClientConnection): void {
-    this.ws = newConnection;
+    this.connections.add(newConnection);
   }
 
   setSessionId(sessionId: string): void {
@@ -138,8 +158,18 @@ export class ChatSessionWriter {
   }
 
   private forward(message: NormalizedMessage): void {
-    if (this.ws.readyState === WS_OPEN_STATE) {
-      this.ws.send(JSON.stringify(message));
+    const payload = JSON.stringify(message);
+
+    // Sending is also when dead sockets get collected: a refreshed tab leaves
+    // its old connection behind, and without dropping it here the set would
+    // grow for the whole life of the run. Deleting during iteration is safe
+    // for a Set — the removed entry is simply not revisited.
+    for (const connection of this.connections) {
+      if (connection.readyState === WS_OPEN_STATE) {
+        connection.send(payload);
+      } else {
+        this.connections.delete(connection);
+      }
     }
   }
 }

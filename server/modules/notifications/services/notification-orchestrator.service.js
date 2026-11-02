@@ -13,7 +13,6 @@ const PROVIDER_LABELS = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
-  antigravity: 'Antigravity',
   system: 'System'
 };
 
@@ -156,6 +155,7 @@ function buildNotificationPayload(event) {
       ? `Action Required: Tool "${normalizedEvent.meta.toolName}" needs approval`
       : 'Action Required: A tool needs your approval',
     'run.stopped': normalizedEvent.meta?.stopReason || 'Run Stopped: The run has stopped',
+    'run.background_completed': 'Background work finished',
     'run.failed': normalizedEvent.meta?.error ? `Run Failed: ${normalizedEvent.meta.error}` : 'Run Failed: The run encountered an error',
     'agent.notification': normalizedEvent.meta?.message ? String(normalizedEvent.meta.message) : 'You have a new notification',
     'push.enabled': 'Push notifications are now enabled!'
@@ -247,15 +247,6 @@ function notifyUserIfEnabled({ userId, event }) {
   }
 }
 
-/**
- * @param {{
- *   userId: string | number | null,
- *   provider: string,
- *   sessionId?: string | null,
- *   stopReason?: string,
- *   sessionName?: string | null
- * }} input
- */
 function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
   notifyUserIfEnabled({
     userId,
@@ -272,14 +263,26 @@ function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'co
 }
 
 /**
- * @param {{
- *   userId: string | number | null,
- *   provider: string,
- *   sessionId?: string | null,
- *   error: unknown,
- *   sessionName?: string | null
- * }} input
+ * Reports background work that finished after its turn had already completed.
+ *
+ * Uses the `stop` kind so it rides the existing "run stopped" preference rather
+ * than needing a new opt-in that would default to off. No explicit dedupeKey, so
+ * the default composite key collapses repeats inside the dedupe window.
  */
+function notifyBackgroundWorkCompleted({ userId, provider, sessionId = null, sessionName = null }) {
+  notifyUserIfEnabled({
+    userId,
+    event: createNotificationEvent({
+      provider,
+      sessionId,
+      kind: 'stop',
+      code: 'run.background_completed',
+      meta: { sessionName },
+      severity: 'info'
+    })
+  });
+}
+
 function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null }) {
   const errorMessage = normalizeErrorMessage(error);
 
@@ -302,5 +305,6 @@ export {
   createNotificationEvent,
   notifyUserIfEnabled,
   notifyRunStopped,
-  notifyRunFailed
+  notifyRunFailed,
+  notifyBackgroundWorkCompleted
 };

@@ -4,17 +4,71 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type {
+  AnyRecord,
+  CompactionInfo,
+  FetchHistoryOptions,
+  FetchHistoryResult,
+  NormalizedMessage,
+  SubagentActivity,
+  SubagentInfo,
+  TaskUsage,
+  WorkflowAgentActivity,
+  WorkflowAgentInfo,
+  WorkflowAgentProgress,
+  WorkflowInfo,
+} from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
+import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/message-unification.js';
+import {
+  createNormalizedMessage,
+  generateMessageId,
+  isClaudeNonTurnMessageRow,
+  isPlaceholderProviderModel,
+  readObjectRecord,
+  sliceTailPage,
+  stripAnsiSequences,
+  truncateSubagentActivity,
+} from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
+import { getClaudeSDKSessionStartTime } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import {
+  getReportedClaudeContextWindow,
+  summarizeClaudeTokenUsage,
+} from '@/modules/providers/services/provider-token-usage.service.js';
 
 const PROVIDER = 'claude';
+
+/** Tokens the way the CLI writes them: 725k rather than 724,871. */
+const formatTokenCount = (tokens: number): string => {
+  if (tokens >= 1_000_000) {
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
+  }
+  return tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : `${tokens}`;
+};
+
+/** A duration the way the CLI writes one: `2m 22s`. */
+const formatDuration = (milliseconds: number): string => {
+  const seconds = Math.round(milliseconds / 1_000);
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+};
+
+/**
+ * Upper bound on how much of a subagent's timeline is sent to the client. A
+ * long-running agent can record hundreds of tool calls, and the transcript only
+ * ever shows them behind a collapsed header, so shipping the whole history on
+ * every load costs far more than it shows. The newest steps are the ones
+ * kept: a running agent's timeline is polled for what it is doing now, and
+ * the card says how many earlier ones were left out.
+ */
+const MAX_TRANSMITTED_SUBAGENT_ACTIVITIES = 200;
 
 type ClaudeToolResult = {
   content: unknown;
   isError: boolean;
-  subagentTools?: unknown;
+  subagentTools?: SubagentActivity[];
+  subagent?: SubagentInfo;
+  workflow?: WorkflowInfo;
   toolUseResult?: unknown;
 };
 
@@ -36,8 +90,24 @@ type ClaudeHistoryMessagesResult =
     limit?: number | null;
   };
 
-async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
-  const tools: AnyRecord[] = [];
+type ClaudeSubagentTranscript = {
+  activity: SubagentActivity[];
+  model?: string;
+  /** When the agent's first row was written: the moment it was spawned. */
+  startedAt?: string;
+};
+
+/**
+ * Flattens one subagent transcript into the shared activity timeline.
+ *
+ * Assistant prose and reasoning are kept alongside the tool calls so the
+ * transcript can replay what the agent actually did rather than listing tool
+ * names with no narrative.
+ */
+async function readClaudeSubagentTranscript(filePath: string): Promise<ClaudeSubagentTranscript> {
+  const activity: SubagentActivity[] = [];
+  const transcript: ClaudeSubagentTranscript = { activity };
+  const toolsById = new Map<string, SubagentActivity>();
 
   try {
     const fileStream = fs.createReadStream(filePath);
@@ -53,16 +123,40 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
 
       try {
         const entry = JSON.parse(line) as AnyRecord;
+        if (isClaudeNonTurnMessageRow(entry)) {
+          continue;
+        }
+        const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
+        if (timestamp && !transcript.startedAt) {
+          transcript.startedAt = timestamp;
+        }
 
         if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
+          if (typeof entry.message.model === 'string') {
+            transcript.model = entry.message.model;
+          }
+
           for (const part of entry.message.content as AnyRecord[]) {
             if (part.type === 'tool_use') {
-              tools.push({
-                toolId: part.id,
-                toolName: part.name,
+              const tool: SubagentActivity = {
+                kind: 'tool',
+                toolId: String(part.id ?? ''),
+                toolName: String(part.name ?? 'Tool'),
                 toolInput: part.input,
-                timestamp: entry.timestamp,
-              });
+                timestamp,
+              };
+              activity.push(tool);
+              if (tool.toolId) {
+                toolsById.set(tool.toolId, tool);
+              }
+              continue;
+            }
+            if (part.type === 'text' && typeof part.text === 'string' && part.text.trim()) {
+              activity.push({ kind: 'text', content: part.text, timestamp });
+              continue;
+            }
+            if (part.type === 'thinking' && typeof part.thinking === 'string' && part.thinking.trim()) {
+              activity.push({ kind: 'thinking', content: part.thinking, timestamp });
             }
           }
         }
@@ -73,7 +167,7 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
               continue;
             }
 
-            const tool = tools.find((candidate) => candidate.toolId === part.tool_use_id);
+            const tool = toolsById.get(String(part.tool_use_id ?? ''));
             if (!tool) {
               continue;
             }
@@ -99,14 +193,514 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
     console.warn(`Error parsing agent file ${filePath}:`, message);
   }
 
-  return tools;
+  return transcript;
 }
+
+type ClaudeSubagentMeta = {
+  agentType?: string;
+  description?: string;
+};
+
+/** Reads the sidecar `.meta.json` Claude writes next to a subagent transcript. */
+async function readClaudeSubagentMeta(metaPath: string): Promise<ClaudeSubagentMeta> {
+  try {
+    const parsed = JSON.parse(await fsp.readFile(metaPath, 'utf8')) as AnyRecord;
+    return {
+      agentType: typeof parsed.agentType === 'string' ? parsed.agentType : undefined,
+      description: typeof parsed.description === 'string' ? parsed.description : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Resolves where a subagent's transcript lives.
+ *
+ * Current Claude versions write it to
+ * `<projectDir>/<providerSessionId>/subagents/agent-<agentId>.jsonl`; older
+ * ones dropped it next to the parent transcript. Both are checked, newest
+ * layout first, because a project directory usually holds sessions from
+ * several CLI versions.
+ */
+async function findClaudeSubagentTranscript(
+  projectDirectory: string,
+  providerSessionId: string,
+  agentId: string,
+): Promise<{ transcriptPath: string; metaPath: string } | null> {
+  const candidates = [
+    path.join(projectDirectory, providerSessionId, 'subagents', `agent-${agentId}.jsonl`),
+    path.join(projectDirectory, `agent-${agentId}.jsonl`),
+  ];
+
+  for (const transcriptPath of candidates) {
+    try {
+      await fsp.access(transcriptPath);
+      return { transcriptPath, metaPath: transcriptPath.replace(/\.jsonl$/, '.meta.json') };
+    } catch {
+      // Try the next layout.
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Reads which agents a workflow run spawned and how far each got.
+ *
+ * The run appends one record per event to `<transcriptDir>/journal.jsonl`:
+ * `started` names the agent (and the label and phase the script gave it, when
+ * it gave any), `result` and `failed` settle it. The journal is what the
+ * workflow itself resumes from, so it is the only record of an agent that is
+ * still running — its transcript file is written, but nothing in it says the
+ * agent is not done. A missing directory or journal means the run left no
+ * record here (a fork copies only the parent's transcript), which reads as no
+ * agents rather than an error.
+ */
+async function readWorkflowJournal(transcriptDir: string): Promise<WorkflowAgentInfo[]> {
+  const agentsById = new Map<string, WorkflowAgentInfo>();
+
+  let journal: string;
+  try {
+    journal = await fsp.readFile(path.join(transcriptDir, 'journal.jsonl'), 'utf8');
+  } catch {
+    return [];
+  }
+
+  for (const line of journal.split('\n')) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    let entry: AnyRecord;
+    try {
+      entry = JSON.parse(line) as AnyRecord;
+    } catch {
+      // The workflow appends while this reads, so the last line can be partial.
+      continue;
+    }
+
+    const agentId = typeof entry.agentId === 'string' ? entry.agentId : '';
+    if (!agentId) {
+      continue;
+    }
+
+    if (entry.type === 'started') {
+      agentsById.set(agentId, {
+        id: agentId,
+        label: typeof entry.label === 'string' ? entry.label : undefined,
+        phase: typeof entry.phase === 'string' ? entry.phase : undefined,
+        status: 'running',
+      });
+      continue;
+    }
+
+    const agent = agentsById.get(agentId);
+    if (!agent) {
+      continue;
+    }
+    if (entry.type === 'result') {
+      agent.status = 'completed';
+    } else if (entry.type === 'failed') {
+      agent.status = 'failed';
+    }
+  }
+
+  return [...agentsById.values()];
+}
+
+/**
+ * Which kind of background work a tool-result row launched, read off the
+ * structured `toolUseResult` the CLI stores beside it.
+ *
+ * All three answer the same way — a launch acknowledgement now, a
+ * `<task-notification>` later — but each is recognised by its own key: an
+ * `Agent` by the `agentId` of the transcript it writes, a `Workflow` by the
+ * `async_launched` status it shares with an agent launch (it has no agent of
+ * its own), and a backgrounded `Bash` by the `backgroundTaskId` the shell
+ * reports. A synchronous `Agent` also carries `agentId` and is included here
+ * because its card is built the same way; only `isAsync` says it launched.
+ */
+type ClaudeBackgroundLaunch = 'agent' | 'workflow' | 'bash';
+
+function readBackgroundLaunch(toolUseResult: unknown): ClaudeBackgroundLaunch | null {
+  const result = readObjectRecord(toolUseResult);
+  if (!result) {
+    return null;
+  }
+  if (result.agentId) {
+    return 'agent';
+  }
+  if (result.status === 'async_launched') {
+    return 'workflow';
+  }
+  if (typeof result.backgroundTaskId === 'string' && result.backgroundTaskId) {
+    return 'bash';
+  }
+  return null;
+}
+
+type ClaudeTaskNotification = {
+  /**
+   * `uuid`s of every transcript row that notified for this call, so all of
+   * them can be dropped once the latest one is folded. A task that resumes or
+   * is first reported as stopped and later as completed notifies more than
+   * once, and every earlier row is superseded bookkeeping. Queue-operation
+   * records carry no `uuid` and never render on their own, so they add
+   * nothing here.
+   */
+  sourceUuids: string[];
+  toolUseId: string;
+  status: string;
+  summary: string;
+  result: string;
+};
+
+function readTaggedValue(content: string, tagName: string): string {
+  const match = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`).exec(content);
+  return match ? match[1].trim() : '';
+}
+
+/**
+ * Reads every `<task-notification>` payload one transcript row carries.
+ *
+ * Claude writes the same completion report in two shapes, and which one you get
+ * depends only on when the agent happened to finish:
+ *
+ * - as an ordinary user-role turn, when the queued notification is delivered
+ *   between turns (the harness also logs a contentless `dequeue` for it);
+ * - as a top-level `queue-operation` record whose `content` holds the payload,
+ *   when the harness consumes it inline while the parent turn is still running
+ *   (`remove`), or when the session ends before it is ever delivered
+ *   (`enqueue`).
+ *
+ * The operation names the queue's bookkeeping, not whether the agent finished,
+ * so every queue-operation payload counts. Reading only the user-role shape
+ * loses the majority of them: across the 919 transcripts this was measured on,
+ * 31 of 56 background agent launches report *only* through a queue-operation
+ * record, and their result and status were invisible to every consumer.
+ */
+function readTaskNotificationTexts(message: AnyRecord): string[] {
+  if (message.type === 'queue-operation') {
+    return typeof message.content === 'string' ? [message.content] : [];
+  }
+
+  if (message.message?.role !== 'user') {
+    return [];
+  }
+
+  const content = message.message.content;
+  if (typeof content === 'string') {
+    return [content];
+  }
+
+  return Array.isArray(content)
+    ? content.filter((part: AnyRecord) => part?.type === 'text').map((part: AnyRecord) => String(part.text ?? ''))
+    : [];
+}
+
+/**
+ * Collects every `<task-notification>` keyed by the tool call that spawned the
+ * agent it reports on.
+ *
+ * Only notifications that name a tool-use id are collected: without one there
+ * is no card to fold them into, and they must keep rendering on their own.
+ */
+function collectTaskNotifications(messages: AnyRecord[]): Map<string, ClaudeTaskNotification> {
+  const notifications = new Map<string, ClaudeTaskNotification>();
+
+  for (const message of messages) {
+    for (const text of readTaskNotificationTexts(message)) {
+      if (!text.trimStart().startsWith('<task-notification>')) {
+        continue;
+      }
+
+      const toolUseId = readTaggedValue(text, 'tool-use-id');
+      if (!toolUseId) {
+        continue;
+      }
+
+      // A resumed agent notifies more than once; the last word wins, and the
+      // rows that carried the earlier words go with it.
+      const sourceUuids = notifications.get(toolUseId)?.sourceUuids ?? [];
+      if (typeof message.uuid === 'string' && message.uuid) {
+        sourceUuids.push(message.uuid);
+      }
+      notifications.set(toolUseId, {
+        sourceUuids,
+        toolUseId,
+        status: readTaggedValue(text, 'status') || 'completed',
+        summary: readTaggedValue(text, 'summary'),
+        result: readTaggedValue(text, 'result'),
+      });
+    }
+  }
+
+  return notifications;
+}
+
+/** Reads the `tool_use_id` off the tool-result row that launched background work. */
+function readLaunchToolUseId(message: AnyRecord): string | null {
+  const content = message.message?.content;
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  for (const part of content) {
+    if (part?.type === 'tool_result' && typeof part.tool_use_id === 'string') {
+      return part.tool_use_id;
+    }
+  }
+
+  return null;
+}
+
+/** Swaps a launch acknowledgement for the work's actual answer. */
+function replaceLaunchToolResultContent(message: AnyRecord, replacement: string): void {
+  const content = message.message?.content;
+  if (!Array.isArray(content)) {
+    return;
+  }
+
+  for (const part of content) {
+    if (part?.type === 'tool_result') {
+      part.content = replacement;
+    }
+  }
+}
+
+/**
+ * Reads a Claude transcript's rows as a graph keyed by `uuid`.
+ *
+ * The file is append-only and every row names its predecessor in `parentUuid`,
+ * so a conversation is a path through it rather than the whole file. Editing a
+ * sent message makes a second path appear alongside the first.
+ */
+async function readTranscriptRows(jsonlPath: string, providerSessionId: string): Promise<AnyRecord[]> {
+  const rows: AnyRecord[] = [];
+  const fileStream = fs.createReadStream(jsonlPath);
+  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+  for await (const line of rl) {
+    if (!line.trim()) {
+      continue;
+    }
+    try {
+      const entry = JSON.parse(line) as AnyRecord;
+      if (entry.sessionId === providerSessionId && !isClaudeNonTurnMessageRow(entry)) {
+        rows.push(entry);
+      }
+    } catch {
+      // A row can be half-written while the CLI is streaming into the file.
+    }
+  }
+
+  return rows;
+}
+
+/** True for a row the user typed, as opposed to a tool result or an injected note. */
+function isUserPromptRow(row: AnyRecord): boolean {
+  if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
+    return false;
+  }
+
+  const content = row.message?.content;
+  if (Array.isArray(content)) {
+    return content.some((part: AnyRecord) => part?.type === 'text' || part?.type === 'image');
+  }
+
+  return typeof content === 'string' && content.length > 0;
+}
+
+/**
+ * Returns the uuids on the chain the next `claude --resume` replays, from the
+ * leaf it continues from back to the root.
+ *
+ * Mirrors the transcript loader of the Claude CLI, which the Agent SDK's
+ * `resume` spawns as well. Every CLI process stamps a `last-prompt` row naming
+ * the leaf it was on when it exits, so with two writers on one session it is
+ * that stamp — not the newest row — that decides which branch is replayed. The
+ * newest conversation row only takes over when it descends from the stamped
+ * leaf (the stamping process kept going), or when the file carries no stamp.
+ * A compact boundary clears the stamp, and `progress` rows are skipped over
+ * when linking a row to its parent, as the CLI does.
+ */
+function resolveResumePath(rows: AnyRecord[]): Set<string> {
+  const conversation = new Map<string, AnyRecord>();
+  const progressParents = new Map<string, string | null>();
+  const parentOf = (row: AnyRecord): string | undefined => {
+    const parentUuid = typeof row.parentUuid === 'string' ? row.parentUuid : undefined;
+    if (parentUuid && progressParents.has(parentUuid)) {
+      return progressParents.get(parentUuid) ?? undefined;
+    }
+    return parentUuid;
+  };
+
+  let newestRow: string | undefined;
+  let stampedLeaf: string | undefined;
+  let stampIsExplicit = false;
+
+  for (const row of rows) {
+    if (row.type === 'progress' && typeof row.uuid === 'string') {
+      progressParents.set(row.uuid, parentOf(row) ?? null);
+      continue;
+    }
+    if (typeof row.uuid === 'string'
+      && (row.type === 'user' || row.type === 'assistant' || row.type === 'attachment' || row.type === 'system')) {
+      conversation.set(row.uuid, row);
+      if (row.isSidechain !== true) {
+        newestRow = row.uuid;
+        stampIsExplicit = false;
+      }
+      if (row.type === 'system' && row.subtype === 'compact_boundary') {
+        stampedLeaf = undefined;
+        stampIsExplicit = false;
+      }
+    } else if (row.type === 'last-prompt' && typeof row.leafUuid === 'string' && row.leafUuid) {
+      stampIsExplicit = row.explicit === true || (stampIsExplicit && row.leafUuid === stampedLeaf);
+      stampedLeaf = row.leafUuid;
+    }
+  }
+
+  const chainFrom = (leaf: string | undefined): string[] => {
+    const chain: string[] = [];
+    const seen = new Set<string>();
+    let cursor = leaf;
+    while (cursor && conversation.has(cursor) && !seen.has(cursor)) {
+      seen.add(cursor);
+      chain.push(cursor);
+      cursor = parentOf(conversation.get(cursor) as AnyRecord);
+    }
+    return chain;
+  };
+
+  let leaf = stampedLeaf && conversation.has(stampedLeaf) ? stampedLeaf : undefined;
+  if (leaf && !stampIsExplicit && newestRow && newestRow !== leaf && chainFrom(newestRow).includes(leaf)) {
+    leaf = newestRow;
+  }
+
+  return new Set(chainFrom(leaf ?? newestRow));
+}
+
+/**
+ * Maps each row's uuid to the file position of the newest row in its subtree.
+ *
+ * The transcript is append-only and a child is always written after its
+ * parent, so one backward pass hands every row's position to its parent and
+ * each uuid ends up holding the position of the last line its branch grew.
+ * Rows after a compact boundary do not link back across it, so this only
+ * orders branches within one compaction segment.
+ */
+function indexNewestRowPerBranch(rows: AnyRecord[]): Map<string, number> {
+  const newestByUuid = new Map<string, number>();
+
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (typeof row.uuid !== 'string') {
+      continue;
+    }
+    const newest = newestByUuid.get(row.uuid) ?? index;
+    newestByUuid.set(row.uuid, newest);
+    if (typeof row.parentUuid === 'string' && (newestByUuid.get(row.parentUuid) ?? -1) < newest) {
+      newestByUuid.set(row.parentUuid, newest);
+    }
+  }
+
+  return newestByUuid;
+}
+
+/**
+ * Drops the rows belonging to prompts the next resume will not replay.
+ *
+ * When a message is edited, Claude resumes the conversation partway and appends
+ * the replacement, so two prompts end up sharing one parent and the file holds
+ * both the abandoned attempt and the live one. A flat read would show them
+ * stacked, which reads as the app having sent the message twice. The same shape
+ * appears without an edit when a session is driven from Chat and from the
+ * native `claude` CLI at once: both writers branch off the row each of them saw
+ * last.
+ *
+ * Which sibling survives is decided by the branch the runtime will actually
+ * resume: the sibling on the chain `resolveResumePath` returns. Going by the
+ * newest prompt, or by the newest row, would show a branch the model was never
+ * sent whenever the two writers exit in a different order than they wrote. A
+ * fork that is not on that chain at all (one made before a compaction) keeps
+ * the branch that was appended to last.
+ *
+ * Only sibling *prompts* are treated as a fork. Branch points made by parallel
+ * tool calls are extremely common — one assistant turn writes several chained
+ * rows and each tool result parents onto its own — and pruning those would
+ * delete tool output from every transcript in the app.
+ */
+function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
+  const promptSiblings = new Map<string, AnyRecord[]>();
+  for (const row of rows) {
+    if (typeof row.parentUuid !== 'string' || !isUserPromptRow(row)) {
+      continue;
+    }
+    const siblings = promptSiblings.get(row.parentUuid);
+    if (siblings) {
+      siblings.push(row);
+    } else {
+      promptSiblings.set(row.parentUuid, [row]);
+    }
+  }
+
+  const forks = [...promptSiblings.values()].filter((siblings) => siblings.length > 1);
+  if (forks.length === 0) {
+    return rows;
+  }
+
+  const resumePath = resolveResumePath(rows);
+  let newestByUuid: Map<string, number> | undefined;
+  const newestRowOf = (row: AnyRecord): number => {
+    newestByUuid ??= indexNewestRowPerBranch(rows);
+    return typeof row.uuid === 'string' ? newestByUuid.get(row.uuid) ?? -1 : -1;
+  };
+
+  const supersededRoots = new Set<string>();
+  for (const siblings of forks) {
+    let live = siblings.find((row) => typeof row.uuid === 'string' && resumePath.has(row.uuid));
+    if (!live) {
+      live = siblings[0];
+      for (const row of siblings) {
+        if (newestRowOf(row) > newestRowOf(live)) {
+          live = row;
+        }
+      }
+    }
+    for (const row of siblings) {
+      if (row !== live && typeof row.uuid === 'string') {
+        supersededRoots.add(row.uuid);
+      }
+    }
+  }
+
+  if (supersededRoots.size === 0) {
+    return rows;
+  }
+
+  const abandoned = new Set(supersededRoots);
+  // Rows are appended in order, so one forward pass propagates each superseded
+  // root to its whole subtree.
+  for (const row of rows) {
+    if (typeof row.parentUuid === 'string' && abandoned.has(row.parentUuid) && typeof row.uuid === 'string') {
+      abandoned.add(row.uuid);
+    }
+  }
+
+  return rows.filter((row) => typeof row.uuid !== 'string' || !abandoned.has(row.uuid));
+}
+
+/** When the CLI run behind a session started (epoch ms), or null when none is up. */
+type LiveRunStartTimeProbe = (sessionId: string) => number | null;
 
 async function getSessionMessages(
   sessionId: string,
   providerSessionId: string,
   limit: number | null,
   offset: number,
+  getLiveRunStartTime: LiveRunStartTimeProbe,
 ): Promise<ClaudeHistoryMessagesResult> {
   try {
     // The DB row is keyed by the app-facing session id, while the JSONL rows
@@ -118,32 +712,10 @@ async function getSessionMessages(
     }
 
     const projectDir = path.dirname(jsonLPath);
-    const files = await fsp.readdir(projectDir);
-    const agentFiles = files.filter((file) => file.endsWith('.jsonl') && file.startsWith('agent-'));
 
-    const messages: AnyRecord[] = [];
-    const agentToolsCache = new Map<string, AnyRecord[]>();
-
-    const fileStream = fs.createReadStream(jsonLPath);
-    const rl = readline.createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-
-    for await (const line of rl) {
-      if (!line.trim()) {
-        continue;
-      }
-
-      try {
-        const entry = JSON.parse(line) as AnyRecord;
-        if (entry.sessionId === providerSessionId) {
-          messages.push(entry);
-        }
-      } catch {
-        // Skip malformed JSONL lines that can happen during concurrent writes.
-      }
-    }
+    const messages = dropSupersededPromptBranches(
+      await readTranscriptRows(jsonLPath, providerSessionId),
+    );
 
     const agentIds = new Set<string>();
     for (const message of messages) {
@@ -153,30 +725,192 @@ async function getSessionMessages(
       }
     }
 
+    // Read each spawned agent's own transcript once, then hang it off every
+    // row that references it. Status is not part of this: the transcript
+    // cannot say whether the agent finished (see the loop below).
+    const subagentsById = new Map<string, {
+      activity: SubagentActivity[];
+      info: Omit<SubagentInfo, 'status'>;
+    }>();
     for (const agentId of agentIds) {
-      const agentFileName = `agent-${agentId}.jsonl`;
-      if (!agentFiles.includes(agentFileName)) {
+      const located = await findClaudeSubagentTranscript(projectDir, providerSessionId, agentId);
+      if (!located) {
         continue;
       }
 
-      const agentFilePath = path.join(projectDir, agentFileName);
-      const tools = await parseAgentTools(agentFilePath);
-      agentToolsCache.set(agentId, tools);
+      const [transcript, meta] = await Promise.all([
+        readClaudeSubagentTranscript(located.transcriptPath),
+        readClaudeSubagentMeta(located.metaPath),
+      ]);
+
+      subagentsById.set(agentId, {
+        activity: transcript.activity
+          .slice(-MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
+          .map(truncateSubagentActivity),
+        info: {
+          id: agentId,
+          name: meta.agentType,
+          type: meta.agentType,
+          description: meta.description,
+          model: transcript.model,
+          activityCount: transcript.activity.length,
+        },
+      });
     }
+
+    // Read each workflow run's journal once, keyed by the directory the launch
+    // row names. The journal is the only thing that says which of a run's
+    // agents are still going — see `readWorkflowJournal`.
+    const workflowAgentsByDir = new Map<string, WorkflowAgentInfo[]>();
+    for (const message of messages) {
+      const transcriptDir = message.toolUseResult?.transcriptDir;
+      if (
+        readBackgroundLaunch(message.toolUseResult) === 'workflow'
+        && typeof transcriptDir === 'string'
+        && transcriptDir
+        && !workflowAgentsByDir.has(transcriptDir)
+      ) {
+        workflowAgentsByDir.set(transcriptDir, await readWorkflowJournal(transcriptDir));
+      }
+    }
+
+    // A background launch's tool result is internal bookkeeping ("Async agent
+    // launched successfully…", "Workflow launched in background. Task ID: …",
+    // "Command running in background with ID: …"); its real answer arrives
+    // later as a separate `<task-notification>` turn. Folding the notification
+    // back onto the tool call that started the work keeps one card per launch
+    // instead of a card, an unrelated status line, and a stray markdown reply.
+    // Reading only rows with an `agentId` left a workflow's card on its launch
+    // acknowledgement forever, with its report rendering as a raw user bubble
+    // further down or, for a queue-operation record, nowhere at all.
+    const notificationsByToolUseId = collectTaskNotifications(messages);
+    const foldedNotificationUuids = new Set<string>();
+
+    // A background agent runs inside the CLI process that launched it, so once
+    // that process is gone an agent that has not reported back never will. A
+    // later run of the same session is a new process, so a launch row older
+    // than the live run belongs to a process that has already exited. The
+    // runtime keys its process map by the app session id when the chat gateway
+    // starts a run and by the provider-native id when the agent API does, so
+    // both are asked.
+    const liveRunStartedAt = getLiveRunStartTime(sessionId) ?? getLiveRunStartTime(providerSessionId);
+    const launchedByLiveRun = (message: AnyRecord): boolean =>
+      liveRunStartedAt !== null && Date.parse(String(message.timestamp ?? '')) >= liveRunStartedAt;
 
     for (const message of messages) {
-      const agentId = message.toolUseResult?.agentId;
-      if (!agentId) {
+      const launch = readBackgroundLaunch(message.toolUseResult);
+      if (!launch) {
         continue;
       }
 
-      const agentTools = agentToolsCache.get(String(agentId));
-      if (agentTools && agentTools.length > 0) {
-        message.subagentTools = agentTools;
+      const toolUseId = readLaunchToolUseId(message);
+      const notification = toolUseId ? notificationsByToolUseId.get(toolUseId) : undefined;
+      // A workflow and a backgrounded shell command have no foreground form;
+      // only an agent can hand its answer back inline.
+      const isAsyncLaunch = launch !== 'agent' || message.toolUseResult?.isAsync === true;
+
+      // An async launch row never tells you it finished — only the later
+      // notification does, so a missing notification means the outcome is
+      // still unknown.
+      //
+      // The agent's own transcript cannot stand in for that. A background agent
+      // routinely ends its turn cleanly while its work is still outstanding: it
+      // replies "I've started that, waiting for it to finish" and stops, or it
+      // has live background children of its own, which is precisely when the
+      // harness holds the notification back. Treating a cleanly-ended timeline
+      // as proof of completion therefore marked every background agent
+      // `completed` the moment it launched, collapsing its card and dropping
+      // its spinner while it was still working.
+      //
+      // "Unknown" only means "still outstanding" while the process the agent
+      // runs in is alive. Once it is gone — the run was stopped or crashed, or
+      // this transcript is a fork, which copies the parent's conversation rows
+      // but not its agent files or queue-operation records — nothing can still
+      // report, and reading that as `running` pinned a spinner on the card
+      // forever.
+      //
+      // A synchronous agent hands its answer back inline on its own tool
+      // result, so its status never depends on a notification or the process.
+      const unreportedStatus = isAsyncLaunch
+        ? launchedByLiveRun(message) ? 'running' : 'stopped'
+        : 'completed';
+
+      if (launch === 'agent') {
+        const agentId = String(message.toolUseResult.agentId);
+        const subagent = subagentsById.get(agentId);
+        const status: SubagentInfo['status'] = notification
+          ? notification.status === 'completed' ? 'completed' : 'failed'
+          : unreportedStatus;
+
+        if (subagent && subagent.activity.length > 0) {
+          message.subagentTools = subagent.activity;
+        }
+        // The agent's own transcript names its type, model and timeline, but
+        // it is not what says whether the agent finished, and it can be
+        // missing — a fork copies only the parent's `.jsonl`. The card reads
+        // its status off `subagent`, so the launch row publishes one with or
+        // without it; otherwise a notification saying "completed" left the
+        // card `running`.
+        message.subagent = {
+          id: agentId,
+          ...subagent?.info,
+          description: subagent?.info.description
+            ?? (typeof message.toolUseResult?.description === 'string' ? message.toolUseResult.description : undefined),
+          model: subagent?.info.model
+            ?? (typeof message.toolUseResult?.resolvedModel === 'string' ? message.toolUseResult.resolvedModel : undefined),
+          status,
+        };
+      } else if (launch === 'workflow') {
+        // The notification's own word is kept here, `stopped` included: a
+        // workflow the user stopped is not one that failed.
+        const status: WorkflowInfo['status'] = notification
+          ? notification.status === 'completed' || notification.status === 'stopped' ? notification.status : 'failed'
+          : unreportedStatus;
+        // The journal marks an agent `started` and later `result`/`failed`.
+        // Once the run itself has settled, a `started` with no second record
+        // is not still going: the run was stopped under it, or a resume re-ran
+        // the step under a new id. Drawing those as running put a pulsing dot
+        // on a finished card.
+        const agents = (workflowAgentsByDir.get(String(message.toolUseResult.transcriptDir ?? '')) ?? [])
+          .map((agent) => (status !== 'running' && agent.status === 'running' ? { ...agent, status: 'stopped' as const } : agent));
+        const countWith = (agentStatus: WorkflowAgentInfo['status']) =>
+          agents.filter((agent) => agent.status === agentStatus).length;
+
+        message.workflow = {
+          runId: String(message.toolUseResult.runId ?? ''),
+          name: String(message.toolUseResult.workflowName ?? ''),
+          description: typeof message.toolUseResult.summary === 'string' ? message.toolUseResult.summary : undefined,
+          status,
+          agents,
+          agentCounts: {
+            total: agents.length,
+            completed: countWith('completed'),
+            failed: countWith('failed'),
+            running: countWith('running'),
+            stopped: countWith('stopped'),
+          },
+          scriptPath: typeof message.toolUseResult.scriptPath === 'string' ? message.toolUseResult.scriptPath : undefined,
+        };
+      }
+
+      if (notification) {
+        replaceLaunchToolResultContent(message, notification.result || notification.summary);
+        for (const sourceUuid of notification.sourceUuids) {
+          foldedNotificationUuids.add(sourceUuid);
+        }
+      } else if (isAsyncLaunch && launch !== 'bash') {
+        // Without a notification there is no answer to show, and an agent's
+        // or workflow's launch acknowledgement is internal bookkeeping the
+        // user must never read. A backgrounded command's acknowledgement is
+        // different: it names the output file, which is the only handle on
+        // the command's output until it reports, so it stays.
+        replaceLaunchToolResultContent(message, '');
       }
     }
 
-    const sortedMessages = messages.sort(
+    const sortedMessages = messages
+      .filter((message) => !foldedNotificationUuids.has(String(message.uuid ?? '')))
+      .sort(
       (a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime(),
     );
     const total = sortedMessages.length;
@@ -226,6 +960,30 @@ const INTERNAL_CONTENT_PREFIXES = [
   '[Request interrupted',
   'Base directory for this skill:',
 ] as const;
+
+/**
+ * Claude Code 2.1.282+ writes pasted text into the transcript already wrapped as
+ * `<pasted_content id="ID">\nBODY\n</pasted_content id="ID">`. The closing tag
+ * carries the id too, so a generic closing-tag stripper misses it.
+ */
+const PASTED_CONTENT =
+  /<pasted_content id="([^"]*)">\n?([\s\S]*?)\n?<\/pasted_content(?: id="\1")?>/g;
+
+/**
+ * Replaces each well-formed `<pasted_content>` wrapper with its body so a user
+ * message shows the text that was pasted. Unclosed or mismatched-id wrappers are
+ * left untouched, and a message with no wrapper is returned unchanged.
+ */
+function unwrapPastedContent(text: string): string {
+  let unwrapped = false;
+  const result = text.replace(PASTED_CONTENT, (_match, _id: string, body: string) => {
+    unwrapped = true;
+    return body;
+  });
+
+  if (!unwrapped) return text;
+  return result.replace(/^[\r\n]+|[\r\n]+$/g, '');
+}
 
 function isInternalContent(content: string): boolean {
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
@@ -290,20 +1048,219 @@ function buildLocalCommandDisplayText(payload: ClaudeLocalCommandPayload): strin
   return commandArgs ? `${baseCommand} ${commandArgs}` : baseCommand;
 }
 
+/** The `task_status` fields of a normalized message, minus the envelope. */
+type ClaudeTaskStatusEvent = Pick<
+  NormalizedMessage,
+  'event' | 'taskId' | 'toolUseId' | 'taskType' | 'workflowName' | 'description' | 'status' | 'summary' | 'usage' | 'outputFile' | 'agents'
+>;
+
+const readOptionalString = (value: unknown): string | undefined =>
+  typeof value === 'string' && value ? value : undefined;
+
 /**
- * Claude local-command stdout may contain ANSI styling codes because it was
- * captured from the terminal. The web chat should receive readable plain text.
+ * The model an assistant row reports, or undefined when there is nothing
+ * honest to report.
+ *
+ * Rows Claude Code fabricated locally — a usage-limit notice, an API-error
+ * placeholder — are stamped `<synthetic>`; labelling one with a model would
+ * claim a request that never ran, so those are dropped here rather than
+ * guessed at further down.
  */
-function stripAnsiFormatting(text: string): string {
-  return text.replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '');
+const readAssistantModel = (value: unknown): string | undefined => {
+  const model = readOptionalString(value)?.trim();
+  return model && !isPlaceholderProviderModel(model) ? model : undefined;
+};
+
+/** The CLI's `{total_tokens, tool_uses, duration_ms}` in the app's spelling. */
+function readTaskUsage(value: unknown): TaskUsage | undefined {
+  const usage = readObjectRecord(value);
+  if (!usage) {
+    return undefined;
+  }
+  return {
+    totalTokens: Number(usage.total_tokens) || 0,
+    toolUses: Number(usage.tool_uses) || 0,
+    durationMs: Number(usage.duration_ms) || 0,
+  };
 }
 
+const readOptionalNumber = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+/**
+ * The SDK's word on one workflow agent, in the app's spelling.
+ *
+ * The SDK reports `start` for an agent the script has queued as well as one
+ * that is running; only an `agentId` — the transcript the agent writes — tells
+ * the two apart. `progress` is a running agent that has reported, `done` one
+ * that finished, and anything else (`error`, `failed`) one that did not.
+ */
+function readWorkflowAgentState(state: unknown, agentId: string | undefined): WorkflowAgentProgress['state'] {
+  switch (state) {
+    case 'start':
+      return agentId ? 'running' : 'queued';
+    case 'progress':
+      return 'running';
+    case 'done':
+      return 'done';
+    default:
+      return 'failed';
+  }
+}
+
+/**
+ * The per-agent progress a workflow's `task_progress` carries in its
+ * undocumented `workflow_progress`, or undefined when the event has none (an
+ * agent's or shell command's progress, or a workflow that has not spawned).
+ */
+function readWorkflowAgentsProgress(value: unknown): WorkflowAgentProgress[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const agents: WorkflowAgentProgress[] = [];
+  for (const raw of value) {
+    const entry = readObjectRecord(raw);
+    const index = readOptionalNumber(entry?.index);
+    if (!entry || entry.type !== 'workflow_agent' || index === undefined) {
+      continue;
+    }
+    const agentId = readOptionalString(entry.agentId);
+    agents.push({
+      index,
+      label: readOptionalString(entry.label),
+      phase: readOptionalString(entry.phaseTitle),
+      agentId,
+      model: readOptionalString(entry.model),
+      state: readWorkflowAgentState(entry.state, agentId),
+      startedAt: readOptionalNumber(entry.startedAt),
+      lastToolName: readOptionalString(entry.lastToolName),
+      lastToolSummary: readOptionalString(entry.lastToolSummary),
+      promptPreview: readOptionalString(entry.promptPreview),
+      tokens: readOptionalNumber(entry.tokens),
+      toolCalls: readOptionalNumber(entry.toolCalls),
+      durationMs: readOptionalNumber(entry.durationMs),
+      resultPreview: readOptionalString(entry.resultPreview),
+    });
+  }
+  return agents;
+}
+
+/**
+ * Maps one of the SDK's four background-task `system` events onto the
+ * `task_status` fields, or returns null for any other `system` subtype.
+ *
+ * `task_started` and `task_progress` name the tool call that launched the
+ * task; `task_updated` carries only the task id and a patch of what changed,
+ * so the client has to remember the id from the start event. The patch's
+ * `killed` is spelled `stopped` here, the word the task notification and the
+ * history reader already use for a task that ended without an outcome.
+ */
+function readTaskStatusEvent(raw: AnyRecord): ClaudeTaskStatusEvent | null {
+  const taskId = readOptionalString(raw.task_id);
+  if (!taskId) {
+    return null;
+  }
+
+  const shared = {
+    taskId,
+    toolUseId: readOptionalString(raw.tool_use_id),
+  };
+
+  switch (raw.subtype) {
+    case 'task_started':
+      return {
+        ...shared,
+        event: 'started',
+        taskType: readOptionalString(raw.task_type),
+        workflowName: readOptionalString(raw.workflow_name),
+        description: readOptionalString(raw.description),
+      };
+    case 'task_progress':
+      // A workflow's progress reports on each agent it spawned. Its
+      // task-level `last_tool_name` is the current agent's label rather than
+      // a tool — and nothing draws a task's, so it is not forwarded; the
+      // client reads the current agent from `agents`.
+      return {
+        ...shared,
+        event: 'progress',
+        description: readOptionalString(raw.description),
+        summary: readOptionalString(raw.summary),
+        usage: readTaskUsage(raw.usage),
+        agents: readWorkflowAgentsProgress(raw.workflow_progress),
+      };
+    case 'task_updated': {
+      const patched = readOptionalString(readObjectRecord(raw.patch)?.status);
+      return {
+        ...shared,
+        event: 'updated',
+        status: patched === 'killed' ? 'stopped' : patched,
+      };
+    }
+    case 'task_notification':
+      return {
+        ...shared,
+        event: 'notification',
+        status: readOptionalString(raw.status),
+        summary: readOptionalString(raw.summary),
+        usage: readTaskUsage(raw.usage),
+        outputFile: readOptionalString(raw.output_file),
+      };
+    default:
+      return null;
+  }
+}
+
+type ClaudeSessionsProviderOptions = {
+  /**
+   * When the CLI run behind a session started, or null when none is up.
+   * Injected so history tests can pin what a stopped run reads as without
+   * driving a real SDK run.
+   */
+  getLiveRunStartTime?: LiveRunStartTimeProbe;
+};
+
 export class ClaudeSessionsProvider implements IProviderSessions {
+  private readonly getLiveRunStartTime: LiveRunStartTimeProbe;
+
+  constructor({ getLiveRunStartTime = getClaudeSDKSessionStartTime }: ClaudeSessionsProviderOptions = {}) {
+    this.getLiveRunStartTime = getLiveRunStartTime;
+  }
+
   /**
    * Normalizes one Claude JSONL entry or live SDK stream event into the shared
    * message shape consumed by REST and WebSocket clients.
+   *
+   * Every user turn it produces is stamped with the transcript row's `uuid`,
+   * which is the anchor "edit this message" and "fork from here" address. It is
+   * applied here rather than at each `createNormalizedMessage` call because the
+   * row-shape branches below have several exits, and an anchor missing from one
+   * of them would show up as a message the user silently cannot edit.
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
+    const messages = this.normalizeMessageRows(rawMessage, sessionId);
+    // Show the text that was pasted, not the wrapper tags Claude Code stores it in.
+    for (const message of messages) {
+      if (message.role === 'user' && message.kind === 'text' && typeof message.content === 'string') {
+        message.content = unwrapPastedContent(message.content);
+      }
+    }
+    // A synthesized id is useless as an anchor — it changes on every read — so
+    // a row without its own uuid produces messages with no anchor at all.
+    const raw = readObjectRecord(rawMessage);
+    const anchorId = typeof raw?.uuid === 'string' && raw.uuid ? raw.uuid : null;
+    if (anchorId) {
+      for (const message of messages) {
+        if (message.role === 'user') {
+          message.transcriptAnchorId = anchorId;
+        }
+      }
+    }
+
+    return messages;
+  }
+
+  private normalizeMessageRows(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
     if (!raw) {
       return [];
@@ -319,6 +1276,86 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     const messages: NormalizedMessage[] = [];
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('claude');
+
+    // The live stream reports on background work — a launched workflow, agent
+    // or shell command — through four `system` subtypes that the transcript
+    // never records. They normalize to one `task_status` kind so the client
+    // can keep a workflow's card current while it runs; before this they fell
+    // through every branch below and were dropped.
+    if (raw.type === 'system') {
+      const taskStatus = readTaskStatusEvent(raw);
+      if (taskStatus) {
+        return [createNormalizedMessage({
+          id: baseId,
+          sessionId,
+          timestamp: ts,
+          provider: PROVIDER,
+          kind: 'task_status',
+          ...taskStatus,
+        })];
+      }
+    }
+
+    // A compaction is the most expensive thing a long session does without
+    // being asked, and neither record that describes it survives the branches
+    // below: `system` events normalize to nothing. Both become one ordinary
+    // assistant row, so a client that knows nothing of `compact` still reads
+    // the sentence, while one that does can draw it as a row of its own.
+    if (raw.type === 'system' && (raw.subtype === 'compact_boundary' || raw.subtype === 'status')) {
+      const compactionRow = (content: string, compact: CompactionInfo): NormalizedMessage[] => [
+        createNormalizedMessage({
+          id: `${baseId}_compact`,
+          sessionId,
+          timestamp: ts,
+          provider: PROVIDER,
+          kind: 'text',
+          role: 'assistant',
+          content,
+          compact,
+        }),
+      ];
+
+      if (raw.subtype === 'compact_boundary') {
+        // `compact_metadata` live, `compactMetadata` on disk.
+        const metadata = readObjectRecord(raw.compact_metadata ?? raw.compactMetadata) ?? {};
+        const trigger = metadata.trigger === 'manual' ? 'manual' : 'auto';
+        const preTokens = Number(metadata.pre_tokens ?? metadata.preTokens) || 0;
+        const postTokens = Number(metadata.post_tokens ?? metadata.postTokens) || 0;
+        const durationMs = Number(metadata.duration_ms ?? metadata.durationMs) || 0;
+        const said = ['Compacted', trigger];
+        if (preTokens) {
+          said.push(postTokens
+            ? `${formatTokenCount(preTokens)} → ${formatTokenCount(postTokens)} tokens`
+            : `${formatTokenCount(preTokens)} tokens`);
+        }
+        if (durationMs) {
+          said.push(formatDuration(durationMs));
+        }
+
+        return compactionRow(said.join(' · '), {
+          phase: 'done',
+          trigger,
+          preTokens,
+          postTokens,
+          durationMs,
+        });
+      }
+
+      // A status message reports several things, and compaction is the only one
+      // with anything to say: every other turn sends `requesting` or nothing.
+      if (raw.status === 'compacting') {
+        return compactionRow('Compacting conversation…', { phase: 'running' });
+      }
+      if (raw.compact_result === 'failed') {
+        const error = typeof raw.compact_error === 'string' ? raw.compact_error : null;
+        return compactionRow(`Compaction failed${error ? `: ${error}` : ''}`, {
+          phase: 'failed',
+          error,
+        });
+      }
+
+      return [];
+    }
 
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
       if (Array.isArray(raw.message.content)) {
@@ -347,8 +1384,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               toolId: part.tool_use_id,
               content: typeof part.content === 'string' ? part.content : JSON.stringify(part.content),
               isError: Boolean(part.is_error),
-              subagentTools: raw.subagentTools,
-              toolUseResult: raw.toolUseResult,
+              // `toolUseResult` on disk, `tool_use_result` on the live SDK
+              // stream. Reading only the transcript key meant a live agent
+              // launch reached the client with no `isAsync`, so the card could
+              // not tell the launch acknowledgement from an answer. The stream
+              // value is the tool's whole structured output — an Edit carries
+              // the file it edited — so it gets the same per-string cap the
+              // transcript path applies before anything is sent or buffered.
+              toolUseResult: truncateNestedOutput(raw.toolUseResult ?? raw.tool_use_result),
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
@@ -470,7 +1513,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
          */
         const localCommandStdout = extractTaggedContent(text, 'local-command-stdout');
         if (localCommandStdout !== null) {
-          const stdoutText = stripAnsiFormatting(localCommandStdout).trim();
+          const stdoutText = stripAnsiSequences(localCommandStdout).trim();
           if (stdoutText) {
             messages.push(createNormalizedMessage({
               id: baseId,
@@ -547,6 +1590,13 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     if (raw.message?.role === 'assistant' && raw.message?.content) {
+      // Which model actually answered. It rides on the assistant row itself in
+      // both the transcript and the live SDK stream, so history renders it
+      // retroactively with no migration. Only prose carries it: a tool call has
+      // no footer to show it in, and a locally-fabricated row (`<synthetic>`,
+      // e.g. the usage-limit notice) gets no label rather than a guessed one.
+      const answeredByModel = readAssistantModel(raw.message.model);
+
       if (Array.isArray(raw.message.content)) {
         let partIndex = 0;
         for (const part of raw.message.content) {
@@ -559,6 +1609,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               kind: 'text',
               role: 'assistant',
               content: part.text,
+              model: answeredByModel,
             }));
           } else if (part.type === 'tool_use') {
             messages.push(createNormalizedMessage({
@@ -592,12 +1643,124 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           kind: 'text',
           role: 'assistant',
           content: raw.message.content,
+          model: answeredByModel,
         }));
       }
       return messages;
     }
 
     return messages;
+  }
+
+  /**
+   * Finds the row to resume *through* so that `anchorId`'s turn is replaced.
+   *
+   * Walks up the `parentUuid` chain to the nearest assistant row, because the
+   * SDK's `resumeSessionAt` is documented against assistant message ids — the
+   * user row's immediate parent can be an attachment or an injected note.
+   * Returns `null` when nothing precedes the edited prompt, which means the
+   * conversation should start over rather than resume.
+   */
+  async resolveEditAnchor(
+    sessionId: string,
+    anchorId: string,
+  ): Promise<{ found: boolean; resumeThroughId: string | null }> {
+    const session = sessionsDb.getSessionById(sessionId);
+    const jsonlPath = session?.jsonl_path;
+    const providerSessionId = session?.provider_session_id;
+    if (!jsonlPath || !providerSessionId) {
+      return { found: false, resumeThroughId: null };
+    }
+
+    const rows = await readTranscriptRows(jsonlPath, providerSessionId);
+    const byUuid = new Map<string, AnyRecord>();
+    for (const row of rows) {
+      if (typeof row.uuid === 'string') {
+        byUuid.set(row.uuid, row);
+      }
+    }
+
+    const target = byUuid.get(anchorId);
+    if (!target) {
+      return { found: false, resumeThroughId: null };
+    }
+
+    const visited = new Set<string>([anchorId]);
+    let parentUuid: unknown = target.parentUuid;
+    while (typeof parentUuid === 'string' && !visited.has(parentUuid)) {
+      visited.add(parentUuid);
+      const parent = byUuid.get(parentUuid);
+      if (!parent) {
+        break;
+      }
+      if (parent.type === 'assistant') {
+        return { found: true, resumeThroughId: parentUuid };
+      }
+      parentUuid = parent.parentUuid;
+    }
+
+    return { found: true, resumeThroughId: null };
+  }
+
+  /**
+   * Reads one workflow agent's timeline from the transcript the run wrote for
+   * it, under `<projectDir>/<providerSessionId>/subagents/workflows/<runId>/`
+   * — the only place it exists, since the SDK never streams a workflow agent's
+   * rows to the parent session.
+   *
+   * The journal beside it settles the agent when it has; short of that the
+   * agent is running only while the process that spawned it is — the same
+   * rule history applies to a launch row, keyed here on the agent's first row
+   * rather than the launch's.
+   */
+  async readWorkflowAgentActivity(
+    sessionId: string,
+    runId: string,
+    agentId: string,
+  ): Promise<WorkflowAgentActivity | null> {
+    const session = sessionsDb.getSessionById(sessionId);
+    const jsonlPath = session?.jsonl_path;
+    const providerSessionId = session?.provider_session_id;
+    if (!jsonlPath || !providerSessionId) {
+      return null;
+    }
+
+    const transcriptDir = path.join(path.dirname(jsonlPath), providerSessionId, 'subagents', 'workflows', runId);
+    const transcriptPath = path.join(transcriptDir, `agent-${agentId}.jsonl`);
+    try {
+      await fsp.access(transcriptPath);
+    } catch {
+      return null;
+    }
+
+    const [transcript, journalAgents] = await Promise.all([
+      readClaudeSubagentTranscript(transcriptPath),
+      readWorkflowJournal(transcriptDir),
+    ]);
+    const journalAgent = journalAgents.find((agent) => agent.id === agentId);
+
+    let status: WorkflowAgentActivity['agent']['status'];
+    if (journalAgent && journalAgent.status !== 'running') {
+      status = journalAgent.status;
+    } else {
+      const liveRunStartedAt = this.getLiveRunStartTime(sessionId) ?? this.getLiveRunStartTime(providerSessionId);
+      status = liveRunStartedAt !== null && Date.parse(transcript.startedAt ?? '') >= liveRunStartedAt
+        ? 'running'
+        : 'stopped';
+    }
+
+    return {
+      agent: {
+        id: agentId,
+        label: journalAgent?.label,
+        model: transcript.model,
+        status,
+      },
+      activity: transcript.activity
+        .slice(-MAX_TRANSMITTED_SUBAGENT_ACTIVITIES)
+        .map(truncateSubagentActivity),
+      activityCount: transcript.activity.length,
+    };
   }
 
   /**
@@ -615,7 +1778,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     try {
       // Load full history first so `total` reflects frontend-normalized messages,
       // not raw JSONL records.
-      result = await getSessionMessages(sessionId, providerSessionId, null, 0);
+      result = await getSessionMessages(sessionId, providerSessionId, null, 0, this.getLiveRunStartTime);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[ClaudeProvider] Failed to load session ${sessionId}:`, message);
@@ -633,6 +1796,8 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               content: part.content,
               isError: Boolean(part.is_error),
               subagentTools: raw.subagentTools,
+              subagent: raw.subagent,
+              workflow: raw.workflow,
               toolUseResult: raw.toolUseResult,
             });
           }
@@ -660,18 +1825,18 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           toolUseResult: toolResult.toolUseResult,
         };
         msg.subagentTools = toolResult.subagentTools;
+        msg.subagent = toolResult.subagent;
+        msg.workflow = toolResult.workflow;
       }
     }
 
-    let total = 0;
-    for (const msg of normalized) {
-      if (msg.kind !== 'tool_result') {
-        total += 1;
-      }
-    }
+    // Everything the transcript draws, and nothing else — so a page of N rows
+    // is N rows the user sees, and `total` counts the same thing.
+    const transcript = prepareTranscriptMessages(normalized);
+    const total = transcript.length;
     const normalizedOffset = Math.max(0, offset);
     const normalizedLimit = limit === null ? null : Math.max(0, limit);
-    const { page, hasMore } = sliceTailPage(normalized, normalizedLimit, normalizedOffset);
+    const { page, hasMore } = sliceTailPage(transcript, normalizedLimit, normalizedOffset);
 
     return {
       messages: page,
@@ -679,6 +1844,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       hasMore,
       offset: normalizedOffset,
       limit: normalizedLimit,
+      // Carried on every page, like the Codex and OpenCode readers do, so the
+      // composer's counter tracks the conversation instead of being frozen at
+      // whatever it was when the session was opened.
+      tokenUsage: summarizeClaudeTokenUsage(
+        rawMessages,
+        undefined,
+        getReportedClaudeContextWindow(providerSessionId),
+      ),
     };
   }
 }

@@ -28,7 +28,6 @@ export function createCliApplication(): CliApplication {
     bugsUrl: packageMetadataJson.bugs?.url,
   };
   const fileSystem = {
-    readTextFile: (filePath: string) => fs.readFileSync(filePath, 'utf8'),
     pathExists: (filePath: string) => fs.existsSync(filePath),
     getFileStats: (filePath: string) => {
       const stats = fs.statSync(filePath);

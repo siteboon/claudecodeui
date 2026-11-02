@@ -55,7 +55,10 @@ test('Antigravity auth finds agy in npm global prefix bin even when PATH omits i
         : `.COM;.EXE;.BAT;.CMD${previousPathExt ? `;${previousPathExt}` : ''}`;
     }
 
-    const status = await new AntigravityProviderAuth().getStatus();
+    const auth = new AntigravityProviderAuth();
+    assert.deepEqual(auth.checkInstalled(), { installed: true, exitCode: 0, version: '1.2.3' });
+    const status = await auth.getStatus();
+    assert.equal(status.installedVersion, '1.2.3');
 
     assert.equal(status.installed, true);
     assert.equal(status.authenticated, true);

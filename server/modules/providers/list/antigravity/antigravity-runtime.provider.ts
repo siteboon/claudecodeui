@@ -18,6 +18,11 @@ import {
   flattenPromptForWindowsShell,
 } from '@/shared/utils.js';
 
+// The legacy notification service infers optional ids as null from JavaScript
+// defaults; its public payload accepts provider-native and app session ids.
+const reportRunStopped = notifyRunStopped as (input: AnyRecord) => void;
+const reportRunFailed = notifyRunFailed as (input: AnyRecord) => void;
+
 type AntigravityProcess = ReturnType<typeof crossSpawn> & {
   aborted?: boolean;
   sessionId?: string;
@@ -167,7 +172,7 @@ async function runAntigravity(
 
     terminalNotificationSent = true;
     if (outcome.aborted || (outcome.code === 0 && !outcome.error)) {
-      notifyRunStopped({
+      reportRunStopped({
         userId: writer.userId ?? null,
         provider: 'antigravity',
         sessionId: fallbackSessionId,
@@ -177,7 +182,7 @@ async function runAntigravity(
       return;
     }
 
-    notifyRunFailed({
+    reportRunFailed({
       userId: writer.userId ?? null,
       provider: 'antigravity',
       sessionId: fallbackSessionId,

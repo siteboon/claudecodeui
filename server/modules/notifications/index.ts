@@ -9,6 +9,8 @@ export {
   notifyRunFailed,
   // Used by provider runtimes to report stopped or completed agent runs.
   notifyRunStopped,
+  // Used by provider runtimes to report background work that finished after its turn ended.
+  notifyBackgroundWorkCompleted,
 } from '@/modules/notifications/services/notification-orchestrator.service.js';
 export {
   registerDesktopNotificationClient,

@@ -1,22 +1,26 @@
 import type { IProviderAuth } from '@/shared/interfaces.js';
-import type { ProviderAuthStatus } from '@/shared/types.js';
-import { runProviderCliCommand } from '@/shared/utils.js';
+import type { CliVersionProbe, ProviderAuthStatus } from '@/shared/types.js';
+import { buildProviderCliEnv, parseCliVersion, probeCliVersion, runProviderCliCommand } from '@/shared/utils.js';
 
 /** Antigravity installation and authentication probe used by provider routes. */
 export class AntigravityProviderAuth implements IProviderAuth {
-  /** Checks whether the AGY executable can be invoked without blocking Node.js. */
-  private async checkInstalled(): Promise<boolean> {
-    const result = await runProviderCliCommand('agy', ['--version'], { timeoutMs: 5_000 });
-    return !result.error && result.exitCode === 0;
+  /** Supplies the explicit CLI-version endpoint with the same executable path as AGY chats. */
+  checkInstalled(): CliVersionProbe {
+    return probeCliVersion('agy', ['--version'], { env: buildProviderCliEnv() });
   }
 
   /** Reports installation and login state through lightweight AGY probes. */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = await this.checkInstalled();
+    // Keep routine auth refresh non-blocking; only the explicit CLI endpoint
+    // uses the synchronous checkInstalled contract shared by provider adapters.
+    const versionResult = await runProviderCliCommand('agy', ['--version'], { timeoutMs: 5_000 });
+    const installed = !versionResult.error && versionResult.exitCode === 0;
+    const installedVersion = installed ? parseCliVersion(versionResult.stdout) : null;
     if (!installed) {
       return {
         installed: false,
         provider: 'antigravity',
+        installedVersion,
         authenticated: false,
         email: null,
         method: null,
@@ -30,6 +34,7 @@ export class AntigravityProviderAuth implements IProviderAuth {
     return {
       installed,
       provider: 'antigravity',
+      installedVersion,
       authenticated,
       email: authenticated ? 'Authenticated' : null,
       method: authenticated ? 'agy' : null,
