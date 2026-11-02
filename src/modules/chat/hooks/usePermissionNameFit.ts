@@ -7,26 +7,24 @@ import type { RefObject } from 'react';
  */
 const FIT_EPSILON = 0.5;
 
-/** ComposerPermissionMenu's trigger without its name: the 32px (`w-8`) icon button. */
-const ICON_ONLY_WIDTH = 32;
-
 /**
- * Room a hidden name needs to spare before it is shown. That is the clear
- * button the composer adds to its left-hand tools once something is typed
- * (32px plus a 4px gap), so the first keystroke never takes back a name that
- * was just shown.
+ * Room a hidden name needs to spare before it is shown, in rem. That is the
+ * clear button the composer adds to its left-hand tools once something is typed
+ * (`w-8` plus the tools' `gap-1`), so the first keystroke never takes back a
+ * name that was just shown. In rem because the button grows with the browser's
+ * font size.
  */
-const SHOW_MARGIN = 36;
+const SHOW_MARGIN_REM = 2.25;
 
 type PermissionNameFitInput = {
   /** Width the composer footer lays its tools and controls out in (its content box). */
   room: number;
   /** Width of the footer's left-hand tools. */
   toolsWidth: number;
-  /** Width of the right-hand controls (schedule, model, permission, send) with the trigger as an icon. */
+  /** Width of the right-hand controls (schedule, model, send and their gaps) without the trigger. */
   controlsWidth: number;
-  /** How much wider the trigger is with the name shown. */
-  nameWidth: number;
+  /** Width of the trigger with the name shown. */
+  namedTriggerWidth: number;
   /** Whether the name may move the controls onto a row of their own. */
   mayWrap: boolean;
   /** Room to spare on top of the name, for a name that is not shown yet. */
@@ -44,11 +42,11 @@ function fitsPermissionName({
   room,
   toolsWidth,
   controlsWidth,
-  nameWidth,
+  namedTriggerWidth,
   mayWrap,
   margin,
 }: PermissionNameFitInput): boolean {
-  const namedControlsWidth = controlsWidth + nameWidth;
+  const namedControlsWidth = controlsWidth + namedTriggerWidth;
   if (namedControlsWidth > room + FIT_EPSILON) {
     return false;
   }
@@ -65,6 +63,10 @@ const findFooterParts = (trigger: HTMLElement | null) => {
   const controls = Array.from(footer.children).find((child) => child !== tools && child.contains(trigger));
   return tools && controls ? { trigger, footer, tools, controls } : null;
 };
+
+/** The root font size in px, which the rem-based margin scales with. */
+const getRootFontSize = (element: HTMLElement) =>
+  parseFloat(getComputedStyle(element.ownerDocument.documentElement).fontSize) || 16;
 
 type NameFit = { name: string; isShown: boolean };
 
@@ -117,10 +119,10 @@ export function usePermissionNameFit(
     const next = fitsPermissionName({
       room,
       toolsWidth: tools.getBoundingClientRect().width,
-      controlsWidth: controls.getBoundingClientRect().width - triggerWidth + ICON_ONLY_WIDTH,
-      nameWidth: namedWidth - ICON_ONLY_WIDTH,
+      controlsWidth: controls.getBoundingClientRect().width - triggerWidth,
+      namedTriggerWidth: namedWidth,
       mayWrap,
-      margin: isDecided && isShown ? 0 : SHOW_MARGIN,
+      margin: isDecided && isShown ? 0 : SHOW_MARGIN_REM * getRootFontSize(trigger),
     });
     setFit((current) => {
       // A hidden name is judged by the width it had when it was last shown,

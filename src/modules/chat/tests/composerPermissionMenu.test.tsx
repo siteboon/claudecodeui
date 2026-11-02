@@ -221,6 +221,7 @@ const renderInFooter = (permissionMode: PermissionMode) => {
 afterEach(() => {
   vi.unstubAllGlobals();
   liveObservers.clear();
+  document.documentElement.style.fontSize = '';
 });
 
 test('the mode is named where the composer has room, and only the icon is left where it does not', () => {
@@ -284,7 +285,7 @@ test('typing the first character neither takes the name away nor brings it in', 
   assert.equal(tight.getByRole('button').textContent, '');
 });
 
-test('a hidden name needs exactly the clear button\'s width to spare', () => {
+test('a hidden name needs exactly the clear button\'s width to spare, which grows with the font size', () => {
   // Nothing typed: 174px of tools, so the named toolbar is 174 + 241 + 112
   // (Default Mode) = 527px wide. The clear button is 2.25rem, 36px at the
   // browser's default 16px font size.
@@ -299,6 +300,12 @@ test('a hidden name needs exactly the clear button\'s width to spare', () => {
 
   assert.equal(nameAt(36), 'Default Mode');
   assert.equal(nameAt(35), '');
+
+  // A 20px font size makes the clear button 45px wide. Only the font size
+  // changes here, so the margin is all that moves.
+  document.documentElement.style.fontSize = '20px';
+  assert.equal(nameAt(44), '');
+  assert.equal(nameAt(45), 'Default Mode');
 });
 
 test('a wider toolbar or model menu takes the name away, and it comes back when they narrow', () => {
