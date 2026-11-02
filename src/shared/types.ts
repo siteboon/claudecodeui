@@ -455,12 +455,13 @@ export type PendingPermissionRequest = {
   receivedAt?: Date;
 };
 
-/** One question asked by the AskUserQuestion tool, with its answer options and whether more than one option may be selected. */
+/** One question asked by the AskUserQuestion tool, with its answer options, whether more than one option may be selected, and whether a typed answer is offered (`custom: false` hides it; OpenCode's questions can set it). */
 export type Question = {
   question: string;
   header?: string;
   options: QuestionOption[];
   multiSelect?: boolean;
+  custom?: boolean;
 };
 
 /** Options for a programmatic session navigation, currently only whether the route change should replace the current history entry instead of pushing a new one. */
@@ -887,9 +888,10 @@ export type TodoItem = {
 /** Display state of a tool call — 'running', 'completed', 'error' or 'denied' — used to choose the status badge and styling shown beside it in the transcript. */
 export type ToolStatus = 'running' | 'completed' | 'error' | 'denied';
 
-/** Props contract that every interactive permission panel implements, giving the panel the pending request and the callback it calls to allow or deny that request; use it when registering a panel in the permission panel registry. */
+/** Props contract that every interactive permission panel implements, giving the panel the pending request, the name of the agent asking (for its header) and the callback it calls to allow or deny that request; use it when registering a panel in the permission panel registry. */
 export type PermissionPanelProps = {
   request: PendingPermissionRequest;
+  agentLabel?: string;
   onDecision: (
     requestIds: string | string[],
     decision: { allow?: boolean; message?: string; updatedInput?: unknown },

@@ -80,6 +80,12 @@
   "json": {
     "response": "JSON Yanıtı"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} girdinizi bekliyor",
+    "dismiss": "Reddet",
+    "alwaysAllow": "Her zaman izin ver",
+    "alwaysAllowCovers": "\"Her zaman izin ver\" kapsamı"
+  },
   "permissions": {
     "grant": "{{tool}} için izin ver",
     "added": "İzin eklendi",
