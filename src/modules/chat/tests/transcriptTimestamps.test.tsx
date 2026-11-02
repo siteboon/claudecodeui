@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRef } from 'react';
 import type { ComponentProps } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, it, vi } from 'vitest';
 
 import { i18n } from '@/modules/i18n';
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
@@ -28,6 +28,26 @@ import type * as ChatExportModule from '@/modules/chat/utils/chatExport';
  * happened, as do collapsed tool groups, subagent steps and live workflow
  * agents. With it off the transcript is exactly what it was.
  */
+
+/**
+ * The clock a browser writes times on by default (the one the time under a
+ * user turn uses) is read once, and Node's default follows the machine's LANG.
+ * Pinned to a US-English browser before anything reads it, so these
+ * expectations hold on any machine.
+ */
+const { restoreDefaultClock } = vi.hoisted(() => {
+  const NativeDateTimeFormat = Intl.DateTimeFormat;
+  Intl.DateTimeFormat = new Proxy(NativeDateTimeFormat, {
+    construct: (target, [locales, options]) => new target(locales ?? 'en-US', options),
+    apply: (target, _thisArg, [locales, options]) => target(locales ?? 'en-US', options),
+  });
+  return {
+    restoreDefaultClock: () => {
+      Intl.DateTimeFormat = NativeDateTimeFormat;
+    },
+  };
+});
+afterAll(restoreDefaultClock);
 
 /** Counts row re-renders: Markdown is memoised, so this pass-through runs once per render of the row around it. */
 const markdownRenders = { count: 0 };
@@ -113,7 +133,7 @@ const stacksTimeBelowSm = (header: HTMLElement) => {
     && time.className.split(' ').includes('self-end');
 };
 
-/** Mocks the browser's own locale and its language list together, as a real browser reports them. */
+/** Mocks the browser's preferred languages; its default clock is pinned to en-US above. */
 const mockBrowserLocale = (language: string, languages: string[] = [language]) => {
   vi.spyOn(navigator, 'language', 'get').mockReturnValue(language);
   vi.spyOn(navigator, 'languages', 'get').mockReturnValue(languages);
@@ -312,10 +332,10 @@ describe('a transcript row with timestamps on', () => {
     assert.deepEqual(rows.map((row) => row.timestampEstimated), [true, true, undefined]);
   });
 
-  it('writes the time the way the app language does, refined by the browser region', async () => {
+  it('writes the date the way the app language does, refined by the browser region, on the browser\'s default clock', async () => {
     mockBrowserLocale('en-GB', ['en-GB', 'en']);
     const british = renderRow({ message: { ...LATER_REPLY, timestamp: at(19, 14, 32, 5) }, showTimestamps: true });
-    assert.deepEqual(timeLabels(british.container), ['19 Oct, 14:32:05']);
+    assert.deepEqual(timeLabels(british.container), ['19 Oct, 2:32:05 pm']);
     british.unmount();
 
     await act(async () => {
@@ -323,7 +343,7 @@ describe('a transcript row with timestamps on', () => {
     });
     mockBrowserLocale('de-DE', ['de-DE', 'de']);
     const german = renderRow({ message: { ...LATER_REPLY, timestamp: at(19, 14, 32, 5) }, showTimestamps: true });
-    assert.deepEqual(timeLabels(german.container), ['19. Okt., 14:32:05']);
+    assert.deepEqual(timeLabels(german.container), ['19. Okt., 2:32:05 PM']);
     german.unmount();
 
     // A language the app pins to a region keeps that region's own clock.
@@ -335,23 +355,25 @@ describe('a transcript row with timestamps on', () => {
     assert.deepEqual(timeLabels(brazilian.container), ['14:32:05']);
   });
 
-  it('keeps the browser\'s 24-hour clock while the app language is the default English', () => {
-    // A German browser that never picked an app language: the time under its
-    // user turns has always read 14:32:05, and switching stamps on keeps it so.
+  it('takes the 12/24-hour clock from the browser\'s default, not from its first preferred language', () => {
+    // A browser that writes times the US way but lists German first: the time
+    // under its user turns reads 2:32:05 PM, and switching stamps on keeps it so.
     mockBrowserLocale('de-DE', ['de-DE', 'de', 'en-US', 'en']);
     const { container } = renderRow({ message: LATER_REPLY, showTimestamps: true });
-    assert.deepEqual(timeLabels(container), ['14:32:05']);
+    const defaultTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: 'numeric', second: 'numeric' });
+    assert.deepEqual(timeLabels(container), ['2:32:05 PM']);
+    assert.deepEqual(timeLabels(container), [plainSpaces(defaultTime.format(new Date(LATER_REPLY.timestamp)))]);
   });
 
   it('rewrites a mounted stamp when the app language changes', async () => {
     mockBrowserLocale('en-GB', ['en-GB', 'en']);
     const { container } = renderRow({ message: { ...LATER_REPLY, timestamp: at(19, 14, 32, 5) }, showTimestamps: true });
-    assert.deepEqual(timeLabels(container), ['19 Oct, 14:32:05']);
+    assert.deepEqual(timeLabels(container), ['19 Oct, 2:32:05 pm']);
 
     await act(async () => {
       await i18n.changeLanguage('de');
     });
-    assert.deepEqual(timeLabels(container), ['19. Okt., 14:32:05']);
+    assert.deepEqual(timeLabels(container), ['19. Okt., 2:32:05 PM']);
   });
 });
 

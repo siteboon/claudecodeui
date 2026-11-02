@@ -29,12 +29,20 @@ type TimestampFormatters = {
 type RangeCapableFormat = Intl.DateTimeFormat & { formatRange?: (start: Date, end: Date) => string };
 
 const formattersByLocale = new Map<string, TimestampFormatters>();
-const hour12ByBrowserLocale = new Map<string, boolean | undefined>();
+/**
+ * The clock the browser writes times on by default, once read: asking means
+ * building a formatter, which costs far more than formatting with one, and
+ * the default does not change while the page is open.
+ */
+let browserDefaultClock: { hour12: boolean | undefined } | undefined;
 
 function createFormatters(locale: string | undefined, hour12: boolean | undefined): TimestampFormatters {
   // Seconds are kept: an agent's tool calls are often seconds apart, and
-  // without them a whole run of rows reads as the same minute.
-  const time: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12 };
+  // without them a whole run of rows reads as the same minute. `numeric`
+  // throughout, as `toLocaleTimeString()` asks for: '2-digit' minutes make
+  // ICU drop the hour's leading zero in most 24-hour locales, so a German
+  // stamp would read 9:05:07 beside the user turn's 09:05:07.
+  const time: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: 'numeric', second: 'numeric', hour12 };
   return {
     time: new Intl.DateTimeFormat(locale, time),
     dayAndTime: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', ...time }),
@@ -79,26 +87,27 @@ function resolveTimestampLocale(appLanguage: string | undefined): string | undef
 /**
  * Whether times are written on a 12-hour clock, or undefined to leave it to
  * the locale. A region-pinned app language decides for itself. Otherwise the
- * browser's own locale does, as it does for every other time the app prints
- * (the time under a user turn, schedules): the app language is `en` until
- * someone picks another, and `en` alone would turn a German reader's 17:00
- * into 5:00 PM the moment these stamps are switched on.
+ * browser's default does: the one `toLocaleTimeString()` writes the time
+ * under a user turn with, so switching these stamps on never changes how that
+ * time reads. The app language is `en` until someone picks another, and `en`
+ * alone would turn a German reader's 17:00 into 5:00 PM. The default is not
+ * `navigator.language`: a browser can list English first among its preferred
+ * languages and still write times the German way, or the other way round.
  */
 function resolveHour12(appLanguage: string | undefined): boolean | undefined {
-  const browserLocale = typeof navigator === 'undefined' ? undefined : navigator.language;
-  if (!browserLocale || appLanguage?.includes('-')) {
+  if (appLanguage?.includes('-')) {
     return undefined;
   }
-  if (!hour12ByBrowserLocale.has(browserLocale)) {
+  if (!browserDefaultClock) {
     let hour12: boolean | undefined;
     try {
-      hour12 = new Intl.DateTimeFormat(browserLocale, { hour: 'numeric' }).resolvedOptions().hour12;
+      hour12 = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hour12;
     } catch {
       hour12 = undefined;
     }
-    hour12ByBrowserLocale.set(browserLocale, hour12);
+    browserDefaultClock = { hour12 };
   }
-  return hour12ByBrowserLocale.get(browserLocale);
+  return browserDefaultClock.hour12;
 }
 
 /** One formatter's label for a single time or, when the two differ, for the span between them. */

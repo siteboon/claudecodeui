@@ -14,13 +14,21 @@ import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
  * they were created in), and in a file of its own so no other test's
  * formatters are built in it.
  */
-const { originalTimeZone } = vi.hoisted(() => {
+const { originalTimeZone, NativeDateTimeFormat } = vi.hoisted(() => {
   const originalTimeZone = process.env.TZ;
   process.env.TZ = 'Pacific/Auckland';
-  return { originalTimeZone };
+  // The browser's default clock is read once, and Node's follows the
+  // machine's LANG: pinned to a US-English browser before anything reads it.
+  const NativeDateTimeFormat = Intl.DateTimeFormat;
+  Intl.DateTimeFormat = new Proxy(NativeDateTimeFormat, {
+    construct: (target, [locales, options]) => new target(locales ?? 'en-US', options),
+    apply: (target, _thisArg, [locales, options]) => target(locales ?? 'en-US', options),
+  });
+  return { originalTimeZone, NativeDateTimeFormat };
 });
 
 afterAll(() => {
+  Intl.DateTimeFormat = NativeDateTimeFormat;
   if (originalTimeZone === undefined) {
     delete process.env.TZ;
   } else {
