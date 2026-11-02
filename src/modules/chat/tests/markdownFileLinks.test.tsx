@@ -72,5 +72,8 @@ test('external URLs keep their browser navigation and encoding', () => {
   const link = getByRole('link');
   assert.equal(link.getAttribute('href'), href);
   assert.equal(link.getAttribute('target'), '_blank');
+  const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+  assert.equal(fireEvent(link, click), true);
   assert.equal(openFileInEditor.mock.calls.length, 0);
+  assert.equal(openDirectory.mock.calls.length, 0);
 });
