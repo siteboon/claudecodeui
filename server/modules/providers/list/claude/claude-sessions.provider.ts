@@ -478,6 +478,9 @@ function replaceLaunchToolResultContent(message: AnyRecord, replacement: string)
  */
 async function readTranscriptRows(jsonlPath: string, providerSessionId: string): Promise<AnyRecord[]> {
   const rows: AnyRecord[] = [];
+  // A session's own transcript also holds the history a fork copied from its
+  // parent, under the parent's id; the copied rows belong to this conversation.
+  const isOwnTranscript = path.basename(jsonlPath, '.jsonl') === providerSessionId;
   const fileStream = fs.createReadStream(jsonlPath);
   const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
@@ -487,7 +490,7 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
     }
     try {
       const entry = JSON.parse(line) as AnyRecord;
-      if (entry.sessionId === providerSessionId && !isClaudeNonTurnMessageRow(entry)) {
+      if ((isOwnTranscript || entry.sessionId === providerSessionId) && !isClaudeNonTurnMessageRow(entry)) {
         rows.push(entry);
       }
     } catch {
