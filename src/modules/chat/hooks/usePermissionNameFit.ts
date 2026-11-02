@@ -12,7 +12,8 @@ const FIT_EPSILON = 0.5;
  * clear button the composer adds to its left-hand tools once something is typed
  * (`w-8` plus the tools' `gap-1`), so the first keystroke never takes back a
  * name that was just shown. In rem because the button grows with the browser's
- * font size.
+ * font size. The button exists only at `sm` and up; below that the margin is
+ * kept anyway and only keeps a name hidden a little longer.
  */
 const SHOW_MARGIN_REM = 2.25;
 
