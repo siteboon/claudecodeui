@@ -88,89 +88,143 @@ test('every mode leads the accessible name, a mode with no translation by its id
 
 // jsdom has no layout, so the footer tests below give the composer the widths
 // the real app measures for Claude with text typed: 210px of left-hand tools,
-// and 273px of controls (schedule, model menu, this trigger, send) with the
-// trigger as a 32px icon. A named trigger is 40px plus 6px per character,
-// capped at 192px like the real one.
-const layout = { room: 0, tools: 210 };
-const CONTROLS_BESIDE_TRIGGER = 241;
+// and 241px of controls beside the trigger (schedule, model menu, send and the
+// gaps between them). A named trigger is 40px plus 6px per character, capped
+// like the real one: 192px, and 160px below `sm`. The footer has the real one's
+// 12px padding on each side, which the room does not include.
+const FOOTER_PADDING = 12;
+
+type ComposerLayout = { room: number; tools: number; controls: number; cap: number };
+
+const layout: ComposerLayout = { room: 0, tools: 210, controls: 241, cap: 192 };
 
 const triggerWidth = (trigger: Element | null) => {
   const name = trigger?.querySelector('span')?.textContent;
-  return name ? Math.min(192, 40 + 6 * name.length) : 32;
+  return name ? Math.min(layout.cap, 40 + 6 * name.length) : 32;
 };
 
 const widthOf = (element: Element) => {
+  if (element.matches('[data-slot="prompt-input-footer"]')) {
+    return layout.room + 2 * FOOTER_PADDING;
+  }
   if (element.matches('[data-slot="prompt-input-tools"]')) {
     return layout.tools;
   }
   if (element.matches('[data-testid="composer-controls"]')) {
-    return CONTROLS_BESIDE_TRIGGER + triggerWidth(element.querySelector('button'));
+    return layout.controls + triggerWidth(element.querySelector('button'));
   }
   return element.matches('button[aria-haspopup="menu"]') ? triggerWidth(element) : 0;
 };
 
-const resizeObservers = new Set<{ callback: () => void }>();
+/**
+ * Stands in for the browser's ResizeObserver: an observer hears about the
+ * elements it observes, once when it starts and then only when one of them
+ * changes width, and nothing at all once it is disconnected.
+ */
+class FakeResizeObserver {
+  callback: () => void;
 
-const layOutComposer = (room: number, tools = 210) => {
-  layout.room = room;
-  layout.tools = tools;
+  reportedWidths = new Map<Element, number>();
+
+  constructor(callback: () => void) {
+    this.callback = callback;
+  }
+
+  observe(target: Element) {
+    this.reportedWidths.set(target, Number.NaN);
+    liveObservers.add(this);
+  }
+
+  unobserve(target: Element) {
+    this.reportedWidths.delete(target);
+  }
+
+  disconnect() {
+    this.reportedWidths.clear();
+    liveObservers.delete(this);
+  }
+
+  /** Calls back if an observed element's width changed since it was last reported. */
+  deliver() {
+    let hasChanged = false;
+    for (const [target, reported] of this.reportedWidths) {
+      const width = widthOf(target);
+      if (width !== reported) {
+        this.reportedWidths.set(target, width);
+        hasChanged = true;
+      }
+    }
+    if (hasChanged) {
+      this.callback();
+    }
+    return hasChanged;
+  }
+}
+
+const liveObservers = new Set<FakeResizeObserver>();
+
+/** Lets frames pass, each one rendering and then delivering resizes, until the composer stops changing. */
+const settle = () => {
+  for (let frame = 0; frame < 10; frame += 1) {
+    let hasDelivered = false;
+    act(() => {
+      for (const observer of [...liveObservers]) {
+        hasDelivered = observer.deliver() || hasDelivered;
+      }
+    });
+    if (!hasDelivered) {
+      return;
+    }
+  }
+  throw new Error('the composer kept changing width');
+};
+
+const layOutComposer = (changes: Partial<ComposerLayout>) => {
+  Object.assign(layout, { tools: 210, controls: 241, cap: 192 }, changes);
   vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
-    return this.matches('[data-slot="prompt-input-footer"]') ? layout.room : 0;
+    return this.matches('[data-slot="prompt-input-footer"]') ? widthOf(this) : 0;
   });
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     const width = widthOf(this);
     return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: 32, width, height: 32, toJSON: () => ({}) };
   });
-  vi.stubGlobal('ResizeObserver', class {
-    callback: () => void;
-
-    constructor(callback: () => void) {
-      this.callback = callback;
-    }
-
-    observe() {
-      resizeObservers.add(this);
-    }
-
-    disconnect() {
-      resizeObservers.delete(this);
-    }
-  });
+  vi.stubGlobal('ResizeObserver', FakeResizeObserver);
 };
 
-/** Changes the composer's widths the way a resize or a keystroke would, and lets the observers see it. */
-const resizeComposer = (changes: Partial<typeof layout>) => {
-  act(() => {
-    Object.assign(layout, changes);
-    for (const observer of [...resizeObservers]) {
-      observer.callback();
-    }
-  });
+/** Changes the composer's widths the way a resize, a keystroke or a model change would. */
+const resizeComposer = (changes: Partial<ComposerLayout>) => {
+  Object.assign(layout, changes);
+  settle();
 };
 
-const renderInFooter = (permissionMode: PermissionMode) =>
-  render(
-    <PromptInputFooter>
-      <PromptInputTools />
-      <div data-testid="composer-controls">
-        <ComposerPermissionMenu
-          permissionMode={permissionMode}
-          permissionModes={[...MODES]}
-          onSelectPermissionMode={() => {}}
-          providerLabel="Claude"
-        />
-      </div>
-    </PromptInputFooter>,
-  );
+const composerFooter = (permissionMode: PermissionMode) => (
+  <PromptInputFooter style={{ paddingLeft: FOOTER_PADDING, paddingRight: FOOTER_PADDING }}>
+    <PromptInputTools />
+    <div data-testid="composer-controls">
+      <ComposerPermissionMenu
+        permissionMode={permissionMode}
+        permissionModes={[...MODES]}
+        onSelectPermissionMode={() => {}}
+        providerLabel="Claude"
+      />
+    </div>
+  </PromptInputFooter>
+);
+
+const renderInFooter = (permissionMode: PermissionMode) => {
+  const view = render(composerFooter(permissionMode));
+  settle();
+  return view;
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  resizeObservers.clear();
+  liveObservers.clear();
 });
 
 test('the mode is named where the composer has room, and only the icon is left where it does not', () => {
   // 678px is the composer at 1024px with the sidebar open.
-  layOutComposer(678);
+  layOutComposer({ room: 678 });
   const { getByRole } = renderInFooter('default');
   const trigger = getByRole('button', { name: /^Default Mode: / });
   assert.equal(trigger.textContent, 'Default Mode');
@@ -193,7 +247,7 @@ test('the mode is named where the composer has room, and only the icon is left w
 test('plan mode keeps its name wherever it fits inside the composer', () => {
   // Docked at 1366px (416px): the controls already need a row of their own,
   // and with the name they still fit inside it. Default mode stays an icon.
-  layOutComposer(416);
+  layOutComposer({ room: 416 });
   const plan = renderInFooter('plan');
   assert.equal(plan.getByRole('button').textContent, 'Plan Mode');
   plan.unmount();
@@ -203,8 +257,9 @@ test('plan mode keeps its name wherever it fits inside the composer', () => {
   other.unmount();
 
   // Docked at 1280px (330px) even Plan Mode's name would push the send button
-  // out, so plan mode falls back to the icon too.
-  layOutComposer(330);
+  // out by 5px, so plan mode falls back to the icon too. The footer's padding
+  // is not room: counting it would leave the name on.
+  layOutComposer({ room: 330 });
   const narrow = renderInFooter('plan');
   assert.equal(narrow.getByRole('button').textContent, '');
   assert.ok(narrow.getByRole('button', { name: /^Plan Mode: / }));
@@ -214,18 +269,69 @@ test('typing the first character neither takes the name away nor brings it in', 
   // The clear button joins the left-hand tools (174px -> 210px) once something
   // is typed. A name is only shown with that much room to spare, and once shown
   // it stays as long as it fits.
-  layOutComposer(580, 174);
+  layOutComposer({ room: 580, tools: 174 });
   const roomy = renderInFooter('default');
   assert.equal(roomy.getByRole('button').textContent, 'Default Mode');
   resizeComposer({ tools: 210 });
   assert.equal(roomy.getByRole('button').textContent, 'Default Mode');
   roomy.unmount();
 
-  layOutComposer(540, 174);
+  layOutComposer({ room: 540, tools: 174 });
   const tight = renderInFooter('default');
   assert.equal(tight.getByRole('button').textContent, '');
   resizeComposer({ tools: 210 });
   assert.equal(tight.getByRole('button').textContent, '');
+});
+
+test('a hidden name needs exactly the clear button\'s width to spare', () => {
+  // Nothing typed: 174px of tools, so the named toolbar is 174 + 241 + 112
+  // (Default Mode) = 527px wide. The clear button is 2.25rem, 36px at the
+  // browser's default 16px font size.
+  const namedToolbar = 527;
+  const nameAt = (spare: number) => {
+    layOutComposer({ room: namedToolbar + spare, tools: 174 });
+    const view = renderInFooter('default');
+    const text = view.getByRole('button').textContent;
+    view.unmount();
+    return text;
+  };
+
+  assert.equal(nameAt(36), 'Default Mode');
+  assert.equal(nameAt(35), '');
+});
+
+test('a wider toolbar or model menu takes the name away, and it comes back when they narrow', () => {
+  // 678px of room leaves the named toolbar (210 + 241 + 112) 115px to spare.
+  layOutComposer({ room: 678 });
+  const { getByRole } = renderInFooter('default');
+  const trigger = getByRole('button');
+  assert.equal(trigger.textContent, 'Default Mode');
+
+  // The left-hand tools widen when the token count grows or the voice button appears.
+  resizeComposer({ tools: 330 });
+  assert.equal(trigger.textContent, '');
+  resizeComposer({ tools: 210 });
+  assert.equal(trigger.textContent, 'Default Mode');
+
+  // The controls widen when a model with a longer name is picked.
+  resizeComposer({ controls: 360 });
+  assert.equal(trigger.textContent, '');
+  resizeComposer({ controls: 241 });
+  assert.equal(trigger.textContent, 'Default Mode');
+});
+
+test('the trigger leaves no observer behind', () => {
+  layOutComposer({ room: 678 });
+  const view = renderInFooter('default');
+  // Every decision and every mode starts a new observer; the one before it stops.
+  resizeComposer({ room: 330 });
+  resizeComposer({ room: 678 });
+  view.rerender(composerFooter('plan'));
+  settle();
+  assert.equal(liveObservers.size, 1);
+
+  view.unmount();
+  assert.equal(liveObservers.size, 0);
 });
 
 test('the trigger and the menu speak the user\'s language', async () => {
