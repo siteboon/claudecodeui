@@ -415,8 +415,14 @@ export function createWebhookNotificationsService(overrides: Partial<WebhookNoti
         // The owner may have removed, disabled or re-pointed the destination,
         // or rotated its secret, while this event waited. Retry only to the
         // same, still enabled URL, signed with the current secret; otherwise
-        // the last attempt's outcome stands.
-        const current = readStoredWebhook(userId);
+        // the last attempt's outcome stands. A destination that cannot be
+        // read (a database error) gets no retry either.
+        let current: StoredWebhook | null = null;
+        try {
+          current = readStoredWebhook(userId);
+        } catch (error) {
+          console.warn('[notifications] could not read the webhook destination before a retry:', (error as Error)?.message);
+        }
         if (!current || !current.enabled || current.url !== firstTarget.url) {
           break;
         }

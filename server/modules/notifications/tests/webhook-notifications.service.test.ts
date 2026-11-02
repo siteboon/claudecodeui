@@ -405,6 +405,56 @@ test('retries stop once the destination is removed, disabled or re-pointed, and 
   });
 });
 
+test('a database error before a retry ends the delivery with the attempts really made and their outcome', async (t) => {
+  await withDatabase(async (userId) => {
+    // The database fails once, right after the second attempt was answered,
+    // which is when the destination is read again for the third attempt.
+    let failNextRead = false;
+    const readEndpoint = notificationChannelEndpointsDb.getEndpoint.bind(notificationChannelEndpointsDb);
+    t.mock.method(notificationChannelEndpointsDb, 'getEndpoint', (...args: Parameters<typeof readEndpoint>) => {
+      if (failNextRead) {
+        failNextRead = false;
+        throw new Error('SQLITE_BUSY: database is locked');
+      }
+      return readEndpoint(...args);
+    });
+    const receiver = await startReceiver((_req, res, index) => {
+      if (index === 1) {
+        failNextRead = true;
+      }
+      res.statusCode = 503;
+      res.end();
+    });
+    const warned: string[] = [];
+    t.mock.method(console, 'warn', (...args: unknown[]) => {
+      warned.push(format(...args));
+    });
+    try {
+      const notifier = createWebhookNotificationsService(FAST);
+      notifier.saveConfig(userId, { url: `${receiver.url}/db-error?token=tok-db`, allowHttp: true });
+
+      const delivery = await notifier.sendForEvent({
+        userId,
+        event: createNotificationEvent({ provider: 'codex', sessionId: 'db-1', kind: 'error', code: 'run.failed' }),
+      });
+
+      // Both attempts were answered 503; no third one goes to a destination that could not be read.
+      const outcome = { ok: false, error: 'httpStatus', status: 503, attempts: 2 };
+      assert.deepEqual({ ok: delivery?.ok, error: delivery?.error, status: delivery?.status, attempts: delivery?.attempts }, outcome);
+      assert.equal(receiver.hits.length, 2);
+      const recorded = notifier.getConfig(userId).lastDelivery;
+      assert.deepEqual({ ok: recorded?.ok, error: recorded?.error, status: recorded?.status, attempts: recorded?.attempts }, outcome);
+      const output = warned.join('\n');
+      assert.match(output, /database is locked/);
+      for (const forbidden of ['/db-error', 'tok-db']) {
+        assert.ok(!output.includes(forbidden), `log output must not contain ${forbidden}`);
+      }
+    } finally {
+      await receiver.close();
+    }
+  });
+});
+
 test('a hanging receiver never blocks the caller: notify returns at once, attempts time out, nothing rejects', async () => {
   await withDatabase(async (userId) => {
     // Accepts the request and never answers.
