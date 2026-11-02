@@ -9,6 +9,7 @@ import {
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
+  readLastJsonlTimestamp,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
@@ -64,7 +65,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const timestamps = await readFileTimestamps(filePath);
+      const timestamps = await this.readSessionTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
@@ -97,7 +98,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
-    const timestamps = await readFileTimestamps(filePath);
+    const timestamps = await this.readSessionTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
@@ -107,6 +108,22 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
+  }
+
+  /**
+   * Returns the file's creation time and the session's last activity.
+   *
+   * Claude Desktop appends untimestamped metadata rows (`custom-title`,
+   * `last-prompt`, `cost-state`, ...) to transcripts that have not been used in
+   * weeks, for example when it starts. The file's mtime then moves although the
+   * conversation did not, and those sessions jump to the top of the recent
+   * list. The last row that carries a `timestamp` is the real last activity;
+   * the mtime remains the fallback.
+   */
+  private async readSessionTimestamps(filePath: string): Promise<{ createdAt?: string; updatedAt?: string }> {
+    const timestamps = await readFileTimestamps(filePath);
+    const lastActivity = await readLastJsonlTimestamp(filePath);
+    return lastActivity ? { ...timestamps, updatedAt: lastActivity } : timestamps;
   }
 
   /**
