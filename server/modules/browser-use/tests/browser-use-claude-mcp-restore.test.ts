@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { browserUseService } from '@/modules/browser-use/browser-use.service.js';
 import { closeConnection, initializeDatabase } from '@/modules/database/index.js';
+import { providerMcpService } from '@/modules/providers/index.js';
 
 const ENV_KEYS = ['HOME', 'USERPROFILE', 'CLAUDE_CONFIG_DIR', 'DATABASE_PATH'] as const;
 
@@ -45,11 +46,20 @@ test('startup restores the Browser MCP entry in the Claude config the CLI reads'
     await browserUseService.updateSettings({ enabled: true });
     const homeEntry = (await readClaudeUserServers(homeConfigPath))['cloudcli-browser'];
     assert.ok(homeEntry);
+    // The user then removed it from Codex. Only Claude's config location moved,
+    // so the restore must leave the other providers as they are.
+    const codexRemoval = await providerMcpService.removeProviderMcpServer('codex', {
+      name: 'cloudcli-browser',
+      scope: 'user',
+    });
+    assert.equal(codexRemoval.removed, true);
 
     // The server now starts with CLAUDE_CONFIG_DIR set.
     process.env.CLAUDE_CONFIG_DIR = configDir;
     assert.deepEqual(await browserUseService.restoreClaudeAgentMcpRegistration(), { restored: true });
     assert.deepEqual((await readClaudeUserServers(profileConfigPath))['cloudcli-browser'], homeEntry);
+    const codexServers = await providerMcpService.listProviderMcpServersForScope('codex', 'user');
+    assert.ok(!codexServers.some((server) => server.name === 'cloudcli-browser'));
 
     // Already there on the next start: nothing is written.
     assert.deepEqual(await browserUseService.restoreClaudeAgentMcpRegistration(), { restored: false });
