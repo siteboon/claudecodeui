@@ -1,0 +1,397 @@
+import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import type { PermissionPanelProps } from '@/shared/types';
+
+/** One value a form field can hold once parsed, as MCP elicitation allows them. */
+type FieldValue = string | number | boolean | string[];
+
+type Choice = { value: string; label: string };
+
+/** One field of the requested schema, read into what the form needs to draw and check it. */
+type ElicitationField = {
+  key: string;
+  label: string;
+  description?: string;
+  required: boolean;
+  kind: 'text' | 'number' | 'integer' | 'boolean' | 'choice' | 'multi';
+  inputType: 'text' | 'email' | 'url' | 'date' | 'datetime-local';
+  choices: Choice[];
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
+  minItems?: number;
+  maxItems?: number;
+  initial: string | boolean | string[];
+};
+
+/** The request as the backend forwards it from the Agent SDK's `onElicitation`. */
+type ElicitationInput = {
+  serverName?: string;
+  displayName?: string;
+  title?: string;
+  description?: string;
+  message?: string;
+  mode?: 'form' | 'url';
+  url?: string;
+  requestedSchema?: { properties?: Record<string, unknown>; required?: unknown };
+};
+
+type RawValues = Record<string, string | boolean | string[]>;
+
+const FORMAT_INPUT_TYPES: Record<string, ElicitationField['inputType']> = {
+  email: 'email',
+  uri: 'url',
+  date: 'date',
+  'date-time': 'datetime-local',
+};
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+const asNumber = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined);
+
+/** Choices from `enum` (labelled by `enumNames`) or from `oneOf`/`anyOf` entries of `const` and `title`. */
+const readChoices = (schema: Record<string, unknown>): Choice[] | null => {
+  if (Array.isArray(schema.enum)) {
+    const names = Array.isArray(schema.enumNames) ? schema.enumNames : [];
+    return schema.enum.map((value, index) => ({ value: String(value), label: String(names[index] ?? value) }));
+  }
+  const alternatives = Array.isArray(schema.oneOf) ? schema.oneOf : Array.isArray(schema.anyOf) ? schema.anyOf : null;
+  if (alternatives && alternatives.length > 0 && alternatives.every((entry) => 'const' in asRecord(entry))) {
+    return alternatives.map((entry) => {
+      const record = asRecord(entry);
+      return { value: String(record.const), label: String(record.title ?? record.const) };
+    });
+  }
+  return null;
+};
+
+/** Reads the flat object schema MCP elicitation allows into form fields, in the server's order. */
+const readFields = (requestedSchema: ElicitationInput['requestedSchema']): ElicitationField[] => {
+  const properties = asRecord(requestedSchema?.properties);
+  const required = new Set(Array.isArray(requestedSchema?.required) ? requestedSchema.required : []);
+  return Object.entries(properties).map(([key, raw]) => {
+    const schema = asRecord(raw);
+    const itemChoices = schema.type === 'array' ? readChoices(asRecord(schema.items)) : null;
+    const choices = itemChoices ?? readChoices(schema);
+    const kind: ElicitationField['kind'] = itemChoices
+      ? 'multi'
+      : choices
+        ? 'choice'
+        : schema.type === 'boolean'
+          ? 'boolean'
+          : schema.type === 'integer'
+            ? 'integer'
+            : schema.type === 'number'
+              ? 'number'
+              : 'text';
+    const fallback = schema.default;
+    const initial = kind === 'multi'
+      ? (Array.isArray(fallback) ? fallback.map(String) : [])
+      : kind === 'boolean'
+        ? fallback === true
+        : fallback === undefined || fallback === null ? '' : String(fallback);
+    return {
+      key,
+      label: typeof schema.title === 'string' && schema.title ? schema.title : key,
+      description: typeof schema.description === 'string' ? schema.description : undefined,
+      required: required.has(key),
+      kind,
+      inputType: FORMAT_INPUT_TYPES[String(schema.format)] ?? 'text',
+      choices: choices ?? [],
+      minLength: asNumber(schema.minLength),
+      maxLength: asNumber(schema.maxLength),
+      minimum: asNumber(schema.minimum),
+      maximum: asNumber(schema.maximum),
+      minItems: asNumber(schema.minItems),
+      maxItems: asNumber(schema.maxItems),
+      initial,
+    };
+  });
+};
+
+/** Only http(s) links get an Open button; anything else (`javascript:` above all) is shown as text. */
+const isOpenableUrl = (url: string | undefined): boolean => {
+  if (!url) return false;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'https:' || protocol === 'http:';
+  } catch {
+    return false;
+  }
+};
+
+const inputClassName = 'w-full rounded-lg border-0 bg-gray-50 px-3 py-1.5 text-[13px] text-gray-900 outline-none ring-1 ring-gray-200 transition-shadow duration-200 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-400 dark:bg-gray-900/60 dark:text-gray-100 dark:ring-gray-700 dark:placeholder:text-gray-600 dark:focus:ring-blue-500';
+
+/**
+ * Registered by chat's PermissionRequestsBanner as the permission panel for
+ * `McpElicitation` requests: an MCP server asking the person for input in the
+ * middle of a tool call. A form request is drawn as a form built from its
+ * schema and answered with typed content; a URL request offers its link.
+ * Submit is `accept`, Decline is `decline`; the backend maps a request that
+ * goes away unanswered to `cancel`.
+ */
+export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, onDecision }) => {
+  const { t } = useTranslation();
+  const input = (request.input ?? {}) as ElicitationInput;
+  const isUrlMode = input.mode === 'url';
+  const fields = useMemo(() => readFields(input.requestedSchema), [input.requestedSchema]);
+
+  // The person's answers as typed, kept raw so a half-typed number is not lost
+  // to parsing; they are parsed and checked against the schema on submit.
+  const [values, setValues] = useState<RawValues>(() =>
+    Object.fromEntries(fields.map((field) => [field.key, field.initial])),
+  );
+  // Whether Submit was tried once: field errors stay hidden until then, so an
+  // empty form does not open covered in "Required".
+  const [attempted, setAttempted] = useState(false);
+
+  const setValue = useCallback((key: string, value: string | boolean | string[]) => {
+    setValues((previous) => ({ ...previous, [key]: value }));
+  }, []);
+
+  /** A field's error message, or null when its value fits the schema. */
+  const errorFor = useCallback((field: ElicitationField): string | null => {
+    const value = values[field.key];
+    if (field.kind === 'boolean') return null;
+    if (field.kind === 'multi') {
+      const picked = Array.isArray(value) ? value : [];
+      if (field.required && picked.length === 0) return t('chat:mcpElicitation.required', { defaultValue: 'Required' });
+      if (field.minItems !== undefined && picked.length > 0 && picked.length < field.minItems) {
+        return t('chat:mcpElicitation.tooFew', { count: field.minItems, defaultValue: 'Pick at least {{count}}' });
+      }
+      if (field.maxItems !== undefined && picked.length > field.maxItems) {
+        return t('chat:mcpElicitation.tooMany', { count: field.maxItems, defaultValue: 'Pick at most {{count}}' });
+      }
+      return null;
+    }
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (!text) {
+      return field.required ? t('chat:mcpElicitation.required', { defaultValue: 'Required' }) : null;
+    }
+    if (field.kind === 'number' || field.kind === 'integer') {
+      const number = Number(text);
+      if (!Number.isFinite(number)) return t('chat:mcpElicitation.notANumber', { defaultValue: 'Enter a number' });
+      if (field.kind === 'integer' && !Number.isInteger(number)) {
+        return t('chat:mcpElicitation.notAnInteger', { defaultValue: 'Enter a whole number' });
+      }
+      if (field.minimum !== undefined && number < field.minimum) {
+        return t('chat:mcpElicitation.tooSmall', { value: field.minimum, defaultValue: 'At least {{value}}' });
+      }
+      if (field.maximum !== undefined && number > field.maximum) {
+        return t('chat:mcpElicitation.tooLarge', { value: field.maximum, defaultValue: 'At most {{value}}' });
+      }
+      return null;
+    }
+    if (field.minLength !== undefined && text.length < field.minLength) {
+      return t('chat:mcpElicitation.tooShort', { count: field.minLength, defaultValue: 'At least {{count}} characters' });
+    }
+    if (field.maxLength !== undefined && text.length > field.maxLength) {
+      return t('chat:mcpElicitation.tooLong', { count: field.maxLength, defaultValue: 'At most {{count}} characters' });
+    }
+    return null;
+  }, [values, t]);
+
+  /** The typed content sent back on accept; optional fields left empty are left out. */
+  const buildContent = useCallback((): Record<string, FieldValue> => {
+    const content: Record<string, FieldValue> = {};
+    for (const field of fields) {
+      const value = values[field.key];
+      if (field.kind === 'boolean') {
+        content[field.key] = value === true;
+      } else if (field.kind === 'multi') {
+        const picked = Array.isArray(value) ? value : [];
+        if (picked.length > 0) content[field.key] = picked;
+      } else {
+        const text = typeof value === 'string' ? value.trim() : '';
+        if (!text) continue;
+        content[field.key] = field.kind === 'number' || field.kind === 'integer' ? Number(text) : text;
+      }
+    }
+    return content;
+  }, [fields, values]);
+
+  const handleSubmit = useCallback((event?: React.FormEvent) => {
+    event?.preventDefault();
+    setAttempted(true);
+    if (fields.some((field) => errorFor(field) !== null)) return;
+    onDecision(request.requestId, { allow: true, updatedInput: { content: buildContent() } });
+  }, [fields, errorFor, onDecision, request.requestId, buildContent]);
+
+  const handleDecline = useCallback(() => {
+    onDecision(request.requestId, { allow: false });
+  }, [onDecision, request.requestId]);
+
+  const handleOpenUrl = useCallback(() => {
+    onDecision(request.requestId, { allow: true, updatedInput: {} });
+  }, [onDecision, request.requestId]);
+
+  const serverLabel = input.displayName || input.serverName || 'MCP';
+  const canOpenUrl = isUrlMode && isOpenableUrl(input.url);
+
+  return (
+    <div className="w-full" data-testid="mcp-elicitation-panel">
+      <div className="relative overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-lg dark:border-gray-700/50 dark:bg-gray-800/90 dark:shadow-2xl">
+        <div className="absolute left-0 right-0 top-0 h-[2px] bg-gradient-to-r from-blue-500 via-cyan-400 to-teal-400" />
+
+        <form onSubmit={handleSubmit} noValidate>
+          <div className="px-4 pb-2 pt-3.5">
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                {t('chat:mcpElicitation.asks', { server: serverLabel, defaultValue: '{{server}} asks for your input' })}
+              </span>
+            </div>
+            {input.title && (
+              <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">{input.title}</p>
+            )}
+            <p className="whitespace-pre-wrap text-[14px] font-medium leading-snug text-gray-900 dark:text-gray-100">
+              {input.message}
+            </p>
+            {input.description && (
+              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{input.description}</p>
+            )}
+          </div>
+
+          {isUrlMode ? (
+            <div className="px-4 pb-2">
+              <code className="block break-all rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-gray-900/60 dark:text-gray-300">{input.url}</code>
+              {!canOpenUrl && (
+                <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                  {t('chat:mcpElicitation.unsafeUrl', { defaultValue: 'Only http and https links can be opened from here.' })}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3 px-4 pb-3">
+              {fields.map((field) => {
+                const id = `${request.requestId}-${field.key}`;
+                const error = attempted ? errorFor(field) : null;
+                const value = values[field.key];
+                // A checkbox always answers (unticked is false), so it is never marked optional.
+                const labelText = (
+                  <span>
+                    {field.label}
+                    {!field.required && field.kind !== 'boolean' && (
+                      <span className="ml-1 font-normal text-gray-400 dark:text-gray-500">
+                        ({t('chat:mcpElicitation.optional', { defaultValue: 'optional' })})
+                      </span>
+                    )}
+                  </span>
+                );
+
+                if (field.kind === 'boolean') {
+                  return (
+                    <div key={field.key}>
+                      <label htmlFor={id} className="flex items-center gap-2 text-[13px] font-medium text-gray-800 dark:text-gray-200">
+                        <input
+                          id={id}
+                          type="checkbox"
+                          checked={value === true}
+                          onChange={(event) => setValue(field.key, event.target.checked)}
+                        />
+                        {labelText}
+                      </label>
+                      {field.description && <p className="ml-6 text-[11px] text-gray-500 dark:text-gray-400">{field.description}</p>}
+                    </div>
+                  );
+                }
+
+                if (field.kind === 'multi') {
+                  const picked = Array.isArray(value) ? value : [];
+                  return (
+                    <fieldset key={field.key}>
+                      <legend className="text-[13px] font-medium text-gray-800 dark:text-gray-200">{labelText}</legend>
+                      {field.description && <p className="text-[11px] text-gray-500 dark:text-gray-400">{field.description}</p>}
+                      <div className="mt-1 space-y-1">
+                        {field.choices.map((choice) => (
+                          <label key={choice.value} className="flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={picked.includes(choice.value)}
+                              onChange={(event) => setValue(
+                                field.key,
+                                event.target.checked
+                                  ? field.choices.map((c) => c.value).filter((v) => v === choice.value || picked.includes(v))
+                                  : picked.filter((v) => v !== choice.value),
+                              )}
+                            />
+                            {choice.label}
+                          </label>
+                        ))}
+                      </div>
+                      {error && <p role="alert" className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{error}</p>}
+                    </fieldset>
+                  );
+                }
+
+                return (
+                  <div key={field.key}>
+                    <label htmlFor={id} className="block text-[13px] font-medium text-gray-800 dark:text-gray-200">{labelText}</label>
+                    {field.description && <p className="text-[11px] text-gray-500 dark:text-gray-400">{field.description}</p>}
+                    <div className="mt-1">
+                      {field.kind === 'choice' ? (
+                        <select
+                          id={id}
+                          value={typeof value === 'string' ? value : ''}
+                          onChange={(event) => setValue(field.key, event.target.value)}
+                          className={inputClassName}
+                        >
+                          <option value="">{t('chat:mcpElicitation.choose', { defaultValue: 'Choose…' })}</option>
+                          {field.choices.map((choice) => (
+                            <option key={choice.value} value={choice.value}>{choice.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          id={id}
+                          type={field.kind === 'text' ? field.inputType : 'text'}
+                          inputMode={field.kind === 'integer' ? 'numeric' : field.kind === 'number' ? 'decimal' : undefined}
+                          value={typeof value === 'string' ? value : ''}
+                          onChange={(event) => setValue(field.key, event.target.value)}
+                          className={inputClassName}
+                        />
+                      )}
+                    </div>
+                    {error && <p role="alert" className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{error}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-1.5 border-t border-gray-100 bg-gray-50/50 px-4 py-2 dark:border-gray-700/50 dark:bg-gray-800/50">
+            <button
+              type="button"
+              onClick={handleDecline}
+              className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-gray-600 transition-all duration-150 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/60"
+            >
+              {t('chat:mcpElicitation.decline', { defaultValue: 'Decline' })}
+            </button>
+            {isUrlMode ? (
+              canOpenUrl && (
+                <a
+                  href={input.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={handleOpenUrl}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-medium text-white transition-all duration-150 hover:bg-blue-700"
+                >
+                  {t('chat:mcpElicitation.openLink', { defaultValue: 'Open link' })}
+                </a>
+              )
+            ) : (
+              <button
+                type="submit"
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-medium text-white transition-all duration-150 hover:bg-blue-700"
+              >
+                {t('chat:mcpElicitation.submit', { defaultValue: 'Submit' })}
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
