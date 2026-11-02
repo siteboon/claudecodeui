@@ -224,10 +224,13 @@ describe('a transcript row with timestamps on', () => {
   it('stamps compaction rows and task notifications, which never had a time', () => {
     const compaction = renderRow({ message: COMPACTION, prevMessage: FIRST_REPLY, showTimestamps: true });
     assert.deepEqual(timeLabels(compaction.container), ['10:00:00 AM']);
+    // At the end of the row's one line, or on a line of its own rather than wrap the row's text.
+    assert.equal(keepsTextWidth(lineOf(timeElements(compaction.container)[0])), true);
     compaction.unmount();
 
     const notification = renderRow({ message: TASK_NOTIFICATION, prevMessage: FIRST_REPLY, showTimestamps: true });
     assert.deepEqual(timeLabels(notification.container), ['10:05:00 AM']);
+    assert.equal(keepsTextWidth(lineOf(timeElements(notification.container)[0])), true);
   });
 
   it('keeps one time on a user turn, now as a machine-readable element with the full date in its tooltip', () => {

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { GitBranchIcon, PencilIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
-import { toPlausibleTimestamp } from '@/shared/utils';
+import { cn, toPlausibleTimestamp } from '@/shared/utils';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
 import { formatAnsweringModelLabel } from '@/modules/chat/utils/modelLabel';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
@@ -17,6 +17,7 @@ import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
 import MessageModelLabel from '@/modules/chat/transcript/MessageModelLabel';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
 import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
+import HeaderWithTime from '@/modules/chat/transcript/HeaderWithTime';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 
@@ -114,6 +115,12 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
   const showsFooter = showTimestamps
     ? shouldShowAssistantCopyControl || (hasDefaultFooter && Boolean(formatAnsweringModelLabel(message.model))) || stampsFooter
     : hasDefaultFooter;
+  // A compaction's or a task notification's one line carries its time at its
+  // end, under the same rule as a header's: on a line of its own when the
+  // line's text would not fit beside it (see HeaderWithTime).
+  const lineTime = hasStamp
+    ? <TranscriptTimestamp value={stampValue} className="ml-auto flex-shrink-0 text-[11px] leading-4 text-gray-400 dark:text-gray-500" />
+    : undefined;
   const hasUserTurnControls = shouldShowUserCopyControl
     || Boolean(message.transcriptAnchorId && (onEditMessage || onForkFromMessage));
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
@@ -198,22 +205,21 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
       ) : message.compact ? (
         /* A compaction: one row, its numbers, and its summary folded into it */
         <div className="w-full">
-          <div className="flex items-center gap-2 py-0.5">
-            <span
-              className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                message.compact.phase === 'running'
-                  ? 'animate-pulse bg-amber-400 dark:bg-amber-500'
-                  : message.compact.phase === 'failed'
-                    ? 'bg-red-400 dark:bg-red-500'
-                    : 'bg-gray-400 dark:bg-gray-500'
-              }`}
-            />
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {message.content || t('chat:misc.compacted', 'Compacted')}
-            </span>
-            {showTimestamps && (
-              <TranscriptTimestamp value={stampValue} className="ml-auto flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500" />
-            )}
+          <div className={cn('flex items-center gap-2 py-0.5', lineTime && 'flex-wrap gap-y-0.5')}>
+            <HeaderWithTime time={lineTime} className="gap-2">
+              <span
+                className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                  message.compact.phase === 'running'
+                    ? 'animate-pulse bg-amber-400 dark:bg-amber-500'
+                    : message.compact.phase === 'failed'
+                      ? 'bg-red-400 dark:bg-red-500'
+                      : 'bg-gray-400 dark:bg-gray-500'
+                }`}
+              />
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {message.content || t('chat:misc.compacted', 'Compacted')}
+              </span>
+            </HeaderWithTime>
           </div>
           {message.compactSummary && (
             <details className="ml-3.5 mt-0.5">
@@ -231,12 +237,11 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
       ) : message.isTaskNotification ? (
         /* Compact task notification on the left */
         <div className="w-full">
-          <div className="flex items-center gap-2 py-0.5">
-            <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskNotificationStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
-            <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
-            {showTimestamps && (
-              <TranscriptTimestamp value={stampValue} className="ml-auto flex-shrink-0 text-[11px] text-gray-400 dark:text-gray-500" />
-            )}
+          <div className={cn('flex items-center gap-2 py-0.5', lineTime && 'flex-wrap gap-y-0.5')}>
+            <HeaderWithTime time={lineTime} className="gap-2">
+              <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskNotificationStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
+              <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
+            </HeaderWithTime>
           </div>
         </div>
       ) : (
