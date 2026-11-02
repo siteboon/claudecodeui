@@ -451,6 +451,49 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
     () => (status !== 'running' && content.trim() && !content.startsWith(LAUNCH_ACK_PREFIX) ? formatResultText(content) : ''),
     [content, status],
   );
+  // With the timestamps preference on, the header carries the launch, when
+  // the launch has a time worth showing.
+  const headerStartAt = toPlausibleTimestamp(launchedAt) !== null ? launchedAt : undefined;
+
+  const headerSummary = (
+    <>
+      <ChevronRight className={cn('h-3 w-3 flex-shrink-0 transition-transform duration-150', isOpen && 'rotate-90')} />
+      <Workflow className="h-3.5 w-3.5 flex-shrink-0 text-purple-500 dark:text-purple-400" />
+      <span className="flex-shrink-0 font-medium text-foreground">{t('workflow.title', 'Workflow')}</span>
+      {name && (
+        <>
+          <span className="flex-shrink-0 text-[10px] text-muted-foreground/40">/</span>
+          <span className="flex-shrink-0 font-medium">{name}</span>
+        </>
+      )}
+      {description && <span className="min-w-0 flex-1 truncate">{description}</span>}
+      <span className={cn('ml-auto flex flex-shrink-0 items-center gap-1 text-[11px]', STATUS_STYLES[status])}>
+        {status === 'running' ? (
+          <>
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
+            {liveSummary || t('workflow.status.running', 'running')}
+          </>
+        ) : status === 'failed' ? (
+          <>
+            <CircleAlert className="h-3 w-3" />
+            {t('workflow.status.failed', 'failed')}
+          </>
+        ) : status === 'stopped' ? (
+          // Neither a spinner nor a check mark: the run never reported and
+          // the process it ran in is gone, so there is no outcome to draw.
+          <span title={t('workflow.stoppedHint', 'The run ended before this workflow reported back')} className="flex items-center gap-1">
+            <CircleDashed className="h-3 w-3" />
+            {t('workflow.status.stopped', 'no result')}
+          </span>
+        ) : (
+          <>
+            <CircleCheck className="h-3 w-3" />
+            {t('workflow.status.completed', 'done')}
+          </>
+        )}
+      </span>
+    </>
+  );
 
   return (
     <div className="my-1 border-l-2 border-l-purple-500 py-0.5 pl-3 dark:border-l-purple-400">
@@ -458,46 +501,23 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
         type="button"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((previous) => !previous)}
-        className="flex w-full select-none items-center gap-1.5 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+        className={cn(
+          'flex w-full select-none items-center gap-1.5 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground',
+          // Below `sm` the time takes a line of its own under the header, as
+          // on an agent card: beside it a phone would cut the description to
+          // nothing.
+          headerStartAt !== undefined && 'flex-col items-stretch gap-y-0.5 sm:flex-row sm:items-center',
+        )}
       >
-        <ChevronRight className={cn('h-3 w-3 flex-shrink-0 transition-transform duration-150', isOpen && 'rotate-90')} />
-        <Workflow className="h-3.5 w-3.5 flex-shrink-0 text-purple-500 dark:text-purple-400" />
-        <span className="flex-shrink-0 font-medium text-foreground">{t('workflow.title', 'Workflow')}</span>
-        {name && (
+        {headerStartAt !== undefined ? (
           <>
-            <span className="flex-shrink-0 text-[10px] text-muted-foreground/40">/</span>
-            <span className="flex-shrink-0 font-medium">{name}</span>
+            <span className="flex min-w-0 items-center gap-1.5 sm:flex-1">{headerSummary}</span>
+            <TranscriptTimestamp
+              value={headerStartAt}
+              className="flex-shrink-0 self-end text-[11px] text-muted-foreground/70 sm:self-auto"
+            />
           </>
-        )}
-        {description && <span className="min-w-0 flex-1 truncate">{description}</span>}
-        <span className={cn('ml-auto flex flex-shrink-0 items-center gap-1 text-[11px]', STATUS_STYLES[status])}>
-          {status === 'running' ? (
-            <>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
-              {liveSummary || t('workflow.status.running', 'running')}
-            </>
-          ) : status === 'failed' ? (
-            <>
-              <CircleAlert className="h-3 w-3" />
-              {t('workflow.status.failed', 'failed')}
-            </>
-          ) : status === 'stopped' ? (
-            // Neither a spinner nor a check mark: the run never reported and
-            // the process it ran in is gone, so there is no outcome to draw.
-            <span title={t('workflow.stoppedHint', 'The run ended before this workflow reported back')} className="flex items-center gap-1">
-              <CircleDashed className="h-3 w-3" />
-              {t('workflow.status.stopped', 'no result')}
-            </span>
-          ) : (
-            <>
-              <CircleCheck className="h-3 w-3" />
-              {t('workflow.status.completed', 'done')}
-            </>
-          )}
-        </span>
-        {launchedAt !== undefined && (
-          <TranscriptTimestamp value={launchedAt} className="flex-shrink-0 text-[11px] text-muted-foreground/70" />
-        )}
+        ) : headerSummary}
       </button>
 
       {showBody && (

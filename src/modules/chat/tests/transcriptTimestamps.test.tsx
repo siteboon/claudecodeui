@@ -99,6 +99,19 @@ const timeElements = (container: HTMLElement) => [...container.querySelectorAll(
 const timeLabels = (container: HTMLElement) => timeElements(container).map((element) => plainSpaces(element.textContent));
 /** The left-hand row footer: copy controls, model label and, when it is the only place for it, the time. */
 const footers = (container: HTMLElement) => container.querySelectorAll('div.mt-1.w-full');
+/** The header button of a collapsible card or tool group. */
+const headerOf = (container: HTMLElement) => container.querySelector('button[aria-expanded]') as HTMLButtonElement;
+/**
+ * Whether a header puts its time on a line of its own below the `sm`
+ * breakpoint, under the rest of the header, and back beside it from `sm` on.
+ */
+const stacksTimeBelowSm = (header: HTMLElement) => {
+  const classes = header.className.split(' ');
+  const [summary, time] = [...header.children];
+  return classes.includes('flex-col') && classes.includes('sm:flex-row')
+    && header.children.length === 2 && summary.tagName === 'SPAN' && time.tagName === 'TIME'
+    && time.className.split(' ').includes('self-end');
+};
 
 /** Mocks the browser's own locale and its language list together, as a real browser reports them. */
 const mockBrowserLocale = (language: string, languages: string[] = [language]) => {
@@ -393,6 +406,18 @@ describe('a collapsed tool group', () => {
       <ToolGroupContainer group={madeUp} prevMessage={USER_TURN} createDiff={createDiff} getMessageKey={(message) => String(message.toolId)} provider="claude" showTimestamps />,
     );
     assert.equal(timeElements(none.container).length, 0);
+    // Nor a line laid out for it on a phone.
+    assert.doesNotMatch(headerOf(none.container).className, /flex-col/);
+  });
+
+  it('puts the span on a line of its own below the sm breakpoint, so the preview keeps its width', () => {
+    const on = renderGroup(true);
+    assert.equal(stacksTimeBelowSm(headerOf(on.container)), true);
+    assert.match(headerOf(on.container).children[0].textContent ?? '', /TODO/);
+    on.unmount();
+
+    const off = renderGroup(false);
+    assert.doesNotMatch(headerOf(off.container).className, /flex-col/);
   });
 
   it('shows no time with the preference off', () => {
@@ -446,6 +471,52 @@ describe('a subagent timeline', () => {
 
     fireEvent.click(header);
     assert.deepEqual(timeLabels(container), ['8:03:00 AM – 8:03:31 AM', '8:03:30 AM', '8:03:31 AM']);
+  });
+
+  const AGENT_ROW: ChatMessage = {
+    type: 'assistant',
+    content: '',
+    isToolUse: true,
+    toolName: 'Agent',
+    toolId: 'toolu_agent',
+    toolInput: JSON.stringify({ subagent_type: 'Explore', description: 'Survey', prompt: 'Look around' }),
+    isSubagentContainer: true,
+    subagent: { id: 'agent-1', type: 'Explore', status: 'completed' },
+    subagentActivity: STEPS,
+    timestamp: at(20, 8, 3, 0),
+  };
+
+  it('puts the card\'s span on a line of its own below the sm breakpoint, so the description keeps its width', () => {
+    const on = renderRow({ message: { ...AGENT_ROW, timestamp: at(19, 8, 3, 0) }, prevMessage: FIRST_REPLY, showTimestamps: true });
+    const header = headerOf(on.container);
+    assert.equal(stacksTimeBelowSm(header), true);
+    assert.match(header.children[0].textContent ?? '', /Survey/);
+    on.unmount();
+
+    const off = renderRow({ message: AGENT_ROW, prevMessage: FIRST_REPLY });
+    assert.doesNotMatch(headerOf(off.container).className, /flex-col/);
+  });
+
+  it('shows no header time for an agent whose launch time the backend made up, nor one it cannot show', () => {
+    for (const message of [{ ...AGENT_ROW, timestampEstimated: true }, { ...AGENT_ROW, timestamp: 0 }]) {
+      const { container, unmount } = renderRow({ message, prevMessage: FIRST_REPLY, showTimestamps: true });
+      const header = headerOf(container);
+      // Its steps' own times are real, but the latest of them is not the launch.
+      assert.equal(timeElements(header).length, 0, `no header time for ${String(message.timestamp)}`);
+      assert.doesNotMatch(header.className, /flex-col/);
+      fireEvent.click(header);
+      assert.deepEqual(timeLabels(container), ['8:03:30 AM', '8:03:31 AM']);
+      unmount();
+    }
+  });
+
+  it('ends the card\'s span at the latest step with a time worth showing', () => {
+    const { container } = renderRow({
+      message: { ...AGENT_ROW, subagentActivity: [...STEPS.slice(0, 2), { kind: 'text', content: 'Wrapped up.', timestamp: '1970-01-01T00:00:00.000Z' }] },
+      prevMessage: FIRST_REPLY,
+      showTimestamps: true,
+    });
+    assert.deepEqual(timeLabels(headerOf(container)), ['8:03:00 AM – 8:03:31 AM']);
   });
 
   it('keeps the card\'s time in its header alone while the spawning call has no input yet', () => {
@@ -529,6 +600,39 @@ describe('a workflow card', () => {
     const header = container.querySelector('button[aria-expanded]') as HTMLButtonElement;
     assert.deepEqual(timeLabels(header), ['8:08:00 AM']);
     assert.equal(footers(container).length, 0);
+  });
+
+  it('puts the launch on a line of its own below the sm breakpoint, and shows none the backend made up', () => {
+    const renderWorkflowRow = (message: Partial<ChatMessage>, showTimestamps: boolean) => renderRow({
+      message: {
+        type: 'assistant',
+        content: '',
+        isToolUse: true,
+        toolName: 'Workflow',
+        toolId: 'toolu_workflow',
+        toolInput: JSON.stringify({ script: '', description: 'Audit' }),
+        workflow: WORKFLOW,
+        timestamp: at(19, 8, 8, 0),
+        ...message,
+      },
+      prevMessage: FIRST_REPLY,
+      showTimestamps,
+    });
+
+    const dated = renderWorkflowRow({}, true);
+    assert.deepEqual(timeLabels(headerOf(dated.container)), ['Oct 19, 8:08:00 AM']);
+    assert.equal(stacksTimeBelowSm(headerOf(dated.container)), true);
+    dated.unmount();
+
+    for (const message of [{ timestampEstimated: true }, { timestamp: 0 }]) {
+      const unshown = renderWorkflowRow(message, true);
+      assert.equal(timeElements(unshown.container).length, 0);
+      assert.doesNotMatch(headerOf(unshown.container).className, /flex-col/);
+      unshown.unmount();
+    }
+
+    const off = renderWorkflowRow({}, false);
+    assert.doesNotMatch(headerOf(off.container).className, /flex-col/);
   });
 
   it('keeps an agent\'s status on the right, with its class as before, when there is no start time to show', () => {
