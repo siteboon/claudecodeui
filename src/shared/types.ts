@@ -23,16 +23,32 @@ export type ProviderModelOption = {
   };
 };
 
-/** The full model catalog for one provider: every option plus the value used when the user has not chosen one. */
+/**
+ * The full model catalog for one provider: every option plus the value used when the user has not chosen one.
+ * `EFFORT_LEVELS` lists, weakest first, the reasoning-effort levels a custom model may declare in the model
+ * library; the server derives it from the provider, not from the options, and it is empty without effort support.
+ * `CUSTOM_MODELS_ONLY` is the user's "use only my models" flag: while it is on and a custom model exists, the
+ * server lists only custom models and the first is `DEFAULT`. Older servers omit it, which means off.
+ */
 export type ProviderModelsDefinition = {
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
+  EFFORT_LEVELS?: string[];
+  CUSTOM_MODELS_ONLY?: boolean;
 };
 
-/** User-supplied fields for creating or editing a custom provider model entry. */
+/**
+ * User-supplied fields for creating or editing a custom provider model entry.
+ * `effort` lists the reasoning-effort levels the model accepts; omit it to keep
+ * the stored levels on edit, send `null` to clear them.
+ */
 export type CustomProviderModelInput = {
   model: string;
   id: string;
+  effort?: {
+    values: string[];
+    default?: string;
+  } | null;
 };
 
 /** Mutation callbacks a model menu calls to persist custom provider models. */
@@ -44,6 +60,8 @@ export type ProviderModelActions = {
     input: CustomProviderModelInput,
   ): Promise<void>;
   remove(provider: LLMProvider, existing: ProviderModelOption): Promise<void>;
+  /** Turns the provider's "use only my models" flag on or off. */
+  setCustomModelsOnly(provider: LLMProvider, enabled: boolean): Promise<void>;
 };
 
 // ---------------------------
@@ -147,7 +165,31 @@ export type InstallMode = 'git' | 'npm';
 
 //----------------- SESSION PROCESSING STATE ------------
 
-/** What a session that is currently producing a response is doing, as shown by the activity indicator. */
+/**
+ * One background task — a spawned agent, a workflow run or a backgrounded
+ * command — that a session still has running after its turn ended. Listed by
+ * the running-sessions poll and derived from the transcript between polls;
+ * `taskId` is what `chat.stop-task` addresses.
+ */
+export type BackgroundTaskSummary = {
+  taskId: string;
+  toolUseId: string;
+  /** The SDK's kind: `local_agent`, `local_workflow` or `local_bash`. */
+  taskType: string;
+  description: string;
+  workflowName?: string;
+  /** When the task started (epoch ms). The activity indicator counts from the earliest. */
+  startedAt: number;
+  /**
+   * The task was launched by a subagent or workflow agent, not by the
+   * session's own turn: its `toolUseId` names a call in that agent's
+   * transcript, so no card in this session's transcript matches it. Listed so
+   * it can still be stopped; not counted as the session's own work.
+   */
+  nested?: boolean;
+};
+
+/** What a busy session is doing, as shown by the activity indicator: producing a response, or only running background tasks. */
 export type SessionActivity = {
   /** Provider-supplied status line; null renders the default activity label. */
   statusText: string | null;
@@ -155,11 +197,20 @@ export type SessionActivity = {
   /**
    * When this request was first marked as processing (client clock). Drives
    * the elapsed-time display and the stale `chat_subscribed` idle-ack guard.
+   * For background-only work it is the earliest task's start.
    */
   startedAt: number;
+  /**
+   * Set when no response is being produced and only background tasks keep
+   * the session busy. The composer stays usable: the CLI accepts a new turn
+   * while they run.
+   */
+  background?: boolean;
+  /** The background tasks the session still has running, with or without a response in flight. */
+  tasks?: BackgroundTaskSummary[];
 };
 
-/** Every session currently producing a response, keyed by session id. Read it to tell whether a session is busy. */
+/** Every busy session, keyed by session id. Read it to tell whether a session is busy; check `background` to tell how. */
 export type SessionActivityMap = ReadonlyMap<string, SessionActivity>;
 
 /** Marks a session as producing a response; call it as soon as a send is dispatched so the UI reacts immediately. */
@@ -168,18 +219,27 @@ export type MarkSessionProcessing = (
   activity?: { statusText?: string | null; canInterrupt?: boolean },
 ) => void;
 
-/** Marks a session as finished; `ifStartedBefore` lets a late acknowledgement clear only a stale run. */
+/** Marks a session's response as finished; `ifStartedBefore` lets a late acknowledgement clear only a stale run. Leaves background-only work alone, which it says nothing about. */
 export type MarkSessionIdle = (
   sessionId?: string | null,
   opts?: { ifStartedBefore?: number },
 ) => void;
+
+/** Records the background tasks a session still has once its turn ended; an empty list marks it idle. */
+export type MarkSessionBackground = (
+  sessionId: string,
+  tasks: BackgroundTaskSummary[],
+) => void;
+
+/** Reads one session's current activity without subscribing to the map, for logic that runs on a websocket frame. */
+export type GetSessionActivity = (sessionId: string) => SessionActivity | undefined;
 
 /** Replaces the whole processing map with the server's view, used by the periodic running-sessions poll. */
 export type SyncProcessingSessions = (
   sessions: readonly SessionActivitySnapshot[],
 ) => void;
 
-/** Reports whether one session is currently producing a response. */
+/** Reports whether one session is currently producing a response; false for one that only has background tasks running. */
 export type IsSessionProcessing = (sessionId?: string | null) => boolean;
 
 /** One running session as reported by the server, before it is folded into the client-side activity map. */
@@ -188,6 +248,9 @@ export type SessionActivitySnapshot = {
   statusText?: string | null;
   canInterrupt?: boolean;
   startedAt?: number;
+  /** True when the server lists the session for its background tasks alone, with no chat run. */
+  background?: boolean;
+  tasks?: BackgroundTaskSummary[];
 };
 
 // ---------------------------
@@ -280,12 +343,16 @@ export type CompactionInfo = {
   error?: string | null;
 };
 
+/** Where a background task — a spawned agent, a workflow run or a backgrounded command — stands: `stopped` is one whose session process ended before it reported, so no outcome exists and none is coming. */
+export type BackgroundTaskStatus = 'running' | 'completed' | 'failed' | 'stopped';
+
 export type SubagentInfo = {
   id: string;
   name?: string;
   type?: string;
   description?: string;
-  status: 'running' | 'completed' | 'failed';
+  /** `stopped` is a background agent whose session process ended before it reported: no outcome exists and none is coming. */
+  status: BackgroundTaskStatus;
   model?: string;
   /** Total entries the agent recorded, which exceeds the received timeline when a long run was truncated for transport. */
   activityCount?: number;
@@ -311,6 +378,12 @@ export type ChatMessage = {
    * already-sent one, naming the anchor it replaces. Local to this client.
    */
   replacesAnchorId?: string;
+  /**
+   * The model that produced this assistant turn, as the provider reported it
+   * on the transcript row. Absent on user turns and on rows the provider
+   * fabricated locally, so the footer shows nothing rather than guessing.
+   */
+  model?: string;
   isThinking?: boolean;
   isStreaming?: boolean;
   isToolUse?: boolean;
@@ -334,6 +407,13 @@ export type ChatMessage = {
   subagent?: SubagentInfo;
   /** What that agent did, in order. Empty while the agent is still starting up. */
   subagentActivity?: SubagentActivity[];
+  /** The workflow run this row launched, as the backend read it on the last history load. */
+  workflow?: WorkflowInfo;
+  /** The latest live word on the background task this row launched, while the run is in flight. */
+  taskStatus?: LiveTaskStatus;
+  /** Set on the row that stands for a background task's completion report, with the status it reported. */
+  isTaskNotification?: boolean;
+  taskNotificationStatus?: string;
   /** Stored memory this reply drew on, shown as a footnote beneath it. */
   memoryCitations?: MemoryCitation[];
   /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
@@ -375,12 +455,13 @@ export type PendingPermissionRequest = {
   receivedAt?: Date;
 };
 
-/** One question asked by the AskUserQuestion tool, with its answer options and whether more than one option may be selected. */
+/** One question asked by the AskUserQuestion tool, with its answer options, whether more than one option may be selected, and whether a typed answer is offered (`custom: false` hides it; OpenCode's questions can set it). */
 export type Question = {
   question: string;
   header?: string;
   options: QuestionOption[];
   multiSelect?: boolean;
+  custom?: boolean;
 };
 
 /** Options for a programmatic session navigation, currently only whether the route change should replace the current history entry instead of pushing a new one. */
@@ -460,6 +541,13 @@ export type NormalizedMessage = {
   role?: 'user' | 'assistant';
   content?: string;
   /**
+   * The model that answered this turn, as the backend read it off the
+   * provider's own record of the row (today: Claude's `message.model`). Never
+   * set on a user turn — no provider records which model a request went out
+   * with — and never a placeholder the provider synthesized.
+   */
+  model?: string;
+  /**
    * Mirrors optional transcript metadata from the server.
    *
    * These fields are currently used by Claude history normalization so local
@@ -481,6 +569,8 @@ export type NormalizedMessage = {
   toolInput?: unknown;
   toolId?: string;
   toolResult?: { content: string; isError: boolean; toolUseResult?: unknown } | null;
+  /** A `tool_result` row's structured output — a launch acknowledgement's task id and metadata, a search's file list. */
+  toolUseResult?: unknown;
   isError?: boolean;
   text?: string;
   tokens?: number;
@@ -499,12 +589,100 @@ export type NormalizedMessage = {
   subagentTools?: SubagentActivity[];
   /** Identity and lifecycle of that subagent. */
   subagent?: SubagentInfo;
+  /** The workflow run a `Workflow` call launched, attached by the backend from the run's journal. */
+  workflow?: WorkflowInfo;
   /** Stored memory this reply drew on, when the provider reports it. */
   memoryCitations?: MemoryCitation[];
   isFinal?: boolean;
   // Cursor-specific ordering
   sequence?: number;
   rowid?: number;
+  /**
+   * `task_status` fields: one live lifecycle event of a background task.
+   * `toolUseId` names the call that launched it and is absent on `updated`,
+   * which is keyed by `taskId` alone; `status` and `summary` above carry the
+   * event's own.
+   */
+  event?: 'started' | 'progress' | 'updated' | 'notification';
+  taskId?: string;
+  toolUseId?: string;
+  taskType?: string;
+  workflowName?: string;
+  description?: string;
+  usage?: TaskUsage;
+  outputFile?: string;
+  /** A workflow's `progress` only: where each agent the run spawned stands. */
+  agents?: WorkflowAgentProgress[];
+};
+
+/** What a background task has spent so far — tokens, tool calls and wall time — as the CLI reports it while the task runs and when it ends. */
+export type TaskUsage = {
+  totalTokens: number;
+  toolUses: number;
+  durationMs: number;
+};
+
+/** One agent a workflow run spawned, as its journal records it: the label and phase the script gave it (older scripts gave neither) and whether it has finished. */
+export type WorkflowAgentInfo = {
+  id: string;
+  label?: string;
+  phase?: string;
+  /** `stopped` is an agent the journal never settled although the run itself has — abandoned by a stop or a resume that re-ran the step. */
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+};
+
+/** A `Workflow` call's run as the backend read it from disk; `stopped` is a run whose session process ended before it reported, and an empty agent list is a run that left no journal behind. */
+export type WorkflowInfo = {
+  runId: string;
+  name: string;
+  description?: string;
+  status: BackgroundTaskStatus;
+  agents: WorkflowAgentInfo[];
+  agentCounts: { total: number; completed: number; failed: number; running: number; stopped: number };
+  scriptPath?: string;
+};
+
+/**
+ * The latest live word on a background task, folded from the session's
+ * `task_status` events onto the tool call that launched it. It is what a card
+ * reads while the run is in flight; on a history reload the backend's
+ * `subagent` or `workflow` carries the settled outcome instead.
+ */
+export type LiveTaskStatus = {
+  status: BackgroundTaskStatus;
+  /** The id the events name the task by, which is what stopping it addresses. */
+  taskId?: string;
+  taskType?: string;
+  workflowName?: string;
+  description?: string;
+  summary?: string;
+  usage?: TaskUsage;
+  /** A workflow's only: where each agent the run spawned stands, from its latest progress event. */
+  agents?: WorkflowAgentProgress[];
+};
+
+/**
+ * Where one agent of a running workflow stands, as the SDK reports it on the
+ * run's progress events. An entry with no `agentId` is a slot the script has
+ * queued but not yet started, identified by `index` alone; `lastToolName` and
+ * `lastToolSummary` are the agent's own latest tool call.
+ */
+export type WorkflowAgentProgress = {
+  index: number;
+  label?: string;
+  /** The title of the script phase the agent runs under, when it has one. */
+  phase?: string;
+  agentId?: string;
+  model?: string;
+  state: 'queued' | 'running' | 'done' | 'failed';
+  startedAt?: number;
+  lastToolName?: string;
+  lastToolSummary?: string;
+  promptPreview?: string;
+  tokens?: number;
+  toolCalls?: number;
+  durationMs?: number;
+  resultPreview?: string;
 };
 
 /** Discriminator on NormalizedMessage naming which kind of transcript event it carries — plain text, tool use or result, thinking, stream delta or end, error, completion, status, permission request/resolution/cancellation, session creation, interactive prompt, or task notification. */
@@ -523,7 +701,8 @@ type MessageKind =
   | 'permission_cancelled'
   | 'session_created'
   | 'history_truncated'
-  | 'task_notification';
+  | 'task_notification'
+  | 'task_status';
 
 // ---------------------------
 
@@ -603,6 +782,14 @@ export type QueuedDraft = {
    * permission settings while another session is being viewed.
    */
   options?: QueuedSendOptions;
+};
+
+/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, or do nothing. */
+export type BackgroundSendChoice = 'send' | 'queue' | 'cancel';
+
+/** An open background-work send prompt, listing the session's own background tasks as display strings. */
+export type BackgroundSendPrompt = {
+  work: string[];
 };
 
 /** Viewport-relative placement box (right/bottom offsets plus max height and width) computed for a composer popover so the model and permission menus stay inside the window. */
@@ -701,9 +888,10 @@ export type TodoItem = {
 /** Display state of a tool call — 'running', 'completed', 'error' or 'denied' — used to choose the status badge and styling shown beside it in the transcript. */
 export type ToolStatus = 'running' | 'completed' | 'error' | 'denied';
 
-/** Props contract that every interactive permission panel implements, giving the panel the pending request and the callback it calls to allow or deny that request; use it when registering a panel in the permission panel registry. */
+/** Props contract that every interactive permission panel implements, giving the panel the pending request, the name of the agent asking (for its header) and the callback it calls to allow or deny that request; use it when registering a panel in the permission panel registry. */
 export type PermissionPanelProps = {
   request: PendingPermissionRequest;
+  agentLabel?: string;
   onDecision: (
     requestIds: string | string[],
     decision: { allow?: boolean; message?: string; updatedInput?: unknown },
@@ -806,11 +994,11 @@ type FileDiffInfo = {
 export type FileOpenHandler = (filePath: string, diffInfo?: FileDiffInfo) => void;
 
 
-/** Which tab the git panel is showing (changes, history, branches or worktrees), driving both the tab bar and which data its controller loads. */
-export type GitPanelView = 'changes' | 'history' | 'branches' | 'worktrees';
+/** Which tab the git panel is showing (changes, compare, history, branches or worktrees), driving both the tab bar and which data its controller loads. */
+export type GitPanelView = 'changes' | 'compare' | 'history' | 'branches' | 'worktrees';
 
-/** Single-letter git status of a changed file (M, A, D or U), used to pick its label, badge styling and change group. */
-export type FileStatusCode = 'M' | 'A' | 'D' | 'U';
+/** Single-letter git status of a changed file (M, A, D, R or U), used to pick its label and badge styling; the Changes tab groups only M/A/D/U, while R (renamed) appears in the Compare tab. */
+export type FileStatusCode = 'M' | 'A' | 'D' | 'R' | 'U';
 
 /** The git action a confirmation dialog is guarding, selecting that dialog's title, action label and colour scheme. */
 export type ConfirmActionType = 'discard' | 'delete' | 'commit' | 'pull' | 'push' | 'publish' | 'revertLocalCommit' | 'deleteBranch';
@@ -885,6 +1073,26 @@ export type GitApiErrorResponse = {
 export type GitOperationResponse = GitApiErrorResponse & {
   success?: boolean;
   output?: string;
+};
+
+/** Response of the single-file diff endpoints (`/diff`, `/branch-diff/file`): the shared error fields plus the unified `diff` text with its headers stripped. */
+export type GitFileDiffResponse = GitApiErrorResponse & {
+  diff?: string;
+};
+
+/** One file the working copy changed relative to the compare base's merge base, as listed by the branch-diff endpoint; `oldPath` is only set for renames. */
+export type GitBranchDiffFile = {
+  path: string;
+  oldPath?: string;
+  status: FileStatusCode;
+};
+
+/** Payload of the branch-diff endpoint: the requested `base`, the merge-base sha it resolved to and the changed `files`, or the shared error fields plus a stable `code` (e.g. `GIT_NO_MERGE_BASE`) when the base cannot be compared. */
+export type GitBranchDiffResponse = GitApiErrorResponse & {
+  base?: string;
+  mergeBase?: string;
+  files?: GitBranchDiffFile[];
+  code?: string;
 };
 
 /** One git worktree as reported by the worktrees API, including its branch, ahead/behind counts and the linked project used to open it. */
@@ -1120,17 +1328,55 @@ export type ProjectWorkspaceShellProps = RealtimeProps & {
 
 //----------------- PROVIDER AUTHENTICATION ------------
 
-/** Sign-in state of one LLM provider CLI - whether it is authenticated, the account email and method, plus in-flight loading and error state - polled by the provider-auth module and rendered by the settings and onboarding account views. */
+/** Reported by the server when an ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN is taking precedence over a still-valid `claude /login` subscription, so every request is billed pay-as-you-go to the key; says which variable won, where it was found (the fix differs: restart after unsetting a process env var, or edit the `env` block of ~/.claude/settings.json) and the bypassed account's email when the credentials file records one. Rendered as a warning by the settings account view. */
+export type ProviderAuthSubscriptionOverride = {
+  variable: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN';
+  source: 'process_env' | 'settings_file';
+  subscriptionEmail: string | null;
+};
+
+/** Sign-in state of one LLM provider CLI - whether it is authenticated, the account email and method, plus in-flight loading and error state - polled by the provider-auth module and rendered by the settings and onboarding account views. `subscriptionOverride` is only present when an API key is bypassing a valid subscription login. */
 export type ProviderAuthStatus = {
   authenticated: boolean;
   email: string | null;
   method: string | null;
   error: string | null;
   loading: boolean;
+  subscriptionOverride?: ProviderAuthSubscriptionOverride;
+  /** Version the provider's CLI printed for `--version`; null when unknown, absent until the server has answered. */
+  installedVersion?: string | null;
 };
 
 /** The authentication state of every CLI provider at once, keyed by LLMProvider, so onboarding and settings can render each provider's connected, loading and error state from one object returned by useProviderAuthStatus. */
 export type ProviderAuthStatusMap = Record<LLMProvider, ProviderAuthStatus>;
+
+// ---------------------------
+
+//----------------- PROVIDER CLI VERSION ------------
+
+/** One provider CLI's version state from `GET /api/providers/:provider/cli`: the installed version, the newest npm release (null when the CLI is not on npm or the registry did not answer), the command the update action runs, or why there is none ('bundled': it ships with CloudCLI; 'platform': the hosting platform manages it; 'manual': manage the external CLI outside CloudCLI), whether an update run is going on, and the most recent finished run since the server started. A page that sees `updateInProgress` polls until it turns false and then shows `lastUpdate` as that run's result. Loaded by useProviderCliVersion and rendered by the settings account view. */
+export type ProviderCliStatus = {
+  provider: LLMProvider;
+  installed: boolean;
+  installedVersion: string | null;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  updateCommand: string | null;
+  updateUnavailableReason: 'bundled' | 'platform' | 'manual' | null;
+  updateInProgress: boolean;
+  lastUpdate: ProviderCliUpdateResult | null;
+};
+
+/** What one run of a CLI's own updater did, from `POST /api/providers/:provider/cli/update`: the command, its exit code (null when it could not start or timed out), the tail of its output, the version before and after, and why it failed (null when neither the exit code nor the output reports a failure). Returned by useProviderCliVersion and rendered by the settings account view. */
+export type ProviderCliUpdateResult = {
+  provider: LLMProvider;
+  command: string;
+  exitCode: number | null;
+  output: string;
+  previousVersion: string | null;
+  installedVersion: string | null;
+  failure: 'permission_denied' | 'timed_out' | 'failed' | null;
+};
 
 // ---------------------------
 
@@ -1146,6 +1392,8 @@ export type PreferenceToggleKey =
 /** The full set of quick settings booleans keyed by PreferenceToggleKey, held together so the panel can read every toggle from one object. */
 export type QuickSettingsPreferences = Record<PreferenceToggleKey, boolean>;
 
+/** Which content area the quick settings panel is showing: 'settings' (preference toggles) or 'commands' (slash-command list); persisted with the pin state and used by the tab bar and the panel view. */
+export type QuickSettingsTab = 'settings' | 'commands';
 
 /** Inline style for the quick settings drag handle, produced by the drag hook from the stored handle position and applied by the handle component. */
 export type QuickSettingsHandleStyle = CSSProperties;
@@ -1188,6 +1436,16 @@ export type ClaudePermissionsState = {
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
+};
+
+/** One of the Claude CLI's own settings files (the user's ~/.claude/settings.json or the administrator-managed file) and the permission rules it adds on top of ClaudePermissionsState; served read-only by the server, never edited in the app. `missing` and `invalid` files carry empty rule lists. */
+export type ClaudeSettingsPermissionSource = {
+  scope: 'user' | 'managed';
+  path: string;
+  status: 'ok' | 'missing' | 'invalid';
+  allow: string[];
+  deny: string[];
+  ask: string[];
 };
 
 /** The user's notification settings, grouped into delivery channels (in-app, web push, desktop, sound) and the events that trigger them; mirrors the payload of the notification preferences API. */
@@ -1277,8 +1535,10 @@ export type MobileTerminalSelectionManager = {
 export type SessionRowActions = {
   /** The rename currently open anywhere in the sidebar, or null. */
   activeRename: ActiveSidebarRename | null;
-  /** Sessions with a run in flight: they show a spinner and hide destructive actions. */
+  /** Sessions with a run in flight or background work: they count as running; the former also show a spinner and hide destructive actions. */
   activeSessions: ReadonlySet<string>;
+  /** The subset of `activeSessions` that only has background tasks running, which show the purple dot instead of the spinner. */
+  backgroundSessionIds: ReadonlySet<string>;
   /** Sessions waiting on the user, which show the amber dot. */
   attentionSessionIds: ReadonlySet<string>;
   onRenameDraftChange: (draft: string) => void;
@@ -1316,8 +1576,28 @@ export type SidebarProjectListProps = SessionRowActions & {
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onNewSession: (project: Project) => void;
+  /** The project whose session list is in bulk-selection mode and the rows ticked in it, or null while no list is selecting. */
+  sessionSelection: SidebarSessionSelection | null;
+  /** Enters bulk-selection mode for one project, or replaces its ticked rows (used by "Select all" and "Clear"). */
+  onSetSessionSelection: (selection: SidebarSessionSelection) => void;
+  /** Ticks or unticks one row; takes the owning projectId so a memoized row can bind itself without a per-row closure. */
+  onToggleSessionSelected: (projectId: string, sessionId: string) => void;
+  /** Leaves bulk-selection mode, discarding the ticked rows. */
+  onCancelSessionSelection: () => void;
+  /** Opens the bulk delete confirmation for the ids the list resolved as still deletable. */
+  onDeleteSelectedSessions: (sessionIds: string[]) => void;
   t: TFunction;
 };
+
+/**
+ * The colour theme the user selected, persisted as the `theme` preference.
+ *
+ * `light` and `dark` pin the appearance; `system` follows the operating
+ * system's light/dark setting and keeps following it while the app is open.
+ * `system` is the default, and is also what an unrecognised stored value
+ * resolves to.
+ */
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 /** The ordering applied to the project list, either alphabetically by name or by most recent activity, persisted alongside the user's appearance settings. */
 export type ProjectSortOrder = 'name' | 'date';
@@ -1372,11 +1652,23 @@ export type ActiveSidebarRename =
  * The sidebar's pending delete confirmation. One value rather than a pair of
  * nullable states, so a project dialog and a session dialog cannot both be
  * open — they are portalled at the same z-index and would stack. The project
- * variant carries the session count the dialog warns with.
+ * variant carries the session count the dialog warns with, and the `sessions`
+ * variant the ids of a bulk delete, resolved when the dialog was opened.
  */
 export type PendingSidebarDeletion =
   | { kind: 'project'; project: Project; sessionCount: number }
-  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean };
+  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean }
+  | { kind: 'sessions'; sessionIds: string[] };
+
+/**
+ * The sessions ticked for a bulk action, scoped to the one project whose list
+ * is in selection mode. Scoping it keeps a delete from mixing rows of two
+ * projects, and lets every other project row be handed a constant `null`.
+ */
+export type SidebarSessionSelection = {
+  projectId: string;
+  sessionIds: ReadonlySet<string>;
+};
 
 /** Whether a TaskMaster MCP server is present and configured for a project, or null while that status is still unknown. */
 export type MCPServerStatus = {

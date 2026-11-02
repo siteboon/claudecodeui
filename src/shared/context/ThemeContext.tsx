@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import type { ThemeMode } from '@/shared/types';
 import {
   readUserPreference,
   subscribeToUserPreferences,
@@ -10,9 +11,31 @@ import {
 type ThemeContextValue = {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
+  themeMode: ThemeMode;
+  setThemeMode: (mode: ThemeMode) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+/**
+ * Reads the stored preference as a theme mode.
+ *
+ * Only `'dark'` and `'light'` were ever written before the system option
+ * existed, so anything else — `'system'`, an absent value, or a value a newer
+ * client wrote — means "follow the OS", which is also the default.
+ */
+const readStoredThemeMode = (): ThemeMode => {
+  const savedTheme = readUserPreference<string | null>('theme', null);
+  return savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'system';
+};
+
+/** Whether the OS currently asks for a dark appearance; false when unknown. */
+const prefersDarkAppearance = (): boolean =>
+  Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+
+/** The colour a mode resolves to right now. */
+const resolveIsDarkMode = (mode: ThemeMode): boolean =>
+  mode === 'system' ? prefersDarkAppearance() : mode === 'dark';
 
 export const useTheme = () => {
   const context = useContext(ThemeContext);
@@ -24,30 +47,21 @@ export const useTheme = () => {
 
 /** Mounted once by App so every module can read and switch the colour theme through useTheme. */
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
-  // Check for saved theme preference or default to system preference. The
-  // stored theme is read synchronously from the preference mirror so the very
-  // first paint is already the right colour.
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const savedTheme = readUserPreference<string | null>('theme', null);
-    if (savedTheme) {
-      return savedTheme === 'dark';
-    }
-
-    // Check system preference
-    if (window.matchMedia) {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
-    }
-
-    return false;
-  });
+  // The mode the user chose, not the colour it currently resolves to: only the
+  // mode is persisted, and `system` has to keep tracking the OS afterwards.
+  // Read synchronously from the preference mirror so the very first paint is
+  // already the right colour.
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(readStoredThemeMode);
+  // The resolved colour. It is not derivable from `themeMode` alone, because
+  // under `system` it changes when the OS does, with no state change here.
+  const [isDarkMode, setIsDarkMode] = useState(() => resolveIsDarkMode(readStoredThemeMode()));
 
   // The theme now lives in auth.db, so a change made on another device (or in
   // another tab) arrives through the preference store rather than a re-render.
   useEffect(() => subscribeToUserPreferences(() => {
-    const savedTheme = readUserPreference<string | null>('theme', null);
-    if (savedTheme) {
-      setIsDarkMode(savedTheme === 'dark');
-    }
+    const storedMode = readStoredThemeMode();
+    setThemeModeState(storedMode);
+    setIsDarkMode(resolveIsDarkMode(storedMode));
   }), []);
 
   // Applying the theme to the document and persisting it are deliberately
@@ -90,9 +104,9 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e: MediaQueryListEvent) => {
-      // Only update if user hasn't manually set a preference
-      const savedTheme = readUserPreference<string | null>('theme', null);
-      if (!savedTheme) {
+      // Re-read rather than close over `themeMode`: a change that arrived from
+      // another device lands in the store first, and only `system` follows the OS.
+      if (readStoredThemeMode() === 'system') {
         setIsDarkMode(e.matches);
       }
     };
@@ -103,10 +117,19 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 
   // The only writer: a theme is stored because the user picked it, never
   // because this device happened to start on one.
+  const setThemeMode = useCallback((mode: ThemeMode) => {
+    writeUserPreference('theme', mode);
+    setThemeModeState(mode);
+    setIsDarkMode(resolveIsDarkMode(mode));
+  }, []);
+
+  // Kept for the callers that only offer a light/dark switch: choosing either
+  // one is an explicit choice, so it leaves `system` behind exactly as before.
   const toggleDarkMode = useCallback(() => {
     setIsDarkMode((previous) => {
       const next = !previous;
       writeUserPreference('theme', next ? 'dark' : 'light');
+      setThemeModeState(next ? 'dark' : 'light');
       return next;
     });
   }, []);
@@ -114,8 +137,8 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   // A fresh object here would re-render every consumer in the app on any
   // render of this provider, theme change or not.
   const value = useMemo<ThemeContextValue>(
-    () => ({ isDarkMode, toggleDarkMode }),
-    [isDarkMode, toggleDarkMode],
+    () => ({ isDarkMode, toggleDarkMode, themeMode, setThemeMode }),
+    [isDarkMode, toggleDarkMode, themeMode, setThemeMode],
   );
 
   return (

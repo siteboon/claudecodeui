@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, Plus, Shield, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import ClaudeSettingsFileRules from '@/modules/settings/tabs/agents-settings/sections/content/ClaudeSettingsFileRules';
 import { Button, Input } from '@/shared/ui';
 import type { CodexPermissionMode } from '@/shared/types';
 
@@ -256,6 +257,9 @@ function ClaudePermissions({
           <li><code className="rounded bg-blue-100 px-1 dark:bg-blue-800">"Bash(rm:*)"</code> {t('permissions.toolExamples.bashRm')}</li>
         </ul>
       </div>
+
+      {/* Below the examples, so they stay next to the two inputs whose syntax they explain. */}
+      <ClaudeSettingsFileRules />
 
     </div>
   );

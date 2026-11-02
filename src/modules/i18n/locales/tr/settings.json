@@ -67,6 +67,27 @@
       "openPanel": "Ayarlar panelini aç",
       "draggingStatus": "Sürükleniyor...",
       "toggleAndMove": "Açıp kapamak için tıkla, taşımak için sürükle"
+    },
+    "tabs": {
+      "settings": "Ayarlar",
+      "commands": "Komutlar"
+    },
+    "pin": "Paneli sabitle",
+    "unpin": "Panel sabitlemesini kaldır",
+    "close": "Paneli kapat",
+    "commands": {
+      "searchPlaceholder": "Komut ara…",
+      "noProject": "Komutlarını görmek için bir proje seçin.",
+      "loading": "Komutlar yükleniyor…",
+      "empty": "Bu proje için kullanılabilir komut yok.",
+      "noMatches": "Aramanızla eşleşen komut yok.",
+      "loadError": "Komutlar yüklenemedi.",
+      "groups": {
+        "builtIn": "Yerleşik",
+        "custom": "Özel",
+        "skills": "Beceriler"
+      },
+      "insertTitle": "{{command}} komutunu sohbete ekle"
     }
   },
   "terminalShortcuts": {
@@ -125,6 +146,13 @@
     "darkMode": {
       "label": "Koyu Mod",
       "description": "Açık ve koyu temalar arasında geçiş yap"
+    },
+    "theme": {
+      "label": "Tema",
+      "description": "Açık veya koyu bir görünüm seçin ya da işletim sisteminizi izleyin",
+      "light": "Açık",
+      "dark": "Koyu",
+      "system": "Sistem görünümünü izle"
     },
     "projectSorting": {
       "label": "Proje Sıralama",
@@ -329,6 +357,37 @@
       }
     },
     "connectionStatus": "Bağlantı Durumu",
+    "cli": {
+      "title": "CLI sürümü",
+      "checking": "Sürüm kontrol ediliyor…",
+      "installed": "Kurulu: v{{version}}",
+      "installedUnknown": "Kurulu (sürüm bilinmiyor)",
+      "versionUnavailable": "Sürüm okunamadı",
+      "updateAvailable": "Güncelleme var: v{{version}}",
+      "upToDate": "Güncel",
+      "bundled": "CloudCLI ile birlikte gelir ve onunla birlikte güncellenir.",
+      "platform": "Barındırma platformu tarafından yönetilir.",
+      "updateTo": "v{{version}} sürümüne güncelle",
+      "runUpdater": "Güncelleyiciyi çalıştır",
+      "updating": "Güncelleniyor…",
+      "updatingHint": "Sunucuda {{command}} çalıştırılıyor. Bu birkaç dakika sürebilir.",
+      "runsCommand": "Sunucuda {{command}} komutunu çalıştırır",
+      "output": "{{command}} çıktısı",
+      "result": {
+        "updated": "v{{version}} sürümüne güncellendi.",
+        "alreadyUpToDate": "Zaten güncel (v{{version}}).",
+        "unchanged": "Güncelleyici bitti ama sürüm hâlâ v{{version}}. Nedenini aşağıdaki çıktıda görebilirsin.",
+        "unchangedUnknown": "Güncelleyici bitti. Çıktısı aşağıda.",
+        "permissionDenied": "Sunucunun kullanıcısının bu CLI'nin kurulu olduğu yere yazma izni yok. Sunucuda {{command}} komutunu bu kurulumun sahibi olarak çalıştır (örneğin sudo ile).",
+        "timedOut": "Güncelleme zamanında bitmedi ve durduruldu. Tamamlamak için sunucuda {{command}} komutunu çalıştır.",
+        "failed": "Güncelleme başarısız oldu (çıkış kodu {{exitCode}}). Çıktısı aşağıda.",
+        "failedQuietly": "Güncelleyici bir hata bildirdi. Çıktısı aşağıda.",
+        "notStarted": "Güncelleyici başlatılamadı.",
+        "busy": "Bu ajan bir oturumda çalışıyor. Bitmesini bekle ya da durdur, sonra güncelle.",
+        "requestFailed": "Güncelleme çalıştırılmadı: {{error}}",
+        "unconfirmed": "Sunucudan yanıt gelmedi ({{error}}). Güncelleme yine de çalışmış olabilir; yukarıdaki sürüm, sunucunun en son bildirdiği sürümdür."
+      }
+    },
     "login": {
       "title": "Giriş Yap",
       "reAuthenticate": "Yeniden Kimlik Doğrula",
@@ -358,6 +417,25 @@
       "description": "İzin istemeden otomatik olarak engellenen araçlar",
       "placeholder": "ör. \"Bash(rm:*)\"",
       "empty": "Engellenen araç yapılandırılmamış"
+    },
+    "settingsFiles": {
+      "title": "Claude ayar dosyalarındaki kurallar",
+      "description": "Claude CLI bu kuralları yukarıdaki listelere ek olarak da uygular. Bir reddetme kuralı nerede tanımlanmış olursa olsun önceliklidir, ancak bir sorma kuralı İzin Verilen Araçlar listesinde zaten bulunan bir araç için onay istemez. Kurallar burada salt okunurdur; dosyalarda düzenleyin.",
+      "sources": {
+        "user": "Ayarlarınız",
+        "managed": "Yönetilen ayarlar (yönetici)"
+      },
+      "groups": {
+        "allow": "İzin ver",
+        "ask": "Sor",
+        "deny": "Reddet"
+      },
+      "missing": "Dosya bulunamadı, bu yüzden kural eklemiyor.",
+      "invalid": "Bu dosya okunamadı. Geçerli bir JSON olduğundan emin olun.",
+      "empty": "Bu dosyada izin kuralı yok.",
+      "loading": "Kurallar yükleniyor…",
+      "loadFailed": "Claude ayar dosyalarındaki kurallar yüklenemedi.",
+      "projectNote": "Bir projenin kendi .claude/settings.json ve .claude/settings.local.json dosyaları da o projedeki sohbetlere uygulanır. Claude CLI, klasöre güvenilene kadar .claude/settings.json içindeki izin kurallarını yok sayar: Claude Code'u orada bir kez etkileşimli olarak çalıştırın ve güven iletişim kutusunu kabul edin."
     },
     "allowedCommands": {
       "title": "İzin Verilen Shell Komutları",

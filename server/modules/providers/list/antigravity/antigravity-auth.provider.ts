@@ -1,26 +1,24 @@
-import type { IProviderAuth, ProviderAuthStatus } from '@/shared/index.js';
-import { resolveConfiguredCliExecutable, runProviderCliCommand } from '@/shared/index.js';
+import type { CliVersionProbe, IProviderAuth, ProviderAuthStatus } from '@/shared/index.js';
+import { buildProviderCliEnv, probeCliVersion, resolveConfiguredCliExecutable, runProviderCliCommand } from '@/shared/index.js';
 
 const antigravityExecutable = () =>
   resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy');
 
 /** Used by AntigravityProvider to report installation and usable account status. */
 export class AntigravityProviderAuth implements IProviderAuth {
-  /** Checks whether the AGY executable can be invoked without blocking Node.js. */
-  private async checkInstalled(): Promise<boolean> {
-    const result = await runProviderCliCommand(antigravityExecutable(), ['--version'], {
-      timeoutMs: 5_000,
-    });
-    return !result.error && result.exitCode === 0;
+  /** Used by Providers' auth and CLI-version services to probe the configured AGY binary. */
+  checkInstalled(): CliVersionProbe {
+    return probeCliVersion(antigravityExecutable(), ['--version'], buildProviderCliEnv());
   }
 
   /** Reports installation and login state through lightweight AGY probes. */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = await this.checkInstalled();
+    const { installed, version: installedVersion } = this.checkInstalled();
     if (!installed) {
       return {
         installed: false,
         provider: 'antigravity',
+        installedVersion,
         authenticated: false,
         email: null,
         method: null,
@@ -42,6 +40,7 @@ export class AntigravityProviderAuth implements IProviderAuth {
     return {
       installed,
       provider: 'antigravity',
+      installedVersion,
       authenticated,
       email: authenticated ? 'Authenticated' : null,
       method: authenticated ? 'agy' : null,

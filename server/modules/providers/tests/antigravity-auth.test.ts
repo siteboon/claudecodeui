@@ -66,6 +66,7 @@ test('Antigravity auth uses AGY_CLI_PATH for installation and model probes', { c
     const status = await new AntigravityProviderAuth().getStatus();
 
     assert.equal(status.installed, true);
+    assert.equal(status.installedVersion, '1.2.3');
     assert.equal(status.authenticated, true);
     assert.equal(status.method, 'agy');
   } finally {

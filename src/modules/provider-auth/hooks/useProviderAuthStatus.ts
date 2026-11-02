@@ -1,7 +1,12 @@
 import { useCallback, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { LLMProvider, ProviderAuthStatus, ProviderAuthStatusMap } from '@/shared/types';
+import type {
+  LLMProvider,
+  ProviderAuthStatus,
+  ProviderAuthStatusMap,
+  ProviderAuthSubscriptionOverride,
+} from '@/shared/types';
 
 const CLI_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
 
@@ -18,6 +23,8 @@ type ProviderAuthStatusPayload = {
   email?: string | null;
   method?: string | null;
   error?: string | null;
+  subscriptionOverride?: ProviderAuthSubscriptionOverride | null;
+  installedVersion?: string | null;
 };
 
 type ProviderAuthStatusApiResponse = {
@@ -41,6 +48,13 @@ const toProviderAuthStatus = (
   method: payload.method ?? null,
   error: payload.error ?? fallbackError,
   loading: false,
+  // Only the Claude provider ever sends this, and only while a key is bypassing
+  // a valid subscription login; keep the key absent otherwise so the shape
+  // matches the initial/error statuses above.
+  ...(payload.subscriptionOverride ? { subscriptionOverride: payload.subscriptionOverride } : {}),
+  // Servers older than this field leave it out; keep it absent rather than
+  // claiming the version is unknown.
+  ...(payload.installedVersion !== undefined ? { installedVersion: payload.installedVersion } : {}),
 });
 
 type UseProviderAuthStatusOptions = {

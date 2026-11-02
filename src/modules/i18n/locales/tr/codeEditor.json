@@ -34,5 +34,9 @@
   "binaryFile": {
     "title": "Binary Dosya",
     "message": "\"{{fileName}}\" dosyası binary olduğu için metin editöründe gösterilemez."
+  },
+  "unsavedChanges": {
+    "confirmClose": "Kaydedilmemiş değişikliklerin var. Bu dosya kapatılsın ve değişiklikler silinsin mi?",
+    "indicator": "Kaydedilmemiş değişiklikler"
   }
 }

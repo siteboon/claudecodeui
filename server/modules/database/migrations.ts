@@ -488,6 +488,8 @@ const ensureAntigravityProviderModelsConstraint = (db: Database): void => {
         sort_order INTEGER NOT NULL DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        effort_values TEXT DEFAULT NULL,
+        effort_default TEXT DEFAULT NULL,
         UNIQUE(provider, model_id)
       )
     `);
@@ -499,7 +501,9 @@ const ensureAntigravityProviderModelsConstraint = (db: Database): void => {
         model_name,
         sort_order,
         created_at,
-        updated_at
+        updated_at,
+        effort_values,
+        effort_default
       )
       SELECT
         id,
@@ -508,7 +512,9 @@ const ensureAntigravityProviderModelsConstraint = (db: Database): void => {
         model_name,
         sort_order,
         created_at,
-        updated_at
+        updated_at,
+        effort_values,
+        effort_default
       FROM provider_models
     `);
     db.exec('DROP TABLE provider_models');
@@ -518,6 +524,19 @@ const ensureAntigravityProviderModelsConstraint = (db: Database): void => {
     db.exec('ROLLBACK');
     throw error;
   }
+};
+
+/**
+ * Adds the reasoning-effort metadata columns to the custom-model library.
+ *
+ * Existing rows stay NULL on purpose: no effort levels were ever declared for
+ * them, and a guessed list could offer levels the model rejects. Those models
+ * keep hiding the composer's Reasoning section until the user declares levels.
+ */
+const addProviderModelEffortColumns = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'provider_models').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'provider_models', columnNames, 'effort_values', 'TEXT DEFAULT NULL');
+  addColumnToTableIfNotExists(db, 'provider_models', columnNames, 'effort_default', 'TEXT DEFAULT NULL');
 };
 
 const ensureProjectsForSessionPaths = (db: Database): void => {
@@ -563,6 +582,9 @@ export const runMigrations = (db: Database) => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_user_channel ON notification_channel_endpoints(user_id, channel)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_notification_channel_endpoints_enabled ON notification_channel_endpoints(enabled)');
     db.exec(PROVIDER_MODELS_TABLE_SCHEMA_SQL);
+    // Add effort columns before the constraint rebuild so both legacy and
+    // current-main model metadata survive the copy into the replacement table.
+    addProviderModelEffortColumns(db);
     ensureAntigravityProviderModelsConstraint(db);
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_provider_models_provider_order

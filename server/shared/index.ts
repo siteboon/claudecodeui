@@ -4,11 +4,12 @@ export type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '.
 
 // Providers' Antigravity auth/model adapters consume the shared CLI contracts.
 export type { IProviderAuth, IProviderModels } from './interfaces.js';
-export type { ProviderAuthStatus, ProviderCurrentActiveModel, ProviderModelsDefinition } from './types.js';
+export type { CliVersionProbe, ProviderAuthStatus, ProviderCurrentActiveModel, ProviderModelsDefinition } from './types.js';
 export {
   buildDefaultProviderCurrentActiveModel,
   buildProviderCliEnv,
   parseIncomingJsonObject,
+  probeCliVersion,
   resolveConfiguredCliExecutable,
   runProviderCliCommand,
   stripAnsiSequences,

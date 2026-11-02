@@ -33,7 +33,9 @@
     "failed": "Fallito",
     "pending": "In attesa",
     "completed": "Completato",
-    "inProgress": "In corso"
+    "inProgress": "In corso",
+    "reconnecting": "Riconnessione...",
+    "chatConnectionLost": "Connessione della chat persa. Riconnessione..."
   },
   "messages": {
     "savedSuccessfully": "Salvato con successo",
@@ -264,7 +266,8 @@
       "showSidebar": "Mostra barra laterale",
       "settings": "Impostazioni",
       "updateAvailable": "Aggiornamento disponibile",
-      "closeSidebar": "Chiudi barra laterale"
+      "closeSidebar": "Chiudi barra laterale",
+      "resizeSidebar": "Ridimensiona barra laterale"
     }
   }
 }

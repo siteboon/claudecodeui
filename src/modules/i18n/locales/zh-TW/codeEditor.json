@@ -32,5 +32,9 @@
   "binaryFile": {
     "title": "二進位檔案",
     "message": "檔案「{{fileName}}」無法在文字編輯器中顯示，因為它是二進位檔案。"
+  },
+  "unsavedChanges": {
+    "confirmClose": "您有未儲存的變更。關閉此檔案並放棄這些變更？",
+    "indicator": "未儲存的變更"
   }
 }
