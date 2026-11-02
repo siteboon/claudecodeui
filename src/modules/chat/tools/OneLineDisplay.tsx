@@ -109,8 +109,9 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
             </svg>
           </div>
           <div className={`flex min-w-0 flex-1 items-start gap-2${wrapsForTime}`}>
-            {/* Nudged down to the pill's first line of text. */}
-            <HeaderWithTime time={headerTime && <span className="ml-auto mt-1 flex-shrink-0">{headerTime}</span>} className="items-start gap-2">
+            {/* Nudged down to the pill's first line of text. A flex box, so the
+                wrapper adds no line of its own around the time. */}
+            <HeaderWithTime time={headerTime && <span className="ml-auto mt-1 flex flex-shrink-0">{headerTime}</span>} className="items-start gap-2">
               <div className="min-w-0 flex-1 rounded bg-gray-900 px-2.5 py-1 dark:bg-black">
                 <code className={`font-mono text-xs text-green-400 ${wrapText ? 'whitespace-pre-wrap break-all' : 'block truncate'}`}>
                   <span className="select-none text-green-600 dark:text-green-500">$ </span>{value}
