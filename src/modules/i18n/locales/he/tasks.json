@@ -1,0 +1,160 @@
+{
+  "notConfigured": {
+    "title": "TaskMaster AI לא מוגדר",
+    "description": "TaskMaster עוזר לפרק פרויקטים מורכבים למשימות שקל לנהל, בעזרת AI",
+    "whatIsTitle": "🎯 מה זה TaskMaster?",
+    "features": {
+      "aiPowered": "ניהול משימות מבוסס AI: פירוק פרויקטים מורכבים לתתי-משימות שקל לנהל",
+      "prdTemplates": "תבניות PRD: יצירת משימות ממסמכי דרישות מוצר",
+      "dependencyTracking": "מעקב תלויות: הבנת הקשרים בין משימות וסדר הביצוע",
+      "progressVisualization": "תצוגת התקדמות: לוחות קנבן וניתוח מפורט של משימות",
+      "cliIntegration": "שילוב CLI: שימוש בפקודות taskmaster לתהליכי עבודה מתקדמים"
+    },
+    "initializeButton": "אתחול TaskMaster AI"
+  },
+  "gettingStarted": {
+    "title": "תחילת עבודה עם TaskMaster",
+    "subtitle": "TaskMaster אותחל! מה עושים עכשיו:",
+    "steps": {
+      "createPRD": {
+        "title": "יצירת מסמך דרישות מוצר (PRD)",
+        "description": "אפשר לדון ברעיון לפרויקט וליצור PRD שמתאר מה רוצים לבנות.",
+        "addButton": "הוספת PRD",
+        "existingPRDs": "מסמכי PRD קיימים:"
+      },
+      "generateTasks": {
+        "title": "יצירת משימות מ-PRD",
+        "description": "אחרי שיש PRD, אפשר לבקש מעוזר ה-AI לנתח אותו, ו-TaskMaster יפרק אותו אוטומטית למשימות שקל לנהל, עם פרטי מימוש."
+      },
+      "analyzeTasks": {
+        "title": "ניתוח והרחבת משימות",
+        "description": "אפשר לבקש מעוזר ה-AI לנתח את מורכבות המשימות ולהרחיב אותן לתתי-משימות מפורטות, כדי להקל על המימוש."
+      },
+      "startBuilding": {
+        "title": "מתחילים לבנות",
+        "description": "אפשר לבקש מעוזר ה-AI להתחיל לעבוד על משימות, לעדכן את הסטטוס שלהן ולהוסיף משימות חדשות ככל שהפרויקט מתפתח."
+      }
+    },
+    "tip": "💡 טיפ: כדאי להתחיל עם PRD כדי להפיק את המרב מיצירת המשימות מבוססת ה-AI של TaskMaster"
+  },
+  "setupModal": {
+    "title": "הגדרת TaskMaster",
+    "subtitle": "CLI אינטראקטיבי עבור {{projectName}}",
+    "willStart": "האתחול של TaskMaster יתחיל אוטומטית",
+    "completed": "הגדרת TaskMaster הושלמה! אפשר לסגור את החלון.",
+    "closeButton": "סגירה",
+    "closeContinueButton": "סגירה והמשך"
+  },
+  "helpGuide": {
+    "title": "תחילת עבודה עם TaskMaster",
+    "subtitle": "המדריך לניהול משימות פרודוקטיבי",
+    "examples": {
+      "parsePRD": "💬 דוגמה:\n\"אתחלתי פרויקט חדש עם Claude Task Master. יש לי PRD בנתיב .taskmaster/docs/prd.txt. אפשר לעזור לי לנתח אותו ולהגדיר את המשימות הראשונות?\"",
+      "expandTask": "💬 דוגמה:\n\"משימה 5 נראית מורכבת. אפשר לפרק אותה לתתי-משימות?\"",
+      "addTask": "💬 דוגמה:\n\"נא להוסיף משימה חדשה למימוש העלאת תמונות פרופיל משתמש עם Cloudinary, ולבדוק מה הגישה הטובה ביותר.\""
+    },
+    "moreExamples": "עוד דוגמאות ודפוסי שימוש ←",
+    "proTips": {
+      "title": "💡 טיפים למתקדמים",
+      "search": "אפשר להשתמש בשורת החיפוש כדי למצוא משימות מסוימות במהירות",
+      "views": "אפשר לעבור בין תצוגות קנבן, רשימה ורשת בעזרת מתגי התצוגה",
+      "filters": "אפשר להשתמש במסננים כדי להתמקד בסטטוסים או בעדיפויות מסוימים",
+      "details": "לחיצה על משימה מציגה מידע מפורט ומאפשרת לנהל תתי-משימות"
+    },
+    "learnMore": {
+      "title": "📚 מידע נוסף",
+      "description": "TaskMaster AI היא מערכת מתקדמת לניהול משימות שנבנתה למפתחים. אפשר למצוא תיעוד ודוגמאות ולתרום לפרויקט.",
+      "githubButton": "צפייה ב-GitHub"
+    }
+  },
+  "search": {
+    "placeholder": "חיפוש משימות…"
+  },
+  "filters": {
+    "button": "מסננים",
+    "status": "סטטוס",
+    "priority": "עדיפות",
+    "sortBy": "מיון לפי",
+    "allStatuses": "כל הסטטוסים",
+    "allPriorities": "כל העדיפויות",
+    "showing": "מוצגות {{filtered}} מתוך {{total}} משימות",
+    "clearFilters": "ניקוי מסננים"
+  },
+  "sort": {
+    "id": "מזהה",
+    "status": "סטטוס",
+    "priority": "עדיפות",
+    "idAsc": "מזהה (עולה)",
+    "idDesc": "מזהה (יורד)",
+    "titleAsc": "כותרת (א-ת)",
+    "titleDesc": "כותרת (ת-א)",
+    "statusAsc": "סטטוס (ממתינות קודם)",
+    "statusDesc": "סטטוס (הושלמו קודם)",
+    "priorityAsc": "עדיפות (גבוהה קודם)",
+    "priorityDesc": "עדיפות (נמוכה קודם)"
+  },
+  "views": {
+    "kanban": "תצוגת קנבן",
+    "list": "תצוגת רשימה",
+    "grid": "תצוגת רשת"
+  },
+  "kanban": {
+    "pending": "📋 לביצוע",
+    "inProgress": "🚀 בתהליך",
+    "done": "✅ הושלם",
+    "blocked": "🚫 חסום",
+    "deferred": "⏳ נדחה",
+    "cancelled": "❌ בוטל",
+    "noTasksYet": "אין משימות עדיין",
+    "tasksWillAppear": "משימות יופיעו כאן",
+    "moveTasksHere": "כאן מעבירים משימות כשמתחילים אותן",
+    "completedTasksHere": "משימות שהושלמו יופיעו כאן",
+    "statusTasksHere": "משימות בסטטוס הזה יופיעו כאן"
+  },
+  "buttons": {
+    "help": "מדריך תחילת העבודה של TaskMaster",
+    "prds": "מסמכי PRD",
+    "addPRD": "הוספת PRD",
+    "addTask": "הוספת משימה",
+    "createNewPRD": "יצירת PRD חדש",
+    "prdsAvailable_one": "PRD אחד זמין",
+    "prdsAvailable_two": "שני מסמכי PRD זמינים",
+    "prdsAvailable_other": "{{count}} מסמכי PRD זמינים"
+  },
+  "prd": {
+    "modified": "שונה: {{date}}"
+  },
+  "statuses": {
+    "pending": "ממתין",
+    "in-progress": "בתהליך",
+    "done": "הושלם",
+    "blocked": "חסום",
+    "deferred": "נדחה",
+    "cancelled": "בוטל"
+  },
+  "priorities": {
+    "high": "גבוהה",
+    "medium": "בינונית",
+    "low": "נמוכה",
+    "highTitle": "עדיפות גבוהה",
+    "mediumTitle": "עדיפות בינונית",
+    "lowTitle": "עדיפות נמוכה"
+  },
+  "noMatchingTasks": {
+    "title": "אין משימות שתואמות למסננים",
+    "description": "אפשר לשנות את החיפוש או את תנאי הסינון."
+  },
+  "banner": {
+    "initialize": "אתחול",
+    "hideDetails": "הסתרת פרטים",
+    "whatIsTaskmaster": "מה זה TaskMaster?",
+    "detailAiPowered": "- ניהול משימות מבוסס AI עם תלויות ותתי-משימות.",
+    "detailPrdDriven": "- יצירת משימות מתוך PRD להקמה מהירה יותר של פרויקטים.",
+    "detailKanbanList": "- תצוגות קנבן ורשימה לעבודה היומיומית.",
+    "startTask": "התחלת משימה",
+    "viewTaskDetails": "צפייה בפרטי המשימה",
+    "viewAllTasks": "צפייה בכל המשימות",
+    "allComplete": "כל המשימות הושלמו",
+    "noPending": "אין משימות ממתינות"
+  }
+}

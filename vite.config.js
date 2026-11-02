@@ -1,8 +1,14 @@
+import { createRequire } from 'node:module'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { getConnectableHost, normalizeLoopbackHost } from './shared/networkHosts.js'
 import { resolveAuthMode } from './shared/authConfig.ts'
+
+// The client shows the installed package version so it can be compared against the
+// version the server process is actually running. Reading package.json here and
+// injecting it keeps the frontend free of imports that reach outside src/.
+const pkg = createRequire(import.meta.url)('./package.json')
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -24,7 +30,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), {
       name: 'cloudcli-auth-mode',
       generateBundle() {
-        // Bind the frontend artifact to its build-time authentication settings.
+        // Bind the served frontend to the same authentication settings as the server.
         this.emitFile({
           type: 'asset',
           fileName: 'auth-config.json',
@@ -33,6 +39,7 @@ export default defineConfig(({ mode }) => {
       },
     }],
     define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
       'import.meta.env.VITE_IS_PLATFORM': JSON.stringify(String(authMode.isPlatform)),
       'import.meta.env.VITE_DISABLE_AUTH': JSON.stringify(String(authMode.disableAuth)),
     },

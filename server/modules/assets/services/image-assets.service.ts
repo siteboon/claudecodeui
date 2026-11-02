@@ -1,5 +1,7 @@
-import { promises as fs } from 'node:fs';
+import fsSync, { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import mime from 'mime-types';
 
 import { getGlobalImageAssetsDir, toPosixPath } from '@/shared/image-attachments.js';
 
@@ -33,6 +35,8 @@ type UploadedImageFile = {
   mimetype: string;
 };
 
+type UploadedAttachmentFile = UploadedImageFile;
+
 /** Returns whether one uploaded mime type may be stored as a chat image asset. */
 export function isAllowedImageMimeType(mimeType: string): boolean {
   return ALLOWED_IMAGE_MIME_TYPES.has(mimeType);
@@ -61,6 +65,15 @@ export function buildStoredImageRecords(files: UploadedImageFile[]): StoredImage
 }
 
 /**
+ * Maps multer-stored files to provider-neutral attachment records for the
+ * assets route. The shared storage format intentionally matches image records
+ * so one uploaded file can move through queueing and provider dispatch.
+ */
+export function buildStoredAttachmentRecords(files: UploadedAttachmentFile[]): StoredImageAsset[] {
+  return buildStoredImageRecords(files);
+}
+
+/**
  * Resolves one asset filename to its absolute path inside the global assets
  * folder, or null when the name is empty, contains path separators/traversal,
  * or would escape the folder. This is the only lookup the serving route uses,
@@ -79,4 +92,36 @@ export function resolveImageAssetFile(filename: string): string | null {
   }
 
   return resolved;
+}
+
+/**
+ * Resolves a general chat attachment for the assets serving route. It shares
+ * the image resolver's strict direct-child containment boundary.
+ */
+export function resolveAttachmentAssetFile(filename: string): string | null {
+  return resolveImageAssetFile(filename);
+}
+
+/**
+ * Opens one stored chat asset for the assets route without exposing arbitrary
+ * filesystem reads. The route translates the lookup status and streams the
+ * returned direct-child file to the authenticated client.
+ */
+export async function openStoredAttachmentAsset(filename: string) {
+  const resolved = resolveAttachmentAssetFile(filename);
+  if (!resolved) {
+    return { status: 'invalid' as const };
+  }
+
+  try {
+    await fs.access(resolved);
+  } catch {
+    return { status: 'missing' as const };
+  }
+
+  return {
+    status: 'found' as const,
+    contentType: mime.lookup(resolved) || 'application/octet-stream',
+    stream: fsSync.createReadStream(resolved),
+  };
 }

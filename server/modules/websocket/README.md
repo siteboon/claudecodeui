@@ -19,7 +19,7 @@ Shared chat client registry and open-state constant used by other modules.
 
 ## Why Dependency Injection Is Used
 
-The module receives runtime-specific functions from `server/index.js` instead of importing legacy runtime files directly.
+The module receives runtime-specific functions from `server/index.ts` instead of importing legacy runtime files directly.
 
 Benefits:
 
@@ -33,7 +33,7 @@ Benefits:
 |---|---|
 | `services/websocket-server.service.ts` | Creates `WebSocketServer`, binds `verifyClient`, routes connection by pathname |
 | `services/websocket-auth.service.ts` | Authenticates upgrade requests and attaches `request.user` |
-| `services/chat-websocket.service.ts` | Handles the `/ws` chat protocol (`chat.send` / `chat.abort` / `chat.subscribe` / `chat.permission-response`) |
+| `services/chat-websocket.service.ts` | Handles the `/ws` chat protocol (`chat.send` / `chat.abort` / `chat.stop-task` / `chat.subscribe` / `chat.permission-response`) |
 | `services/chat-run-registry.service.ts` | Tracks live provider runs per app session id: seq numbering, event replay buffer, provider-id mapping, completion state |
 | `services/chat-session-writer.service.ts` | Gateway writer handed to provider runtimes: remaps provider session ids to app ids, swallows `session_created`, assigns `seq` |
 | `services/shell-websocket.service.ts` | Handles `/shell` PTY lifecycle, reconnect buffering, auth URL detection |
@@ -108,7 +108,7 @@ When a chat socket connects:
 
 1. Add socket to `connectedClients`.
 2. Parse each incoming message with `parseIncomingJsonObject`.
-3. Dispatch by `data.type` (four message types, none provider-specific).
+3. Dispatch by `data.type` (six message types, none provider-specific).
 4. On close, remove socket from `connectedClients`.
 
 ### Session identity model
@@ -117,8 +117,8 @@ The frontend only ever knows the **app session id** (allocated by
 `POST /api/providers/sessions` or discovered via the session index). The
 provider-native id (JSONL file name, CLI resume id) stays inside the backend:
 
-1. `chat.send` resolves the app id to `{ provider, provider_session_id, project_path }` from the sessions DB.
-2. The provider runtime receives the provider-native id for resume.
+1. `chat.send` resolves the app id to `{ provider, project_path }` from the sessions DB and passes the **app session id** to the provider runtime.
+2. The provider runtime resolves the provider-native id from the sessions DB itself (`sessionsService.resolveProviderSessionId`) at the exact points its CLI/SDK needs it (resume flags, provider-owned databases). Runtimes key their process maps by the app session id, so abort and pending-approval lookups use app ids too.
 3. The `ChatSessionWriter` remaps every outbound event back to the app id, and turns `session_created` announcements into a DB mapping update instead of forwarding them.
 
 ### Chat Message Dispatch
@@ -129,10 +129,12 @@ flowchart TD
   B -->|invalid| C[send kind:protocol_error]
   B -->|ok| D{data.type}
 
-  D -->|chat.send| E[resolve session row -> startRun -> spawnFns provider]
-  D -->|chat.abort| F[abortFns provider + synthetic complete]
+  D -->|chat.send| E[resolve session row -> startRun -> providerRuntimeService.run]
+  D -->|chat.edit-send| E2[history_truncated -> rewind or resume at the anchor -> same as chat.send]
+  D -->|chat.abort| F[providerRuntimeService.abort + synthetic complete]
+  D -->|chat.stop-task| F2[providerRuntimeService.stopBackgroundTask]
   D -->|chat.subscribe| G[chat_subscribed ack + attach socket + replay events seq > lastSeq]
-  D -->|chat.permission-response| H[resolveToolApproval]
+  D -->|chat.permission-response| H[providerRuntimeService.resolveToolApproval]
   D -->|other| I[send kind:protocol_error]
 ```
 
@@ -269,5 +271,5 @@ To add a new websocket route:
 1. Add a new handler service under `services/`.
 2. Extend `WebSocketServerDependencies` in `websocket-server.service.ts` if needed.
 3. Add a new pathname branch in the router.
-4. Wire dependency injection from `server/index.js`.
+4. Wire dependency injection from `server/index.ts`.
 5. Keep `index.ts` as barrel-only export surface.

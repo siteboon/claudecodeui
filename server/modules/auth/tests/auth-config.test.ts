@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { resolveAuthMode } from '../../../../shared/authConfig.js';
-import { validateFrontendAuthMode } from '../index.js';
+import { validateFrontendAuthMode } from '../services/auth-config.service.js';
 
 test('frontend artifacts must match the running server authentication mode', (t) => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'cloudcli-auth-config-'));

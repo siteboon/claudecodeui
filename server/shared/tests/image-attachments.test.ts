@@ -5,11 +5,15 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  appendFilesInputTag,
   appendImagesInputTag,
   buildClaudeUserContent,
   buildCodexInputItems,
+  isImageAttachmentDescriptor,
+  normalizeAttachmentDescriptors,
   isAllowedImageSourcePath,
   normalizeImageDescriptors,
+  parseFilesInputTag,
   parseImagesInputTag,
   resolveImageMediaType,
   toImageAttachments,
@@ -63,6 +67,57 @@ test('normalizeImageDescriptors accepts objects and bare paths, drops junk', () 
   ]);
   assert.deepEqual(normalizeImageDescriptors(undefined), []);
   assert.deepEqual(normalizeImageDescriptors('not-an-array'), []);
+});
+
+test('normalizeAttachmentDescriptors preserves file metadata and identifies images', () => {
+  const [pdf, image] = normalizeAttachmentDescriptors([
+    { path: 'brief.pdf', name: 'brief.pdf', mimeType: 'application/pdf', size: 4096 },
+    { path: 'diagram.PNG' },
+  ]);
+
+  assert.deepEqual(pdf, {
+    path: 'brief.pdf',
+    name: 'brief.pdf',
+    mimeType: 'application/pdf',
+    size: 4096,
+  });
+  assert.equal(isImageAttachmentDescriptor(pdf), false);
+  assert.equal(isImageAttachmentDescriptor(image), true);
+});
+
+test('appendFilesInputTag and parseFilesInputTag round-trip non-image files', () => {
+  const prompt = 'Summarize the attached materials.';
+  const tagged = appendFilesInputTag(prompt, [
+    { path: 'C:\\Users\\x\\.cloudcli\\assets\\brief.pdf', name: 'Brief (final).pdf' },
+    { path: '/tmp/cloudcli-assets/data.csv', name: 'data.csv' },
+  ]);
+
+  assert.ok(tagged.includes('<files_input>'));
+  assert.ok(tagged.includes('The user attached 2 file(s)'));
+  assert.deepEqual(parseFilesInputTag(tagged), {
+    text: prompt,
+    filePaths: [
+      'C:/Users/x/.cloudcli/assets/brief.pdf',
+      '/tmp/cloudcli-assets/data.csv',
+    ],
+    attachments: [
+      { path: 'C:/Users/x/.cloudcli/assets/brief.pdf', name: 'Brief final.pdf' },
+      { path: '/tmp/cloudcli-assets/data.csv', name: 'data.csv' },
+    ],
+  });
+});
+
+test('parseFilesInputTag handles Windows-flattened provider prompts', () => {
+  const flattened = appendFilesInputTag(
+    'inspect this',
+    [{ path: 'C:/Users/x/.cloudcli/assets/report.docx', name: 'report.docx' }],
+  ).replace(/\s*\r?\n\s*/g, ' ');
+
+  const parsed = parseFilesInputTag(flattened);
+  assert.equal(parsed.text, 'inspect this');
+  assert.deepEqual(parsed.attachments, [
+    { path: 'C:/Users/x/.cloudcli/assets/report.docx', name: 'report.docx' },
+  ]);
 });
 
 test('appendImagesInputTag and parseImagesInputTag round-trip', () => {
