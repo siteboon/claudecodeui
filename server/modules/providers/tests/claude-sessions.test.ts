@@ -2278,6 +2278,81 @@ test('Claude history of a fork includes the history it copied from its parent', 
   }
 });
 
+test('Claude history of a fork ignores the resume stamp it copied from its parent', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-history-fork-stamp-'));
+
+  try {
+    // The parent went on past the fork point (p3, p4) and stamped p4 on exit;
+    // the fork branched off p2, so its own prompt is a sibling of p3.
+    const copiedParentRows = [
+      forkFixtureRow(PARENT_SESSION_ID, 'user', 'p1', null, 'parent prompt'),
+      forkFixtureRow(PARENT_SESSION_ID, 'assistant', 'p2', 'p1', 'parent answer'),
+      forkFixtureRow(PARENT_SESSION_ID, 'user', 'p3', 'p2', 'parent follow-up'),
+      forkFixtureRow(PARENT_SESSION_ID, 'assistant', 'p4', 'p3', 'parent follow-up answer'),
+      JSON.stringify({ type: 'last-prompt', lastPrompt: 'redacted', leafUuid: 'p4', sessionId: PARENT_SESSION_ID }),
+    ];
+    const forkPath = path.join(tmp, `${FORK_SESSION_ID}.jsonl`);
+    await writeFile(forkPath, `${[
+      ...copiedParentRows,
+      forkFixtureRow(FORK_SESSION_ID, 'user', 'f5', 'p2', 'fork prompt'),
+      forkFixtureRow(FORK_SESSION_ID, 'assistant', 'f6', 'f5', 'fork answer'),
+    ].join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(FORK_SESSION_ID, 'claude', tmp, 'fork title', now, now, forkPath);
+
+      const fork = await new ClaudeSessionsProvider().fetchHistory(FORK_SESSION_ID, {
+        providerSessionId: FORK_SESSION_ID,
+      });
+      assert.deepEqual(
+        fork.messages.map((message) => message.content),
+        ['parent prompt', 'parent answer', 'fork prompt', 'fork answer'],
+      );
+    });
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('Claude history of a fork finds a copied subagent under the session that spawned it', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-fork-subagent-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    // Claude Desktop copies the parent's rows into the fork, and the agent's
+    // transcript into the fork's own directory, but not the agent's metadata.
+    const forkPath = path.join(tempRoot, `${FORK_SESSION_ID}.jsonl`);
+    await writeFile(forkPath, await readFile(parentPath, 'utf8'), 'utf8');
+    const forkSubagents = path.join(tempRoot, FORK_SESSION_ID, 'subagents');
+    await mkdir(forkSubagents, { recursive: true });
+    await writeFile(
+      path.join(forkSubagents, `agent-${AGENT_ID}.jsonl`),
+      await readFile(path.join(tempRoot, SESSION_ID, 'subagents', `agent-${AGENT_ID}.jsonl`), 'utf8'),
+      'utf8',
+    );
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(FORK_SESSION_ID, 'claude', tempRoot, 'fork title', now, now, forkPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(FORK_SESSION_ID, {
+        providerSessionId: FORK_SESSION_ID,
+      });
+      const agentRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+      );
+
+      assert.ok(agentRow, 'the copied Agent call must be in the fork transcript');
+      assert.equal(agentRow.subagent?.type, 'Explore');
+      assert.equal(agentRow.subagent?.description, 'Survey the repo');
+      assert.equal(agentRow.subagentTools?.length, 2);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('synchronizeFile skips non-jsonl files', { concurrency: false }, async () => {
   await withIsolatedDatabase(async () => {
     const synchronizer = new ClaudeSessionSynchronizer();

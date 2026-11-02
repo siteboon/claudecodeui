@@ -527,8 +527,12 @@ function isUserPromptRow(row: AnyRecord): boolean {
  * leaf (the stamping process kept going), or when the file carries no stamp.
  * A compact boundary clears the stamp, and `progress` rows are skipped over
  * when linking a row to its parent, as the CLI does.
+ *
+ * Only this session's own stamps count: a fork's transcript also holds the
+ * stamps its parent wrote, copied along with the parent's rows, and those name
+ * the parent's leaf rather than where the fork is.
  */
-function resolveResumePath(rows: AnyRecord[]): Set<string> {
+function resolveResumePath(rows: AnyRecord[], providerSessionId: string): Set<string> {
   const conversation = new Map<string, AnyRecord>();
   const progressParents = new Map<string, string | null>();
   const parentOf = (row: AnyRecord): string | undefined => {
@@ -559,7 +563,8 @@ function resolveResumePath(rows: AnyRecord[]): Set<string> {
         stampedLeaf = undefined;
         stampIsExplicit = false;
       }
-    } else if (row.type === 'last-prompt' && typeof row.leafUuid === 'string' && row.leafUuid) {
+    } else if (row.type === 'last-prompt' && typeof row.leafUuid === 'string' && row.leafUuid
+      && (typeof row.sessionId !== 'string' || row.sessionId === providerSessionId)) {
       stampIsExplicit = row.explicit === true || (stampIsExplicit && row.leafUuid === stampedLeaf);
       stampedLeaf = row.leafUuid;
     }
@@ -635,7 +640,7 @@ function indexNewestRowPerBranch(rows: AnyRecord[]): Map<string, number> {
  * rows and each tool result parents onto its own — and pruning those would
  * delete tool output from every transcript in the app.
  */
-function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
+function dropSupersededPromptBranches(rows: AnyRecord[], providerSessionId: string): AnyRecord[] {
   const promptSiblings = new Map<string, AnyRecord[]>();
   for (const row of rows) {
     if (typeof row.parentUuid !== 'string' || !isUserPromptRow(row)) {
@@ -654,7 +659,7 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
     return rows;
   }
 
-  const resumePath = resolveResumePath(rows);
+  const resumePath = resolveResumePath(rows, providerSessionId);
   let newestByUuid: Map<string, number> | undefined;
   const newestRowOf = (row: AnyRecord): number => {
     newestByUuid ??= indexNewestRowPerBranch(rows);
@@ -718,13 +723,19 @@ async function getSessionMessages(
 
     const messages = dropSupersededPromptBranches(
       await readTranscriptRows(jsonLPath, providerSessionId),
+      providerSessionId,
     );
 
-    const agentIds = new Set<string>();
+    // Keyed by agent id, valued by the session that spawned it: a fork's copied
+    // rows name agents whose transcript and metadata live under the parent.
+    const agentSessions = new Map<string, string>();
     for (const message of messages) {
       const agentId = message.toolUseResult?.agentId;
-      if (agentId) {
-        agentIds.add(String(agentId));
+      if (agentId && !agentSessions.has(String(agentId))) {
+        agentSessions.set(
+          String(agentId),
+          typeof message.sessionId === 'string' ? message.sessionId : providerSessionId,
+        );
       }
     }
 
@@ -735,8 +746,11 @@ async function getSessionMessages(
       activity: SubagentActivity[];
       info: Omit<SubagentInfo, 'status'>;
     }>();
-    for (const agentId of agentIds) {
-      const located = await findClaudeSubagentTranscript(projectDir, providerSessionId, agentId);
+    for (const [agentId, agentSessionId] of agentSessions) {
+      const located = await findClaudeSubagentTranscript(projectDir, agentSessionId, agentId)
+        ?? (agentSessionId === providerSessionId
+          ? null
+          : await findClaudeSubagentTranscript(projectDir, providerSessionId, agentId));
       if (!located) {
         continue;
       }
