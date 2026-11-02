@@ -5,6 +5,7 @@ import { afterEach, test, vi } from 'vitest';
 
 import type { PermissionMode } from '@/shared/types';
 import { i18n } from '@/modules/i18n';
+import deChat from '@/modules/i18n/locales/de/chat.json';
 import frChat from '@/modules/i18n/locales/fr/chat.json';
 import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
 import { PromptInputFooter, PromptInputTools } from '@/modules/chat/composer/PromptInput';
@@ -318,6 +319,39 @@ test('a wider toolbar or model menu takes the name away, and it comes back when 
   assert.equal(trigger.textContent, '');
   resizeComposer({ controls: 241 });
   assert.equal(trigger.textContent, 'Default Mode');
+});
+
+test('a name hidden on a phone waits for room at its full width on a wider screen', async () => {
+  await act(async () => {
+    await i18n.changeLanguage('de');
+  });
+  try {
+    const acceptEdits = deChat.codex.modes.acceptEdits;
+    // Below `sm` the trigger is capped at 160px, so the long German name of
+    // Accept Edits (190px wide on its own) measures 160px there. A phone's
+    // composer has no room for it either way.
+    layOutComposer({ room: 348, tools: 98, controls: 170, cap: 160 });
+    const { getByRole } = renderInFooter('acceptEdits');
+    const trigger = getByRole('button');
+    assert.equal(trigger.textContent, '');
+
+    // The window widens past `sm` to 960px, nothing typed: the cap is 192px
+    // now. At its old 160px the name would have 39px to spare, but at 190px it
+    // has 9px, less than the clear button, so it is not shown...
+    resizeComposer({ room: 614, tools: 174, controls: 241, cap: 192 });
+    assert.equal(trigger.textContent, '');
+    // ...and the first keystroke has nothing to take back.
+    resizeComposer({ tools: 210 });
+    assert.equal(trigger.textContent, '');
+
+    // With room for its full width and the clear button, it is shown.
+    resizeComposer({ room: 660, tools: 174 });
+    assert.equal(trigger.textContent, acceptEdits);
+  } finally {
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+  }
 });
 
 test('the trigger leaves no observer behind', () => {

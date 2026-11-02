@@ -87,6 +87,7 @@ export function usePermissionNameFit(
   const namedWidthsRef = useRef(new Map<string, number>());
   // The last decision. It can only be made from a laid-out DOM, so a name that
   // has none yet is shown, and the layout pass corrects that before it paints.
+  // Dropped back to null to show a hidden name again (see `measure`).
   const [fit, setFit] = useState<NameFit | null>(null);
   const isDecided = name !== null && fit?.name === name;
   const isShown = isDecided ? fit.isShown : true;
@@ -121,7 +122,17 @@ export function usePermissionNameFit(
       mayWrap,
       margin: isDecided && isShown ? 0 : SHOW_MARGIN,
     });
-    setFit((current) => (current?.name === name && current.isShown === next ? current : { name, isShown: next }));
+    setFit((current) => {
+      // A hidden name is judged by the width it had when it was last shown,
+      // which can be out of date: the trigger's cap grows at `sm`, and the font
+      // can have changed since. So that width never shows it. The decision is
+      // dropped instead: the name is shown, measured and decided again, with
+      // the margin, before it paints, like a new name.
+      if (!isShown && next) {
+        return null;
+      }
+      return current?.name === name && current.isShown === next ? current : { name, isShown: next };
+    });
   }, [triggerRef, name, mayWrap, isDecided, isShown]);
 
   useLayoutEffect(() => {
