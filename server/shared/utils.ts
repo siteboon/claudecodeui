@@ -1246,16 +1246,18 @@ export async function readFileTimestamps(
 // ---------------------------
 //----------------- SESSION SYNCHRONIZER JSONL PARSING HELPERS ------------
 /**
- * Builds a first-seen key/value lookup map from a JSONL file.
+ * Builds a key/value lookup map from a JSONL file.
  *
  * Use this for provider index files where session id -> display name metadata
- * is stored line-by-line. The first value for each key wins, preserving the
- * earliest known label while avoiding repeated map overwrites.
+ * is stored line-by-line. By default the first value for each key wins,
+ * preserving the earliest known label. Pass `keep: 'last'` for append-only
+ * files where a later row supersedes an earlier one, such as a rename.
  */
 export async function buildLookupMap(
   filePath: string,
   keyField: string,
-  valueField: string
+  valueField: string,
+  { keep = 'first' }: { keep?: 'first' | 'last' } = {}
 ): Promise<Map<string, string>> {
   const lookup = new Map<string, string>();
 
@@ -1281,7 +1283,10 @@ export async function buildLookupMap(
       const key = parsed[keyField];
       const value = parsed[valueField];
 
-      if (typeof key === 'string' && typeof value === 'string' && !lookup.has(key)) {
+      if (typeof key !== 'string' || typeof value !== 'string') {
+        continue;
+      }
+      if (keep === 'last' ? value.trim() !== '' : !lookup.has(key)) {
         lookup.set(key, value);
       }
     }
