@@ -369,6 +369,9 @@
       },
       "opencode": {
         "description": "CLI asistent OpenCode"
+      },
+      "antigravity": {
+        "description": "CLI asistent Antigravity"
       }
     },
     "connectionStatus": "Stav připojení",
@@ -514,7 +517,8 @@
       "claude": "Servery Model Context Protocol rozšiřují Claude o další nástroje a zdroje dat",
       "cursor": "Servery Model Context Protocol rozšiřují Cursor o další nástroje a zdroje dat",
       "codex": "Servery Model Context Protocol rozšiřují Codex o další nástroje a zdroje dat",
-      "opencode": "Servery Model Context Protocol rozšiřují OpenCode o další nástroje a zdroje dat"
+      "opencode": "Servery Model Context Protocol rozšiřují OpenCode o další nástroje a zdroje dat",
+      "antigravity": "Servery Model Context Protocol rozšiřují Antigravity o další nástroje a zdroje dat"
     },
     "addButton": "Přidat MCP server",
     "empty": "Nejsou nastaveny žádné MCP servery",

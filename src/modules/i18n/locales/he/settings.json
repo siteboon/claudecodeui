@@ -397,6 +397,9 @@
       },
       "opencode": {
         "description": "OpenCode, עוזר CLI"
+      },
+      "antigravity": {
+        "description": "Antigravity, עוזר CLI"
       }
     },
     "connectionStatus": "סטטוס חיבור",
@@ -536,7 +539,8 @@
       "claude": "שרתי Model Context Protocol מספקים ל-Claude כלים ומקורות מידע נוספים",
       "cursor": "שרתי Model Context Protocol מספקים ל-Cursor כלים ומקורות מידע נוספים",
       "codex": "שרתי Model Context Protocol מספקים ל-Codex כלים ומקורות מידע נוספים",
-      "opencode": "שרתי Model Context Protocol מספקים ל-OpenCode כלים ומקורות מידע נוספים"
+      "opencode": "שרתי Model Context Protocol מספקים ל-OpenCode כלים ומקורות מידע נוספים",
+      "antigravity": "שרתי Model Context Protocol מספקים ל-Antigravity כלים ומקורות מידע נוספים"
     },
     "addButton": "הוספת שרת MCP",
     "empty": "לא הוגדרו שרתי MCP",
