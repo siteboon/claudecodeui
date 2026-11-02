@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { GitBranchIcon, PencilIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
-import { cn, toPlausibleTimestamp } from '@/shared/utils';
+import { toPlausibleTimestamp } from '@/shared/utils';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
 import { formatAnsweringModelLabel } from '@/modules/chat/utils/modelLabel';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
@@ -101,7 +101,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
   const stampValue = message.timestampEstimated ? undefined : message.timestamp;
   const hasStamp = showTimestamps && toPlausibleTimestamp(stampValue) !== null;
   // Where that time goes on a left-hand row: an agent or workflow card
-  // carries it in its own header, a tool call at the end of its input line
+  // carries it in its own header, a tool call in the header line of its input
   // (a footer line per call would add a line to every tool row), and
   // anything else in its footer.
   const isCardRow = Boolean((message.isToolUse && message.toolName === 'Workflow') || message.isSubagentContainer);
@@ -321,15 +321,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 {message.toolInput && (
                   // Bash draws its output inside this row rather than in the
                   // result section below, so for a backgrounded command this is
-                  // the row the background-tasks strip scrolls to. With the
-                  // timestamps preference on, the call's time sits in a column
-                  // beside the input line; the renderer stays the first child
-                  // either way, so flipping the preference does not remount it
-                  // (which would collapse an expanded output).
-                  <div
-                    id={message.toolName === 'Bash' ? `tool-result-${message.toolId}` : undefined}
-                    className={cn('scroll-mt-4', stampsToolLine && 'grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2')}
-                  >
+                  // the row the background-tasks strip scrolls to.
+                  <div id={message.toolName === 'Bash' ? `tool-result-${message.toolId}` : undefined} className="scroll-mt-4">
                     <ToolRenderer
                       toolName={message.toolName || 'UnknownTool'}
                       toolInput={message.toolInput}
@@ -342,15 +335,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                       showRawParameters={showRawParameters}
                       rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
                       toolStatus={message.toolStatus}
+                      // In the call's own header line, so an expanded diff or
+                      // output below it keeps the width it has without a time.
+                      headerTimestamp={stampsToolLine ? stampValue : undefined}
                     />
-                    {stampsToolLine && (
-                      // Pinned to the first row: Bash draws the files it
-                      // changed as a second element, which flows below.
-                      <TranscriptTimestamp
-                        value={stampValue}
-                        className="col-start-2 row-start-1 mt-1.5 text-[11px] leading-4 text-gray-400 dark:text-gray-500"
-                      />
-                    )}
                   </div>
                 )}
 

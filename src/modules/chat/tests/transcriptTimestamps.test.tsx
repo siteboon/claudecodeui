@@ -138,6 +138,38 @@ const stacksTimeBelowSm = (header: HTMLElement) => {
     && time.className.split(' ').includes('self-end');
 };
 
+const classesOf = (element: Element | undefined) => (element?.getAttribute('class') ?? '').split(' ');
+/**
+ * Whether a header line keeps its text at the width it has without a time,
+ * in a column of any width: the line wraps, its own items are one group as
+ * wide as their text (`flex-auto`, free to shrink with `min-w-0`), and the
+ * time is the line's only other item, pushed to its end. A browser then puts
+ * the time beside the text when both fit, and on a line of its own,
+ * right-aligned, when they do not. Nothing here depends on the window's
+ * width, which cannot tell a phone from a narrow column beside the editor.
+ */
+const keepsTextWidth = (line: Element) => {
+  const [group, timeItem, ...rest] = [...line.children];
+  const isTimeItem = timeItem?.tagName === 'TIME'
+    || (timeItem?.children.length === 1 && timeItem.firstElementChild?.tagName === 'TIME');
+  return classesOf(line).includes('flex-wrap')
+    && rest.length === 0
+    && group?.tagName === 'SPAN' && classesOf(group).includes('flex-auto') && classesOf(group).includes('min-w-0')
+    && isTimeItem && classesOf(timeItem).includes('ml-auto')
+    && ![line, group, timeItem].some((element) => /(^|\s)(sm|md|lg|xl):/.test(element.getAttribute('class') ?? ''));
+};
+/** The line a tool call's or a header's time sits on: its row, or the row of the span it is wrapped in. */
+const lineOf = (time: Element) => {
+  const parent = time.parentElement as HTMLElement;
+  return parent.tagName === 'SPAN' && parent.children.length === 1 ? parent.parentElement as HTMLElement : parent;
+};
+/** The innermost element holding both: what decides whether two things sit side by side or one above the other. */
+const commonAncestor = (first: Element, second: Element) => {
+  let node: Element | null = first;
+  while (node && !node.contains(second)) node = node.parentElement;
+  return node;
+};
+
 /** Mocks the browser's preferred languages; its default clock is pinned to en-US above. */
 const mockBrowserLocale = (language: string, languages: string[] = [language]) => {
   vi.spyOn(navigator, 'language', 'get').mockReturnValue(language);
@@ -190,11 +222,11 @@ describe('a transcript row with timestamps on', () => {
   it('stamps a tool call and a reply that follow another assistant row', () => {
     const tool = renderRow({ message: READ_CALL, prevMessage: FIRST_REPLY, showTimestamps: true });
     assert.deepEqual(timeLabels(tool.container), ['9:02:10 AM']);
-    // Beside the call's input line, not on a footer line of its own.
+    // On the call's own line, after the file it read, not on a footer line of its own.
     assert.equal(footers(tool.container).length, 0);
     const [toolTime] = timeElements(tool.container);
-    assert.match(toolTime.parentElement?.className ?? '', /\bgrid\b/);
-    assert.ok(toolTime.previousElementSibling?.querySelector('button[title="/repo/README.md"]'));
+    assert.equal(lineOf(toolTime).querySelectorAll('button[title="/repo/README.md"]').length, 1);
+    assert.equal(keepsTextWidth(lineOf(toolTime)), true);
     tool.unmount();
 
     const reply = renderRow({ message: LATER_REPLY, prevMessage: READ_CALL, showTimestamps: true });
@@ -323,7 +355,7 @@ describe('a transcript row with timestamps on', () => {
         showTimestamps: true,
       });
       assert.equal(timeElements(container).length, 0, `no time on the ${message.isToolUse ? 'tool' : message.type} row`);
-      assert.equal(container.querySelectorAll('.grid').length, 0, 'no column laid out for it');
+      assert.equal(container.querySelectorAll('.flex-wrap').length, 0, 'nor a line laid out for it');
       unmount();
     }
   });
@@ -347,7 +379,7 @@ describe('a transcript row with timestamps on', () => {
       prevMessage: USER_TURN,
       showTimestamps: true,
     });
-    // The time is beside the call's input line; the footer stays for the label.
+    // The time is on the call's own line; the footer stays for the label.
     assert.deepEqual(timeLabels(container), ['9:02:10 AM']);
     assert.equal(container.querySelectorAll('[title="Answered by claude-opus-5"]').length, 1);
   });
@@ -403,6 +435,84 @@ describe('a transcript row with timestamps on', () => {
       await i18n.changeLanguage('de');
     });
     assert.deepEqual(timeLabels(container), ['19. Okt., 2:32:05 PM']);
+  });
+});
+
+describe('a tool call\'s time', () => {
+  const call = (toolName: string, toolInput: unknown, result = 'done'): ChatMessage => ({
+    ...READ_CALL,
+    toolName,
+    toolId: `toolu_${toolName}`,
+    toolInput: JSON.stringify(toolInput),
+    toolResult: { content: result, isError: false },
+  });
+  /** Whether children of this element are laid out one above the other, each as wide as the element. */
+  const stacks = (element: Element | null) => Boolean(element)
+    && !classesOf(element ?? undefined).includes('grid')
+    && (!classesOf(element ?? undefined).includes('flex') || classesOf(element ?? undefined).includes('flex-col'));
+  // One call for each way the tool renderer draws a call, with what it opens up to, if anything.
+  const CALLS: Array<{ name: string; message: ChatMessage; title: string; content?: (container: HTMLElement) => Element | null }> = [
+    { name: 'a shell command', message: call('Bash', { command: 'ls -la', description: 'List files' }, 'README.md\na.txt'), title: 'ls -la', content: (container) => container.querySelector('pre') },
+    { name: 'an edit with a file name to open', message: call('Edit', { file_path: '/repo/README.md', old_string: 'a', new_string: 'b' }), title: 'README.md', content: (container) => container.querySelector('.group\\/section > div[data-state]') },
+    { name: 'a checklist', message: call('TodoWrite', { todos: [{ content: 'Measure', status: 'in_progress', activeForm: 'Measuring' }] }), title: 'Measuring — 0/1', content: (container) => container.querySelector('.group\\/section > div[data-state]') },
+    { name: 'a file read', message: READ_CALL, title: 'README.md' },
+    { name: 'a search that links to its results', message: call('Grep', { pattern: 'TODO' }), title: 'TODO' },
+    { name: 'a web search', message: call('WebSearch', { query: 'flex wrap' }), title: 'flex wrap' },
+    { name: 'a PowerShell command', message: call('PowerShell', { command: 'Get-ChildItem', description: 'List' }), title: 'Get-ChildItem' },
+  ];
+  const renderCall = (message: ChatMessage, showTimestamps: boolean) => {
+    const rendered = renderRow({ message, prevMessage: FIRST_REPLY, showTimestamps, onFileOpen: () => {} });
+    // Open whatever the call opens up to.
+    for (const toggle of rendered.container.querySelectorAll('[aria-expanded="false"]')) fireEvent.click(toggle);
+    return rendered;
+  };
+
+  for (const { name, message, title, content } of CALLS) {
+    it(`sits on the header line of ${name}, and leaves what the call opens up to its full width`, () => {
+      const { container } = renderCall(message, true);
+      assert.deepEqual(timeLabels(container), ['9:02:10 AM']);
+      const [time] = timeElements(container);
+      const line = lineOf(time);
+      assert.equal((line.textContent ?? '').includes(title), true, `the time shares a line with "${title}"`);
+      assert.equal(keepsTextWidth(line), true);
+      if (content) {
+        const opened = content(container);
+        assert.equal(Boolean(opened), true, 'the call is open');
+        assert.equal(line.contains(opened), false);
+        // The time and the content share only a block that stacks them, so
+        // no column of the time's runs down beside the content.
+        assert.equal(stacks(commonAncestor(time, opened as Element)), true);
+      }
+    });
+  }
+
+  it('sits beside the title of a plan, above the plan itself', () => {
+    const { container } = renderCall(call('ExitPlanMode', { plan: '## Ship it' }), true);
+    const [time] = timeElements(container);
+    assert.deepEqual(timeLabels(container), ['9:02:10 AM']);
+    assert.equal(time.parentElement?.textContent, `Implementation plan${time.textContent}`);
+    const plan = screen.getByText('Ship it');
+    assert.equal(stacks(commonAncestor(time, plan)), true);
+  });
+
+  it('leaves a tool call exactly as it was when its time is not one to show', () => {
+    for (const { message } of [...CALLS, { message: call('ExitPlanMode', { plan: '## Ship it' }) }]) {
+      for (const unshown of [{ ...message, timestampEstimated: true }, { ...message, timestamp: 0 }]) {
+        const off = renderCall(unshown, false);
+        const offMarkup = off.container.innerHTML;
+        off.unmount();
+        const on = renderCall(unshown, true);
+        assert.equal(on.container.innerHTML, offMarkup, `${message.toolName} with ${String(unshown.timestamp)}`);
+        on.unmount();
+      }
+    }
+  });
+
+  it('is not repeated on the result a call reports', () => {
+    const grep = renderCall(call('Grep', { pattern: 'TODO' }, 'No matches'), true);
+    // The call shows its time; the collapsible result under it does not.
+    assert.equal(timeElements(grep.container).length, 1);
+    assert.equal(grep.container.querySelectorAll('[id^="tool-result-"] time').length, 0);
   });
 });
 
@@ -500,9 +610,44 @@ describe('a subagent timeline', () => {
   const renderTimeline = (showTimestamps: boolean) =>
     render(<SubagentTimeline activity={STEPS} createDiff={createDiff} showTimestamps={showTimestamps} />);
 
-  it('puts each recorded step time beside its step', () => {
+  it('puts each recorded step time in the step\'s own first line, with nothing wrapped around the step', () => {
     const { container } = renderTimeline(true);
     assert.deepEqual(timeLabels(container), ['8:03:30 AM', '8:03:31 AM']);
+    const timeline = container.firstElementChild as HTMLElement;
+    const [note, read, thinking] = [...timeline.children] as HTMLElement[];
+    assert.equal(timeline.children.length, STEPS.length, 'the steps are the timeline\'s own children');
+    const [noteTime, readTime] = timeElements(container);
+    // A note's time floats at the end of its first line, so the lines under
+    // it keep the note's width; a tool call's sits on its header line.
+    assert.equal(note.contains(noteTime), true);
+    assert.equal(classesOf(noteTime).includes('float-right'), true);
+    assert.equal(noteTime.parentElement?.firstChild, noteTime);
+    assert.equal(read.contains(readTime), true);
+    assert.equal(keepsTextWidth(lineOf(readTime)), true);
+    assert.equal(lineOf(readTime).querySelectorAll('button[title="/repo/a.txt"]').length, 1);
+    assert.equal(timeElements(thinking).length, 0);
+  });
+
+  it('keeps an opened step open when the preference flips', () => {
+    const steps: SubagentActivity[] = [{
+      kind: 'tool',
+      toolId: 'toolu_child_bash',
+      toolName: 'Bash',
+      toolInput: { command: 'git log --oneline' },
+      toolResult: { content: 'abc123 init', isError: false },
+      timestamp: at(20, 8, 3, 40),
+    }];
+    const timeline = (showTimestamps: boolean) => <SubagentTimeline activity={steps} createDiff={createDiff} showTimestamps={showTimestamps} />;
+    const { container, rerender } = render(timeline(false));
+    const header = () => container.querySelector('[role="button"][aria-expanded]') as HTMLElement;
+    fireEvent.click(header());
+    assert.equal(header().getAttribute('aria-expanded'), 'true');
+
+    rerender(timeline(true));
+    assert.deepEqual(timeLabels(container), ['8:03:40 AM']);
+    assert.equal(header().getAttribute('aria-expanded'), 'true', 'the step was not remounted');
+    rerender(timeline(false));
+    assert.equal(header().getAttribute('aria-expanded'), 'true');
   });
 
   it('renders the same markup as before with the preference off', () => {
@@ -510,6 +655,18 @@ describe('a subagent timeline', () => {
     const untouched = render(<SubagentTimeline activity={STEPS} createDiff={createDiff} />).container.innerHTML;
     assert.equal(off, untouched);
     assert.doesNotMatch(off, /<time/);
+  });
+
+  it('draws a step it has no usable time for exactly as with the preference off', () => {
+    for (const timestamp of [undefined, '', 0, '1970-01-01T00:00:00.000Z', 'not a date']) {
+      const unstamped = STEPS.map((step) => ({ ...step, timestamp }) as SubagentActivity);
+      const off = render(<SubagentTimeline activity={unstamped} createDiff={createDiff} />);
+      const offMarkup = off.container.innerHTML;
+      off.unmount();
+      const on = render(<SubagentTimeline activity={unstamped} createDiff={createDiff} showTimestamps />);
+      assert.equal(on.container.innerHTML, offMarkup, `steps stamped ${String(timestamp)}`);
+      on.unmount();
+    }
   });
 
   it('reaches the timeline of an agent card through the transcript row', () => {

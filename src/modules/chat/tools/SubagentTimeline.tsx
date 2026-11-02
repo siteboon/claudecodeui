@@ -14,7 +14,7 @@ type SubagentTimelineProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
-  /** Puts each step's time beside it, for a step the provider recorded one for. */
+  /** Stamps each step the provider recorded a time for, in the step's own first line. */
   showTimestamps?: boolean;
 };
 
@@ -26,7 +26,7 @@ type SubagentTimelineProps = {
 const INITIALLY_RENDERED_ACTIVITIES = 25;
 
 /** One prose or reasoning entry from the agent's own narration. */
-const SubagentNote = memo(({ activity }: { activity: SubagentActivity }) => {
+const SubagentNote = memo(({ activity, showTimestamp = false }: { activity: SubagentActivity; showTimestamp?: boolean }) => {
   const isThinking = activity.kind === 'thinking';
   const Icon = isThinking ? Brain : MessageSquareText;
 
@@ -39,6 +39,14 @@ const SubagentNote = memo(({ activity }: { activity: SubagentActivity }) => {
           isThinking ? 'italic text-muted-foreground/70' : 'text-muted-foreground',
         )}
       >
+        {showTimestamp && (
+          // Floated to the end of the note's first line: the lines below it
+          // keep the note's full width.
+          <TranscriptTimestamp
+            value={activity.timestamp}
+            className="float-right ml-2 text-[11px] not-italic text-gray-400 dark:text-gray-500"
+          />
+        )}
         {activity.content}
       </div>
     </div>
@@ -72,14 +80,13 @@ export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, cre
     <>
       {visibleEntries.length > 0 && (
         <div className="border-l border-border/60 pl-2">
-          {visibleEntries.map((entry, index) => {
-            const key = entry.kind === 'tool' ? entry.toolId ?? `activity-${index}` : `activity-${index}`;
-            const step = entry.kind === 'tool' ? (
+          {visibleEntries.map((entry, index) => (
+            entry.kind === 'tool' ? (
               // Rendered through the same router the main thread uses, so a
               // subagent's shell command or diff looks exactly like one the
-              // top-level agent ran.
+              // top-level agent ran — its time included, in its header line.
               <ToolRenderer
-                key={key}
+                key={entry.toolId ?? `activity-${index}`}
                 toolName={entry.toolName || 'UnknownTool'}
                 toolInput={entry.toolInput}
                 toolResult={entry.toolResult}
@@ -88,27 +95,12 @@ export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, cre
                 onFileOpen={onFileOpen}
                 createDiff={createDiff}
                 selectedProject={selectedProject}
+                headerTimestamp={showTimestamps ? entry.timestamp : undefined}
               />
             ) : (
-              <SubagentNote key={key} activity={entry} />
-            );
-
-            // The time sits in a column of its own beside the step rather than
-            // inside it, since a step is any of the tool renderers; at phone
-            // widths it takes a line under the step instead, as a nested step
-            // has no width to spare. Only wrapped while shown, so with the
-            // preference off the timeline's markup is exactly what it was
-            // (flipping it therefore remounts the steps of an open timeline).
-            return showTimestamps ? (
-              <div key={key} className="flex flex-col sm:flex-row sm:items-start sm:gap-2">
-                <div className="min-w-0 sm:flex-1">{step}</div>
-                <TranscriptTimestamp
-                  value={entry.timestamp}
-                  className="mb-1 flex-shrink-0 text-[10px] leading-none text-muted-foreground/60 sm:mb-0 sm:mt-1.5"
-                />
-              </div>
-            ) : step;
-          })}
+              <SubagentNote key={`activity-${index}`} activity={entry} showTimestamp={showTimestamps} />
+            )
+          ))}
         </div>
       )}
 

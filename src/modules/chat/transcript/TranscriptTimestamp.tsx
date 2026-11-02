@@ -122,10 +122,10 @@ function formatSpan(formatter: Intl.DateTimeFormat, start: Date, end: Date | nul
 }
 
 /**
- * Rendered by chat's MessageComponent, ToolGroupContainer, SubagentPanel,
- * SubagentTimeline and WorkflowPanel to stamp a row, a tool group, an agent
- * card, a subagent step or a workflow agent with the time it happened, while
- * the "Show timestamps" preference is on.
+ * Rendered by chat's MessageComponent, ToolRenderer, ToolGroupContainer,
+ * SubagentPanel, SubagentTimeline and WorkflowPanel to stamp a row, a tool
+ * call, a tool group, an agent card, a subagent's note or a workflow agent
+ * with the time it happened, while the "Show timestamps" preference is on.
  *
  * The local time to the second, prefixed with the date once the row is not
  * from today (and with the year once it is not from this year); the full date
