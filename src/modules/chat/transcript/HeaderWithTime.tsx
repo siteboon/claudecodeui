@@ -12,8 +12,9 @@ type HeaderWithTimeProps = {
 
 /**
  * Used by chat's tool displays (BashCommandDisplay, CollapsibleSection,
- * OneLineDisplay) to put a call's time on its one-line header without taking
- * width from the header's text, whatever width the transcript column has.
+ * OneLineDisplay), SubagentPanel, WorkflowPanel and ToolGroupContainer to put
+ * a time on a one-line header without taking width from the header's text,
+ * whatever width the transcript column has.
  *
  * The header's own items are grouped into one flex item whose basis is the
  * width their text needs (`flex-auto`), and the time follows it. The caller's

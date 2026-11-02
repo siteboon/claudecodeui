@@ -126,18 +126,6 @@ const timeLabels = (container: HTMLElement) => timeElements(container).map((elem
 const footers = (container: HTMLElement) => container.querySelectorAll('div.mt-1.w-full');
 /** The header button of a collapsible card or tool group. */
 const headerOf = (container: HTMLElement) => container.querySelector('button[aria-expanded]') as HTMLButtonElement;
-/**
- * Whether a header puts its time on a line of its own below the `sm`
- * breakpoint, under the rest of the header, and back beside it from `sm` on.
- */
-const stacksTimeBelowSm = (header: HTMLElement) => {
-  const classes = header.className.split(' ');
-  const [summary, time] = [...header.children];
-  return classes.includes('flex-col') && classes.includes('sm:flex-row')
-    && header.children.length === 2 && summary.tagName === 'SPAN' && time.tagName === 'TIME'
-    && time.className.split(' ').includes('self-end');
-};
-
 const classesOf = (element: Element | undefined) => (element?.getAttribute('class') ?? '').split(' ');
 /**
  * Whether a header line keeps its text at the width it has without a time,
@@ -567,8 +555,8 @@ describe('a collapsed tool group', () => {
       <ToolGroupContainer group={madeUp} prevMessage={USER_TURN} createDiff={createDiff} getMessageKey={(message) => String(message.toolId)} provider="claude" showTimestamps />,
     );
     assert.equal(timeElements(none.container).length, 0);
-    // Nor a line laid out for it on a phone.
-    assert.doesNotMatch(headerOf(none.container).className, /flex-col/);
+    // Nor a header laid out for one.
+    assert.equal(headerOf(none.container).outerHTML, headerOf(renderGroup(false).container).outerHTML);
   });
 
   it('keeps both dates on a span that crosses midnight', () => {
@@ -583,14 +571,17 @@ describe('a collapsed tool group', () => {
     assert.deepEqual(timeLabels(container), ['Oct 19, 11:59:00 PM – Oct 20, 12:01:00 AM']);
   });
 
-  it('puts the span on a line of its own below the sm breakpoint, so the preview keeps its width', () => {
+  it('lets the span take a line of its own rather than cut the preview, in a column of any width', () => {
     const on = renderGroup(true);
-    assert.equal(stacksTimeBelowSm(headerOf(on.container)), true);
-    assert.match(headerOf(on.container).children[0].textContent ?? '', /TODO/);
+    const header = headerOf(on.container);
+    assert.equal(keepsTextWidth(header), true);
+    assert.match(header.children[0].textContent ?? '', /TODO, FIXME, \+1 more/);
     on.unmount();
 
-    const off = renderGroup(false);
-    assert.doesNotMatch(headerOf(off.container).className, /flex-col/);
+    // Off, the header's items are its own again, as on main.
+    const off = headerOf(renderGroup(false).container);
+    assert.equal(classesOf(off).includes('flex-wrap'), false);
+    assert.equal(off.querySelectorAll(':scope > span.flex-auto').length, 0);
   });
 
   it('shows no time with the preference off', () => {
@@ -706,15 +697,17 @@ describe('a subagent timeline', () => {
     timestamp: at(20, 8, 3, 0),
   };
 
-  it('puts the card\'s span on a line of its own below the sm breakpoint, so the description keeps its width', () => {
+  it('lets the card\'s span take a line of its own rather than cut the description, in a column of any width', () => {
     const on = renderRow({ message: { ...AGENT_ROW, timestamp: at(19, 8, 3, 0) }, prevMessage: FIRST_REPLY, showTimestamps: true });
     const header = headerOf(on.container);
-    assert.equal(stacksTimeBelowSm(header), true);
-    assert.match(header.children[0].textContent ?? '', /Survey/);
+    assert.equal(keepsTextWidth(header), true);
+    // The whole header goes in front of the time, the status included.
+    assert.match(header.children[0].textContent ?? '', /Explore\/Survey1 tool$/);
     on.unmount();
 
-    const off = renderRow({ message: AGENT_ROW, prevMessage: FIRST_REPLY });
-    assert.doesNotMatch(headerOf(off.container).className, /flex-col/);
+    const off = headerOf(renderRow({ message: AGENT_ROW, prevMessage: FIRST_REPLY }).container);
+    assert.equal(classesOf(off).includes('flex-wrap'), false);
+    assert.equal(off.querySelectorAll(':scope > span.flex-auto').length, 0);
   });
 
   it('shows no header time for an agent whose launch time the backend made up, nor one it cannot show', () => {
@@ -723,7 +716,7 @@ describe('a subagent timeline', () => {
       const header = headerOf(container);
       // Its steps' own times are real, but the latest of them is not the launch.
       assert.equal(timeElements(header).length, 0, `no header time for ${String(message.timestamp)}`);
-      assert.doesNotMatch(header.className, /flex-col/);
+      assert.equal(classesOf(header).includes('flex-wrap'), false, 'nor a header laid out for one');
       fireEvent.click(header);
       assert.deepEqual(timeLabels(container), ['8:03:30 AM', '8:03:31 AM']);
       unmount();
@@ -796,6 +789,27 @@ describe('a workflow card', () => {
     assert.deepEqual(timeLabels(container), ['8:09:01 AM']);
   });
 
+  it('lets a live agent\'s start time take a line of its own rather than cut the agent\'s name', () => {
+    // Without a session the row cannot open a timeline; with one it is a button with a chevron.
+    const plain = renderWorkflow(live, true);
+    fireEvent.click(plain.container.querySelector('button[aria-expanded]') as HTMLButtonElement);
+    const [plainTime] = timeElements(plain.container);
+    assert.equal(keepsTextWidth(lineOf(plainTime)), true);
+    assert.match(lineOf(plainTime).children[0].textContent ?? '', /^audit:docs· Auditrunning$/);
+    plain.unmount();
+
+    render(
+      <TranscriptSessionContext.Provider value={{ sessionId: 'session-1' }}>
+        <WorkflowPanel toolInput={{ script: '', description: 'Audit' }} workflow={WORKFLOW} taskStatus={live} createDiff={createDiff} showTimestamps />
+      </TranscriptSessionContext.Provider>,
+    );
+    fireEvent.click(screen.getAllByRole('button', { expanded: false })[0]);
+    const agentRow = screen.getByRole('button', { name: /audit:docs/ });
+    assert.equal(keepsTextWidth(agentRow), true);
+    // The chevron goes in front with the name, never alone on the first line.
+    assert.equal(agentRow.children[0].firstElementChild?.tagName.toLowerCase(), 'svg');
+  });
+
   it('shows when the workflow was launched in its header', () => {
     const { container } = render(
       <UiPreferencesProvider>
@@ -822,7 +836,7 @@ describe('a workflow card', () => {
     assert.equal(footers(container).length, 0);
   });
 
-  it('puts the launch on a line of its own below the sm breakpoint, and shows none the backend made up', () => {
+  it('lets the launch take a line of its own rather than cut the description, and shows none the backend made up', () => {
     const renderWorkflowRow = (message: Partial<ChatMessage>, showTimestamps: boolean) => renderRow({
       message: {
         type: 'assistant',
@@ -841,18 +855,20 @@ describe('a workflow card', () => {
 
     const dated = renderWorkflowRow({}, true);
     assert.deepEqual(timeLabels(headerOf(dated.container)), ['Oct 19, 8:08:00 AM']);
-    assert.equal(stacksTimeBelowSm(headerOf(dated.container)), true);
+    assert.equal(keepsTextWidth(headerOf(dated.container)), true);
+    assert.match(headerOf(dated.container).children[0].textContent ?? '', /Workflow\/repo-auditAudit/);
     dated.unmount();
 
+    const off = renderWorkflowRow({}, false);
+    const offHeader = headerOf(off.container).outerHTML;
+    off.unmount();
     for (const message of [{ timestampEstimated: true }, { timestamp: 0 }]) {
       const unshown = renderWorkflowRow(message, true);
       assert.equal(timeElements(unshown.container).length, 0);
-      assert.doesNotMatch(headerOf(unshown.container).className, /flex-col/);
+      // A header with no time to show is the header as it was.
+      assert.equal(headerOf(unshown.container).outerHTML, offHeader);
       unshown.unmount();
     }
-
-    const off = renderWorkflowRow({}, false);
-    assert.doesNotMatch(headerOf(off.container).className, /flex-col/);
   });
 
   it('keeps an agent\'s status on the right, with its class as before, when there is no start time to show', () => {

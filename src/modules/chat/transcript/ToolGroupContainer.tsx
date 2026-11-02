@@ -5,6 +5,7 @@ import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LL
 import { cn, toPlausibleTimestamp } from '@/shared/utils';
 import { getToolConfig } from '@/modules/chat/tools';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
+import HeaderWithTime from '@/modules/chat/transcript/HeaderWithTime';
 import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
@@ -128,53 +129,49 @@ function ToolGroupContainer({
   const hasHeaderTime = showTimestamps
     && (toPlausibleTimestamp(firstStampAt) !== null || toPlausibleTimestamp(lastStampAt) !== null);
 
-  const headerSummary = (
-    <>
-      <ChevronRight
-        className={`h-3.5 w-3.5 flex-shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-        aria-hidden
-      />
-      <span className={`${iconClass} flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-background/80 text-xs font-medium`}>
-        {icon}
-      </span>
-      <span className="min-w-0 flex-shrink-0 text-xs font-medium text-foreground">{label}</span>
-      <span className="flex-shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-        x{group.messages.length}
-      </span>
-      {preview && (
-        <>
-          <span className="text-[10px] text-muted-foreground/40">/</span>
-          <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{preview}</span>
-        </>
-      )}
-      {groupDiffStats && <DiffStatsBadge stats={groupDiffStats} className="ml-auto pl-2" />}
-    </>
-  );
-
   return (
     <div className="chat-message tool px-3 sm:px-0" data-message-timestamp={group.timestamp || undefined}>
       <button
         type="button"
         className={cn(
           `group flex w-full items-center gap-2 border-l-2 ${borderClass} rounded-r-md bg-muted/25 px-3 py-2 text-left transition-colors hover:bg-muted/40 dark:bg-muted/10 dark:hover:bg-muted/20`,
-          // Below `sm` the span takes a line of its own under the header: one
-          // from an earlier day is wider than what a phone leaves of the row,
-          // and beside it the preview would be cut to nothing.
-          hasHeaderTime && 'flex-col items-stretch gap-y-0.5 sm:flex-row sm:items-center',
+          // With a span the header wraps: it sits at the right end when the
+          // preview fits beside it, and takes a line of its own under it when
+          // it would cut the preview short (see HeaderWithTime).
+          hasHeaderTime && 'flex-wrap gap-y-0.5',
         )}
         onClick={() => setIsExpanded((current) => !current)}
         aria-expanded={isExpanded}
       >
-        {hasHeaderTime ? (
-          <>
-            <span className="flex min-w-0 items-center gap-2 sm:flex-1">{headerSummary}</span>
+        <HeaderWithTime
+          time={hasHeaderTime && (
             <TranscriptTimestamp
               value={firstStampAt}
               endValue={lastStampAt}
-              className="flex-shrink-0 self-end text-[11px] text-muted-foreground sm:self-auto"
+              className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground"
             />
-          </>
-        ) : headerSummary}
+          )}
+          className="gap-2"
+        >
+          <ChevronRight
+            className={`h-3.5 w-3.5 flex-shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+            aria-hidden
+          />
+          <span className={`${iconClass} flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-background/80 text-xs font-medium`}>
+            {icon}
+          </span>
+          <span className="min-w-0 flex-shrink-0 text-xs font-medium text-foreground">{label}</span>
+          <span className="flex-shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            x{group.messages.length}
+          </span>
+          {preview && (
+            <>
+              <span className="text-[10px] text-muted-foreground/40">/</span>
+              <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{preview}</span>
+            </>
+          )}
+          {groupDiffStats && <DiffStatsBadge stats={groupDiffStats} className="ml-auto pl-2" />}
+        </HeaderWithTime>
       </button>
 
       {showChildren && (
