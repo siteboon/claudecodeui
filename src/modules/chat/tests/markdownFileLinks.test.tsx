@@ -32,7 +32,16 @@ test.each([
   ['/workspace/literal%2520.md', '/workspace/literal%20.md', null],
   ['/workspace/name%23part%3F%2B.md', '/workspace/name#part?+.md', null],
   ['/workspace/notes.md%3A12', '/workspace/notes.md:12', null],
+  ['notes.md%3A12', 'notes.md:12', null],
+  ['./notes.md%3A12:9', './notes.md:12', 9],
+  ['notes%2Emd', 'notes.md', null],
   ['src/%ED%95%9C%EA%B8%80.ts:9', 'src/한글.ts', 9],
+  ['/workspace/자료/100%complete.md', '/workspace/자료/100%complete.md', null],
+  ['/workspace/자료/%draft%2520.md', '/workspace/자료/%draft%20.md', null],
+  ['/workspace/자료/bad%E0%A4%20draft.md', '/workspace/자료/bad%E0%A4 draft.md', null],
+  ['/workspace/%FF%EC%9E%90%EB%A3%8C.md', '/workspace/%FF자료.md', null],
+  ['/workspace/%ED%A0%80%20notes.md', '/workspace/%ED%A0%80 notes.md', null],
+  ['/workspace/자료/%F0%9F%93%9D.md', '/workspace/자료/📝.md', null],
   ['/workspace/bad%E0%A4.md', '/workspace/bad%E0%A4.md', null],
 ])('opens the local href %s as an exact filesystem path', (href, expected, line) => {
   const { getByRole } = render(<Markdown>{`[원장](<${href}>)`}</Markdown>);
@@ -41,10 +50,13 @@ test.each([
   assert.equal(openDirectory.mock.calls.length, 0);
 });
 
-test('decodes a directory href before opening the file tree', () => {
-  const { getByRole } = render(<Markdown>{'[폴더](/workspace/이력원장/)'}</Markdown>);
+test.each([
+  ['/workspace/이력원장/', '/workspace/이력원장/'],
+  ['/workspace/자료/100%complete/', '/workspace/자료/100%complete/'],
+])('decodes the directory href %s before opening the file tree', (href, expected) => {
+  const { getByRole } = render(<Markdown>{`[폴더](${href})`}</Markdown>);
   fireEvent.click(getByRole('link'));
-  assert.deepEqual(openDirectory.mock.calls, [['/workspace/이력원장/']]);
+  assert.deepEqual(openDirectory.mock.calls, [[expected]]);
   assert.equal(openFileInEditor.mock.calls.length, 0);
 });
 
