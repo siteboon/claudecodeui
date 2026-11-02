@@ -421,6 +421,26 @@ test('a name turned down while the window was still moving is shown where it fit
   assert.equal(trigger.textContent, 'Default Mode');
 });
 
+test('a hidden name with no room is not rendered again on every resize', () => {
+  // A hidden name is only shown again to be measured when the width it had
+  // last time says it may fit, so dragging the window through widths where
+  // it does not (174 + 241 + 112 + 36 = 563px) never renders it.
+  layOutComposer({ room: 400, tools: 174 });
+  const { getByRole } = renderInFooter('default');
+  const trigger = getByRole('button');
+  assert.equal(trigger.textContent, '');
+
+  const nameInsertions = new MutationObserver(() => {});
+  nameInsertions.observe(trigger, { childList: true });
+  for (const room of [480, 500, 520, 540]) {
+    resizeComposer({ room });
+  }
+  const insertions = nameInsertions.takeRecords().filter((record) => record.addedNodes.length > 0).length;
+  nameInsertions.disconnect();
+  assert.equal(insertions, 0);
+  assert.equal(trigger.textContent, '');
+});
+
 test('the trigger leaves no observer behind', () => {
   layOutComposer({ room: 678 });
   const view = renderInFooter('default');
