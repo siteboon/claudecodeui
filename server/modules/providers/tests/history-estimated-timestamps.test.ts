@@ -73,7 +73,12 @@ test('claude history: only a transcript row without its own time is marked', { c
 
   try {
     const transcriptPath = path.join(tempRoot, `${SESSION_ID}.jsonl`);
-    const row = (uuid: string, role: 'user' | 'assistant', text: string, timestamp?: string) => JSON.stringify({
+    const row = (
+      uuid: string,
+      role: 'user' | 'assistant',
+      content: Array<Record<string, unknown>>,
+      timestamp?: string,
+    ) => JSON.stringify({
       parentUuid: null,
       isSidechain: false,
       type: role,
@@ -81,14 +86,21 @@ test('claude history: only a transcript row without its own time is marked', { c
       ...(timestamp ? { timestamp } : {}),
       cwd: '/workspace/demo',
       sessionId: SESSION_ID,
-      message: { role, content: [{ type: 'text', text }] },
+      message: { role, content },
     });
+    const text = (value: string) => ({ type: 'text', text: value });
     await writeFile(
       transcriptPath,
       [
-        row('user-1', 'user', 'Plan the refactor.', '2026-07-10T00:00:00.000Z'),
-        row('asst-1', 'assistant', 'Here is the plan.'),
-        row('asst-2', 'assistant', 'Done.', '2026-07-10T00:00:05.000Z'),
+        row('user-1', 'user', [text('Plan the refactor.')], '2026-07-10T00:00:00.000Z'),
+        row('asst-1', 'assistant', [text('Here is the plan.')]),
+        // One transcript row the CLI wrote as several messages: every one of
+        // them is marked, not only the first.
+        row('asst-2', 'assistant', [
+          text('Reading the layout first.'),
+          { type: 'tool_use', id: 'toolu_untimed', name: 'Read', input: { file_path: '/workspace/demo/README.md' } },
+        ]),
+        row('asst-3', 'assistant', [text('Done.')], '2026-07-10T00:00:05.000Z'),
         '',
       ].join('\n'),
       'utf8',
@@ -107,6 +119,14 @@ test('claude history: only a transcript row without its own time is marked', { c
       assert.equal(byText.get('Done.')?.timestampEstimated, undefined);
       assert.equal(byText.get('Here is the plan.')?.timestampEstimated, true);
       assert.ok(Number.isFinite(Date.parse(byText.get('Here is the plan.')?.timestamp ?? '')));
+
+      const untimedRow = history.messages.filter(
+        (message) => message.content === 'Reading the layout first.' || message.toolId === 'toolu_untimed',
+      );
+      assert.deepEqual(untimedRow.map((message) => message.kind), ['text', 'tool_use']);
+      for (const message of untimedRow) {
+        assert.equal(message.timestampEstimated, true, `${message.kind} of the untimed row is marked`);
+      }
     });
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

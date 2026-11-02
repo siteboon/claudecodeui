@@ -36,7 +36,7 @@ afterAll(() => {
   }
 });
 
-const plainSpaces = (text: string | null) => (text ?? '').replace(/[   ]/g, ' ');
+const plainSpaces = (text: string | null) => (text ?? '').replace(/[\u202f\u00a0\u2009]/g, ' ');
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });

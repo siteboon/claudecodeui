@@ -63,15 +63,20 @@ vi.mock('@/modules/chat/transcript/Markdown', async (importOriginal) => {
   };
 });
 
-// The workflow agent-activity route, answered per agent id; and the export
-// menu's download, recorded rather than handed to the browser.
-const { workflowAgentActivity, downloadTranscriptExport } = vi.hoisted(() => ({
+// The workflow agent-activity route, answered per agent id; the export
+// menu's download, recorded rather than handed to the browser; and the
+// preference save a language switch queues, which jsdom cannot send.
+const { workflowAgentActivity, downloadTranscriptExport, savePreferences } = vi.hoisted(() => ({
   workflowAgentActivity: vi.fn(),
   downloadTranscriptExport: vi.fn(async () => {}),
+  savePreferences: vi.fn(async () => new Response(JSON.stringify({ success: true, preferences: {} }))),
 }));
 vi.mock('@/shared/api', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
-  return { ...actual, api: { ...actual.api, workflowAgentActivity } };
+  return {
+    ...actual,
+    api: { ...actual.api, workflowAgentActivity, user: { ...actual.api.user, savePreferences } },
+  };
 });
 vi.mock('@/modules/chat/utils/chatExport', async (importOriginal) => ({
   ...(await importOriginal<typeof ChatExportModule>()),
@@ -323,6 +328,30 @@ describe('a transcript row with timestamps on', () => {
     }
   });
 
+  it('keeps a user turn\'s copy, edit and fork controls when its made-up time is hidden', () => {
+    const { container } = renderRow({
+      message: { ...USER_TURN, timestampEstimated: true, transcriptAnchorId: 'user-1' },
+      onEditMessage: () => {},
+      onForkFromMessage: () => {},
+      showTimestamps: true,
+    });
+    assert.equal(timeElements(container).length, 0);
+    for (const name of ['Copy message', 'Edit and resend', 'Fork from here']) {
+      assert.equal(screen.queryAllByRole('button', { name }).length, 1, `${name} is still offered`);
+    }
+  });
+
+  it('keeps the model label on the first row of a run that has nothing to copy', () => {
+    const { container } = renderRow({
+      message: { ...READ_CALL, model: 'claude-opus-5' },
+      prevMessage: USER_TURN,
+      showTimestamps: true,
+    });
+    // The time is beside the call's input line; the footer stays for the label.
+    assert.deepEqual(timeLabels(container), ['9:02:10 AM']);
+    assert.equal(container.querySelectorAll('[title="Answered by claude-opus-5"]').length, 1);
+  });
+
   it('carries the made-up mark from the backend onto the rows it renders', () => {
     const rows = normalizedToChatMessages([
       { id: 'n1', sessionId: 's', provider: 'cursor', kind: 'text', role: 'user', content: 'List the files', timestamp: at(20, 9, 0, 0), timestampEstimated: true },
@@ -430,6 +459,18 @@ describe('a collapsed tool group', () => {
     assert.equal(timeElements(none.container).length, 0);
     // Nor a line laid out for it on a phone.
     assert.doesNotMatch(headerOf(none.container).className, /flex-col/);
+  });
+
+  it('keeps both dates on a span that crosses midnight', () => {
+    const acrossMidnight = groupConsecutiveTools([
+      { ...GREPS[0], timestamp: at(19, 23, 59, 0) },
+      { ...GREPS[1], timestamp: at(20, 0, 1, 0) },
+    ])[0] as ToolGroupItem;
+    const { container } = render(
+      <ToolGroupContainer group={acrossMidnight} prevMessage={USER_TURN} createDiff={createDiff} getMessageKey={(message) => String(message.toolId)} provider="claude" showTimestamps />,
+    );
+    // Its end is today, but a time alone would read as today's 11:59 PM.
+    assert.deepEqual(timeLabels(container), ['Oct 19, 11:59:00 PM – Oct 20, 12:01:00 AM']);
   });
 
   it('puts the span on a line of its own below the sm breakpoint, so the preview keeps its width', () => {
