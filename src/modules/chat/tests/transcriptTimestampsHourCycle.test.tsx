@@ -37,7 +37,7 @@ vi.mock('@/shared/api', async (importOriginal) => {
   return { ...actual, api: { ...actual.api, user: { ...actual.api.user, savePreferences } } };
 });
 
-const plainSpaces = (text: string | null) => (text ?? '').replace(/[   ]/g, ' ');
+const plainSpaces = (text: string | null) => (text ?? '').replace(/[\u202f\u00a0\u2009]/g, ' ');
 /** What the browser itself writes for a time, as `toLocaleTimeString()` does. */
 const defaultTimeOf = (date: Date) =>
   plainSpaces(new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: 'numeric', second: 'numeric' }).format(date));
