@@ -535,8 +535,9 @@ export type NormalizedMessage = {
   timestamp: string;
   /**
    * Set by the backend when the provider recorded no time for this row, so
-   * `timestamp` is only when the history was read (every Cursor history row).
-   * Still used for ordering; never shown as the row's time.
+   * `timestamp` is only when the history was read: every Cursor history row,
+   * and a Claude transcript row without its own `timestamp`. Live events never
+   * carry it. Still used for ordering; never shown as the row's time.
    */
   timestampEstimated?: boolean;
   provider: LLMProvider;
