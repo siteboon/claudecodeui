@@ -12,7 +12,13 @@ import {
   OPENCODE_PREDEFINED_MODELS,
 } from '@/modules/providers/list/opencode/opencode-models.provider.js';
 
-const OPENCODE_ENV_KEYS = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY'];
+const OPENCODE_ENV_KEYS = [
+  'OPENCODE_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'OPENAI_API_KEY',
+  'OPENCODE_CONFIG',
+  'OPENCODE_CONFIG_CONTENT',
+];
 
 /**
  * Runs one case against a throwaway OpenCode home, so the catalog the adapter
@@ -22,6 +28,7 @@ const OPENCODE_ENV_KEYS = ['OPENCODE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_
 const withOpenCodeHome = async (
   setUp: (homeDir: string) => Promise<void>,
   runTest: (adapter: OpenCodeProviderModels) => Promise<void>,
+  readModels: () => Promise<string[]> = async () => [],
 ): Promise<void> => {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), 'opencode-catalog-'));
   const originalHomedir = os.homedir;
@@ -34,7 +41,7 @@ const withOpenCodeHome = async (
 
   try {
     await setUp(homeDir);
-    await runTest(new OpenCodeProviderModels());
+    await runTest(new OpenCodeProviderModels(readModels));
   } finally {
     (os as any).homedir = originalHomedir;
     for (const [key, value] of originalEnv) {
@@ -54,7 +61,7 @@ const writeOpenCodeAuth = async (homeDir: string, auth: Record<string, unknown>)
   await writeFile(path.join(authDir, 'auth.json'), JSON.stringify(auth), 'utf8');
 };
 
-test('OpenCode exposes only the curated predefined catalog', async () => {
+test('OpenCode falls back to the curated catalog only when no providers are known', async () => {
   await withOpenCodeHome(async () => {}, async (adapter) => {
     // Nothing readable about this install, so the picker keeps every option
     // rather than coming up empty.
@@ -118,7 +125,7 @@ test('OpenCode exposes only the curated predefined catalog', async () => {
   );
 });
 
-test('OpenCode offers only models the install can route to', async () => {
+test('OpenCode discovers only models available through connected providers', async () => {
   // Asking for a provider the user never connected fails the whole run with
   // "Model <id> is not valid", so an OpenCode Zen model must not be offered -
   // or defaulted to - on a machine that only holds an Anthropic key.
@@ -134,6 +141,7 @@ test('OpenCode offers only models the install can route to', async () => {
       assert.ok(catalog.OPTIONS.some((option) => option.value === catalog.DEFAULT));
       assert.equal((await adapter.getCurrentActiveModel()).model, catalog.DEFAULT);
     },
+    async () => ['anthropic/claude-sonnet-5', 'opencode/gpt-5.6-terra'],
   );
 
   // A Go subscriber's auth store holds only `opencode-go`, so the whole catalog
@@ -146,11 +154,12 @@ test('OpenCode offers only models the install can route to', async () => {
       const providerIds = new Set(catalog.OPTIONS.map((option) => option.value.split('/')[0]));
 
       assert.deepEqual([...providerIds], ['opencode-go']);
-      assert.equal(catalog.OPTIONS.length, 27);
+      assert.equal(catalog.OPTIONS.length, 2);
       assert.equal(catalog.DEFAULT, 'opencode-go/grok-4.6');
       assert.ok(catalog.OPTIONS.some((option) => option.value === catalog.DEFAULT));
       assert.equal((await adapter.getCurrentActiveModel()).model, catalog.DEFAULT);
     },
+    async () => ['opencode-go/grok-4.6', 'opencode-go/glm-5.3'],
   );
 
   // The catalog default survives whenever its own provider is connected.
@@ -166,6 +175,7 @@ test('OpenCode offers only models the install can route to', async () => {
       assert.deepEqual([...providerIds].sort(), ['opencode', 'openai'].sort());
       assert.equal(catalog.DEFAULT, OPENCODE_PREDEFINED_MODELS.DEFAULT);
     },
+    async () => ['opencode/gpt-5.6-terra', 'openai/gpt-5.6'],
   );
 
   // Providers configured rather than logged into count too.
@@ -185,6 +195,7 @@ test('OpenCode offers only models the install can route to', async () => {
 
       assert.deepEqual([...providerIds], ['anthropic']);
     },
+    async () => ['anthropic/claude-opus-5'],
   );
 
   // An API key in the environment is enough on its own.
@@ -197,6 +208,184 @@ test('OpenCode offers only models the install can route to', async () => {
       const providerIds = new Set(catalog.OPTIONS.map((option) => option.value.split('/')[0]));
 
       assert.deepEqual([...providerIds], ['openai']);
+    },
+    async () => ['openai/gpt-5.6'],
+  );
+});
+
+test('OpenCode uses discovered GitHub Copilot models and never falls back to foreign providers', async () => {
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { 'github-copilot': { type: 'oauth' } }),
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+
+      assert.deepEqual(catalog.OPTIONS.map((option) => option.value), [
+        'github-copilot/gpt-5.6-terra',
+        'github-copilot/claude-sonnet-5.5',
+      ]);
+      assert.equal(catalog.DEFAULT, 'github-copilot/gpt-5.6-terra');
+      assert.equal((await adapter.getCurrentActiveModel()).model, 'github-copilot/gpt-5.6-terra');
+    },
+    async () => [
+      'github-copilot/gpt-5.6-terra',
+      'opencode/gpt-5.6-terra',
+      'github-copilot/claude-sonnet-5.5',
+    ],
+  );
+
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { 'github-copilot': { type: 'oauth' } }),
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+
+      assert.deepEqual(catalog.OPTIONS, []);
+      assert.equal(catalog.DEFAULT, '');
+    },
+  );
+
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { 'github-copilot': { type: 'oauth' } }),
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+
+      assert.deepEqual(catalog.OPTIONS, []);
+      assert.equal(catalog.DEFAULT, '');
+    },
+    async () => Promise.reject(new Error('OpenCode unavailable')),
+  );
+});
+
+test('OpenCode keeps curated metadata for discovered models it already knows', async () => {
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { 'opencode-go': { type: 'api', key: 'test' } }),
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+      const [known, unknown] = catalog.OPTIONS;
+
+      // The runtime turns the selected effort into `--variant`, so a known
+      // model losing its levels would silently hide the Reasoning picker.
+      assert.equal(known.value, 'opencode-go/glm-5.3-flash');
+      assert.equal(known.label, 'GLM 5.3 Flash');
+      assert.equal(known.description, 'OpenCode Go');
+      assert.deepEqual(known.effort?.values.map((value) => value.value), ['low', 'high', 'max']);
+      assert.deepEqual(unknown, {
+        value: 'opencode-go/new-model',
+        label: 'new-model',
+        description: 'opencode-go',
+      });
+    },
+    async () => ['opencode-go/glm-5.3-flash', 'opencode-go/new-model'],
+  );
+});
+
+test('OpenCode counts providers from OPENCODE_CONFIG and OPENCODE_CONFIG_CONTENT', async () => {
+  const listing = async () => ['my-proxy/foo', 'anthropic/claude-sonnet-5', 'opencode/gpt-5.6-terra'];
+  const expectProxyAndAnthropic = async (adapter: OpenCodeProviderModels): Promise<void> => {
+    const catalog = await adapter.getSupportedModels();
+    assert.deepEqual(
+      catalog.OPTIONS.map((option) => option.value),
+      ['my-proxy/foo', 'anthropic/claude-sonnet-5'],
+    );
+  };
+
+  await withOpenCodeHome(
+    async (homeDir) => {
+      await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } });
+      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ provider: { 'my-proxy': {} } });
+    },
+    expectProxyAndAnthropic,
+    listing,
+  );
+
+  await withOpenCodeHome(
+    async (homeDir) => {
+      await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } });
+      const configPath = path.join(homeDir, 'custom-opencode.json');
+      await writeFile(configPath, JSON.stringify({ provider: { 'my-proxy': {} } }), 'utf8');
+      process.env.OPENCODE_CONFIG = configPath;
+    },
+    expectProxyAndAnthropic,
+    listing,
+  );
+});
+
+test('OpenCode caches the CLI model listing and refreshes it in the background', async () => {
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } }),
+    async () => {
+      let now = 0;
+      let listing = ['anthropic/claude-sonnet-5'];
+      const pendingReads: Array<() => void> = [];
+      let readCount = 0;
+      const adapter = new OpenCodeProviderModels(
+        () => {
+          readCount += 1;
+          const snapshot = listing;
+          return new Promise((resolve) => {
+            pendingReads.push(() => resolve(snapshot));
+          });
+        },
+        () => now,
+      );
+      const flushRead = async (): Promise<void> => {
+        pendingReads.shift()?.();
+        await new Promise((resolve) => setImmediate(resolve));
+      };
+
+      // Concurrent first loads share one CLI invocation.
+      const firstLoads = Promise.all([adapter.getSupportedModels(), adapter.getSupportedModels()]);
+      await new Promise((resolve) => setImmediate(resolve));
+      await flushRead();
+      const [first, second] = await firstLoads;
+      assert.equal(readCount, 1);
+      assert.deepEqual(first.OPTIONS.map((option) => option.value), ['anthropic/claude-sonnet-5']);
+      assert.deepEqual(second, first);
+
+      // Fresh cache: no new process.
+      await adapter.getSupportedModels();
+      assert.equal(readCount, 1);
+
+      // Stale cache answers immediately and refreshes behind the response.
+      now = 5 * 60_000;
+      listing = ['anthropic/claude-opus-5'];
+      const stale = await adapter.getSupportedModels();
+      assert.deepEqual(stale.OPTIONS.map((option) => option.value), ['anthropic/claude-sonnet-5']);
+      assert.equal(readCount, 2);
+      await flushRead();
+      const refreshed = await adapter.getSupportedModels();
+      assert.deepEqual(refreshed.OPTIONS.map((option) => option.value), ['anthropic/claude-opus-5']);
+      assert.equal(readCount, 2);
+    },
+  );
+});
+
+test('OpenCode retries a failed CLI listing sooner than a successful one', async () => {
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } }),
+    async () => {
+      let now = 0;
+      let readCount = 0;
+      const adapter = new OpenCodeProviderModels(
+        async () => {
+          readCount += 1;
+          if (readCount === 1) {
+            throw new Error('OpenCode unavailable');
+          }
+          return ['anthropic/claude-sonnet-5'];
+        },
+        () => now,
+      );
+
+      // Failure falls back to the connected-provider slice of the static catalog.
+      const fallback = await adapter.getSupportedModels();
+      assert.ok(fallback.OPTIONS.every((option) => option.value.startsWith('anthropic/')));
+
+      now = 30_000;
+      await adapter.getSupportedModels();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(readCount, 2);
+      const recovered = await adapter.getSupportedModels();
+      assert.deepEqual(recovered.OPTIONS.map((option) => option.value), ['anthropic/claude-sonnet-5']);
     },
   );
 });
@@ -271,6 +460,13 @@ test('OpenCode composes the provider prefix into session model ids', async () =>
           id: 'ses_plain_string',
           model: 'opencode/gpt-5.6-terra',
         },
+        {
+          id: 'ses_github_copilot',
+          model: JSON.stringify({
+            id: 'gpt-5.6-terra',
+            providerID: 'github-copilot',
+          }),
+        },
       ]),
       async (adapter) => {
         assert.equal(
@@ -284,6 +480,10 @@ test('OpenCode composes the provider prefix into session model ids', async () =>
         assert.equal(
           (await adapter.getCurrentActiveModel('ses_plain_string')).model,
           'opencode/gpt-5.6-terra',
+        );
+        assert.equal(
+          (await adapter.getCurrentActiveModel('ses_github_copilot')).model,
+          'github-copilot/gpt-5.6-terra',
         );
       },
     );

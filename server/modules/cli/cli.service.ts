@@ -162,7 +162,7 @@ Environment Variables:
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
   CLOUDCLI_RUNTIME_PROFILES  Configure selectable CLI environments as JSON
-  CONTEXT_WINDOW      Set context window size (default: 160000)
+  CONTEXT_WINDOW      Fallback context window size (default: 160000)
 
 Documentation:
   ${dependencies.packageMetadata.homepage || 'https://github.com/siteboon/claudecodeui'}

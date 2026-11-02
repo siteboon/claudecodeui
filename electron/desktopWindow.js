@@ -749,6 +749,12 @@ export class DesktopWindowManager {
       this.syncSettingsWindowBounds();
     });
 
+    // A combined move+resize (e.g. maximize, left/top edge drags on Linux) can emit 'resize'
+    // before the content area is laid out, so re-apply the view bounds once layout settles.
+    this.mainWindow.contentView.on('bounds-changed', () => {
+      this.viewHost.resizeActiveView();
+    });
+
     this.mainWindow.on('move', () => {
       this.syncSettingsWindowBounds();
     });

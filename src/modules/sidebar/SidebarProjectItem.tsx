@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
+import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
 import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import TaskIndicator from '@/modules/sidebar/TaskIndicator';
 import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
@@ -48,6 +48,12 @@ type SidebarProjectItemProps = {
   onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  /** The sessions ticked in this project's list, or null when it is not the one selecting. */
+  selectedSessionIds: ReadonlySet<string> | null;
+  onSetSessionSelection: (selection: SidebarSessionSelection) => void;
+  onToggleSessionSelected: (projectId: string, sessionId: string) => void;
+  onCancelSessionSelection: () => void;
+  onDeleteSelectedSessions: (sessionIds: string[]) => void;
   t: TFunction;
 };
 
@@ -93,6 +99,11 @@ function SidebarProjectItem({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
+  selectedSessionIds,
+  onSetSessionSelection,
+  onToggleSessionSelected,
+  onCancelSessionSelection,
+  onDeleteSelectedSessions,
   t,
 }: SidebarProjectItemProps) {
   // Project identity is tracked by the DB-assigned `projectId` everywhere
@@ -201,6 +212,8 @@ function SidebarProjectItem({
                         }
 
                         if (event.key === 'Escape') {
+                          // Cancelling the rename must not also close the code editor.
+                          event.stopPropagation();
                           onCancelEditingProject();
                         }
                       }}
@@ -341,6 +354,8 @@ function SidebarProjectItem({
                         saveProjectName();
                       }
                       if (event.key === 'Escape') {
+                        // Cancelling the rename must not also close the code editor.
+                        event.stopPropagation();
                         onCancelEditingProject();
                       }
                     }}
@@ -448,6 +463,11 @@ function SidebarProjectItem({
         onForkSession={onForkSession}
         onLoadMoreSessions={onLoadMoreSessions}
         onNewSession={onNewSession}
+        selectedSessionIds={selectedSessionIds}
+        onSetSessionSelection={onSetSessionSelection}
+        onToggleSessionSelected={onToggleSessionSelected}
+        onCancelSessionSelection={onCancelSessionSelection}
+        onDeleteSelectedSessions={onDeleteSelectedSessions}
         t={t}
       />
     </div>

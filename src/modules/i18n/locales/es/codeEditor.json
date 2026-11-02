@@ -24,7 +24,8 @@
     "fullscreen": "Pantalla completa",
     "close": "Cerrar",
     "previewMarkdown": "Vista previa de markdown",
-    "editMarkdown": "Editar markdown"
+    "editMarkdown": "Editar markdown",
+    "previewHtml": "Abrir vista previa HTML en una pestaña nueva"
   },
   "footer": {
     "lines": "Líneas:",
@@ -39,5 +40,9 @@
     "loading": "Cargando vista previa...",
     "error": "No se puede mostrar este archivo.",
     "openInNewTab": "Abrir en una pestaña nueva"
+  },
+  "unsavedChanges": {
+    "confirmClose": "Tienes cambios sin guardar. ¿Cerrar este archivo y descartarlos?",
+    "indicator": "Cambios sin guardar"
   }
 }

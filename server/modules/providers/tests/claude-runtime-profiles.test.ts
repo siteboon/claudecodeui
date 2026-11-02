@@ -56,6 +56,9 @@ for (const scenario of ['selected', 'inherited', 'missing', 'invalid', 'default'
         scenario === 'default' ? defaultServers
           : scenario === 'missing' || scenario === 'invalid' ? undefined : profileServers);
       if (scenario !== 'default') assert.equal(capturedOptions.env.CLAUDE_CONFIG_DIR, profileDirectory);
+      // Upstream SDK defaults must survive the runtime-profile overlay.
+      assert.equal(capturedOptions.env.CLAUDE_CODE_ARTIFACT, process.env.CLAUDE_CODE_ARTIFACT ?? '1');
+      assert.equal(capturedOptions.env.CLAUDE_CODE_ENTRYPOINT, process.env.CLAUDE_CODE_ENTRYPOINT ?? 'claudecodeui');
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;

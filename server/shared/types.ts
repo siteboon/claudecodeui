@@ -143,6 +143,21 @@ export type ProviderModelOption = {
 export type ProviderModelsDefinition = {
   OPTIONS: ProviderModelOption[];
   DEFAULT: string;
+  /**
+   * Reasoning-effort levels a custom entry of this catalog may declare, weakest
+   * first; empty for providers without effort support. The Providers service
+   * sets it on merged catalogs from the capability matrix, so the model
+   * library offers the same levels on every machine. Adapter catalogs omit it.
+   */
+  EFFORT_LEVELS?: string[];
+  /**
+   * The user's "use only my models" flag for this provider, set by the
+   * Providers service on merged catalogs. While it is true and at least one
+   * custom model exists, `OPTIONS` holds only custom models and `DEFAULT` is
+   * the first of them; with no custom models the built-ins are listed anyway.
+   * Adapter catalogs omit it.
+   */
+  CUSTOM_MODELS_ONLY?: boolean;
 };
 
 /**
@@ -159,6 +174,22 @@ export type CustomProviderModelRecord = {
   modelId: string;
   model: string;
   sortOrder: number;
+  /** NULL for rows that never declared effort levels, including pre-existing rows. */
+  effort: CustomProviderModelEffort | null;
+};
+
+/**
+ * Reasoning-effort levels a user declared for one custom model.
+ *
+ * `values` holds unique, non-empty level ids drawn from the levels the
+ * provider's predefined models declare, and is never empty (an empty
+ * declaration is stored as NULL). `default`, when present, is one of `values`
+ * and documents the level the provider applies when the composer sends
+ * `Default`, mirroring `ProviderModelOption['effort'].default`.
+ */
+export type CustomProviderModelEffort = {
+  values: string[];
+  default?: string;
 };
 
 /**
@@ -171,6 +202,12 @@ export type CustomProviderModelRecord = {
 export type CustomProviderModelInput = {
   id: string;
   model: string;
+  /**
+   * Optional reasoning-effort declaration. `undefined` leaves stored metadata
+   * untouched on update (and stores none on create) so clients that predate
+   * effort metadata keep working; `null` clears it.
+   */
+  effort?: CustomProviderModelEffort | null;
 };
 
 // ---------------------------
@@ -246,16 +283,17 @@ export type MessageKind =
  * Event kinds added by the chat gateway layer on top of provider message kinds.
  *
  * These are app-level realtime events (subscription acks, sidebar deltas,
- * project loading progress, protocol failures) that are not produced by any
- * provider adapter. Together with `MessageKind` they form the complete set of
- * `kind` values a websocket client can receive, so the frontend only ever
- * needs one kind-based switch.
+ * project loading progress, protocol failures, scheduled-message changes) that
+ * are not produced by any provider adapter. Together with `MessageKind` they
+ * form the complete set of `kind` values a websocket client can receive, so
+ * the frontend only ever needs one kind-based switch.
  */
 export type GatewayEventKind =
   | 'chat_subscribed'
   | 'session_upserted'
   | 'loading_progress'
-  | 'protocol_error';
+  | 'protocol_error'
+  | 'scheduled_messages_changed';
 
 /**
  * Complete set of `kind` values emitted to websocket clients.
@@ -348,6 +386,15 @@ export type NormalizedMessage = {
   seq?: number;
   role?: 'user' | 'assistant';
   content?: string;
+  /**
+   * The model that produced this assistant message, as the provider reported
+   * it on the transcript row (today: Claude's `message.model`, e.g.
+   * `claude-opus-5`). Absent on user turns — no provider records which model a
+   * request went out with — and absent when the provider named a placeholder
+   * such as `<synthetic>`, so a locally-fabricated notice is never labelled
+   * with a model it did not run on.
+   */
+  model?: string;
   /**
    * Optional display-oriented metadata used by providers that need to expose
    * richer transcript artifacts without introducing a brand-new message kind.
@@ -884,6 +931,29 @@ export type UpsertProviderMcpServerInput = {
 // ---------------------------
 //----------------- PROVIDER AUTH TYPES ------------
 /**
+ * Records that an API-key style credential is taking precedence over a
+ * still-valid subscription login in `~/.claude/.credentials.json`.
+ *
+ * Claude Code always prefers `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_API_KEY` over
+ * the OAuth login written by `claude /login`, so when both exist every request
+ * is billed to the key (pay-as-you-go) rather than the subscription — usually
+ * without the user realising it. The Claude auth provider fills this in so the
+ * settings UI can say which variable won and where it was found; the fix
+ * differs per source (unset the variable and restart the server for
+ * `process_env`, edit the `env` block of `~/.claude/settings.json` for
+ * `settings_file`). It is never set when the login in the credentials file is
+ * missing or expired, because then nothing is being bypassed.
+ */
+export type ProviderAuthSubscriptionOverride = {
+  /** The environment variable Claude Code is using instead of the login. */
+  variable: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN';
+  /** Where that variable was found: the server process env or the settings.json env block. */
+  source: 'process_env' | 'settings_file';
+  /** Email recorded in the credentials file for the bypassed login, when known. */
+  subscriptionEmail: string | null;
+};
+
+/**
  * Authentication status result returned by provider health checks.
  *
  * This shape is consumed by settings/status endpoints to report installation and
@@ -892,10 +962,36 @@ export type UpsertProviderMcpServerInput = {
 export type ProviderAuthStatus = {
   installed: boolean;
   provider: LLMProvider;
+  /**
+   * Version of the CLI the provider runs, as its `--version` printed it
+   * (`2.1.295`, `2026.07.20-8cc9c0b`), or null when it is not installed or
+   * printed no version.
+   */
+  installedVersion: string | null;
   authenticated: boolean;
   email: string | null;
   method: string | null;
   error?: string;
+  /**
+   * Present only when `method` is `api_key` and a valid subscription login is
+   * being bypassed; see ProviderAuthSubscriptionOverride. Omitted otherwise so
+   * existing consumers that never look for it are unaffected.
+   */
+  subscriptionOverride?: ProviderAuthSubscriptionOverride;
+};
+
+/**
+ * What running a CLI's `--version` revealed, as returned by `probeCliVersion`.
+ *
+ * `installed` says only that the command could be started (or started and was
+ * too slow to answer); it ignores the exit code, which is reported separately
+ * for callers that also require a clean exit. `version` is null whenever the
+ * command did not exit 0 or printed nothing that looks like a version.
+ */
+export type CliVersionProbe = {
+  installed: boolean;
+  exitCode: number | null;
+  version: string | null;
 };
 
 // ---------------------------
@@ -925,6 +1021,26 @@ export type CreateCredentialResult = {
   id: number | bigint;
   credentialName: string;
   credentialType: string;
+};
+
+// ---------------------------
+//----------------- CHAT DRAFT QUEUE TYPES ------------
+/**
+ * A chat message queued to be sent when its session is next idle, in the shape
+ * the composer submits it and `session_drafts.queued_message` stores it.
+ *
+ * `content` is the message text, `attachments` the JSON-safe descriptors
+ * returned by POST /api/assets/files, and `options` the composer's send options
+ * (model, effort, permission mode, ...) captured when it was queued. A session
+ * has at most one: a message queued while another is waiting is merged into it
+ * by the drafts repository. The User module accepts it, the Database module
+ * stores and merges it, and the Scheduled Messages dispatcher sends it (read
+ * through `readQueuedChatMessage`).
+ */
+export type QueuedChatMessage = {
+  content: string;
+  options?: Record<string, unknown>;
+  attachments: unknown[];
 };
 
 // ---------------------------
@@ -979,12 +1095,13 @@ export type WorkspacePathValidationResult = {
 };
 
 // ---------------------------
-//----------------- GIT WORKTREE MANAGEMENT ------------
+//----------------- GIT COMMAND EXECUTION AND WORKTREE MANAGEMENT ------------
 /**
  * Captured output of one completed `git` invocation.
  *
- * Returned by `GitCommandRunner` implementations so worktree services can read
- * both streams without caring about process plumbing.
+ * Returned by `GitCommandRunner` and `GitProcessRunner` implementations so the
+ * git and worktree services can read both streams without caring about
+ * process plumbing.
  */
 export type GitCommandResult = {
   stdout: string;
@@ -1000,6 +1117,20 @@ export type GitCommandResult = {
  * exit code.
  */
 export type GitCommandRunner = (args: string[], cwd: string) => Promise<GitCommandResult>;
+
+/**
+ * Executes `command args...` inside `options.cwd` and resolves with the captured output.
+ *
+ * This is the `spawnAsync` shape the Git routes module injects into its typed
+ * services (branch deletion, branch compare) so their tests can substitute a
+ * fake runner. Like `GitCommandRunner`, the promise must reject on a non-zero
+ * exit code, with `stderr` attached to the error when available.
+ */
+export type GitProcessRunner = (
+  command: string,
+  args: string[],
+  options: { cwd: string },
+) => Promise<GitCommandResult>;
 
 /**
  * One entry parsed from `git worktree list --porcelain`.

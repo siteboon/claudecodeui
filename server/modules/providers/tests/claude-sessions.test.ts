@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import nodeFs from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,7 +8,7 @@ import test from 'node:test';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { ClaudeSessionSynchronizer } from '@/modules/providers/list/claude/claude-session-synchronizer.provider.js';
-import { buildLookupMap } from '@/shared/utils.js';
+import { buildLookupMap, extractFirstValidJsonlData } from '@/shared/utils.js';
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -1519,6 +1520,137 @@ test('an edited prompt replaces the one it superseded instead of stacking on it'
   }
 });
 
+const CONCURRENT_SESSION_ID = 'claude-concurrent-session';
+
+/**
+ * Rows two live writers leave behind: Chat and the native `claude` CLI both
+ * branch off the assistant row each of them saw last. `last-prompt` is the row
+ * every CLI process appends when it exits, naming the leaf it was on.
+ */
+const concurrentRow = {
+  sharedPrompt: {
+    type: 'user', uuid: 'u1', parentUuid: null, sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:00.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'shared prompt' }] },
+  },
+  sharedAnswer: {
+    type: 'assistant', uuid: 'a1', parentUuid: 'u1', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:01.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'shared answer' }] },
+  },
+  chatPrompt: {
+    type: 'user', uuid: 'u2', parentUuid: 'a1', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:02.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'chat prompt' }] },
+  },
+  chatAnswer: {
+    type: 'assistant', uuid: 'a2', parentUuid: 'u2', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:03.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'chat answer' }] },
+  },
+  // The native CLI had loaded the session before `u2` existed, so its prompt
+  // parents onto `a1` too.
+  terminalPrompt: {
+    type: 'user', uuid: 't1', parentUuid: 'a1', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:04.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'terminal prompt' }] },
+  },
+  terminalAnswer: {
+    type: 'assistant', uuid: 't2', parentUuid: 't1', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:05.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'terminal answer' }] },
+  },
+  chatFollowUp: {
+    type: 'user', uuid: 'u3', parentUuid: 'a2', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:06.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'chat follow-up' }] },
+  },
+  chatFollowUpAnswer: {
+    type: 'assistant', uuid: 'a3', parentUuid: 'u3', sessionId: CONCURRENT_SESSION_ID,
+    timestamp: '2026-08-23T10:00:07.000Z',
+    message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'chat follow-up answer' }] },
+  },
+};
+
+const exitStamp = (leafUuid: string) => ({
+  type: 'last-prompt', lastPrompt: 'redacted', leafUuid, sessionId: CONCURRENT_SESSION_ID,
+});
+
+async function readConcurrentlyForkedHistory(rows: object[]): Promise<unknown[]> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-concurrent-history-'));
+
+  try {
+    const transcriptPath = path.join(tempRoot, `${CONCURRENT_SESSION_ID}.jsonl`);
+    await writeFile(transcriptPath, `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    let texts: unknown[] = [];
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(
+        CONCURRENT_SESSION_ID, 'claude', tempRoot, 'Concurrently forked session', now, now, transcriptPath,
+      );
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(CONCURRENT_SESSION_ID, {
+        providerSessionId: CONCURRENT_SESSION_ID,
+      });
+      texts = history.messages.map((message) => message.content);
+    });
+    return texts;
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+const SHARED_TURN = ['shared prompt', 'shared answer'];
+const TERMINAL_TURN = ['terminal prompt', 'terminal answer'];
+
+test('a fork with no exit stamp shows the branch ending at the newest row', { concurrency: false }, async () => {
+  const r = concurrentRow;
+  // With no `last-prompt` in the file, `--resume` falls back to the newest row:
+  // Chat forked first but kept the session going.
+  const texts = await readConcurrentlyForkedHistory([
+    r.sharedPrompt, r.sharedAnswer, r.chatPrompt, r.chatAnswer,
+    r.terminalPrompt, r.terminalAnswer, r.chatFollowUp, r.chatFollowUpAnswer,
+  ]);
+
+  assert.deepEqual(texts, [...SHARED_TURN, 'chat prompt', 'chat answer', 'chat follow-up', 'chat follow-up answer']);
+});
+
+test('a fork shows the branch Chat stamped when Chat exited last', { concurrency: false }, async () => {
+  const r = concurrentRow;
+  const texts = await readConcurrentlyForkedHistory([
+    r.sharedPrompt, r.sharedAnswer, r.chatPrompt, r.chatAnswer, exitStamp('a2'),
+    r.terminalPrompt, r.terminalAnswer, r.chatFollowUp, r.chatFollowUpAnswer, exitStamp('a3'),
+  ]);
+
+  assert.deepEqual(texts, [...SHARED_TURN, 'chat prompt', 'chat answer', 'chat follow-up', 'chat follow-up answer']);
+});
+
+test('a fork shows the terminal branch once the terminal exits after Chat', { concurrency: false }, async () => {
+  const r = concurrentRow;
+  // Chat wrote the newest rows, but closing the terminal stamps its own leaf
+  // last, and that stamp is what the next resume continues from.
+  const texts = await readConcurrentlyForkedHistory([
+    r.sharedPrompt, r.sharedAnswer, r.chatPrompt, r.chatAnswer, exitStamp('a2'),
+    r.terminalPrompt, r.terminalAnswer, r.chatFollowUp, r.chatFollowUpAnswer, exitStamp('a3'),
+    exitStamp('t2'),
+  ]);
+
+  assert.deepEqual(texts, [...SHARED_TURN, ...TERMINAL_TURN]);
+});
+
+test('a fork keeps the stamped branch while the other writer is still open', { concurrency: false }, async () => {
+  const r = concurrentRow;
+  // Chat exited after its turn; the terminal then typed a prompt and is still
+  // open. Its rows are the newest, but they do not descend from Chat's stamp.
+  const texts = await readConcurrentlyForkedHistory([
+    r.sharedPrompt, r.sharedAnswer, r.chatPrompt, r.chatAnswer, exitStamp('a2'),
+    r.terminalPrompt, r.terminalAnswer,
+  ]);
+
+  assert.deepEqual(texts, [...SHARED_TURN, 'chat prompt', 'chat answer']);
+});
+
 test('parallel tool calls are not mistaken for an edit', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-parallel-tools-'));
   const sessionId = 'claude-parallel-session';
@@ -2057,4 +2189,100 @@ test('synchronizeFile skips non-jsonl files', { concurrency: false }, async () =
     const result = await synchronizer.synchronizeFile('/tmp/not-a-jsonl.txt');
     assert.equal(result, null);
   });
+});
+
+// Regression tests: a single malformed JSONL line must not discard the rest of
+// the file, and extractFirstValidJsonlData must release the file handle on
+// every exit path. Both helpers back the per-provider session synchronizers.
+
+test('buildLookupMap keeps entries after a malformed line instead of stopping there', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jsonl-lookup-'));
+
+  try {
+    const filePath = path.join(tempRoot, 'history.jsonl');
+    await writeFile(
+      filePath,
+      [
+        JSON.stringify({ sessionId: 'session-before', title: 'Before the bad line' }),
+        '{ this is not valid json',
+        JSON.stringify({ sessionId: 'session-after', title: 'After the bad line' }),
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const lookup = await buildLookupMap(filePath, 'sessionId', 'title');
+
+    assert.equal(lookup.get('session-before'), 'Before the bad line');
+    assert.equal(lookup.get('session-after'), 'After the bad line', 'the entry after a malformed line must survive');
+    assert.equal(lookup.size, 2);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('extractFirstValidJsonlData skips a malformed line and returns a later valid row', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jsonl-extract-'));
+
+  try {
+    const filePath = path.join(tempRoot, 'session.jsonl');
+    await writeFile(
+      filePath,
+      [
+        '{ half-written line',
+        JSON.stringify({ type: 'summary', sessionId: 'session-xyz' }),
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const result = await extractFirstValidJsonlData(filePath, (row) => {
+      const record = row as Record<string, unknown>;
+      return typeof record.sessionId === 'string' ? record.sessionId : null;
+    });
+
+    assert.equal(result, 'session-xyz');
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('extractFirstValidJsonlData closes the file stream on the no-match path', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jsonl-fd-'));
+  // Assert the helper calls close() explicitly rather than checking `destroyed`:
+  // the no-match fixture reaches EOF and Node destroys the stream there anyway,
+  // so `destroyed` stays true even without the finally block. Counting close()
+  // calls is what actually fails if the cleanup is removed.
+  let closeCalls = 0;
+  let createdStreams = 0;
+  const originalCreateReadStream = nodeFs.createReadStream;
+  (nodeFs as { createReadStream: typeof nodeFs.createReadStream }).createReadStream = ((
+    ...args: Parameters<typeof nodeFs.createReadStream>
+  ) => {
+    const stream = originalCreateReadStream(...args);
+    createdStreams += 1;
+    const originalClose = stream.close.bind(stream);
+    stream.close = ((...closeArgs: Parameters<typeof stream.close>) => {
+      closeCalls += 1;
+      return originalClose(...closeArgs);
+    }) as typeof stream.close;
+    return stream;
+  }) as typeof nodeFs.createReadStream;
+
+  try {
+    const filePath = path.join(tempRoot, 'session.jsonl');
+    // Only malformed rows, so the extractor never matches and the function
+    // returns null without ever hitting the success branch that used to be the
+    // only place the stream was closed.
+    await writeFile(filePath, ['{ bad one', '{ bad two', ''].join('\n'), 'utf8');
+
+    const result = await extractFirstValidJsonlData(filePath, () => 'never');
+
+    assert.equal(result, null);
+    assert.equal(createdStreams, 1);
+    assert.equal(closeCalls, 1, 'the read stream must be closed even when no row matches');
+  } finally {
+    (nodeFs as { createReadStream: typeof nodeFs.createReadStream }).createReadStream = originalCreateReadStream;
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });

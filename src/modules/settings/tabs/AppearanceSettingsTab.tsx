@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 
-import { DarkModeToggle } from '@/shared/ui';
-import type { CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
+import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
+import { useTheme } from '@/shared/context/ThemeContext';
+import type { CodeEditorSettingsState, ProjectSortOrder, ThemeMode } from '@/shared/types';
 import { LanguageSelector } from '@/modules/i18n';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
@@ -29,16 +30,28 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
+  const { themeMode, setThemeMode } = useTheme();
+  const preferences = useUiPreferences();
+  const setPreference = useSetUiPreference();
 
   return (
     <div className="space-y-8">
-      <SettingsSection title={t('appearanceSettings.darkMode.label')}>
+      <SettingsSection title={t('appearanceSettings.theme.label')}>
         <SettingsCard>
           <SettingsRow
-            label={t('appearanceSettings.darkMode.label')}
-            description={t('appearanceSettings.darkMode.description')}
+            label={t('appearanceSettings.theme.label')}
+            description={t('appearanceSettings.theme.description')}
           >
-            <DarkModeToggle ariaLabel={t('appearanceSettings.darkMode.label')} />
+            <select
+              value={themeMode}
+              onChange={(event) => setThemeMode(event.target.value as ThemeMode)}
+              aria-label={t('appearanceSettings.theme.label')}
+              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
+            >
+              <option value="light">{t('appearanceSettings.theme.light')}</option>
+              <option value="dark">{t('appearanceSettings.theme.dark')}</option>
+              <option value="system">{t('appearanceSettings.theme.system')}</option>
+            </select>
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
@@ -63,6 +76,21 @@ export default function AppearanceSettingsTab({
               <option value="name">{t('appearanceSettings.projectSorting.alphabetical')}</option>
               <option value="date">{t('appearanceSettings.projectSorting.recentActivity')}</option>
             </select>
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
+      <SettingsSection title={t('appearanceSettings.keepProjectsExpanded.section', { defaultValue: 'Sidebar' })}>
+        <SettingsCard>
+          <SettingsRow
+            label={t('appearanceSettings.keepProjectsExpanded.label', { defaultValue: 'Keep projects expanded' })}
+            description={t('appearanceSettings.keepProjectsExpanded.description', { defaultValue: 'Open several projects together and remember them after reloading.' })}
+          >
+            <SettingsToggle
+              checked={preferences.keepProjectsExpanded}
+              onChange={(value) => setPreference('keepProjectsExpanded', value)}
+              ariaLabel={t('appearanceSettings.keepProjectsExpanded.label', { defaultValue: 'Keep projects expanded' })}
+            />
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
