@@ -405,6 +405,48 @@ test('retries stop once the destination is removed, disabled or re-pointed, and 
   });
 });
 
+test('a retry reads the destination after its backoff, so a change made during the wait counts', async () => {
+  await withDatabase(async (userId) => {
+    // Each request takes the next step: the status to answer with, then an
+    // optional change made 100 ms later, while the delivery waits out its
+    // 600 ms backoff (well after the answer, well before the retry).
+    const plan: Array<{ status: number; duringBackoff?: () => void }> = [];
+    const receiver = await startReceiver((_req, res) => {
+      const step = plan.shift() ?? { status: 200 };
+      res.statusCode = step.status;
+      res.end();
+      if (step.duringBackoff) {
+        setTimeout(step.duringBackoff, 100);
+      }
+    });
+    try {
+      const notifier = createWebhookNotificationsService({ attemptTimeoutMs: 300, retryDelaysMs: [600, 20] });
+      const event = createNotificationEvent({ provider: 'claude', sessionId: 'backoff-1', kind: 'stop', code: 'run.stopped' });
+
+      notifier.saveConfig(userId, { url: receiver.url, allowHttp: true });
+      plan.push({ status: 500, duringBackoff: () => notifier.removeConfig(userId) });
+      const removed = await notifier.sendForEvent({ userId, event });
+      assert.deepEqual({ attempts: removed?.attempts, status: removed?.status, hits: receiver.hits.length }, { attempts: 1, status: 500, hits: 1 });
+      assert.equal(notifier.getConfig(userId).configured, false);
+
+      notifier.saveConfig(userId, { url: receiver.url, allowHttp: true });
+      const { secret: oldSecret } = notifier.createSecret(userId);
+      let newSecret = '';
+      plan.push({ status: 500, duringBackoff: () => { newSecret = notifier.createSecret(userId).secret; } }, { status: 200 });
+      const rotated = await notifier.sendForEvent({ userId, event });
+      assert.deepEqual({ attempts: rotated?.attempts, ok: rotated?.ok }, { attempts: 2, ok: true });
+      const [first, retry] = receiver.hits.slice(-2);
+      const signatureWith = (secret: string, hit: (typeof receiver.hits)[number]) => standardWebhookSignature(
+        secret, String(hit.headers['webhook-id']), String(hit.headers['webhook-timestamp']), hit.body,
+      );
+      assert.equal(first.headers['webhook-signature'], signatureWith(oldSecret, first));
+      assert.equal(retry.headers['webhook-signature'], signatureWith(newSecret, retry), 'the retry is signed with the secret set during the wait');
+    } finally {
+      await receiver.close();
+    }
+  });
+});
+
 test('a database error before a retry ends the delivery with the attempts really made and their outcome', async (t) => {
   await withDatabase(async (userId) => {
     // The database fails once, right after the second attempt was answered,
