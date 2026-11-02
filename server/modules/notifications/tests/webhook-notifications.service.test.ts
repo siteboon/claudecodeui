@@ -705,7 +705,8 @@ test('the secret is write-only, survives a re-save, and never reaches logs; logs
       notifier.saveConfig(userId, { url: `${receiver.url}/private/path?token=tok-123`, allowHttp: true });
       const { secret, webhook } = notifier.createSecret(userId);
       assert.equal(webhook.hasSecret, true);
-      assert.doesNotMatch(JSON.stringify(notifier.getConfig(userId)), new RegExp(secret.slice(6, 20)));
+      // A substring check: the base64 secret can hold `+`, which a RegExp would read as a quantifier.
+      assert.ok(!JSON.stringify(notifier.getConfig(userId)).includes(secret.slice(6, 20)));
 
       // Saving the destination again (e.g. toggling enabled) keeps the secret.
       const edited = notifier.saveConfig(userId, { url: `${receiver.url}/private/path?token=tok-123`, allowHttp: true, enabled: true });
