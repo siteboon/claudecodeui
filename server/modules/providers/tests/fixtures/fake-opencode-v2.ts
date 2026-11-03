@@ -12,6 +12,7 @@
  * broken event stream raises and exits 130. `serve` is refused, as the 1.x SDK
  * cannot drive a 2.x server.
  */
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,6 +27,11 @@ type Scenario = {
   lines?: unknown[];
   /** Raw text printed on stdout after the lines. */
   stdout?: string;
+  /**
+   * A process the run leaves behind, still holding its stdout, prints this
+   * event after the run exited.
+   */
+  lateLine?: { delayMs: number; line: unknown };
   stderr?: string;
   exitCode?: number;
   /** Keeps running after the lines until a signal ends it. */
@@ -154,6 +160,13 @@ if (args[0] === '--version') {
     }
     if (scenario.stderr) {
       process.stderr.write(scenario.stderr);
+    }
+    if (scenario.lateLine) {
+      const { delayMs, line } = scenario.lateLine;
+      spawn(process.execPath, [
+        '-e',
+        `setTimeout(() => process.stdout.write(${JSON.stringify(`${JSON.stringify(line)}\n`)}), ${delayMs});`,
+      ], { stdio: ['ignore', 'inherit', 'ignore'], detached: true }).unref();
     }
 
     if (scenario.waitForSignal) {

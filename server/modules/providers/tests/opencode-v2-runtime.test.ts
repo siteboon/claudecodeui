@@ -436,6 +436,38 @@ test('an error line fails the turn with that error, once', async () => {
   assert.equal(turn.frames.at(-1)?.exitCode, 1);
 });
 
+test('the last line `run` prints counts without a newline, and a part or an error printed twice shows once', async () => {
+  setInstalledVersion('opencode v2.2.3');
+  const textLine = toolTurn[4];
+  const unterminated = await runTurn({
+    scenario: { lines: toolTurn.slice(0, 4), stdout: JSON.stringify(textLine) },
+  });
+  assert.equal(unterminated.error, null);
+  assert.deepEqual(unterminated.frames.filter((frame) => frame.kind === 'text').map((frame) => frame.content), [
+    'Hello from the fake model.',
+  ]);
+
+  const twice = await runTurn({ scenario: { lines: [...toolTurn.slice(0, 5), textLine, toolTurn[5]] } });
+  assert.equal(twice.frames.filter((frame) => frame.kind === 'text').length, 1);
+
+  const sameError = await runTurn({ scenario: { lines: [...modelError, { ...modelError[0], timestamp: Date.now() }], exitCode: 1 } });
+  assert.deepEqual(kinds(sameError.frames), ['session_created', 'error', 'complete']);
+});
+
+test('what a process `run` left behind prints after the run ended is not part of the turn', async () => {
+  setInstalledVersion('opencode v2.2.3');
+  const lateText = { ...toolTurn[4], part: { ...toolTurn[4].part, id: 'prt_1a2419999001LateLateLateLa', text: 'Printed after the run.' } };
+  const turn = await runTurn({ scenario: { lines: toolTurn, lateLine: { delayMs: 3_000, line: lateText } } });
+  assert.equal(turn.error, null);
+  const framesAtEnd = turn.frames.length;
+  assert.equal(turn.frames.at(-1)?.kind, 'complete');
+
+  // The pipe stays open until the leftover process prints, after the turn settled.
+  await new Promise((resolve) => setTimeout(resolve, 2_500));
+  assert.equal(turn.frames.length, framesAtEnd);
+  assert.equal(turn.frames.some((frame) => frame.content === 'Printed after the run.'), false);
+});
+
 test('a run that fails without an error line shows what it printed', async () => {
   setInstalledVersion('opencode v2.2.3');
   const refused = await runTurn({
