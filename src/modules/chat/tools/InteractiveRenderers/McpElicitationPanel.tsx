@@ -129,22 +129,27 @@ const readFields = (requestedSchema: ElicitationInput['requestedSchema']): Elici
  * answer goes out as an ISO 8601 instant in UTC. Null when it is not a date,
  * or names a local time that does not exist.
  */
+// What a datetime-local input gives (local time, seconds and fraction optional),
+// and the same with an explicit offset. Any other shape is not guessed at.
+const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/;
+const OFFSET_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
+
 const toSubmittedText = (field: ElicitationField, text: string): string | null => {
   if (field.format !== 'date-time') return text;
+  const local = LOCAL_DATE_TIME.exec(text);
+  if (!local && !OFFSET_DATE_TIME.test(text)) return null;
   const instant = new Date(text);
   if (Number.isNaN(instant.getTime())) return null;
   // A local time a DST change skipped (02:30 on a spring-forward night) parses
-  // to an hour later; refuse it rather than send a time nobody picked. A value
-  // typed with its own offset is not local time and is left as it is.
-  const local = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(text);
+  // to an hour later; refuse it rather than send a time nobody picked. Every
+  // offset change is whole minutes, so the wall time is compared to the minute.
   if (local) {
-    const [year, month, day, hours, minutes, seconds = '0'] = local.slice(1).map((part) => part ?? '0');
-    const sameWallTime = instant.getFullYear() === Number(year)
-      && instant.getMonth() + 1 === Number(month)
-      && instant.getDate() === Number(day)
-      && instant.getHours() === Number(hours)
-      && instant.getMinutes() === Number(minutes)
-      && instant.getSeconds() === Number(seconds);
+    const [year, month, day, hours, minutes] = local.slice(1, 6).map(Number);
+    const sameWallTime = instant.getFullYear() === year
+      && instant.getMonth() + 1 === month
+      && instant.getDate() === day
+      && instant.getHours() === hours
+      && instant.getMinutes() === minutes;
     if (!sameWallTime) return null;
   }
   return instant.toISOString();

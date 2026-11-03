@@ -245,6 +245,11 @@ test('a local time skipped by a DST change is refused, not moved an hour', () =>
     assert.equal(decisions.length, 0);
     assert.ok(getByText('Enter a date and time'));
 
+    // Seconds and a fraction do not get it past the check.
+    fireEvent.change(getByLabelText(/Answer/), { target: { value: '2026-03-08T02:30:00.001' } });
+    fireEvent.click(getByText('Submit'));
+    assert.equal(decisions.length, 0);
+
     fireEvent.change(getByLabelText(/Answer/), { target: { value: '2026-03-08T03:30' } });
     fireEvent.click(getByText('Submit'));
     assert.deepEqual(decisions, [{
