@@ -845,8 +845,12 @@ test('the shell keeps the Windows ConPTY when the bundled one is incomplete or t
     addon(prebuildDir);
     addon('build/Release', []);
     launch(dependencies, plainShell, projectPath);
-
     fs.rmSync(path.join(nodePtyRoot, 'build'), { recursive: true, force: true });
+    // node-pty also looks inside lib/ (a bundled copy) before its prebuilds.
+    addon('lib/build/Release', []);
+    launch(dependencies, plainShell, projectPath);
+    fs.rmSync(path.join(nodePtyRoot, 'lib'), { recursive: true, force: true });
+
     for (const setting of ['false', '0', ' OFF ', 'no']) {
       process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL = setting;
       launch(dependencies, plainShell, projectPath);
@@ -857,7 +861,7 @@ test('the shell keeps the Windows ConPTY when the bundled one is incomplete or t
     assert.deepEqual(unresolved.calls.map((call) => call.useConptyDll), [undefined]);
     assert.deepEqual(
       calls.map((call) => call.useConptyDll),
-      [undefined, undefined, undefined, undefined, undefined, undefined, true]
+      [undefined, undefined, undefined, undefined, undefined, undefined, undefined, true]
     );
   });
 });
