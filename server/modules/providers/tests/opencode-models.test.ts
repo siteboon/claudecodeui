@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readlink, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test, { mock } from 'node:test';
@@ -438,11 +438,13 @@ const findEnvKey = (name: string) =>
  * `opencode models` prints `listing.txt` in one write and exits with
  * `exitCode` (default 0). `gated` makes it drop a `started` marker first and
  * wait for a `release` file, so a test can move a mocked clock while the
- * listing "runs"; it records a SIGTERM in `killed`. `cutUnlessFile` makes it
- * print only the first 100 lines unless its stdout is a regular file, which
- * is what real OpenCode does into a pipe that CloudCLI is too busy to read:
- * it exited 0 after 85 of 373 lines with the reader held up while it wrote,
- * and after 75-306 of 358 on a one-core host.
+ * listing "runs"; it records a SIGTERM in `killed`, and with `partial` it
+ * prints one model line before it waits, as a CLI killed at the budget may
+ * already have. `cutUnlessFile` makes it print only the first 100 lines
+ * unless its stdout is a regular file, which is what real OpenCode does into
+ * a pipe that CloudCLI is too busy to read: it exited 0 after 85 of 373 lines
+ * with the reader held up while it wrote, and after 75-306 of 358 on a
+ * one-core host.
  */
 const FAKE_OPENCODE_SCRIPT = `
 const fs = require('node:fs');
@@ -464,6 +466,9 @@ if (!config.gated) {
     fs.writeFileSync(file('killed'), '');
     process.exit(143);
   });
+  if (config.partial) {
+    fs.writeSync(1, 'openrouter/partial/model\\n');
+  }
   fs.writeFileSync(file('started'), '');
   // Never outlive a broken test run (its cleanup deletes this directory).
   const giveUpAt = Date.now() + 30000;
@@ -483,6 +488,7 @@ if (!config.gated) {
 
 type FakeOpenCodeCliConfig = {
   gated?: boolean;
+  partial?: boolean;
   cutUnlessFile?: boolean;
   exitCode?: number;
   /** Puts no `opencode` on PATH at all. */
@@ -494,8 +500,21 @@ type FakeOpenCodeCli = {
   release: () => Promise<void>;
   waitForStart: () => Promise<void>;
   waitForKill: () => Promise<void>;
-  /** Whatever the adapter left in the temp dir it was given. */
+  /** Whatever the adapter left in the temp dir it was given, or (on Linux) still holds open there. */
   leftoverTempEntries: () => Promise<string[]>;
+};
+
+// The files under `dir` this process still has open, deleted ones included. Linux only; on Windows
+// an open file keeps the adapter's cleanup from deleting it, so the entries show it there.
+const openFilesUnder = async (dir: string): Promise<string[]> => {
+  if (process.platform !== 'linux') {
+    return [];
+  }
+  const prefix = `${await realpath(dir)}${path.sep}`;
+  const targets = await Promise.all((await readdir('/proc/self/fd')).map(
+    (fd) => readlink(path.join('/proc/self/fd', fd)).catch(() => ''),
+  ));
+  return targets.filter((target) => target.startsWith(prefix));
 };
 
 // Waits in real time (the budget tests mock only setTimeout, not setImmediate
@@ -534,7 +553,7 @@ const withFakeOpenCodeCli = async (
     release: () => writeFile(path.join(binDir, 'release'), ''),
     waitForStart: () => waitForFile(path.join(binDir, 'started'), 'the fake `opencode models` to start'),
     waitForKill: () => waitForFile(path.join(binDir, 'killed'), 'the fake `opencode models` to get SIGTERM'),
-    leftoverTempEntries: () => readdir(tempDir),
+    leftoverTempEntries: async () => [...await readdir(tempDir), ...await openFilesUnder(tempDir)],
   };
 
   try {
@@ -604,7 +623,7 @@ test('OpenCode waits for an `opencode models` listing that takes longer than 5 s
 
 test('OpenCode still gives up on, and kills, an `opencode models` that never answers', async () => {
   const listing = 'openrouter/qwen/qwen3-coder-flash\n';
-  await withOpenCodeHome(async () => {}, () => withFakeOpenCodeCli(listing, { gated: true }, async (fake) => {
+  await withOpenCodeHome(async () => {}, () => withFakeOpenCodeCli(listing, { gated: true, partial: true }, async (fake) => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
       const pending = new OpenCodeProviderModels().getSupportedModels();
@@ -612,7 +631,8 @@ test('OpenCode still gives up on, and kills, an `opencode models` that never ans
 
       mock.timers.tick(30_000);
 
-      // No provider is readable in this home, so the whole static catalog stands in.
+      // The line the CLI printed before it was killed is not taken for a listing: no provider is
+      // readable in this home, so the whole static catalog stands in.
       assert.deepEqual(await pending, OPENCODE_PREDEFINED_MODELS);
       // On Windows kill() ends the .cmd shim's cmd.exe, which does not signal the node behind it,
       // and that node still holds the listing file.
