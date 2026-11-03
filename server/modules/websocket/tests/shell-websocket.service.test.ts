@@ -1229,6 +1229,9 @@ test('the replay drops only terminal queries and the live output stays byte for 
     // Palette and cursor colour reads, DA1 with its 0, an ANSI-mode DECRQM and a
     // read of the primary selection, which the clipboard addon answers too.
     '\x1b]4;1;?\x07\x1b]4;2;?;3;?\x1b\\\x1b]12;?\x07\x1b[0c\x1b[4$p\x1b]52;p;?\x1b\\',
+    // DA3, kitty keyboard flags and a size report go too, though xterm.js 5.5
+    // does not answer them.
+    '\x1b[=c\x1b[?u\x1b[18t',
     'done\r\n',
   ];
 
@@ -1256,15 +1259,34 @@ test('the replay drops only terminal queries and the live output stays byte for 
 // replay is cut into frames of at most 16,384 characters after the queries are
 // stripped.
 test('a long replay goes out in frames of at most 16,384 characters, in order', () => {
-  const shellPty = createFakePty();
-  const dependencies = { resolveProviderSessionId: () => null, nodePtyRoot: null, spawnPty: () => shellPty as never };
-  const init = JSON.stringify({
-    type: 'init',
-    projectPath: process.cwd(),
-    sessionId: `replay-frames-${Date.now()}`,
-    hasSession: false,
-    ...plainShell,
-  });
+  // What a socket that reattaches after `output` gets after the banner, `live`
+  // being output that arrives once it is attached.
+  const reattach = (name: string, output: string[], live?: string) => {
+    const shellPty = createFakePty();
+    const dependencies = { resolveProviderSessionId: () => null, nodePtyRoot: null, spawnPty: () => shellPty as never };
+    const init = JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId: `replay-${name}-${Date.now()}`,
+      hasSession: false,
+      ...plainShell,
+    });
+    const firstSocket = createFakeSocket();
+    handleShellConnection(firstSocket as never, dependencies);
+    firstSocket.emit('message', init);
+    output.forEach((chunk) => shellPty.emitData(chunk));
+    firstSocket.emit('close');
+    const secondSocket = createFakeSocket();
+    handleShellConnection(secondSocket as never, dependencies);
+    secondSocket.emit('message', init);
+    if (live) {
+      shellPty.emitData(live);
+    }
+    const frames = secondSocket.frames.map((frame) => (JSON.parse(frame) as { data: string }).data);
+    shellPty.emitExit();
+    assert.equal(frames[0], '\x1b[36m[Reconnected to existing session]\x1b[0m\r\n');
+    return frames.slice(1);
+  };
   // 20 characters.
   const line = '\x1b[33m中文\x1b[0m output\r\n';
   // Queries split across chunks: a cursor query, a background colour read
@@ -1278,23 +1300,14 @@ test('a long replay goes out in frames of at most 16,384 characters, in order', 
   // The emoji's surrogate pair sits at characters 16,383 and 16,384.
   const replay = `${line.repeat(819)}abc😀${line.repeat(1000)}done\r\n`;
 
-  const firstSocket = createFakeSocket();
-  handleShellConnection(firstSocket as never, dependencies);
-  firstSocket.emit('message', init);
-  chunks.forEach((chunk) => shellPty.emitData(chunk));
-  firstSocket.emit('close');
-  const secondSocket = createFakeSocket();
-  handleShellConnection(secondSocket as never, dependencies);
-  secondSocket.emit('message', init);
-  shellPty.emitData('live\r\n');
-
-  const frames = secondSocket.frames.map((frame) => (JSON.parse(frame) as { data: string }).data);
-  assert.equal(frames[0], '\x1b[36m[Reconnected to existing session]\x1b[0m\r\n');
+  const frames = reattach('frames', chunks, 'live\r\n');
   assert.equal(frames.at(-1), 'live\r\n');
-  const replayFrames = frames.slice(1, -1);
+  const replayFrames = frames.slice(0, -1);
   assert.equal(replayFrames.join(''), replay);
   // The first frame ends one character early to keep the emoji whole.
   assert.deepEqual(replayFrames.map((frame) => frame.length), [16383, 16384, replay.length - 32767]);
-
-  shellPty.emitExit();
+  // Nothing buffered, no replay frame. A cut also moves on when the buffer
+  // ends in half a surrogate pair, which no UTF-8 decoder emits.
+  assert.deepEqual(reattach('empty', []), []);
+  assert.deepEqual(reattach('half-pair', ['x', '\ud83d']), ['x\ud83d']);
 });
