@@ -21,6 +21,7 @@ import {
   normalizeProviderTimestamp,
   readObjectRecord,
   readJsonRecord,
+  readOpenCodeHistorySessionTable,
   readOpenCodeLiveSessionTable,
   readOpenCodeSessionTables,
   readOptionalString,
@@ -726,11 +727,10 @@ const normalizeOpenCodeV2History = (
 
 /**
  * Reads a history page from OpenCode 2.x storage, when that is where the
- * session's messages are: always on a database without the 1.x tables. With
- * both layouts, a session is read from its live copy (see
- * `readOpenCodeLiveSessionTable`), and from the other layout when that copy
- * has no messages. Returns null for a session the 1.x tables have to answer
- * for. Token usage comes from `session_v2`'s totals.
+ * session's messages are (see `readOpenCodeHistorySessionTable`): always on a
+ * database without the 1.x tables. Returns null for a session the 1.x tables
+ * have to answer for. Token usage comes from `session_v2`'s totals, which the
+ * token usage service then reads for the session too.
  */
 const fetchOpenCodeV2HistoryPage = (
   db: Database.Database,
@@ -741,24 +741,11 @@ const fetchOpenCodeV2HistoryPage = (
   // Inside the try: a database that cannot be read gives the empty page and
   // warning the 1.x reader gives, and the caller still closes it.
   try {
-    const sessionTables = readOpenCodeSessionTables(db);
-    if (!sessionTables.includes('session_v2')) {
-      return null;
-    }
-
-    const hasV1Messages = () => sessionTables.includes('session')
-      && hasOpenCodeTable(db, 'message')
-      && db.prepare('SELECT 1 FROM message WHERE session_id = ? LIMIT 1').get(providerSessionId) !== undefined;
-    const liveTable = readOpenCodeLiveSessionTable(db, providerSessionId);
-    if (liveTable === 'session' && hasV1Messages()) {
+    if (readOpenCodeHistorySessionTable(db, providerSessionId) !== 'session_v2') {
       return null;
     }
 
     const normalized = normalizeOpenCodeV2History(db, providerSessionId, sessionId);
-    if (!normalized && (liveTable === 'session' || hasV1Messages())) {
-      return null;
-    }
-
     const normalizedOffset = Math.max(0, options.offset ?? 0);
     const normalizedLimit = options.limit == null ? null : Math.max(0, options.limit);
     const { page, hasMore } = sliceTailPage(normalized ?? [], normalizedLimit, normalizedOffset);

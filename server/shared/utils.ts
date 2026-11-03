@@ -1090,9 +1090,10 @@ export function unwrapJsonStringLiteral(value: string): string {
  *
  * Used by the OpenCode session synchronizer, which lists the sessions of
  * every table there is, the OpenCode sessions provider, which reads a
- * session's history from the other table when its live copy has none, and
- * the OpenCode models provider, which reads a session's model from there
- * when the live copy names none.
+ * subagent's timeline from the other table when the child's live copy has
+ * none, `readOpenCodeHistorySessionTable`, which does the same for a
+ * session's history, and the OpenCode models provider, which reads a
+ * session's model from there when the live copy names none.
  */
 export function readOpenCodeSessionTables(db: Database.Database): OpenCodeSessionTable[] {
   const tables = new Set(db.prepare(`
@@ -1110,9 +1111,9 @@ export function readOpenCodeSessionTables(db: Database.Database): OpenCodeSessio
  * `session_v2`. Null when the database has no session table.
  *
  * A database with one table costs no lookup of the session. Used by the
- * OpenCode session synchronizer, sessions provider and models provider and
- * by the providers module's token usage service, which read a session's
- * first prompt, messages, model and token totals from that copy.
+ * OpenCode session synchronizer, sessions provider and models provider,
+ * which read a session's first prompt, a subagent's timeline and a session's
+ * model from that copy, and by `readOpenCodeHistorySessionTable`.
  */
 export function readOpenCodeLiveSessionTable(db: Database.Database, sessionId: string): OpenCodeSessionTable | null {
   const tables = readOpenCodeSessionTables(db);
@@ -1129,6 +1130,33 @@ export function readOpenCodeLiveSessionTable(db: Database.Database, sessionId: s
   const v1UpdatedAt = readUpdatedAt('session');
   const v2UpdatedAt = readUpdatedAt('session_v2');
   return v1UpdatedAt !== null && (v2UpdatedAt === null || v1UpdatedAt > v2UpdatedAt) ? 'session' : 'session_v2';
+}
+
+/**
+ * The table whose layout holds one OpenCode session's messages: the table of
+ * its live copy (see `readOpenCodeLiveSessionTable`), or the other one when
+ * `opencode.db` has both layouts and only the other copy has messages
+ * (`message` for 1.x, `session_message` for 2.x). Null when the database has
+ * no session table.
+ *
+ * Used by the OpenCode sessions provider, which reads a session's history
+ * from that layout, and by the providers module's token usage service, which
+ * reads that table's token totals, so the totals a chat shows belong to the
+ * messages it shows.
+ */
+export function readOpenCodeHistorySessionTable(db: Database.Database, sessionId: string): OpenCodeSessionTable | null {
+  const liveTable = readOpenCodeLiveSessionTable(db, sessionId);
+  const otherTable = readOpenCodeSessionTables(db).find((table) => table !== liveTable);
+  if (!liveTable || !otherTable) {
+    return liveTable;
+  }
+
+  const hasMessages = (table: OpenCodeSessionTable): boolean => {
+    const messageTable = table === 'session' ? 'message' : 'session_message';
+    const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(messageTable) !== undefined;
+    return exists && db.prepare(`SELECT 1 FROM ${messageTable} WHERE session_id = ? LIMIT 1`).get(sessionId) !== undefined;
+  };
+  return hasMessages(liveTable) || !hasMessages(otherTable) ? liveTable : otherTable;
 }
 
 /**

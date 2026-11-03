@@ -482,6 +482,36 @@ test('with both layouts each session is listed and read from its own live copy, 
   });
 });
 
+test('token usage comes from the layout the history is read from when the live copy has no messages', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_UPGRADED_SCHEMA, async ({ db, homeDir, workspace }) => {
+    // The 2.x copy holds the turn; the 1.x row was written later, without messages or tokens.
+    insertV2Session(db, { id: 'ses_in_2x', directory: workspace, timeUpdated: BASE_TIME + 5_000, tokens: [40, 9, 2, 10, 3] });
+    insertV2Message(db, 'ses_in_2x', 1, 'msg_in_2x_user', 'user', { text: 'asked on 2.x' });
+    insertV2Message(db, 'ses_in_2x', 2, 'msg_in_2x_reply', 'assistant', { content: [{ type: 'text', text: '2.x answer' }], finish: 'stop' });
+    db.prepare(`
+      INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+      VALUES ('ses_in_2x', 'prj', 'ses_in_2x', ?, 'touched by 1.x', '1.18.25', ?, ?)
+    `).run(workspace, BASE_TIME + 4_000, BASE_TIME + 10_000);
+    // The other way round: the 1.x rows hold the turn, the newer 2.x row has nothing yet.
+    insertV1Session(db, 'ses_in_1x', workspace, BASE_TIME + 6_000, '1.x answer', { prompt: 'asked on 1.x', tokens: [21, 5] });
+    insertV2Session(db, { id: 'ses_in_1x', directory: workspace, timeUpdated: BASE_TIME + 25_000 });
+
+    const provider = new OpenCodeSessionsProvider();
+    const read = async (id: string) => {
+      const history = await provider.fetchHistory(id);
+      return { messages: summarize(history.messages), tokenUsage: history.tokenUsage, service: await readServiceTokenUsage(homeDir, workspace, id) };
+    };
+    const inV2 = await read('ses_in_2x');
+    assert.deepEqual(inV2.messages, ['user:asked on 2.x', 'assistant:2.x answer', 'end']);
+    assert.deepEqual(inV2.service, { used: 64, inputTokens: 50, outputTokens: 9, breakdown: { input: 50, output: 9 } });
+    assert.deepEqual(inV2.service, inV2.tokenUsage);
+    const inV1 = await read('ses_in_1x');
+    assert.deepEqual(inV1.messages, ['user:asked on 1.x', 'assistant:1.x answer']);
+    assert.deepEqual(inV1.service, { used: 26, inputTokens: 21, outputTokens: 5, breakdown: { input: 21, output: 5 } });
+    assert.deepEqual(inV1.service, inV1.tokenUsage);
+  });
+});
+
 test('a 2.x subagent card keeps its timeline after a 1.x CLI wrote the database', { concurrency: false }, async () => {
   await withOpenCodeHome(OPENCODE_UPGRADED_SCHEMA, async ({ db, workspace }) => {
     const parentId = subagentTurn[1].sessionID as string;
