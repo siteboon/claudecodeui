@@ -315,8 +315,9 @@ const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
  * not only the first. A 5 s budget kept failing on such hosts, so the picker
  * stayed on the static catalog, which offers models this OpenCode refuses to
  * run (instead of the user's own) when the install's providers cannot be
- * read. When a listing takes longer than this, the static catalog still
- * stands in until a later background refresh finishes in time. Only the
+ * read. When the first listing after a start takes longer than this, the
+ * static catalog still stands in until a later background refresh finishes
+ * in time. Only the
  * first catalog read after a start waits this long; later ones are served
  * from the cache.
  */

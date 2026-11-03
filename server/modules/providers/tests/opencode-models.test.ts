@@ -419,6 +419,8 @@ test('OpenCode keeps serving the last good listing when a refresh fails', async 
       await new Promise((resolve) => setImmediate(resolve));
       assert.equal(readCount, 2);
       assert.deepEqual(await listedValues(), ['anthropic/claude-sonnet-5']);
+      // Reading the catalog again before the retry is due starts no listing.
+      assert.equal(readCount, 2);
 
       // ...and is retried on the short schedule.
       now += 30_000;
