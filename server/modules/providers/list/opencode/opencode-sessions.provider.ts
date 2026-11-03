@@ -35,7 +35,7 @@ const SUBAGENT_TOOL_NAME = 'task';
 const MAX_TRANSMITTED_SUBAGENT_ACTIVITIES = 200;
 
 type OpenCodeHistoryRow = {
-  message_id: string;
+  message_id: string | null;
   message_time_created: number | null;
   message_data: string | null;
   part_id: string | null;
@@ -49,7 +49,7 @@ type OpenCodeHistoryRow = {
  * column, read only when there is no digest.
  */
 type OpenCodeOutlineMessageRow = {
-  id: string;
+  id: string | null;
   time_created: number | null;
   digest: string | null;
   data: unknown;
@@ -68,7 +68,7 @@ type OpenCodeOutlinePartRow = {
  * in the full normalized history without being normalized.
  */
 type OpenCodeHistoryOutlineRow = {
-  messageId: string;
+  messageId: string | null;
   messageTimeCreated: number | null;
   partId: string | null;
   partTimeCreated: number | null;
@@ -573,7 +573,9 @@ const readOpenCodeHistoryOutline = (
   const messages = db.prepare(HISTORY_OUTLINE_MESSAGES_SQL).all(providerSessionId) as OpenCodeOutlineMessageRow[];
   const parts = db.prepare(HISTORY_OUTLINE_PARTS_SQL).all(providerSessionId) as OpenCodeOutlinePartRow[];
 
-  const partsByMessage = new Map<string, OpenCodeOutlinePartRow[]>();
+  // As in a join, a NULL id matches nothing: such a part is skipped, and such
+  // a message has no parts.
+  const partsByMessage = new Map<string | null, OpenCodeOutlinePartRow[]>();
   for (const part of parts) {
     if (part.message_id === null) {
       continue;
@@ -588,7 +590,7 @@ const readOpenCodeHistoryOutline = (
   }
 
   const outline: OpenCodeHistoryOutlineRow[] = [];
-  const emittedMessageErrors = new Set<string>();
+  const emittedMessageErrors = new Set<string | null>();
   let position = 0;
   for (const message of messages) {
     const messageInfo = readJsonRecord(message.digest ?? message.data);
@@ -847,7 +849,7 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
   ): NormalizedMessage[] {
     const readMessageData = db.prepare('SELECT data FROM message WHERE id = ?').pluck();
     const readPartData = db.prepare('SELECT data FROM part WHERE id = ?').pluck();
-    const messageDataById = new Map<string, string | null>();
+    const messageDataById = new Map<string | null, string | null>();
     const runIsLive = isOpenCodeSessionActive(sessionId);
     const page: NormalizedMessage[] = [];
 
