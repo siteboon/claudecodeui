@@ -433,6 +433,9 @@ test('with both layouts each session is listed and read from its own live copy, 
     });
     insertV2Message(db, 'ses_on_2x', 1, 'msg_on_2x_user', 'user', { text: 'asked on 2.x' });
     insertV2Message(db, 'ses_on_2x', 2, 'msg_on_2x_reply', 'assistant', { content: [{ type: 'text', text: '2.x answer' }], finish: 'stop' });
+    // Resumed on 2.x, which made its row before storing anything: the 1.x rows still answer.
+    insertV1Session(db, 'ses_resumed', workspace, BASE_TIME + 6_000, 'answer only 1.x stored', { prompt: 'asked on 1.x only' });
+    insertV2Session(db, { id: 'ses_resumed', directory: workspace, timeUpdated: BASE_TIME + 25_000 });
     // Each in one table only; the 2.x CLI wrote last.
     insertV1Session(db, 'ses_term1', workspace, BASE_TIME + 15_000, 'a terminal 1.x session');
     insertV2Session(db, { id: 'ses_term2', directory: workspace, timeUpdated: BASE_TIME + 30_000 });
@@ -442,7 +445,7 @@ test('with both layouts each session is listed and read from its own live copy, 
     const provider = new OpenCodeSessionsProvider();
     const models = new OpenCodeProviderModels(async () => []);
     const readAll = async () => ({
-      histories: Object.fromEntries(await Promise.all(['ses_cc', 'ses_on_2x', 'ses_term1', 'ses_term2'].map(
+      histories: Object.fromEntries(await Promise.all(['ses_cc', 'ses_on_2x', 'ses_resumed', 'ses_term1', 'ses_term2'].map(
         async (id) => [id, summarize((await provider.fetchHistory(id)).messages)],
       ))),
       tokens: [(await readServiceTokenUsage(homeDir, workspace, 'ses_cc')).used, (await readServiceTokenUsage(homeDir, workspace, 'ses_on_2x')).used],
@@ -452,6 +455,7 @@ test('with both layouts each session is listed and read from its own live copy, 
       histories: {
         ses_cc: ['user:asked on 1.x', 'assistant:1.x answer after the migration'],
         ses_on_2x: ['user:asked on 2.x', 'assistant:2.x answer', 'end'],
+        ses_resumed: ['user:asked on 1.x only', 'assistant:answer only 1.x stored'],
         ses_term1: ['assistant:a terminal 1.x session'],
         ses_term2: ['user:made on 2.x', 'assistant:terminal 2.x answer', 'end'],
       },
@@ -459,8 +463,8 @@ test('with both layouts each session is listed and read from its own live copy, 
       models: ['p1/m-1x', 'p3/m-new'],
     };
 
-    assert.equal(await new OpenCodeSessionSynchronizer().synchronize(), 4);
-    for (const id of ['ses_cc', 'ses_on_2x', 'ses_term1', 'ses_term2']) {
+    assert.equal(await new OpenCodeSessionSynchronizer().synchronize(), 5);
+    for (const id of ['ses_cc', 'ses_on_2x', 'ses_resumed', 'ses_term1', 'ses_term2']) {
       assert.ok(sessionsDb.getSessionByProviderSessionId(id), id);
     }
     assert.deepEqual(await readAll(), expected);

@@ -344,7 +344,8 @@ test('a 2.x turn shows its text under the ids the history gives the stored parts
     part: { ...textB.part, id, messageID, text },
   });
   // `run` prints streamed text with fresh part ids, and text it reads back
-  // from storage with the stored id (`prt_<message>_text-<n>`).
+  // from storage with the stored id (`prt_<message>_text-<n>`); reading back,
+  // it skips an empty text, so the second step's first line is `text-1`.
   const lines = [
     stepStartA,
     textLine(messageA, 'prt_1a2418ff1001aaaaaaaaaaaaaa', 'Running the command.'),
@@ -353,7 +354,7 @@ test('a 2.x turn shows its text under the ids the history gives the stored parts
     textLine(messageA, 'prt_1a2418ff4001cccccccccccccc', 'It ran.'),
     stepFinishA,
     stepStartB,
-    textLine(messageB, `prt_${messageB.replace(/^msg_/, '')}_text-0`, textB.part.text),
+    textLine(messageB, `prt_${messageB.replace(/^msg_/, '')}_text-1`, textB.part.text),
     stepFinishB,
   ];
 
@@ -381,7 +382,10 @@ test('a 2.x turn shows its text under the ids the history gives the stored parts
       ],
       finish: 'tool-calls',
     }));
-    insertMessage.run(messageB, sessionId, 2, JSON.stringify({ content: [{ type: 'text', text: textB.part.text }], finish: 'stop' }));
+    insertMessage.run(messageB, sessionId, 2, JSON.stringify({
+      content: [{ type: 'text', text: '' }, { type: 'text', text: textB.part.text }],
+      finish: 'stop',
+    }));
   } finally {
     db.close();
   }
@@ -394,7 +398,7 @@ test('a 2.x turn shows its text under the ids the history gives the stored parts
   assert.deepEqual(liveTexts, [
     `${messageA}_prt_${messageA.slice(4)}_text-0|Running the command.`,
     `${messageA}_prt_${messageA.slice(4)}_text-2|It ran.`,
-    `${messageB}_prt_${messageB.slice(4)}_text-0|${textB.part.text}`,
+    `${messageB}_prt_${messageB.slice(4)}_text-1|${textB.part.text}`,
   ]);
 });
 
