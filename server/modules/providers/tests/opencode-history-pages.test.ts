@@ -379,3 +379,65 @@ test('an OpenCode history page reads tool output and subagent timelines only for
     assert.equal(childStepsRead, stepsPerSubagent);
   });
 });
+
+test('an OpenCode history page is cut from the rows its total counted while OpenCode rewrites one', { concurrency: false }, async (t) => {
+  await withOpenCodeDatabase((db) => {
+    const insertMessage = db.prepare('INSERT INTO message (id, session_id, time_created, data) VALUES (?, ?, ?, ?)');
+    const insertPart = db.prepare('INSERT INTO part (id, message_id, session_id, time_created, data) VALUES (?, ?, ?, ?, ?)');
+    db.prepare('INSERT INTO session (id) VALUES (?)').run('ses_live');
+    for (let turn = 0; turn < 3; turn += 1) {
+      const time = 1_700_000_000_000 + turn * 10;
+      insertMessage.run(`msg_${turn}_1`, 'ses_live', time, JSON.stringify({ role: 'user' }));
+      insertPart.run(`prt_${turn}_1`, `msg_${turn}_1`, 'ses_live', time, JSON.stringify({ type: 'text', text: `Prompt ${turn}` }));
+      insertMessage.run(`msg_${turn}_2`, 'ses_live', time + 1, JSON.stringify({ role: 'assistant' }));
+      insertPart.run(`prt_${turn}_2`, `msg_${turn}_2`, 'ses_live', time + 1, JSON.stringify({ type: 'text', text: `Answer ${turn}` }));
+    }
+  }, async (provider, dbPath) => {
+    // OpenCode runs in WAL mode, so it can commit while a history read is open.
+    const writer = new Database(dbPath);
+    writer.pragma('journal_mode = WAL');
+    // OpenCode rewrites parts in place, as it does for a streaming text part or
+    // a tool changing state.
+    const rewritePart = writer.prepare('UPDATE part SET data = ? WHERE id = ?');
+    const setNewestAnswer = (text: string) => rewritePart.run(JSON.stringify({ type: 'text', text }), 'prt_2_2');
+    const readNewestPage = () => provider.fetchHistory('app-session', { providerSessionId: 'ses_live', limit: 3, offset: 0 });
+
+    try {
+      const withAnswer = await readNewestPage();
+      setNewestAnswer('');
+      const withoutAnswer = await readNewestPage();
+      assert.deepEqual(withAnswer.messages.map((message) => message.content), ['Answer 1', 'Prompt 2', 'Answer 2']);
+      assert.deepEqual(withoutAnswer.messages.map((message) => message.content), ['Prompt 1', 'Answer 1', 'Prompt 2']);
+
+      // Blank the answer just before the first, second, ... statement a read
+      // prepares, until the read finishes first. Whichever version of the rows
+      // the total counted, the page must come from that same version.
+      const prepare = Database.prototype.prepare;
+      let blankedDuringRead = false;
+      for (let blankBefore = 1; ; blankBefore += 1) {
+        setNewestAnswer('Answer 2');
+        let prepared = 0;
+        const preparing = t.mock.method(Database.prototype, 'prepare', function (this: Database.Database, source: string) {
+          prepared += 1;
+          if (prepared === blankBefore) {
+            setNewestAnswer('');
+          }
+          return prepare.call(this, source);
+        });
+        const page = await readNewestPage();
+        preparing.mock.restore();
+        if (prepared < blankBefore) {
+          break;
+        }
+
+        const counted = page.total === withAnswer.total ? withAnswer : withoutAnswer;
+        assert.deepEqual(page, counted, `answer blanked before statement ${blankBefore}`);
+        blankedDuringRead ||= counted === withAnswer;
+      }
+      // The answer was blanked at least once after the read had started counting.
+      assert.equal(blankedDuringRead, true);
+    } finally {
+      writer.close();
+    }
+  });
+});
