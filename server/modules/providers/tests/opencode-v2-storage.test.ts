@@ -320,13 +320,15 @@ test('an upgraded database lists each session once, and a 1.x CLI writing it aga
     // 2.x migrated the 1.x session into session_v2 and left the 1.x rows behind.
     insertV1Session(db, 'ses_v1', workspace, 1_793_723_510_000, 'answer kept in the 1.x tables');
     insertV2Session(db, { id: 'ses_v1', directory: workspace, timeUpdated: 1_793_723_510_000 });
-    insertV2Message(db, 'ses_v1', 0, 'msg_v1_user', 'user', { text: 'migrated prompt' });
+    // A prompt the old `opencode run` runtime sent, which kept it as a JSON string literal.
+    insertV2Message(db, 'ses_v1', 0, 'msg_v1_user', 'user', { text: JSON.stringify('migrated prompt') });
     insertV2Message(db, 'ses_v1', 1, 'ses_v1_msg', 'assistant', { content: [{ type: 'text', text: 'migrated answer' }], finish: 'stop' });
     insertV2Session(db, { id: 'ses_v2', directory: workspace, timeUpdated: 1_793_723_520_000 });
 
     const synchronizer = new OpenCodeSessionSynchronizer();
     assert.equal(await synchronizer.synchronize(), 2);
-    assert.ok(sessionsDb.getSessionByProviderSessionId('ses_v1'));
+    // Named and shown like the 1.x reader showed it before the upgrade.
+    assert.equal(sessionsDb.getSessionByProviderSessionId('ses_v1')?.custom_name, 'migrated prompt');
     assert.ok(sessionsDb.getSessionByProviderSessionId('ses_v2'));
     const provider = new OpenCodeSessionsProvider();
     assert.deepEqual(summarize((await provider.fetchHistory('ses_v1')).messages), [
