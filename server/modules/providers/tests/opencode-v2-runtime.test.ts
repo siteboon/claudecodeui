@@ -299,35 +299,34 @@ test('a resumed 2.x turn passes --session, the effort as #variant and plan mode 
   assert.equal(turn.frames.some((frame) => frame.kind === 'session_created'), false);
 });
 
-test('bypassPermissions adds --auto; acceptEdits allows edits through the inline config, keeping the user\'s own', async () => {
+test('bypassPermissions adds --auto, and no mode overrides the permission rules of the user or the project', async () => {
   setInstalledVersion('opencode v2.2.3');
   const bypass = await runTurn({ permissionMode: 'bypassPermissions', scenario: { lines: toolTurn } });
   assert.deepEqual(bypass.runs[0].args, ['run', '--standalone', '--format', 'json', '--model', MODEL, '--auto']);
   assert.equal(bypass.runs[0].configContent, null);
 
-  const userConfig = '{ "model": "x/y", "permission": { "edit": "ask", "shell": "deny" } }';
-  setEnv('OPENCODE_CONFIG_CONTENT', userConfig);
+  // An edit rule the project denies stays OpenCode's to apply: an inline
+  // `edit: allow` would be the last config OpenCode reads, and so beat it.
+  const projectConfigPath = path.join(projectDir, 'opencode.json');
+  await writeFile(projectConfigPath, JSON.stringify({ permission: { edit: { '*': 'ask', '*.env': 'deny' } } }));
   try {
-    const asked = await runTurn({ permissionMode: 'default', scenario: { lines: toolTurn } });
-    assert.equal(asked.runs[0].args.includes('--auto'), false);
-    assert.equal(asked.runs[0].configContent, userConfig);
+    for (const permissionMode of ['acceptEdits', 'default', 'plan']) {
+      const turn = await runTurn({ permissionMode, scenario: { lines: toolTurn } });
+      assert.equal(turn.runs[0].args.includes('--auto'), false, permissionMode);
+      assert.equal(turn.runs[0].configContent, null, permissionMode);
+    }
 
-    const acceptEdits = await runTurn({ permissionMode: 'acceptEdits', scenario: { lines: toolTurn } });
-    assert.equal(acceptEdits.runs[0].args.includes('--auto'), false);
-    const merged = JSON.parse(acceptEdits.runs[0].configContent);
-    assert.deepEqual(merged, { model: 'x/y', permission: { shell: 'deny', edit: 'allow' } });
-    // OpenCode applies the last matching rule, so the edit rule goes last.
-    assert.deepEqual(Object.keys(merged.permission), ['shell', 'edit']);
-
-    setEnv('OPENCODE_CONFIG_CONTENT', '{ "permission": "ask" }');
-    const askAll = await runTurn({ permissionMode: 'acceptEdits', scenario: { lines: toolTurn } });
-    assert.deepEqual(JSON.parse(askAll.runs[0].configContent), { permission: { '*': 'ask', edit: 'allow' } });
+    // The user's own inline config reaches `run` exactly as they set it.
+    const userConfig = '{ "model": "x/y", "permission": { "edit": { "*": "ask", "*.env": "deny" }, "shell": "ask" } }';
+    setEnv('OPENCODE_CONFIG_CONTENT', userConfig);
+    for (const permissionMode of ['acceptEdits', 'default']) {
+      const turn = await runTurn({ permissionMode, scenario: { lines: toolTurn } });
+      assert.equal(turn.runs[0].configContent, userConfig, permissionMode);
+    }
   } finally {
     setEnv('OPENCODE_CONFIG_CONTENT', undefined);
+    await rm(projectConfigPath, { force: true });
   }
-
-  const noInlineConfig = await runTurn({ permissionMode: 'acceptEdits', scenario: { lines: toolTurn } });
-  assert.deepEqual(JSON.parse(noInlineConfig.runs[0].configContent), { permission: { edit: 'allow' } });
 });
 
 test('the prompt reaches `run` exactly as typed, attachments included', async () => {

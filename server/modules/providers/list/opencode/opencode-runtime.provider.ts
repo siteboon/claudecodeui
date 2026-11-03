@@ -1585,25 +1585,16 @@ function buildOpenCodeRunArgs(turn: {
 /**
  * Environment of a 2.x turn's `opencode run`. 2.x works in the directory PWD
  * names, not in the process's cwd, so PWD is set to the workspace: inherited,
- * it would name CloudCLI's own directory. acceptEdits allows file edits
- * through OPENCODE_CONFIG_CONTENT, merged into the user's own inline config
- * (2.x ignores the OPENCODE_PERMISSION variable 1.x `run` read). The rule goes
- * last, since OpenCode applies the last rule that matches.
+ * it would name CloudCLI's own directory.
+ *
+ * Nothing else changes, in any permission mode. acceptEdits in particular
+ * adds no rule: an inline `edit: allow` is the last config OpenCode reads, so
+ * it would beat the edit rules the user denies in their own config files,
+ * while the SDK runtime only answers what those rules leave to `ask`. With
+ * nobody to ask, `run` rejects those, so acceptEdits runs like default here.
  */
-function buildOpenCodeRunEnv(permissionMode: unknown, workingDir: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, PWD: workingDir };
-  if (permissionMode !== 'acceptEdits') {
-    return env;
-  }
-
-  const inlineConfig = (readInlineConfig() ?? {}) as AnyRecord;
-  // A single action stands for every permission, as `{ "*": action }`.
-  const rules: AnyRecord = typeof inlineConfig.permission === 'string'
-    ? { '*': inlineConfig.permission }
-    : { ...readObjectRecord(inlineConfig.permission) };
-  delete rules.edit;
-  env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ ...inlineConfig, permission: { ...rules, edit: 'allow' } });
-  return env;
+function buildOpenCodeRunEnv(workingDir: string): NodeJS.ProcessEnv {
+  return { ...process.env, PWD: workingDir };
 }
 
 /**
@@ -1789,7 +1780,7 @@ async function runOpenCodeV2Turn(
       permissionMode,
     }), {
       cwd: workingDir,
-      env: buildOpenCodeRunEnv(permissionMode, workingDir),
+      env: buildOpenCodeRunEnv(workingDir),
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
