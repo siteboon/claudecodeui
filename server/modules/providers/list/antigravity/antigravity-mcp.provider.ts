@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { McpProvider } from '@/modules/providers/shared/mcp/mcp.provider.js';
-import type { McpScope, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/types.js';
+import type { McpScope, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/index.js';
 import {
   AppError,
   readJsonConfig,
@@ -11,7 +11,7 @@ import {
   readStringArray,
   readStringRecord,
   writeJsonConfig,
-} from '@/shared/utils.js';
+} from '@/shared/index.js';
 
 /** Antigravity MCP configuration adapter used by the provider registry. */
 export class AntigravityMcpProvider extends McpProvider {

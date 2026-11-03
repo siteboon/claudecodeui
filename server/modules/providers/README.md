@@ -47,6 +47,15 @@ Current provider ids in this repo are:
 - `opencode`
 - `antigravity`
 
+Antigravity runs use the CLI's [headless streaming protocol](https://antigravity.google/docs/cli/headless/):
+`--input-format stream-json --output-format stream-json`, with one JSON user
+message on stdin. The subprocess's top-level
+`conversation_id` on the `init` event binds the app session immediately; shared
+conversation files are never used to guess ownership. Fresh runs can overlap.
+A CLI that does not emit this protocol reports an explicit error. Aborts send
+SIGTERM, escalate to SIGKILL after three seconds, and retain process ownership
+until exit. Successful stderr diagnostics are excluded from assistant replies.
+
 Antigravity model discovery queries `agy models` on every backend catalog read,
 so account changes and subscription changes use the CLI's current model list.
 The fallback catalog is used only when discovery fails or returns no models;
@@ -160,6 +169,10 @@ Current MCP formats in this repo are:
 | Cursor | `.cursor/mcp.json` | `user`, `project` | `stdio`, `http` |
 | OpenCode | `~/.config/opencode/opencode.json` or `<workspace>/opencode.json` (`.jsonc` is read when present) | `user`, `project` | `stdio`, `http` |
 | Antigravity | `~/.gemini/config/mcp_config.json`, `<workspace>/.agents/mcp_config.json` | `user`, `project` | `stdio`, `http` (`serverUrl`) |
+
+The Antigravity user-level MCP path is confirmed by the official
+[migration directory mapping](https://antigravity.google/docs/cli/gcli-migration/#directory-mapping).
+It intentionally differs from the CLI's conversation/history storage root.
 
 5. Implement skills.
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { collectAgentAssistantMessages } from '@/modules/agent/agent.routes.js';
+import { collectAgentAssistantMessages } from '@/modules/agent/services/agent-response-collector.service.js';
 
 test('non-streaming Agent responses collect normalized AGY output', () => {
   const collected = collectAgentAssistantMessages([
@@ -21,3 +21,18 @@ test('non-streaming Agent responses preserve legacy Claude assistant messages', 
     [assistant],
   );
 });
+
+for (const provider of ['cursor', 'opencode', 'codex', 'claude']) {
+  test(`non-streaming Agent responses collect normalized ${provider} output`, () => {
+    const delta = { kind: 'stream_delta', provider, content: 'partial' };
+    const text = { kind: 'text', provider, role: 'assistant', content: 'answer' };
+    assert.deepEqual(collectAgentAssistantMessages([
+      delta, JSON.stringify(text),
+      { kind: 'text', provider, role: 'user', content: 'prompt' },
+      { kind: 'tool_result', provider, content: 'tool output' },
+      { kind: 'error', provider, content: 'error' },
+      { kind: 'complete', provider },
+      'invalid json', null,
+    ]), [delta, text]);
+  });
+}

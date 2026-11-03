@@ -69,6 +69,7 @@ test('Antigravity auth uses AGY_CLI_PATH for installation and model probes', { c
     assert.equal(status.installedVersion, '1.2.3');
     assert.equal(status.authenticated, true);
     assert.equal(status.method, 'agy');
+    assert.equal(status.email, null);
   } finally {
     if (previousPath === undefined) {
       delete process.env[pathKey];

@@ -1,47 +1,35 @@
-import { readdir, stat } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-
 import crossSpawn from 'cross-spawn';
 
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import type { IProviderRuntime } from '@/shared/interfaces.js';
+import { antigravityRunBindings } from '@/modules/providers/services/antigravity-run-bindings.service.js';
 import type {
   AnyRecord,
+  IProviderRuntime,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
-} from '@/shared/types.js';
+} from '@/shared/index.js';
 import {
   buildProviderCliEnv,
   createCompleteMessage,
   createNormalizedMessage,
-  flattenPromptForWindowsShell,
+  readObjectRecord,
   resolveConfiguredCliExecutable,
-} from '@/shared/utils.js';
+} from '@/shared/index.js';
 
 type AntigravityProcess = ReturnType<typeof crossSpawn> & {
   aborted?: boolean;
-  sessionId?: string;
-};
-
-type ConversationDbFile = {
-  id: string;
-  mtimeMs: number;
+  exited?: boolean;
+  killTimer?: ReturnType<typeof setTimeout>;
 };
 
 type AntigravitySpawn = (
-  command: string,
-  args: string[],
-  options: {
-    cwd: string;
-    stdio: ['pipe', 'pipe', 'pipe'];
-    env: NodeJS.ProcessEnv;
-  },
+  command: string, args: string[],
+  options: { cwd: string; stdio: ['pipe', 'pipe', 'pipe']; env: NodeJS.ProcessEnv },
 ) => AntigravityProcess;
 
 type AntigravityRuntimeDependencies = {
   spawnProcess: AntigravitySpawn;
-  readConversationDbFiles: () => Promise<ConversationDbFile[]>;
+  abortTimeoutMs: number;
 };
 
 /** Reads a trimmed runtime option without accepting blank values. */
@@ -50,49 +38,8 @@ function readStringOption(options: AnyRecord, key: string): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-/** Resolves the provider-native conversation database directory. */
-function getAntigravityConversationsDir(): string {
-  return process.env.ANTIGRAVITY_CONVERSATIONS_DIR
-    || path.join(os.homedir(), '.gemini', 'antigravity-cli', 'conversations');
-}
-
-/** Lists AGY conversation databases used to discover newly created sessions. */
-async function readAntigravityConversationDbFiles(): Promise<ConversationDbFile[]> {
-  try {
-    const conversationsDir = getAntigravityConversationsDir();
-    const entries = await readdir(conversationsDir, { withFileTypes: true });
-    const dbFiles = entries.filter((entry) => entry.isFile() && entry.name.endsWith('.db'));
-
-    return Promise.all(dbFiles.map(async (entry) => {
-      const absolutePath = path.join(conversationsDir, entry.name);
-      const fileStat = await stat(absolutePath);
-      return {
-        id: entry.name.slice(0, -'.db'.length),
-        mtimeMs: fileStat.mtimeMs,
-      };
-    }));
-  } catch {
-    return [];
-  }
-}
-
-/** Selects the newest conversation created by the current runtime invocation. */
-async function findNewAntigravityConversationId(
-  previousIds: Set<string>,
-  startedAtMs: number,
-  readConversationDbFiles: () => Promise<ConversationDbFile[]>,
-): Promise<string | null> {
-  const candidates = (await readConversationDbFiles())
-    .filter((entry) => !previousIds.has(entry.id) && entry.mtimeMs >= startedAtMs - 1000)
-    .sort((left, right) => right.mtimeMs - left.mtimeMs);
-  return candidates[0]?.id ?? null;
-}
-
-/** Publishes a provider-native session id discovered after AGY starts. */
-function announceAntigravityConversation(
-  writer: ProviderRuntimeWriter,
-  conversationId: string,
-): void {
+/** Publishes the id reported by this subprocess, never a guess from shared disk state. */
+function announceAntigravityConversation(writer: ProviderRuntimeWriter, conversationId: string): void {
   writer.setSessionId?.(conversationId);
   writer.send(createNormalizedMessage({
     kind: 'session_created',
@@ -102,19 +49,9 @@ function announceAntigravityConversation(
   }));
 }
 
-/** Normalizes and forwards one incremental AGY output chunk. */
-function sendAntigravityText(
-  writer: ProviderRuntimeWriter,
-  context: ProviderRuntimeContext,
-  text: string,
-  sessionId: string | null,
-): void {
-  for (const message of context.normalizeMessage(text, sessionId)) {
-    writer.send(message);
-  }
-}
-
 const AGY_CONTROL_MARKERS = ['<WAITING_FOR_EVENTS>', '</WAITING_FOR_EVENTS>'] as const;
+const STDERR_BUFFER_LIMIT = 64 * 1024;
+const STREAM_LINE_LIMIT = 4 * 1024 * 1024;
 
 /** Keeps split AGY control tags out of the text stream while forwarding ordinary text immediately. */
 function createAntigravityStdoutFilter(sendVisibleText: (text: string) => void) {
@@ -123,7 +60,6 @@ function createAntigravityStdoutFilter(sendVisibleText: (text: string) => void) 
     write(chunk: string) {
       pending += chunk;
       for (const marker of AGY_CONTROL_MARKERS) pending = pending.replaceAll(marker, '');
-
       let heldLength = 0;
       for (const marker of AGY_CONTROL_MARKERS) {
         for (let length = 1; length < marker.length; length += 1) {
@@ -134,31 +70,31 @@ function createAntigravityStdoutFilter(sendVisibleText: (text: string) => void) 
       pending = pending.slice(visible.length);
       if (visible) sendVisibleText(visible);
     },
-    finish() {
-      // Only a partial control tag can remain after write() has emitted the visible prefix.
-      pending = '';
-    },
+    finish() { pending = ''; },
   };
 }
 
-/**
- * Maps CloudCLI permission modes to the Antigravity CLI flags consumed by the
- * runtime adapter. Exported for the Providers module runtime tests.
- */
+/** Providers module runtime tests consume the native permission flag mapping. */
 export function resolveAntigravityPermissionArgs(permissionMode: unknown): string[] {
   switch (permissionMode) {
-    case 'plan':
-      return ['--mode', 'plan'];
-    case 'acceptEdits':
-      return ['--mode', 'accept-edits'];
-    case 'bypassPermissions':
-      return ['--dangerously-skip-permissions'];
-    default:
-      return [];
+    case 'plan': return ['--mode', 'plan'];
+    case 'acceptEdits': return ['--mode', 'accept-edits'];
+    case 'bypassPermissions': return ['--dangerously-skip-permissions'];
+    default: return [];
   }
 }
 
-/** Runs one AGY prompt and owns its provider-specific process lifecycle. */
+/** Stops the process, retaining ownership until exit and escalating uncooperative children. */
+function terminateAntigravityProcess(child: AntigravityProcess, timeoutMs: number): void {
+  if (child.exited || child.killTimer) return;
+  child.killTimer = setTimeout(() => {
+    if (!child.exited) child.kill('SIGKILL');
+  }, timeoutMs);
+  child.killTimer.unref();
+  child.kill('SIGTERM');
+}
+
+/** Runs one prompt using AGY's documented stdin/NDJSON protocol. */
 async function runAntigravity(
   command: string,
   options: AnyRecord,
@@ -167,323 +103,234 @@ async function runAntigravity(
   providerSessionId: string | null,
   dependencies: AntigravityRuntimeDependencies,
   activeProcesses: Map<string, AntigravityProcess>,
+  startup: { aborted: boolean },
+  releasePendingBinding: () => void,
 ): Promise<void> {
   const appSessionId = readStringOption(options, 'sessionId');
   const fallbackSessionId = appSessionId ?? providerSessionId ?? `${Date.now()}`;
   const processKey = appSessionId ?? providerSessionId ?? fallbackSessionId;
   const workingDirectory = readStringOption(options, 'cwd')
-    ?? readStringOption(options, 'projectPath')
-    ?? process.cwd();
+    ?? readStringOption(options, 'projectPath') ?? process.cwd();
   const sessionSummary = readStringOption(options, 'sessionSummary');
-  const requestedModel = readStringOption(options, 'model');
-  const startedAtMs = Date.now();
-  const previousConversationIds = new Set(
-    (await dependencies.readConversationDbFiles()).map((entry) => entry.id),
-  );
-
-  if (providerSessionId) {
-    writer.setSessionId?.(providerSessionId);
-  }
+  let nativeSessionId = providerSessionId;
+  if (providerSessionId) writer.setSessionId?.(providerSessionId);
 
   let terminalNotificationSent = false;
-  const notifyTerminalState = (
-    outcome: { code?: number | null; error?: Error | string | null; aborted?: boolean },
-  ) => {
-    if (terminalNotificationSent) {
-      return;
-    }
-
+  const notifyTerminalState = (outcome: { code?: number | null; error?: Error; aborted?: boolean }) => {
+    if (terminalNotificationSent) return;
     terminalNotificationSent = true;
     if (outcome.aborted || (outcome.code === 0 && !outcome.error)) {
       notifyRunStopped({
-        userId: writer.userId ?? null,
-        provider: 'antigravity',
-        sessionId: fallbackSessionId,
-        sessionName: sessionSummary,
-        stopReason: outcome.aborted ? 'aborted' : 'completed',
+        userId: writer.userId ?? null, provider: 'antigravity', sessionId: fallbackSessionId,
+        sessionName: sessionSummary, stopReason: outcome.aborted ? 'aborted' : 'completed',
       });
-      return;
+    } else {
+      notifyRunFailed({
+        userId: writer.userId ?? null, provider: 'antigravity', sessionId: fallbackSessionId,
+        sessionName: sessionSummary,
+        error: outcome.error ?? `Antigravity CLI exited with code ${outcome.code ?? 'unknown'}`,
+      });
     }
-
-    notifyRunFailed({
-      userId: writer.userId ?? null,
-      provider: 'antigravity',
-      sessionId: fallbackSessionId,
-      sessionName: sessionSummary,
-      error: outcome.error ?? `Antigravity CLI exited with code ${outcome.code ?? 'unknown'}`,
-    });
+  };
+  const reportError = (error: Error) => {
+    writer.send(createNormalizedMessage({
+      kind: 'error', content: error.message,
+      sessionId: nativeSessionId ?? fallbackSessionId, provider: 'antigravity',
+    }));
+    writer.send(createCompleteMessage({
+      provider: 'antigravity', sessionId: nativeSessionId ?? fallbackSessionId, exitCode: 1,
+    }));
+    notifyTerminalState({ error });
   };
 
   let resolvedModel: string | undefined;
   try {
-    resolvedModel = await context.resolveResumeModel(appSessionId ?? undefined, requestedModel);
+    resolvedModel = await context.resolveResumeModel(appSessionId ?? undefined, readStringOption(options, 'model'));
   } catch (error) {
     const resolvedError = error instanceof Error ? error : new Error(String(error));
-    writer.send(createNormalizedMessage({
-      kind: 'error',
-      content: resolvedError.message,
-      sessionId: providerSessionId ?? fallbackSessionId,
-      provider: 'antigravity',
-    }));
-    writer.send(createCompleteMessage({
-      provider: 'antigravity',
-      sessionId: providerSessionId ?? fallbackSessionId,
-      exitCode: 1,
-    }));
-    notifyTerminalState({ error: resolvedError });
+    reportError(resolvedError);
     throw resolvedError;
   }
+  if (startup.aborted) return;
 
-  const args: string[] = [];
-  if (providerSessionId) {
-    args.push('--conversation', providerSessionId);
-  }
-  if (resolvedModel) {
-    args.push('--model', resolvedModel);
-  }
+  const args = ['--input-format', 'stream-json', '--output-format', 'stream-json'];
+  if (providerSessionId) args.push('--conversation', providerSessionId);
+  if (resolvedModel) args.push('--model', resolvedModel);
   args.push(...resolveAntigravityPermissionArgs(options.permissionMode));
-  args.push('--print', flattenPromptForWindowsShell(command.trim()));
 
   return new Promise((resolve, reject) => {
-    const antigravityProcess = dependencies.spawnProcess(
-      resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy'),
-      args,
-      {
-        cwd: workingDirectory,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env: buildProviderCliEnv(),
-      },
-    ) as AntigravityProcess;
+    let child: AntigravityProcess;
+    try {
+      child = dependencies.spawnProcess(
+        resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy'), args,
+        { cwd: workingDirectory, stdio: ['pipe', 'pipe', 'pipe'], env: buildProviderCliEnv() },
+      );
+    } catch (error) {
+      const resolvedError = error instanceof Error ? error : new Error(String(error));
+      reportError(resolvedError);
+      reject(resolvedError);
+      return;
+    }
+    activeProcesses.set(processKey, child);
     let stderrBuffer = '';
+    let stdoutBuffer = '';
     let settled = false;
-    let completeSent = false;
-    let spawnError: Error | null = null;
+    let failure: Error | null = null;
+    let sawResponseDelta = false;
+    let sawResult = false;
     const stdoutFilter = createAntigravityStdoutFilter((text) => {
-      sendAntigravityText(writer, context, text, providerSessionId ?? fallbackSessionId);
+      for (const message of context.normalizeMessage(text, nativeSessionId ?? fallbackSessionId)) {
+        writer.send(message);
+      }
     });
-
     const settle = (error?: Error) => {
-      if (settled) {
-        return;
-      }
-
+      if (settled) return;
       settled = true;
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
+      if (error) reject(error);
+      else resolve();
     };
+    const releaseProcess = () => {
+      child.exited = true;
+      clearTimeout(child.killTimer);
+      // A delayed exit from an aborted run must not erase its replacement.
+      if (activeProcesses.get(processKey) === child) activeProcesses.delete(processKey);
+    };
+    child.once('exit', releaseProcess);
 
-    activeProcesses.set(processKey, antigravityProcess);
-    antigravityProcess.sessionId = processKey;
-    antigravityProcess.stdin?.end();
-
-    antigravityProcess.stdout?.setEncoding('utf8');
-    antigravityProcess.stdout?.on('data', (data: Buffer | string) => {
-      const text = data.toString();
-      if (text) stdoutFilter.write(text);
-    });
-
-    antigravityProcess.stderr?.setEncoding('utf8');
-    antigravityProcess.stderr?.on('data', (data: Buffer | string) => {
-      stderrBuffer += data.toString();
-    });
-
-    const handleClose = async (code: number | null) => {
-      stdoutFilter.finish();
-      activeProcesses.delete(processKey);
-      if (spawnError) {
-        return;
-      }
-
-      const discoveredConversationId = providerSessionId
-        ?? await findNewAntigravityConversationId(
-          previousConversationIds,
-          startedAtMs,
-          dependencies.readConversationDbFiles,
-        );
-      const outputSessionId = discoveredConversationId ?? fallbackSessionId;
-      if (!providerSessionId && discoveredConversationId) {
-        announceAntigravityConversation(writer, discoveredConversationId);
-      }
-
-      if (stderrBuffer.trim()) {
-        writer.send(createNormalizedMessage({
-          kind: code === 0 ? 'stream_delta' : 'error',
-          content: stderrBuffer,
-          sessionId: outputSessionId,
-          provider: 'antigravity',
-        }));
-      }
-
-      if (antigravityProcess.aborted) {
-        // The generic websocket abort handler owns the terminal aborted frame.
-        notifyTerminalState({ aborted: true });
-        settle();
-        return;
-      }
-
-      if (!completeSent) {
-        completeSent = true;
-        writer.send(createCompleteMessage({
-          provider: 'antigravity',
-          sessionId: outputSessionId,
-          exitCode: code,
-        }));
-      }
-
-      if (code === 0) {
-        notifyTerminalState({ code });
-        settle();
-        return;
-      }
-
-      if (code === 127 || code === null) {
-        const installed = await context.isProviderInstalled();
-        if (!installed) {
-          writer.send(createNormalizedMessage({
-            kind: 'error',
-            content: 'Antigravity CLI is not installed. Install it from https://antigravity.google/cli/install.sh',
-            sessionId: outputSessionId,
-            provider: 'antigravity',
-          }));
+    const readEvent = (line: string) => {
+      if (!line.trim() || child.aborted || failure) return;
+      const event = readObjectRecord(JSON.parse(line));
+      const step = readObjectRecord(event?.step_update);
+      const result = readObjectRecord(event?.result);
+      const id = readStringOption(event ?? {}, 'conversation_id')
+        ?? readStringOption(step ?? {}, 'conversation_id')
+        ?? readStringOption(result ?? {}, 'conversation_id');
+      if (id) {
+        if (!/^[a-zA-Z0-9_.:-]+$/.test(id) || (nativeSessionId && nativeSessionId !== id)) {
+          throw new Error('Antigravity CLI reported an inconsistent conversation id');
+        }
+        if (!nativeSessionId) {
+          nativeSessionId = id;
+          announceAntigravityConversation(writer, id);
+          releasePendingBinding();
         }
       }
-
-      const error = new Error(
-        code === null
-          ? 'Antigravity CLI process was terminated'
-          : `Antigravity CLI exited with code ${code}${stderrBuffer.trim() ? `: ${stderrBuffer.trim()}` : ''}`,
-      );
-      notifyTerminalState({ code, error });
-      settle(error);
+      if (event?.event === 'step_update' && step?.step_type === 'agent_response'
+        && typeof step.text_delta === 'string') {
+        sawResponseDelta = true;
+        stdoutFilter.write(step.text_delta);
+      }
+      if (event?.event === 'result' && result) {
+        sawResult = true;
+        if (result.status !== 'SUCCESS') {
+          failure = new Error(readStringOption(result, 'error') ?? `Antigravity CLI returned ${String(result.status)}`);
+        } else if (!sawResponseDelta && typeof result.response === 'string') {
+          stdoutFilter.write(result.response);
+        }
+      }
     };
-
-    const handleError = async (error: Error) => {
-      spawnError = error;
-      activeProcesses.delete(processKey);
-      if (antigravityProcess.aborted) {
+    const readStdout = (chunk: string, finish = false) => {
+      stdoutBuffer += chunk;
+      let newline: number;
+      while ((newline = stdoutBuffer.indexOf('\n')) !== -1) {
+        if (newline > STREAM_LINE_LIMIT) throw new Error('Antigravity CLI output record exceeds the size limit');
+        const line = stdoutBuffer.slice(0, newline);
+        stdoutBuffer = stdoutBuffer.slice(newline + 1);
+        readEvent(line);
+      }
+      if (stdoutBuffer.length > STREAM_LINE_LIMIT) throw new Error('Antigravity CLI output record exceeds the size limit');
+      if (finish && stdoutBuffer) { readEvent(stdoutBuffer); stdoutBuffer = ''; }
+    };
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (data: string) => {
+      try { readStdout(data); }
+      catch (error) {
+        failure = error instanceof Error ? error : new Error(String(error));
+        stdoutBuffer = '';
+        terminateAntigravityProcess(child, dependencies.abortTimeoutMs);
+      }
+    });
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (data: string) => {
+      stderrBuffer = (stderrBuffer + data).slice(-STDERR_BUFFER_LIMIT);
+    });
+    child.once('error', (error) => {
+      failure = error;
+      // Node follows spawn errors with close. Retain the process until then.
+    });
+    child.once('close', (code) => {
+      releaseProcess();
+      if (child.aborted) {
         notifyTerminalState({ aborted: true });
         settle();
         return;
       }
-
-      const installed = await context.isProviderInstalled();
-      const errorContent = !installed
-        ? 'Antigravity CLI is not installed. Install it from https://antigravity.google/cli/install.sh'
-        : error.message;
-
-      writer.send(createNormalizedMessage({
-        kind: 'error',
-        content: errorContent,
-        sessionId: providerSessionId ?? fallbackSessionId,
-        provider: 'antigravity',
-      }));
-      if (!completeSent && !antigravityProcess.aborted) {
-        completeSent = true;
-        writer.send(createCompleteMessage({
-          provider: 'antigravity',
-          sessionId: providerSessionId ?? fallbackSessionId,
-          exitCode: 1,
-        }));
-      }
-      notifyTerminalState({ error });
-      settle(error);
-    };
-
-    // EventEmitter does not await async handlers. Propagate discovery/probe
-    // failures so they settle the run and release the fresh-conversation queue.
-    const handleLifecycleFailure = (error: unknown) => {
-      const resolvedError = error instanceof Error ? error : new Error(String(error));
-      notifyTerminalState({ error: resolvedError });
-      settle(resolvedError);
-    };
-    antigravityProcess.once('close', (code) => {
-      void handleClose(code).catch(handleLifecycleFailure);
+      try { readStdout('', true); }
+      catch (error) { failure = error instanceof Error ? error : new Error(String(error)); }
+      stdoutFilter.finish();
+      void (async () => {
+        if (!failure && code === 0 && (!nativeSessionId || !sawResult)) {
+          failure = new Error('Antigravity CLI did not report a conversation id and result; a CLI with stream-json support is required');
+        }
+        if (!failure && code !== 0) {
+          const installed = code === 127 || code === null ? await context.isProviderInstalled() : true;
+          failure = new Error(!installed
+            ? 'Antigravity CLI is not installed. Install it from https://antigravity.google/cli/install.sh'
+            : `Antigravity CLI exited with code ${code ?? 'unknown'}${stderrBuffer.trim() ? `: ${stderrBuffer.trim()}` : ''}`);
+        }
+        if (failure) {
+          reportError(failure);
+          settle(failure);
+        } else {
+          writer.send(createCompleteMessage({
+            provider: 'antigravity', sessionId: nativeSessionId ?? fallbackSessionId, exitCode: 0,
+          }));
+          notifyTerminalState({ code: 0 });
+          settle();
+        }
+      })().catch((error) => {
+        const resolvedError = error instanceof Error ? error : new Error(String(error));
+        reportError(resolvedError);
+        settle(resolvedError);
+      });
     });
-    antigravityProcess.once('error', (error) => {
-      void handleError(error).catch(handleLifecycleFailure);
-    });
+    // JSON stdin preserves multiline/leading-dash prompts and keeps them out of argv.
+    child.stdin?.on('error', (error) => { failure = error; });
+    child.stdin?.end(`${JSON.stringify({ event: 'user', message: { content: command } })}\n`);
   });
 }
 
-/** Terminates an active AGY process by application or provider session id. */
-function abortAntigravitySession(
-  sessionId: string,
-  activeProcesses: Map<string, AntigravityProcess>,
-): boolean {
-  const activeProcess = activeProcesses.get(sessionId);
-  if (!activeProcess) {
-    return false;
-  }
-
-  activeProcess.aborted = true;
-  activeProcess.kill('SIGTERM');
-  activeProcesses.delete(sessionId);
-  return true;
-}
-
-/**
- * Creates an Antigravity runtime adapter with injectable process and history
- * dependencies. The provider registry uses the defaults; Providers module
- * tests inject deterministic in-memory subprocesses.
- */
-export function createAntigravityRuntime(
-  overrides: Partial<AntigravityRuntimeDependencies> = {},
-): IProviderRuntime {
-  const dependencies: AntigravityRuntimeDependencies = {
-    spawnProcess: crossSpawn as AntigravitySpawn,
-    readConversationDbFiles: readAntigravityConversationDbFiles,
-    ...overrides,
-  };
+/** Providers registry and runtime tests consume this adapter with injectable subprocesses. */
+export function createAntigravityRuntime(overrides: Partial<AntigravityRuntimeDependencies> = {}): IProviderRuntime {
+  const dependencies = { spawnProcess: crossSpawn as AntigravitySpawn, abortTimeoutMs: 3000, ...overrides };
   const activeProcesses = new Map<string, AntigravityProcess>();
-  const pendingFreshRuns = new Map<string, { aborted: boolean; cancel: () => void }>();
-  let freshRunQueue = Promise.resolve();
-
+  const startups = new Map<string, { aborted: boolean }>();
   return {
     run: async (command, options, writer, context) => {
       const appSessionId = readStringOption(options, 'sessionId');
+      const startup = { aborted: false };
       const providerSessionId = context.resolveProviderSessionId(appSessionId);
-      if (providerSessionId) {
-        return runAntigravity(
-          command, options, writer, context, providerSessionId, dependencies, activeProcesses,
-        );
-      }
-
-      // AGY print output has no conversation id. Only one fresh run may own
-      // the snapshot-to-discovery interval; resumed conversations need no lock.
-      const previousRun = freshRunQueue;
-      let release = () => {};
-      const finished = new Promise<void>((resolve) => { release = resolve; });
-      freshRunQueue = previousRun.then(() => finished);
-      let cancel = () => {};
-      const cancelled = new Promise<void>((resolve) => { cancel = resolve; });
-      const pending = { aborted: false, cancel };
-      if (appSessionId) pendingFreshRuns.set(appSessionId, pending);
-
+      const projectPath = readStringOption(options, 'cwd') ?? readStringOption(options, 'projectPath') ?? process.cwd();
+      const releasePendingBinding = providerSessionId ? () => {} : antigravityRunBindings.trackPendingRun(projectPath);
+      if (appSessionId) startups.set(appSessionId, startup);
       try {
-        await Promise.race([previousRun, cancelled]);
-        if (pending.aborted) return;
-        if (appSessionId) pendingFreshRuns.delete(appSessionId);
-        await runAntigravity(
-          command, options, writer, context, null, dependencies, activeProcesses,
-        );
+        await runAntigravity(command, options, writer, context,
+          providerSessionId, dependencies, activeProcesses, startup, releasePendingBinding);
       } finally {
-        if (appSessionId && pendingFreshRuns.get(appSessionId) === pending) {
-          pendingFreshRuns.delete(appSessionId);
-        }
-        // A cancelled waiter releases its own gate, but its successor must
-        // still await previousRun before entering the discovery interval.
-        release();
+        releasePendingBinding();
+        if (appSessionId && startups.get(appSessionId) === startup) startups.delete(appSessionId);
       }
     },
     abort: (sessionId) => {
-      if (abortAntigravitySession(sessionId, activeProcesses)) return true;
-      const pending = pendingFreshRuns.get(sessionId);
-      if (!pending) return false;
-      pending.aborted = true;
-      pending.cancel();
+      const child = activeProcesses.get(sessionId);
+      if (child) {
+        child.aborted = true;
+        terminateAntigravityProcess(child, dependencies.abortTimeoutMs);
+        return true;
+      }
+      const startup = startups.get(sessionId);
+      if (!startup) return false;
+      startup.aborted = true;
       return true;
     },
   };

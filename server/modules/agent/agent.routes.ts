@@ -3,9 +3,10 @@ import path from 'path';
 
 import express from 'express';
 
-import type { ProviderRunFunction } from '@/shared/types.js';
+import type { ProviderRunFunction } from '@/shared/index.js';
+import { normalizeProjectPath } from '@/shared/index.js';
 
-import { normalizeProjectPath } from '../../shared/utils.js';
+import { collectAgentAssistantMessages } from './services/agent-response-collector.service.js';
 
 /** The providers an Agent API run can start: the ones with a runtime and a model catalog. */
 const AGENT_RUN_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
@@ -44,46 +45,6 @@ type AgentRouterDependencies = {
   queryAntigravity: ProviderRunFunction;
   GithubClient: typeof import('@octokit/rest').Octokit;
 };
-
-/**
- * Filters provider output down to assistant messages for non-streaming Agent
- * responses. It preserves the legacy Claude envelope while accepting the
- * normalized live-message contract used by CLI-backed providers such as AGY.
- */
-export function collectAgentAssistantMessages(messages: unknown[]): unknown[] {
-  const assistantMessages = [];
-
-  for (const msg of messages) {
-    if (msg && msg.type === 'status') {
-      continue;
-    }
-
-    let parsed = msg;
-    if (typeof msg === 'string') {
-      try {
-        parsed = JSON.parse(msg);
-      } catch {
-        continue;
-      }
-    }
-
-    if (parsed?.type === 'claude-response' && parsed.data?.type === 'assistant') {
-      assistantMessages.push(parsed.data);
-      continue;
-    }
-
-    if (
-      parsed
-      && ['stream_delta', 'text'].includes(parsed.kind)
-      && parsed.role !== 'user'
-      && typeof parsed.content === 'string'
-    ) {
-      assistantMessages.push(parsed);
-    }
-  }
-
-  return assistantMessages;
-}
 
 /**
  * Creates Agent routes around explicit authentication, repository, provider,

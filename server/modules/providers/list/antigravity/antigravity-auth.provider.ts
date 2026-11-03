@@ -42,7 +42,7 @@ export class AntigravityProviderAuth implements IProviderAuth {
       provider: 'antigravity',
       installedVersion,
       authenticated,
-      email: authenticated ? 'Authenticated' : null,
+      email: null,
       method: authenticated ? 'agy' : null,
       error: authenticated
         ? undefined

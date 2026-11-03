@@ -1,17 +1,19 @@
 import os from 'node:os';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { stripAntigravityTags } from '@/shared/index.js';
-import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import { antigravityRunBindings } from '@/modules/providers/services/antigravity-run-bindings.service.js';
+import type { IProviderSessionSynchronizer } from '@/shared/index.js';
 import {
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
   readObjectRecord,
   readOptionalString,
-} from '@/shared/utils.js';
+  stripAntigravityTags,
+} from '@/shared/index.js';
 
 const PROVIDER = 'antigravity' as const;
 const UNTITLED_ANTIGRAVITY_SESSION = 'Untitled Antigravity Session';
@@ -22,161 +24,125 @@ type ParsedAntigravitySession = {
   sessionName?: string;
 };
 
-/** Identifies provider-native transcript artifacts inside the brain directory. */
-function isAntigravityTranscript(filePath: string): boolean {
-  return path.basename(filePath) === 'transcript.jsonl';
-}
-
-/** Derives the AGY session id from a transcript path. */
-function getSessionIdFromTranscriptPath(filePath: string): string | null {
-  const parts = filePath.split(path.sep);
-  const brainIndex = parts.lastIndexOf('brain');
-  const sessionId = brainIndex >= 0 ? parts[brainIndex + 1] : null;
-  return sessionId?.trim() || null;
-}
-
-/** Extracts workspace and first-user-message metadata from one transcript line. */
-function extractAntigravityStepContent(rawLine: string): { projectPath?: string; firstUserMessage?: string } | null {
+/** Decodes file URLs, including percent escapes and Windows drive/UNC paths. */
+function readWorkspacePath(value: unknown): string | undefined {
+  const workspace = readOptionalString(value);
+  if (!workspace?.startsWith('file://')) return workspace;
   try {
-    const parsed = readObjectRecord(JSON.parse(rawLine));
-    if (!parsed) {
-      return null;
-    }
-
-    const source = readOptionalString(parsed.source);
-    const type = readOptionalString(parsed.type);
-    const content = readOptionalString(parsed.content);
-
-    if (type === 'LIST_DIRECTORY' || type === 'VIEW_FILE') {
-      const match = content?.match(/File Path: `file:\/\/([^`]+)`/);
-      if (match?.[1]) {
-        const projectPath = type === 'VIEW_FILE' ? path.dirname(match[1]) : match[1];
-        return { projectPath };
-      }
-    }
-
-    if (source !== 'USER_EXPLICIT' || type !== 'USER_INPUT' || !content) {
-      return null;
-    }
-
-    return { firstUserMessage: stripAntigravityTags(content) };
+    const url = new URL(workspace);
+    const windows = /^\/[a-zA-Z]:\//.test(url.pathname) || (url.hostname !== '' && url.hostname !== 'localhost');
+    return fileURLToPath(url, { windows });
   } catch {
-    return null;
+    return undefined;
   }
 }
 
-/** Imports Antigravity transcript metadata into the shared sessions database. */
+/** Providers registry and session watcher use this to index Antigravity transcript metadata. */
 export class AntigravitySessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly brainDir = path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain');
   private readonly historyPath = path.join(os.homedir(), '.gemini', 'antigravity-cli', 'history.jsonl');
+  private readonly deferredFiles = new Set<string>();
 
-  /** Scans changed AGY transcripts and upserts their shared session records. */
+  /** Scans changed AGY transcripts using one history snapshot per synchronization. */
   async synchronize(since?: Date): Promise<number> {
-    const files = await findFilesRecursivelyCreatedAfter(this.brainDir, 'transcript.jsonl', since ?? null);
-
+    const files = new Set([
+      ...this.deferredFiles,
+      ...await findFilesRecursivelyCreatedAfter(this.brainDir, 'transcript.jsonl', since ?? null),
+    ]);
+    const history = await this.readHistoryMetadata();
     let processed = 0;
     for (const filePath of files) {
-      if (!isAntigravityTranscript(filePath)) {
-        continue;
-      }
-
-      const sessionId = await this.synchronizeFile(filePath);
-      if (sessionId) {
-        processed += 1;
-      }
+      if (await this.synchronizeTranscript(filePath, history)) processed += 1;
     }
-
     return processed;
   }
 
-  /** Synchronizes one provider transcript and returns its session id when valid. */
+  /** Synchronizes one provider transcript and returns the canonical app session id. */
   async synchronizeFile(filePath: string): Promise<string | null> {
-    if (!isAntigravityTranscript(filePath)) {
+    if (path.basename(filePath) !== 'transcript.jsonl') return null;
+    return this.synchronizeTranscript(filePath, await this.readHistoryMetadata());
+  }
+
+  private async synchronizeTranscript(
+    filePath: string,
+    history: Map<string, { projectPath?: string; sessionName?: string }>,
+  ): Promise<string | null> {
+    if (path.basename(filePath) !== 'transcript.jsonl') return null;
+    const parsed = await this.processTranscriptFile(filePath, history);
+    if (!parsed) return null;
+    const existing = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
+      ?? sessionsDb.getSessionById(parsed.sessionId);
+    if (!existing && antigravityRunBindings.hasPendingRun(parsed.projectPath)
+      && sessionsDb.findLatestPendingAppSession(PROVIDER, parsed.projectPath)) {
+      // The init event binds the exact app row. Guessing the newest pending
+      // row can steal a concurrent terminal's conversation, so defer indexing
+      // until that mapping arrives. Retry even if the next scan is incremental.
+      this.deferredFiles.add(filePath);
       return null;
     }
-
-    const parsed = await this.processTranscriptFile(filePath);
-    if (!parsed) {
-      return null;
-    }
-
+    this.deferredFiles.delete(filePath);
     const timestamps = await readFileTimestamps(filePath);
     return sessionsDb.createSession(
-      parsed.sessionId,
-      PROVIDER,
-      parsed.projectPath,
-      parsed.sessionName,
-      timestamps.createdAt,
-      timestamps.updatedAt,
-      filePath,
+      parsed.sessionId, PROVIDER, parsed.projectPath,
+      existing?.custom_name && existing.custom_name !== UNTITLED_ANTIGRAVITY_SESSION
+        ? existing.custom_name : parsed.sessionName,
+      timestamps.createdAt, timestamps.updatedAt, filePath,
     );
   }
 
-  private async processTranscriptFile(filePath: string): Promise<ParsedAntigravitySession | null> {
-    const sessionId = getSessionIdFromTranscriptPath(filePath);
-    if (!sessionId) {
-      return null;
-    }
-
-    const fromHistory = await this.readHistoryMetadata(sessionId);
+  private async processTranscriptFile(
+    filePath: string,
+    history: Map<string, { projectPath?: string; sessionName?: string }>,
+  ): Promise<ParsedAntigravitySession | null> {
+    const relative = path.relative(this.brainDir, filePath);
+    const parts = relative.split(path.sep);
+    if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative) || parts.length < 2) return null;
+    const sessionId = parts[0];
+    const fromHistory = history.get(sessionId);
     let firstUserMessage = fromHistory?.sessionName;
     let projectPath = fromHistory?.projectPath;
-
+    // A mapped app row knows the workspace before AGY appends history.jsonl.
+    const existing = sessionsDb.getSessionByProviderSessionId(sessionId);
+    projectPath ??= existing?.project_path ?? undefined;
     try {
       const lines = (await readFile(filePath, 'utf8')).split(/\r?\n/);
       for (const line of lines) {
-        const extracted = extractAntigravityStepContent(line);
-        if (!extracted) {
-          continue;
-        }
-
-        projectPath ??= extracted.projectPath;
-        firstUserMessage ??= extracted.firstUserMessage;
-
-        if (projectPath && firstUserMessage) {
-          break;
-        }
+        try {
+          const step = readObjectRecord(JSON.parse(line));
+          if (step?.source === 'USER_EXPLICIT' && step.type === 'USER_INPUT') {
+            const content = readOptionalString(step.content);
+            if (content) firstUserMessage ??= stripAntigravityTags(content);
+          }
+          // VIEW_FILE/LIST_DIRECTORY paths describe tool targets, not the workspace.
+          if (projectPath && firstUserMessage) break;
+        } catch { /* Live transcripts may end in a partial record. */ }
       }
-    } catch {
-      return null;
-    }
-
-    if (!projectPath) {
-      return null;
-    }
-
+    } catch { return null; }
+    if (!projectPath) return null;
     return {
-      sessionId,
-      projectPath,
+      sessionId, projectPath,
       sessionName: normalizeSessionName(firstUserMessage, UNTITLED_ANTIGRAVITY_SESSION),
     };
   }
 
-  private async readHistoryMetadata(
-    sessionId: string,
-  ): Promise<{ projectPath?: string; sessionName?: string } | null> {
-    try {
-      const lines = (await readFile(this.historyPath, 'utf8')).split(/\r?\n/);
-      for (let index = lines.length - 1; index >= 0; index -= 1) {
-        const line = lines[index]?.trim();
-        if (!line) {
-          continue;
-        }
-
+  private async readHistoryMetadata(): Promise<Map<string, { projectPath?: string; sessionName?: string }>> {
+    const history = new Map<string, { projectPath?: string; sessionName?: string }>();
+    let contents: string;
+    try { contents = await readFile(this.historyPath, 'utf8'); }
+    catch { return history; }
+    for (const line of contents.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
         const entry = readObjectRecord(JSON.parse(line));
-        if (readOptionalString(entry?.conversationId) !== sessionId) {
-          continue;
-        }
-
-        return {
-          projectPath: readOptionalString(entry?.workspace),
-          sessionName: readOptionalString(entry?.display),
-        };
-      }
-    } catch {
-      return null;
+        const sessionId = readOptionalString(entry?.conversationId);
+        if (!sessionId) continue;
+        const previous = history.get(sessionId);
+        history.set(sessionId, {
+          projectPath: readWorkspacePath(entry?.workspace) ?? previous?.projectPath,
+          sessionName: readOptionalString(entry?.display) ?? previous?.sessionName,
+        });
+      } catch { /* Skip malformed records without losing valid earlier entries. */ }
     }
-
-    return null;
+    return history;
   }
 }

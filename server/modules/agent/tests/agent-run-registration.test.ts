@@ -11,8 +11,8 @@ import express from 'express';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { chatRunRegistry, connectedClients } from '@/modules/websocket/index.js';
-import type { NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage } from '@/shared/utils.js';
+import type { NormalizedMessage } from '@/shared/index.js';
+import { createNormalizedMessage } from '@/shared/index.js';
 
 import { createAgentRouter } from '../agent.routes.js';
 
@@ -392,3 +392,27 @@ test('a non-streaming run answers with the assistant\'s replies, its token usage
     });
   });
 });
+
+for (const provider of ['cursor', 'opencode'] as const) {
+  test(`${provider} non-streaming Agent API returns normalized assistant output`, async () => {
+    await withIsolatedDatabase(async () => {
+      const dependencies = createDependencies(async () => { throw new Error('unexpected Claude call'); });
+      const query: RunFunction = async (_prompt, _options, writer) => {
+        writer.send(createNormalizedMessage({ kind: 'session_created', provider, sessionId: 'native', newSessionId: 'native' }));
+        writer.send(createNormalizedMessage({ kind: 'stream_delta', provider, sessionId: 'native', role: 'assistant', content: 'partial' }));
+        writer.send(createNormalizedMessage({ kind: 'text', provider, sessionId: 'native', role: 'assistant', content: 'answer' }));
+        writer.send(createNormalizedMessage({ kind: 'tool_result', provider, sessionId: 'native', content: 'tool output' }));
+        writer.send(createNormalizedMessage({ kind: 'complete', provider, sessionId: 'native', exitCode: 0 }));
+      };
+      if (provider === 'cursor') dependencies.queryCursor = query;
+      else dependencies.queryOpenCode = query;
+      await withAgentServer(dependencies, async (baseUrl) => {
+        const response = await post(baseUrl, { projectPath: '/home/test/project', provider, message: 'Run', stream: false });
+        assert.equal(response.status, 200);
+        const body = await response.json() as { success: boolean; messages: Array<{ content: string }> };
+        assert.equal(body.success, true);
+        assert.deepEqual(body.messages.map((message) => message.content), ['partial', 'answer']);
+      });
+    });
+  });
+}

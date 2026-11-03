@@ -1451,7 +1451,7 @@ function getUserExecutablePathCandidates(env: NodeJS.ProcessEnv): string[] {
 /**
  * Builds the subprocess environment used by provider CLI adapters.
  *
- * Antigravity's runtime, auth probe, model discovery, and Websocket PTYs use this helper so
+ * Antigravity's runtime, auth probe, model discovery, and AGY Shell launches use this helper so
  * user-level executable directories remain discoverable when CloudCLI starts
  * outside an interactive login shell. Existing variables and PATH ordering
  * are preserved after the deduplicated user-directory prefix.

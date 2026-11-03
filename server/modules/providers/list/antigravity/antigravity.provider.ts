@@ -13,7 +13,7 @@ import type {
   IProviderSessionSynchronizer,
   IProviderSkills,
   IProviderSessions,
-} from '@/shared/interfaces.js';
+} from '@/shared/index.js';
 
 /** Composes Antigravity adapters for registration in the Providers module. */
 export class AntigravityProvider extends AbstractProvider {

@@ -9,6 +9,7 @@ import Database from 'better-sqlite3';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { AntigravitySessionSynchronizer } from '@/modules/providers/list/antigravity/antigravity-session-synchronizer.provider.js';
 import { AntigravitySessionsProvider } from '@/modules/providers/list/antigravity/antigravity-sessions.provider.js';
+import { antigravityRunBindings } from '@/modules/providers/services/antigravity-run-bindings.service.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -266,4 +267,108 @@ test('Antigravity history restores clipped assistant text and hides the wait con
     restoreHomeDir();
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('history sync skips malformed lines, decodes file URLs and keeps workspace roots over tool paths', { concurrency: false }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-history-metadata-'));
+  const restore = patchHomeDir(root);
+  try {
+    const workspace = path.join(root, 'workspace with spaces');
+    const first = await writeAntigravityTranscript(root, 'history-a');
+    const second = await writeAntigravityTranscript(root, 'history-b');
+    await appendFile(first, '\n' + JSON.stringify({ type: 'VIEW_FILE', content: 'File Path: `file:///incorrect/root/src/file.ts`' }));
+    const { pathToFileURL } = await import('node:url');
+    await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'), [
+      JSON.stringify({ conversationId: 'history-a', workspace: pathToFileURL(workspace).href, display: 'First title' }),
+      '{malformed record',
+      JSON.stringify({ conversationId: 'history-b', workspace: 'file:///C:/Users/Test/My%20Project', display: 'Windows title' }),
+      '{"conversationId":',
+    ].join('\n'));
+    await withIsolatedDatabase(async () => {
+      const sync = new AntigravitySessionSynchronizer();
+      assert.equal(await sync.synchronize(), 2);
+      assert.equal(sessionsDb.getSessionById('history-a')?.project_path, workspace);
+      assert.equal(sessionsDb.getSessionById('history-a')?.custom_name, 'First title');
+      assert.equal(sessionsDb.getSessionById('history-b')?.project_path, 'C:\\Users\\Test\\My Project');
+      assert.equal(sessionsDb.getSessionById('history-b')?.jsonl_path, second);
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('sync never infers a workspace from VIEW_FILE or LIST_DIRECTORY tool targets', { concurrency: false }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-no-guessed-root-'));
+  const restore = patchHomeDir(root);
+  try {
+    const transcript = await writeAntigravityTranscript(root, 'unmapped');
+    await appendFile(transcript, '\n' + [
+      { type: 'VIEW_FILE', content: 'File Path: `file:///workspace/src/subfolder/file.ts`' },
+      { type: 'LIST_DIRECTORY', content: 'File Path: `file:///workspace/src/subfolder`' },
+    ].map((entry) => JSON.stringify(entry)).join('\n'));
+    await withIsolatedDatabase(async () => {
+      assert.equal(await new AntigravitySessionSynchronizer().synchronizeFile(transcript), null);
+      assert.equal(sessionsDb.getAllSessions().length, 0);
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('watcher defers unmapped transcripts then reuses the exact app row without sidebar duplicates', { concurrency: false }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-pending-sidebar-'));
+  const restore = patchHomeDir(root);
+  try {
+    const workspace = path.join(root, 'workspace');
+    const own = await writeAntigravityTranscript(root, 'own-native', 'same prompt');
+    const foreign = await writeAntigravityTranscript(root, 'terminal-native', 'same prompt');
+    await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'),
+      ['own-native', 'terminal-native'].map((id) => JSON.stringify({ conversationId: id, workspace, display: 'same prompt' })).join('\n'));
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-session', 'antigravity', workspace, 'same prompt');
+      const sync = new AntigravitySessionSynchronizer();
+      const releasePendingBinding = antigravityRunBindings.trackPendingRun(workspace);
+      assert.equal(await sync.synchronizeFile(own), null);
+      assert.equal(await sync.synchronizeFile(foreign), null);
+      assert.equal(sessionsDb.getAllSessions().length, 1);
+      assert.equal(sessionsDb.getSessionById('app-session')?.provider_session_id, null);
+      // Mirrors the runtime init event's exact mapping, instead of choosing a recent file.
+      sessionsDb.assignProviderSessionId('app-session', 'own-native');
+      releasePendingBinding();
+      assert.equal(await sync.synchronize(new Date(Date.now() + 10000)), 2, 'incremental scans must retry deferred files');
+      assert.equal(sessionsDb.getAllSessions().length, 2);
+      assert.equal(sessionsDb.getSessionByProviderSessionId('own-native')?.session_id, 'app-session');
+      assert.equal(sessionsDb.getSessionByProviderSessionId('terminal-native')?.session_id, 'terminal-native');
+      assert.equal(sessionsDb.getSessionById('app-session')?.jsonl_path, own);
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('mapped app workspace allows transcript indexing before history is written', { concurrency: false }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-init-before-history-'));
+  const restore = patchHomeDir(root);
+  try {
+    const workspace = path.join(root, 'workspace');
+    const transcript = await writeAntigravityTranscript(root, 'early-native');
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('early-app', 'antigravity', workspace, 'Existing title');
+      sessionsDb.assignProviderSessionId('early-app', 'early-native');
+      assert.equal(await new AntigravitySessionSynchronizer().synchronizeFile(transcript), 'early-app');
+      assert.equal(sessionsDb.getAllSessions().length, 1);
+      assert.equal(sessionsDb.getSessionById('early-app')?.custom_name, 'Existing title');
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('an abandoned pending app row does not suppress unrelated terminal sessions', { concurrency: false }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-abandoned-pending-'));
+  const restore = patchHomeDir(root);
+  try {
+    const workspace = path.join(root, 'workspace');
+    const transcript = await writeAntigravityTranscript(root, 'external-native');
+    await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'),
+      JSON.stringify({ conversationId: 'external-native', workspace, display: 'External session' }));
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('abandoned-app', 'antigravity', workspace, 'Unsent prompt');
+      assert.equal(await new AntigravitySessionSynchronizer().synchronizeFile(transcript), 'external-native');
+      assert.equal(sessionsDb.getSessionById('abandoned-app')?.provider_session_id, null);
+      assert.equal(sessionsDb.getAllSessions().length, 2);
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
 });

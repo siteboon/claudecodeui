@@ -206,6 +206,7 @@ type ShellLaunch = {
    * scheme, so a later theme toggle can be applied by restarting it.
    */
   claudeFollowsAppTheme: boolean;
+  useAntigravityEnv?: boolean;
 };
 
 /**
@@ -261,9 +262,9 @@ function buildShellCommand(
       ? `& '${executable.replaceAll("'", "''")}'`
       : `'${executable.replaceAll("'", "'\"'\"'")}'`;
     if (resumeSessionId) {
-      return otherProgram(`${shellExecutable} --conversation "${resumeSessionId}"`);
+      return { ...otherProgram(`${shellExecutable} --conversation "${resumeSessionId}"`), useAntigravityEnv: true };
     }
-    return otherProgram(initialCommand || shellExecutable);
+    return { ...otherProgram(initialCommand || shellExecutable), useAntigravityEnv: !initialCommand };
   }
 
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
@@ -483,6 +484,62 @@ function buildClaudeThemeLaunch(colorScheme: ShellColorScheme | null, projectPat
     : { flag: '', followsAppTheme: false };
 }
 
+function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const resolvedKey = Object.keys(env).find((envKey) => envKey.toLowerCase() === key.toLowerCase());
+  return resolvedKey ? env[resolvedKey] : undefined;
+}
+
+function getPathEnvKey(env: NodeJS.ProcessEnv): string {
+  return Object.keys(env).find((key) => key.toLowerCase() === 'path') || 'PATH';
+}
+
+function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; value: string | undefined } {
+  const pathKey = getPathEnvKey(env);
+  const currentPath = env[pathKey];
+  if (!currentPath) {
+    return { key: pathKey, value: currentPath };
+  }
+
+  const delimiter = path.delimiter;
+  const pathEntries = currentPath.split(delimiter).filter(Boolean);
+  const npmPrefix = readEnvValue(env, 'npm_config_prefix');
+  const appData = readEnvValue(env, 'APPDATA');
+  const candidates = [
+    npmPrefix || '',
+    npmPrefix ? path.join(npmPrefix, 'bin') : '',
+    appData ? path.join(appData, 'npm') : '',
+    path.join(os.homedir(), 'AppData', 'Roaming', 'npm'),
+    path.join(os.homedir(), '.npm-global', 'bin'),
+  ].filter(Boolean);
+
+  const normalizedPathEntries = pathEntries.map((entry) => os.platform() === 'win32' ? entry.toLowerCase() : entry);
+  const preferredEntries = candidates.filter((candidate, index) => {
+    const normalizedCandidate = os.platform() === 'win32' ? candidate.toLowerCase() : candidate;
+    return (
+      candidates.indexOf(candidate) === index &&
+      normalizedPathEntries.includes(normalizedCandidate)
+    );
+  });
+
+  if (preferredEntries.length === 0) {
+    return { key: pathKey, value: currentPath };
+  }
+
+  const normalizedPreferredEntries = preferredEntries.map((entry) =>
+    os.platform() === 'win32' ? entry.toLowerCase() : entry
+  );
+
+  const value = [
+    ...preferredEntries,
+    ...pathEntries.filter((entry) => {
+      const normalizedEntry = os.platform() === 'win32' ? entry.toLowerCase() : entry;
+      return !normalizedPreferredEntries.includes(normalizedEntry);
+    }),
+  ].join(delimiter);
+
+  return { key: pathKey, value };
+}
+
 /**
  * Used by this module's websocket gateway to connect the standalone Shell UI
  * to a retained PTY while keeping process lifecycle ownership on the server.
@@ -593,7 +650,7 @@ export function handleShellConnection(
           return;
         }
 
-        const { command: shellCommand, claudeFollowsAppTheme } = buildShellCommand(
+        const { command: shellCommand, claudeFollowsAppTheme, useAntigravityEnv } = buildShellCommand(
           data,
           dependencies,
           resolvedProjectPath,
@@ -606,13 +663,17 @@ export function handleShellConnection(
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
 
+        const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
+        const shellEnv = useAntigravityEnv ? buildProviderCliEnv() : {
+          ...process.env, [prioritizedPath.key]: prioritizedPath.value,
+        };
         shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
           name: 'xterm-256color',
           cols: termCols,
           rows: termRows,
           cwd: resolvedProjectPath,
           env: {
-            ...buildProviderCliEnv(),
+            ...shellEnv,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',

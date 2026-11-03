@@ -4,9 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 import Database from 'better-sqlite3';
 
-import { stripAntigravityTags } from '@/shared/index.js';
-import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type { FetchHistoryOptions, FetchHistoryResult, IProviderSessions, NormalizedMessage } from '@/shared/index.js';
 import {
   createNormalizedMessage,
   generateMessageId,
@@ -14,7 +12,8 @@ import {
   readOptionalString,
   sanitizeLeafDirectoryName,
   sliceTailPage,
-} from '@/shared/utils.js';
+  stripAntigravityTags,
+} from '@/shared/index.js';
 
 const PROVIDER = 'antigravity';
 const WAITING_FOR_EVENTS = /^<WAITING_FOR_EVENTS>\s*<\/WAITING_FOR_EVENTS>$/;

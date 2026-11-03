@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { SkillsProvider } from '@/modules/providers/shared/skills/skills.provider.js';
-import type { ProviderSkillSource } from '@/shared/types.js';
+import type { ProviderSkillSource } from '@/shared/index.js';
 
 /** Antigravity skill filesystem adapter used by shared skill routes. */
 export class AntigravitySkillsProvider extends SkillsProvider {

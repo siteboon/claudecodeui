@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import fs from 'node:fs';
+import fs, { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -823,4 +822,45 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
       ['0;15', '0;15', '0;15', '15;0']
     );
   });
+});
+
+test('plain shells and other providers retain npm-only PATH prioritization without adding directories', () => {
+  const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
+  const previous = process.env[pathKey];
+  const oldPrefix = process.env.npm_config_prefix;
+  const npmBin = path.join(os.homedir(), '.npm-global', 'bin');
+  try {
+    delete process.env.npm_config_prefix;
+    const original = ['/custom/preferred', npmBin, '/system/bin'].join(path.delimiter);
+    process.env[pathKey] = original;
+    for (const init of [
+      { provider: 'claude' }, { provider: 'codex' }, { provider: 'cursor' }, { provider: 'opencode' },
+      { provider: 'plain-shell', isPlainShell: true },
+      { provider: 'antigravity', isPlainShell: true },
+      { provider: 'antigravity', initialCommand: 'custom-command' },
+    ]) {
+      const pty = createFakePty(); const socket = createFakeSocket(); let captured: NodeJS.ProcessEnv = {};
+      handleShellConnection(socket as never, {
+        resolveProviderSessionId: () => null,
+        spawnPty: (_shell, _args, options) => { captured = options.env ?? {}; return pty as never; },
+      });
+      socket.emit('message', JSON.stringify({
+        type: 'init', projectPath: process.cwd(), sessionId: `env-${init.provider}-${Math.random()}`,
+        hasSession: false, ...init,
+      }));
+      assert.equal(captured[pathKey], [npmBin, '/custom/preferred', '/system/bin'].join(path.delimiter));
+      pty.emitExit();
+    }
+    process.env[pathKey] = '/custom/preferred';
+    const pty = createFakePty(); const socket = createFakeSocket(); let captured: NodeJS.ProcessEnv = {};
+    handleShellConnection(socket as never, {
+      resolveProviderSessionId: () => null,
+      spawnPty: (_shell, _args, options) => { captured = options.env ?? {}; return pty as never; },
+    });
+    socket.emit('message', JSON.stringify({ type: 'init', provider: 'plain-shell', projectPath: process.cwd(), sessionId: 'env-no-npm' }));
+    assert.equal(captured[pathKey], '/custom/preferred'); pty.emitExit();
+  } finally {
+    if (previous === undefined) delete process.env[pathKey]; else process.env[pathKey] = previous;
+    if (oldPrefix === undefined) delete process.env.npm_config_prefix; else process.env.npm_config_prefix = oldPrefix;
+  }
 });
