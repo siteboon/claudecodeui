@@ -25,23 +25,27 @@ type Step =
   | {
     type: 'permission';
     id: string;
+    sessionID?: string;
     permission: string;
     patterns: string[];
     always: string[];
     metadata?: Record<string, unknown>;
   }
-  | { type: 'question'; id: string; questions: unknown[] }
+  | { type: 'question'; id: string; questions: unknown[]; sessionID?: string }
   /** Several requests asked at once; a reject of one rejects the rest, as OpenCode does. */
   | { type: 'parallel-permissions'; requests: Array<{ id: string; permission: string; patterns: string[]; always: string[] }> }
   | { type: 'error'; name: string; message: string }
   | { type: 'crash' }
+  | { type: 'disconnect' }
   | { type: 'hang' };
 
 type Scenario = {
   /** Id given to a session created through POST /session. */
   newSessionId?: string;
   /** Sessions GET /session/:id knows; any other id answers 404. */
-  sessions?: Record<string, { permission?: PermissionRule[] }>;
+  sessions?: Record<string, { permission?: PermissionRule[]; parentID?: string }>;
+  /** Other sessions' events on a managed server's shared event stream. */
+  backgroundEvents?: Array<{ type: string; properties: Record<string, unknown> }>;
   agents?: Array<{ name: string; permission: PermissionRule[] }>;
   defaultAgent?: string;
   /** Answered with a status instead of 204, as OpenCode does for a bad prompt. */
@@ -139,10 +143,19 @@ async function runTurn(sessionID: string): Promise<void> {
 
   emit('session.status', { sessionID, status: { type: 'busy' } });
   emit('message.updated', { sessionID, info: { id: 'msg_assistant', sessionID, role: 'assistant' } });
+  for (const event of scenario.backgroundEvents ?? []) {
+    emit(event.type, event.properties);
+  }
 
   for (const step of scenario.steps) {
     if (step.type === 'crash') {
       process.exit(1);
+    }
+
+    if (step.type === 'disconnect') {
+      for (const stream of streams) stream.end();
+      await aborted;
+      return;
     }
 
     if (step.type === 'hang') {
@@ -161,7 +174,7 @@ async function runTurn(sessionID: string): Promise<void> {
       const answer = new Promise<{ kind: string; value: unknown }>((resolve) => waiting.set(step.id, resolve));
       emit('permission.asked', {
         id: step.id,
-        sessionID,
+        sessionID: step.sessionID ?? sessionID,
         permission: step.permission,
         patterns: step.patterns,
         always: step.always,
@@ -217,7 +230,7 @@ async function runTurn(sessionID: string): Promise<void> {
 
     if (step.type === 'question') {
       const answer = new Promise<{ kind: string; value: unknown }>((resolve) => waiting.set(step.id, resolve));
-      emit('question.asked', { id: step.id, sessionID, questions: step.questions });
+      emit('question.asked', { id: step.id, sessionID: step.sessionID ?? sessionID, questions: step.questions });
       const outcome = await Promise.race([answer, aborted]);
       if (outcome === 'aborted') {
         emit('session.status', { sessionID, status: { type: 'idle' } });
@@ -292,7 +305,7 @@ const server = http.createServer(async (req, res) => {
       const added = (body as { permission?: PermissionRule[] } | undefined)?.permission ?? [];
       session.permission = [...(session.permission ?? []), ...added];
     }
-    sendJson(res, 200, { id: match[1], title: 'Session', permission: session.permission });
+    sendJson(res, 200, { id: match[1], title: 'Session', permission: session.permission, parentID: session.parentID });
     return;
   }
 
