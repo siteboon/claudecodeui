@@ -509,6 +509,40 @@ function readOpenCodeTokenUsage(sessionId: string | null, sessionTable: OpenCode
   }
 }
 
+/**
+ * The session an OpenCode 2.x `run` made for a prompt, found by what it stored:
+ * the workspace it ran in, a creation time after the run started, and the
+ * prompt as a user message (`run` stores a prompt from stdin as it is). Null
+ * when there is no such session, or no 2.x database.
+ */
+function findOpenCodeV2RunSession(directory: string, startedAt: number, prompt: string): string | null {
+  const dbPath = getOpenCodeDatabasePath();
+  if (!fsSync.existsSync(dbPath)) {
+    return null;
+  }
+
+  let db: Database.Database | null = null;
+  try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    const sessionId = db.prepare(`
+      SELECT s.id
+      FROM session_v2 s
+      INNER JOIN session_message m ON m.session_id = s.id AND m.type = 'user'
+      WHERE s.directory = ?
+        AND s.parent_id IS NULL
+        AND s.time_created >= ?
+        AND json_extract(m.data, '$.text') = ?
+      ORDER BY s.time_created
+      LIMIT 1
+    `).pluck().get(directory, startedAt - 1000, prompt);
+    return typeof sessionId === 'string' ? sessionId : null;
+  } catch {
+    return null;
+  } finally {
+    db?.close();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Server lifetime
 // ---------------------------------------------------------------------------
@@ -1747,6 +1781,7 @@ async function runOpenCodeV2Turn(
       return await finishStoppedV2Turn(turn);
     }
 
+    const spawnedAt = Date.now();
     const child = spawn('opencode', buildOpenCodeRunArgs({
       providerSessionId: turn.providerSessionId,
       model: resolvedModel,
@@ -1759,6 +1794,18 @@ async function runOpenCodeV2Turn(
       windowsHide: true,
     });
     turn.child = child;
+    // `run` names its session in its first line. A turn stopped (or failed)
+    // before that line still made one; it is looked up as the process exits,
+    // before `exited` settles and the stop is reported, so the chat keeps its
+    // session instead of leaving the synchronizer to guess which one it was.
+    child.once('exit', () => {
+      if (!turn.providerSessionId) {
+        const madeSessionId = findOpenCodeV2RunSession(workingDir, spawnedAt, promptWithAttachments);
+        if (madeSessionId) {
+          registerProviderSession(madeSessionId);
+        }
+      }
+    });
     turn.exited = new Promise<void>((resolve) => {
       child.once('exit', () => resolve());
       child.once('error', () => resolve());

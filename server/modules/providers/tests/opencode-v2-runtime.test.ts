@@ -164,6 +164,8 @@ type TurnOptions = {
   models?: ProviderModelsDefinition;
   /** Called for every frame the chat receives. */
   onFrame?: (frame: Frame) => void;
+  /** Runs alongside the turn, with the path of the fake CLI's log. */
+  whileRunning?: (logPath: string) => Promise<void>;
 };
 
 async function runTurn(options: TurnOptions) {
@@ -201,6 +203,7 @@ async function runTurn(options: TurnOptions) {
     permissionMode: options.permissionMode,
     files: options.files,
   }, writer, context).then(() => null, (caught: unknown) => caught as Error);
+  const sideTask = options.whileRunning?.(logPath);
   // A turn that never ends fails its test instead of hanging the whole file.
   let deadline: ReturnType<typeof setTimeout> | undefined;
   const outcome = await Promise.race([
@@ -215,6 +218,7 @@ async function runTurn(options: TurnOptions) {
     throw new Error(`The turn did not finish within ${TURN_DEADLINE_MS / 1000} s.`);
   }
 
+  await sideTask;
   let log: LogEntry[] = [];
   try {
     log = (await readFile(logPath, 'utf8')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
@@ -433,6 +437,47 @@ test('a run that does not exit on SIGINT is terminated', async () => {
   assert.deepEqual(turn.signals, ['SIGINT', 'SIGTERM']);
   assert.ok(await waitForExit(turn.runs[0].pid));
   assert.equal(turn.frames.some((frame) => frame.kind === 'complete'), false);
+});
+
+test('a turn stopped before `run` printed a line still gets the session `run` made', async () => {
+  setInstalledVersion('opencode v2.2.3');
+  // Another session made in the same workspace just now, for another prompt, is not the turn's.
+  const db = new Database(path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db'));
+  try {
+    const now = Date.now();
+    db.prepare(`
+      INSERT INTO session_v2 (id, project_id, slug, directory, version, time_created, time_updated)
+      VALUES ('ses_someone_else', 'prj', 'other', ?, '2.2.3', ?, ?)
+    `).run(workspacePath, now, now);
+    db.prepare(`
+      INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+      VALUES ('msg_someone_else', 'ses_someone_else', 'user', 1, ?, ?, '{"text":"another prompt"}')
+    `).run(now, now);
+  } finally {
+    db.close();
+  }
+
+  let abortResult: boolean | null = null;
+  const turn = await runTurn({
+    appSessionId: 'app-v2-stopped-early',
+    command: 'Stop me before you print',
+    scenario: { createSession: 'ses_made_before_any_line', waitForSignal: true },
+    whileRunning: async (logPath) => {
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline && !(await readFile(logPath, 'utf8').catch(() => '')).includes('"created"')) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      abortResult = await opencodeRuntime.abort('app-v2-stopped-early');
+    },
+  });
+
+  assert.equal(turn.error, null);
+  assert.equal(abortResult, true);
+  assert.deepEqual(turn.signals, ['SIGINT']);
+  // Registered before the stop was reported, so the chat keeps its session.
+  assert.deepEqual(kinds(turn.frames), ['session_created']);
+  assert.equal(turn.frames[0].newSessionId, 'ses_made_before_any_line');
+  assert.equal(turn.writer.sessionId, 'ses_made_before_any_line');
 });
 
 test('Stop while the CLI version is still being read ends the turn before anything starts', async () => {

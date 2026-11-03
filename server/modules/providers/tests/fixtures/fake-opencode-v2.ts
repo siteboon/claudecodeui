@@ -13,6 +13,10 @@
  * cannot drive a 2.x server.
  */
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import Database from 'better-sqlite3';
 
 type Scenario = {
   /** What `--version` prints, and how long it takes to answer. */
@@ -30,6 +34,12 @@ type Scenario = {
   ignoreSigint?: boolean;
   /** Lines `models` prints. */
   models?: string[];
+  /**
+   * Records a session under this id in ~/.local/share/opencode/opencode.db
+   * before anything is printed, as `run` does: in session_v2 for the PWD it
+   * runs in, with the prompt as its user message.
+   */
+  createSession?: string;
 };
 
 const args = process.argv.slice(2);
@@ -96,6 +106,21 @@ if (args[0] === '--version') {
     process.stderr.write(`fake opencode 2.x: unsupported command ${args[0]}\n`);
     exitAfterOutput(1);
   } else {
+    if (scenario.createSession) {
+      const db = new Database(path.join(os.homedir(), '.local', 'share', 'opencode', 'opencode.db'));
+      const now = Date.now();
+      db.prepare(`
+        INSERT INTO session_v2 (id, project_id, slug, directory, version, time_created, time_updated)
+        VALUES (?, 'prj', 'made-by-run', ?, '2.2.3', ?, ?)
+      `).run(scenario.createSession, process.env.PWD, now, now);
+      db.prepare(`
+        INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+        VALUES (?, ?, 'user', 1, ?, ?, ?)
+      `).run(`msg_${scenario.createSession}`, scenario.createSession, now, now, JSON.stringify({ text: prompt, files: [] }));
+      db.close();
+      log({ created: scenario.createSession });
+    }
+
     if (scenario.waitForSignal) {
       // Installed before anything is printed, as `run` does at startup: the
       // chat may stop the turn as soon as its first line arrives.
