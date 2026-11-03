@@ -131,7 +131,7 @@ const readFields = (requestedSchema: ElicitationInput['requestedSchema']): Elici
  */
 // What a datetime-local input gives (local time, seconds and fraction optional),
 // and the same with an explicit offset. Any other shape is not guessed at.
-const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/;
+const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/;
 const OFFSET_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
 
 const toSubmittedText = (field: ElicitationField, text: string): string | null => {
@@ -141,15 +141,18 @@ const toSubmittedText = (field: ElicitationField, text: string): string | null =
   const instant = new Date(text);
   if (Number.isNaN(instant.getTime())) return null;
   // A local time a DST change skipped (02:30 on a spring-forward night) parses
-  // to an hour later; refuse it rather than send a time nobody picked. Every
-  // offset change is whole minutes, so the wall time is compared to the minute.
+  // to an hour later; refuse it rather than send a time nobody picked. Offsets
+  // are whole seconds but not always whole minutes (historical zones had gaps
+  // of under a minute), so the wall time is compared to the second.
   if (local) {
     const [year, month, day, hours, minutes] = local.slice(1, 6).map(Number);
+    const seconds = Number(local[6] ?? '0');
     const sameWallTime = instant.getFullYear() === year
       && instant.getMonth() + 1 === month
       && instant.getDate() === day
       && instant.getHours() === hours
-      && instant.getMinutes() === minutes;
+      && instant.getMinutes() === minutes
+      && instant.getSeconds() === seconds;
     if (!sameWallTime) return null;
   }
   return instant.toISOString();
