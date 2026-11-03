@@ -33,7 +33,7 @@ const OPENCODE_SCHEMA = `
 
 async function withOpenCodeDatabase(
   seed: (db: Database.Database) => void,
-  runTest: (provider: OpenCodeSessionsProvider) => Promise<void>,
+  runTest: (provider: OpenCodeSessionsProvider, dbPath: string) => Promise<void>,
 ): Promise<void> {
   const homeDir = await mkdtemp(path.join(os.tmpdir(), 'opencode-history-pages-'));
   const originalHomedir = os.homedir;
@@ -42,7 +42,8 @@ async function withOpenCodeDatabase(
   try {
     const dataDir = path.join(homeDir, '.local', 'share', 'opencode');
     await mkdir(dataDir, { recursive: true });
-    const db = new Database(path.join(dataDir, 'opencode.db'));
+    const dbPath = path.join(dataDir, 'opencode.db');
+    const db = new Database(dbPath);
     try {
       db.exec(OPENCODE_SCHEMA);
       db.transaction(() => seed(db))();
@@ -50,7 +51,7 @@ async function withOpenCodeDatabase(
       db.close();
     }
 
-    await runTest(new OpenCodeSessionsProvider());
+    await runTest(new OpenCodeSessionsProvider(), dbPath);
   } finally {
     (os as any).homedir = originalHomedir;
     await rm(homeDir, { recursive: true, force: true });
@@ -75,17 +76,25 @@ const QUESTION_STATE = {
   metadata: { answers: [['Red']] },
 };
 
+/** What the seeded rows must show: the messages whose error is shown, and each part's message kind. */
+type SeededExpectations = {
+  shownErrors: Set<string>;
+  partKinds: Map<string, string | null>;
+};
+
 /**
  * Seeds one session with every row shape the history reader handles: shown
  * and hidden parts of each type, messages without parts, shown and stopped
  * errors, malformed JSON, missing timestamps, ties broken by id, subagent
- * calls, and rows of other sessions that must not leak in.
+ * calls, and rows of other sessions that must not leak in. Records what each
+ * row must show in `expectations`.
  */
 const seedRandomSession = (
   db: Database.Database,
   sessionId: string,
   seed: number,
   messageCount: number,
+  expectations: SeededExpectations,
 ): void => {
   const random = createRandom(seed);
   const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)];
@@ -104,43 +113,53 @@ const seedRandomSession = (
   for (let index = 0; index < messageCount; index += 1) {
     const messageId = nextId('msg');
     const role = random() < 0.35 ? 'user' : 'assistant';
-    const messageData = role === 'user'
-      ? pick([json({ role: 'user' }), json({ role: ' user ' }), '[1,2]', '{"role":"user",'])
-      : pick([
-        json({ role: 'assistant', tokens: { input: 3, output: 2, reasoning: 1, cache: { read: 4, write: 1 } } }),
-        json({ role: 'assistant', tokens: { input: 1, output: 1 } }),
-        json({ role: 'assistant', error: { name: 'APIError', data: { message: `Rate limited ${index}` } } }),
-        json({ role: ' assistant ', error: `plain failure ${index}` }),
-        json({ role: 'assistant', error: { name: 'MessageAbortedError', data: { message: 'Aborted' } } }),
-        json({ role: 'assistant', error: null }),
-        json({ role: 'assistant', error: 0 }),
-        '{"role":"assistant","error":',
-        Buffer.from(json({ role: 'assistant', error: 'stored as a blob' })),
+    // [data, whether the message shows an error]
+    const [messageData, showsError] = role === 'user'
+      ? pick<[unknown, boolean]>([
+        [json({ role: 'user' }), false],
+        [json({ role: ' user ' }), false],
+        ['[1,2]', false],
+        ['{"role":"user",', false],
+      ])
+      : pick<[unknown, boolean]>([
+        [json({ role: 'assistant', tokens: { input: 3, output: 2, reasoning: 1, cache: { read: 4, write: 1 } } }), false],
+        [json({ role: 'assistant', tokens: { input: 1, output: 1 } }), false],
+        [json({ role: 'assistant', error: { name: 'APIError', data: { message: `Rate limited ${index}` } } }), true],
+        [json({ role: ' assistant ', error: `plain failure ${index}` }), true],
+        [json({ role: 'assistant', error: { name: 'MessageAbortedError', data: { message: 'Aborted' } } }), false],
+        [json({ role: 'assistant', error: null }), false],
+        [json({ role: 'assistant', error: 0 }), true],
+        ['{"role":"assistant","error":', false],
+        [Buffer.from(json({ role: 'assistant', error: 'stored as a blob' })), false],
       ]);
     insertMessage.run(messageId, sessionId, tick(), messageData);
+    if (showsError) {
+      expectations.shownErrors.add(messageId);
+    }
 
     const partCount = pick([0, 0, 1, 1, 2, 3, 4]);
     for (let partIndex = 0; partIndex < partCount; partIndex += 1) {
       const callID = nextId('call');
       const prompt = `Prompt ${index}.${partIndex}`;
-      const shapes: unknown[] = [
-        json({ type: 'text', text: role === 'user' ? prompt : `Answer ${index}.${partIndex}` }),
-        json({ type: 'text', text: JSON.stringify(prompt) }),
-        json({ type: 'text', text: appendImagesInputTag(prompt, [{ path: `/assets/${index}.png`, name: 'shot.png' }]) }),
-        json({ type: 'text', text: appendFilesInputTag(prompt, [{ path: `/assets/${index}.txt`, name: 'notes.txt' }]) }),
-        json({ type: 'text', text: appendImagesInputTag('', [{ path: `/assets/only-${index}.png` }]) }),
-        json({ type: 'text', text: '' }),
-        json({ type: 'text', text: '   ' }),
-        json({ type: 'text', text: '"   "' }),
-        json({ type: 'text', content: `Content ${index}` }),
-        json({ type: ' text ', text: `Padded ${index}` }),
-        json({ type: 'reasoning', text: `Thinking ${index}` }),
-        json({ type: 'reasoning', text: ' ' }),
-        json({ type: 'tool', tool: 'bash', callID, state: { status: 'completed', input: { command: 'ls' }, output: `out ${index}` } }),
-        json({ type: 'tool', tool: 'read', state: { status: 'error', input: {}, error: 'File not found' } }),
-        json({ type: 'tool', tool: 'glob', callID, state: { status: 'running', input: { pattern: '*' } } }),
-        json({ type: 'tool', tool: 'question', callID, state: QUESTION_STATE }),
-        json({
+      // [data, the kind of message it shows, or null when it shows nothing]
+      const shapes: [unknown, string | null][] = [
+        [json({ type: 'text', text: role === 'user' ? prompt : `Answer ${index}.${partIndex}` }), 'text'],
+        [json({ type: 'text', text: JSON.stringify(prompt) }), 'text'],
+        [json({ type: 'text', text: appendImagesInputTag(prompt, [{ path: `/assets/${index}.png`, name: 'shot.png' }]) }), 'text'],
+        [json({ type: 'text', text: appendFilesInputTag(prompt, [{ path: `/assets/${index}.txt`, name: 'notes.txt' }]) }), 'text'],
+        [json({ type: 'text', text: appendImagesInputTag('', [{ path: `/assets/only-${index}.png` }]) }), 'text'],
+        [json({ type: 'text', text: '' }), null],
+        [json({ type: 'text', text: '   ' }), null],
+        [json({ type: 'text', text: '"   "' }), null],
+        [json({ type: 'text', content: `Content ${index}` }), 'text'],
+        [json({ type: ' text ', text: `Padded ${index}` }), 'text'],
+        [json({ type: 'reasoning', text: `Thinking ${index}` }), 'thinking'],
+        [json({ type: 'reasoning', text: ' ' }), null],
+        [json({ type: 'tool', tool: 'bash', callID, state: { status: 'completed', input: { command: 'ls' }, output: `out ${index}` } }), 'tool_use'],
+        [json({ type: 'tool', tool: 'read', state: { status: 'error', input: {}, error: 'File not found' } }), 'tool_use'],
+        [json({ type: 'tool', tool: 'glob', callID, state: { status: 'running', input: { pattern: '*' } } }), 'tool_use'],
+        [json({ type: 'tool', tool: 'question', callID, state: QUESTION_STATE }), 'tool_use'],
+        [json({
           type: 'tool',
           tool: 'task',
           callID,
@@ -150,24 +169,26 @@ const seedRandomSession = (
             output: '<task id="x" state="completed">\n<task_result>\ndone\n</task_result>\n</task>',
             metadata: { sessionId: `${sessionId}_child`, model: { modelID: 'm' } },
           },
-        }),
-        json({ type: ' tool ', tool: 'bash', state: { status: 'completed', output: 'padded' } }),
-        json({ type: 'step-start', snapshot: 'abc' }),
-        json({ type: 'step-finish', reason: 'stop', tokens: { input: 1 } }),
-        json({ type: 'patch', hash: 'h', files: ['a.ts'] }),
-        json({ type: 'agent', name: 'general' }),
-        json({ type: 'file', mime: 'image/png', url: 'data:image/png;base64,AAAA' }),
-        json({ type: 'snapshot', snapshot: 'abc' }),
-        json({ type: 7 }),
-        json({ text: 'no type' }),
-        '[1,2]',
-        '{"type":"tool",',
-        null,
-        Buffer.from(json({ type: 'tool', tool: 'bash' })),
+        }), 'tool_use'],
+        [json({ type: ' tool ', tool: 'bash', state: { status: 'completed', output: 'padded' } }), 'tool_use'],
+        [json({ type: 'step-start', snapshot: 'abc' }), null],
+        [json({ type: 'step-finish', reason: 'stop', tokens: { input: 1 } }), 'stream_end'],
+        [json({ type: 'patch', hash: 'h', files: ['a.ts'] }), 'tool_use'],
+        [json({ type: 'agent', name: 'general' }), 'tool_use'],
+        [json({ type: 'file', mime: 'image/png', url: 'data:image/png;base64,AAAA' }), null],
+        [json({ type: 'snapshot', snapshot: 'abc' }), null],
+        [json({ type: 7 }), null],
+        [json({ text: 'no type' }), null],
+        ['[1,2]', null],
+        ['{"type":"tool",', null],
+        [null, null],
+        [Buffer.from(json({ type: 'tool', tool: 'bash' })), null],
       ];
       // User messages mostly carry prompts: the text shapes come first.
-      const partData = pick(role === 'user' && random() < 0.8 ? shapes.slice(0, 10) : shapes);
-      insertPart.run(nextId('prt'), messageId, sessionId, tick(), partData);
+      const [partData, kind] = pick(role === 'user' && random() < 0.8 ? shapes.slice(0, 10) : shapes);
+      const partId = nextId('prt');
+      insertPart.run(partId, messageId, sessionId, tick(), partData);
+      expectations.partKinds.set(partId, kind);
     }
 
     // Rows that share an id with this session but belong to another one.
@@ -183,24 +204,67 @@ const seedRandomSession = (
   insertPart.run(nextId('prt'), childMessageId, `${sessionId}_child`, clock, json({ type: 'text', text: 'child step' }));
 };
 
+/**
+ * The `id kind` list a session's full history must have: its rows in the
+ * order of a `message LEFT JOIN part` sorted by message then part, each
+ * showing its message's error on the message's first row, then its part. A
+ * row without a part is keyed by how many messages came before it.
+ */
+const readExpectedHistory = (dbPath: string, sessionId: string, expectations: SeededExpectations): string[] => {
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    const rows = db.prepare(`
+      SELECT m.id AS message_id, p.id AS part_id
+      FROM message m
+      LEFT JOIN part p ON p.session_id = m.session_id AND p.message_id = m.id
+      WHERE m.session_id = ?
+      ORDER BY COALESCE(m.time_created, 0), m.id, COALESCE(p.time_created, 0), p.id
+    `).all(sessionId) as { message_id: string; part_id: string | null }[];
+
+    const expected: string[] = [];
+    let previousMessageId: string | null = null;
+    for (const row of rows) {
+      if (row.message_id !== previousMessageId && expectations.shownErrors.has(row.message_id)) {
+        expected.push(`${row.message_id}_${row.part_id ?? expected.length}_error error`);
+      }
+      previousMessageId = row.message_id;
+
+      const kind = row.part_id ? expectations.partKinds.get(row.part_id) : null;
+      if (kind) {
+        expected.push(`${row.message_id}_${row.part_id} ${kind}`);
+      }
+    }
+    return expected;
+  } finally {
+    db.close();
+  }
+};
+
 test('OpenCode history pages are exactly the matching slices of the full history', { concurrency: false }, async (t) => {
   // Rows without a timestamp are stamped with the current time.
   t.mock.timers.enable({ apis: ['Date'], now: 1_800_000_000_000 });
+  const expectations: SeededExpectations = { shownErrors: new Set(), partKinds: new Map() };
 
   await withOpenCodeDatabase((db) => {
-    seedRandomSession(db, 'ses_a', 1, 90);
-    seedRandomSession(db, 'ses_b', 2, 40);
-    seedRandomSession(db, 'ses_c', 3, 7);
+    seedRandomSession(db, 'ses_a', 1, 90, expectations);
+    seedRandomSession(db, 'ses_b', 2, 40, expectations);
+    seedRandomSession(db, 'ses_c', 3, 7, expectations);
     db.prepare('UPDATE session SET tokens_input = 11, tokens_output = 5 WHERE id = ?').run('ses_b');
     // A part with an empty id counts as no part, but still names its message's error.
     db.prepare('INSERT INTO message (id, session_id, time_created, data) VALUES (?, ?, ?, ?)')
       .run('msg_empty_part', 'ses_c', 1_700_000_000_500, JSON.stringify({ role: 'assistant', error: 'failed' }));
     db.prepare('INSERT INTO part (id, message_id, session_id, time_created, data) VALUES (?, ?, ?, ?, ?)')
       .run('', 'msg_empty_part', 'ses_c', 1_700_000_000_500, JSON.stringify({ type: 'text', text: 'hidden' }));
+    expectations.shownErrors.add('msg_empty_part');
     db.prepare('INSERT INTO session (id) VALUES (?)').run('ses_empty');
-  }, async (provider) => {
+  }, async (provider, dbPath) => {
     for (const providerSessionId of ['ses_a', 'ses_b', 'ses_c', 'ses_empty', 'ses_missing']) {
       const full = await provider.fetchHistory('app-session', { providerSessionId });
+      assert.deepEqual(
+        full.messages.map((message) => `${message.id} ${message.kind}`),
+        readExpectedHistory(dbPath, providerSessionId, expectations),
+        `${providerSessionId}: full history`,
+      );
       assert.equal(full.total, full.messages.length, `${providerSessionId}: total counts every message`);
       assert.equal(full.hasMore, false);
 
@@ -227,12 +291,9 @@ test('OpenCode history pages are exactly the matching slices of the full history
     }
 
     const full = await provider.fetchHistory('app-session', { providerSessionId: 'ses_a' });
-    const kinds = new Set(full.messages.map((message) => message.kind));
-    assert.deepEqual([...kinds].sort(), ['error', 'stream_end', 'text', 'thinking', 'tool_use']);
     assert.ok(full.messages.some((message) => message.subagent), 'task calls become subagents');
     assert.ok(full.messages.some((message) => message.images), 'user attachments are surfaced');
-    // A message without parts is keyed by its position in the full history.
-    assert.ok(full.messages.some((message) => /^msg_[0-9a-f]{8}_\d+_error$/.test(message.id)));
+    assert.ok(full.messages.some((message) => /^msg_[0-9a-f]{8}_\d+_error$/.test(message.id)), 'a part-less error is shown');
   });
 });
 
