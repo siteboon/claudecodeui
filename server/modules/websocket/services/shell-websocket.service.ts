@@ -134,10 +134,10 @@ const TERMINAL_QUERY_REGEX = new RegExp(
 );
 
 // The most characters (UTF-16 code units, so at most 48 KiB as UTF-8) a replay
-// frame carries. Sent as one frame, a full buffer (5000 chunks of 16 KiB) took
-// a single JSON.stringify of 118 million characters and held the event loop
-// for 1.5 s. Frames of this size serialise about as fast as one frame per chunk
-// did; much larger ones of CJK text are slower again.
+// frame carries. Sent as one frame, a full buffer (5000 chunks of 16 KiB) went
+// through a single JSON.stringify into a 118-million-character frame, which
+// held the event loop for 1.5 s. Frames of this size serialise about as fast as
+// one frame per chunk did; much larger ones of CJK text are slower again.
 const REPLAY_FRAME_LENGTH = 16 * 1024;
 
 /**
