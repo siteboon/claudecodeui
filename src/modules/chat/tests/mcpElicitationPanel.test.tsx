@@ -231,3 +231,28 @@ test('a date-time is measured as the UTC instant that is sent, not as typed', ()
   assert.equal(decisions.length, 0);
   assert.ok(getByText('At most 20 characters'));
 });
+
+test('a local time skipped by a DST change is refused, not moved an hour', () => {
+  // Node applies a TZ change at once; this file's worker is its own process.
+  const previous = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    const { getByText, getByLabelText, decisions } = renderBanner(singleField('eli_11', { type: 'string', format: 'date-time' }));
+
+    // 2026-03-08 02:00 jumps to 03:00 in New York, so 02:30 never happens.
+    fireEvent.change(getByLabelText(/Answer/), { target: { value: '2026-03-08T02:30' } });
+    fireEvent.click(getByText('Submit'));
+    assert.equal(decisions.length, 0);
+    assert.ok(getByText('Enter a date and time'));
+
+    fireEvent.change(getByLabelText(/Answer/), { target: { value: '2026-03-08T03:30' } });
+    fireEvent.click(getByText('Submit'));
+    assert.deepEqual(decisions, [{
+      ids: 'eli_11',
+      decision: { allow: true, updatedInput: { content: { answer: '2026-03-08T07:30:00.000Z' } } },
+    }]);
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});

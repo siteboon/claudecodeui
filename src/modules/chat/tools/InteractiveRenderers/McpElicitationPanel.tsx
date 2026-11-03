@@ -126,12 +126,28 @@ const readFields = (requestedSchema: ElicitationInput['requestedSchema']): Elici
 /**
  * The text a field sends. A `datetime-local` input gives local time without
  * seconds or offset, which RFC 3339 `date-time` rejects, so a `date-time`
- * answer goes out as an ISO 8601 instant in UTC. Null when it is not a date.
+ * answer goes out as an ISO 8601 instant in UTC. Null when it is not a date,
+ * or names a local time that does not exist.
  */
 const toSubmittedText = (field: ElicitationField, text: string): string | null => {
   if (field.format !== 'date-time') return text;
   const instant = new Date(text);
-  return Number.isNaN(instant.getTime()) ? null : instant.toISOString();
+  if (Number.isNaN(instant.getTime())) return null;
+  // A local time a DST change skipped (02:30 on a spring-forward night) parses
+  // to an hour later; refuse it rather than send a time nobody picked. A value
+  // typed with its own offset is not local time and is left as it is.
+  const local = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(text);
+  if (local) {
+    const [year, month, day, hours, minutes, seconds = '0'] = local.slice(1).map((part) => part ?? '0');
+    const sameWallTime = instant.getFullYear() === Number(year)
+      && instant.getMonth() + 1 === Number(month)
+      && instant.getDate() === Number(day)
+      && instant.getHours() === Number(hours)
+      && instant.getMinutes() === Number(minutes)
+      && instant.getSeconds() === Number(seconds);
+    if (!sameWallTime) return null;
+  }
+  return instant.toISOString();
 };
 
 /**
