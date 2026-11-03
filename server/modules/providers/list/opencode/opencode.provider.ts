@@ -17,9 +17,11 @@ import type {
 
 export class OpenCodeProvider extends AbstractProvider {
   readonly runtime: IProviderRuntime = opencodeRuntime;
-  readonly models: IProviderModels = new OpenCodeProviderModels();
+  /** Also read by the login status, which counts 2.x logins by the picker's listing. */
+  private readonly openCodeModels = new OpenCodeProviderModels();
+  readonly models: IProviderModels = this.openCodeModels;
   readonly mcp = new OpenCodeMcpProvider();
-  readonly auth: IProviderAuth = new OpenCodeProviderAuth();
+  readonly auth: IProviderAuth = new OpenCodeProviderAuth(this.openCodeModels);
   readonly skills: IProviderSkills = new OpenCodeSkillsProvider();
   readonly sessions: IProviderSessions = new OpenCodeSessionsProvider();
   readonly sessionSynchronizer: IProviderSessionSynchronizer = new OpenCodeSessionSynchronizer();

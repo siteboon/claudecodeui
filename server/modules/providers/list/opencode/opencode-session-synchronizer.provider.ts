@@ -5,11 +5,14 @@ import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { OpenCodeSessionTable } from '@/shared/types.js';
 import {
   getOpenCodeDatabasePath,
   normalizeProviderTimestamp,
   normalizeSessionName,
   readJsonRecord,
+  readOpenCodeLiveSessionTable,
+  readOpenCodeSessionTables,
   readOptionalString,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
@@ -31,6 +34,31 @@ type SynchronizeRowsResult = {
 type OpenCodeChildSessionRow = {
   id: string;
 };
+
+/**
+ * Every session of a database with both session tables once, as its live
+ * copy: the row of the two that was updated last, `session_v2` on a tie (see
+ * `readOpenCodeLiveSessionTable`). 2.x migrates 1.x sessions a batch at a
+ * time with their old timestamps, and a 1.x CLI can still write the 1.x
+ * tables after that, so neither table alone lists them all.
+ */
+const LIVE_SESSION_COPIES_SQL = `(
+  SELECT id, project_id, parent_id, directory, title, time_created, time_updated, time_archived
+  FROM session v1
+  WHERE NOT EXISTS (
+    SELECT 1 FROM session_v2 v2
+    WHERE v2.id = v1.id
+      AND COALESCE(v2.time_updated, v2.time_created, 0) >= COALESCE(v1.time_updated, v1.time_created, 0)
+  )
+  UNION ALL
+  SELECT id, project_id, parent_id, directory, title, time_created, time_updated, time_archived
+  FROM session_v2 v2
+  WHERE NOT EXISTS (
+    SELECT 1 FROM session v1
+    WHERE v1.id = v2.id
+      AND COALESCE(v1.time_updated, v1.time_created, 0) > COALESCE(v2.time_updated, v2.time_created, 0)
+  )
+)`;
 
 /**
  * Session indexer for OpenCode's SQLite-backed session store.
@@ -72,8 +100,12 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
 
     const db = new Database(dbPath, { readonly: true, fileMustExist: true });
     try {
+      // OpenCode 2.x lists sessions in `session_v2`, with the same columns read
+      // here; with both tables, each session is read from its live copy.
+      const sessionTables = readOpenCodeSessionTables(db);
+      const sessionSource = sessionTables.length === 2 ? LIVE_SESSION_COPIES_SQL : (sessionTables[0] ?? 'session');
       if (pruneChildSessions) {
-        this.pruneChildSessions(db);
+        this.pruneChildSessions(db, sessionSource);
         this.childSessionsReconciled = true;
       }
 
@@ -88,7 +120,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
           s.time_created AS time_created,
           s.time_updated AS time_updated,
           p.worktree AS worktree
-        FROM session s
+        FROM ${sessionSource} s
         LEFT JOIN project p ON p.id = s.project_id
         WHERE s.time_archived IS NULL
           AND s.parent_id IS NULL
@@ -100,7 +132,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       let processed = 0;
       let firstSessionId: string | null = null;
       for (const row of rows) {
-        const indexedSessionId = this.upsertSession(db, row);
+        const indexedSessionId = this.upsertSession(db, row, sessionTables);
         if (!indexedSessionId) {
           continue;
         }
@@ -121,10 +153,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     }
   }
 
-  private pruneChildSessions(db: Database.Database): void {
+  private pruneChildSessions(db: Database.Database, sessionSource: string): void {
     const childSessions = db.prepare(`
       SELECT id
-      FROM session
+      FROM ${sessionSource}
       WHERE parent_id IS NOT NULL
     `).all() as OpenCodeChildSessionRow[];
 
@@ -133,7 +165,11 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     }
   }
 
-  private upsertSession(db: Database.Database, row: OpenCodeSessionRow): string | null {
+  private upsertSession(
+    db: Database.Database,
+    row: OpenCodeSessionRow,
+    sessionTables: OpenCodeSessionTable[],
+  ): string | null {
     const sessionId = readOptionalString(row.id);
     const projectPath = readOptionalString(row.directory) ?? readOptionalString(row.worktree);
     if (!sessionId || !projectPath) {
@@ -162,7 +198,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     if (existingName && existingName !== fallbackTitle) {
       nextName = existingName;
     } else {
-      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId, sessionTables);
     }
 
     // OpenCode stores every session in one shared sqlite database, so jsonl_path
@@ -180,8 +216,41 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     );
   }
 
-  private readFirstUserText(db: Database.Database, sessionId: string): string | undefined {
+  /**
+   * The first prompt of a session, from its live copy's messages, or from the
+   * other table's when the live copy has none yet (2.x stores a session
+   * before its prompt).
+   */
+  private readFirstUserText(
+    db: Database.Database,
+    sessionId: string,
+    sessionTables: OpenCodeSessionTable[],
+  ): string | undefined {
+    const liveTable = readOpenCodeLiveSessionTable(db, sessionId) ?? 'session';
+    const otherTable = sessionTables.find((table) => table !== liveTable);
+    return this.readFirstUserTextFrom(db, sessionId, liveTable)
+      ?? (otherTable ? this.readFirstUserTextFrom(db, sessionId, otherTable) : undefined);
+  }
+
+  private readFirstUserTextFrom(
+    db: Database.Database,
+    sessionId: string,
+    sessionTable: OpenCodeSessionTable,
+  ): string | undefined {
     try {
+      if (sessionTable === 'session_v2') {
+        // A 2.x user message keeps its prompt in `data.text`. It is decoded
+        // like a 1.x one below: migrated 1.x prompts keep their JSON quotes.
+        const text = readOptionalString(db.prepare(`
+          SELECT json_extract(data, '$.text')
+          FROM session_message
+          WHERE session_id = ? AND type = 'user'
+          ORDER BY seq
+          LIMIT 1
+        `).pluck().get(sessionId));
+        return text === undefined ? undefined : unwrapJsonStringLiteral(text);
+      }
+
       const row = db.prepare(`
         SELECT p.data AS data
         FROM message m

@@ -15,6 +15,9 @@ import {
   buildDefaultProviderCurrentActiveModel,
   getOpenCodeDatabasePath,
   readObjectRecord,
+  readOpenCodeCli,
+  readOpenCodeLiveSessionTable,
+  readOpenCodeSessionTables,
   readOptionalString,
 } from '@/shared/utils.js';
 
@@ -322,7 +325,11 @@ const OPENCODE_MODEL_REFERENCE_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9
  * output is deliberately treated as untrusted: only standalone,
  * fully-qualified `<provider>/<model>` lines are accepted.
  */
-const readInstalledOpenCodeModels = async (): Promise<string[]> => new Promise((resolve) => {
+const readInstalledOpenCodeModels = async (
+  args = ['models'],
+  timeoutMs = OPENCODE_MODELS_TIMEOUT_MS,
+  command = 'opencode',
+): Promise<string[]> => new Promise((resolve) => {
   let settled = false;
   let output = '';
   let timeout: NodeJS.Timeout | undefined;
@@ -337,7 +344,7 @@ const readInstalledOpenCodeModels = async (): Promise<string[]> => new Promise((
     }
     resolve([...models]);
   };
-  const child = spawn('opencode', ['models'], {
+  const child = spawn(command, args, {
     stdio: ['ignore', 'pipe', 'ignore'],
     shell: false,
   });
@@ -347,7 +354,7 @@ const readInstalledOpenCodeModels = async (): Promise<string[]> => new Promise((
     models.clear();
     child.kill();
     finish();
-  }, OPENCODE_MODELS_TIMEOUT_MS);
+  }, timeoutMs);
 
   child.stdout?.on('data', (chunk: Buffer) => {
     output += chunk.toString();
@@ -371,6 +378,27 @@ const readInstalledOpenCodeModels = async (): Promise<string[]> => new Promise((
   });
 });
 
+/**
+ * How long a 2.x listing may take. It boots a private server, and the first
+ * one after an install or upgrade also creates or migrates OpenCode's
+ * database: 5.4-5.6 s in CloudCLI (2.1.4 to 2.2.5), past the 1.x budget.
+ */
+const OPENCODE_V2_MODELS_TIMEOUT_MS = 20_000;
+
+/**
+ * Lists models with the installed CLI. OpenCode 2.x runs every command
+ * through a shared background service that it starts when none is running
+ * and that outlives the command; `--standalone` gives the listing a private
+ * server that ends with it, and the listing runs the file whose version was
+ * read. 1.x has no such service and rejects the flag.
+ */
+const readModelsWithInstalledOpenCode = async (): Promise<string[]> => {
+  const cli = await readOpenCodeCli();
+  return cli && cli.majorVersion !== null && cli.majorVersion >= 2
+    ? readInstalledOpenCodeModels(['models', '--standalone'], OPENCODE_V2_MODELS_TIMEOUT_MS, cli.executablePath)
+    : readInstalledOpenCodeModels(['models']);
+};
+
 const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, unknown> | null> => {
   try {
     return readObjectRecord(JSON.parse(await readFile(filePath, 'utf8')));
@@ -393,7 +421,8 @@ const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, un
  *
  * Custom config passed through `OPENCODE_CONFIG` (a file path) or
  * `OPENCODE_CONFIG_CONTENT` (inline JSON) is read too, so providers declared
- * there are not filtered out of the CLI listing.
+ * there are not filtered out of the CLI listing. The logins OpenCode 2.x keeps
+ * in its database are added by the caller (see `readOpenCodeV2ModelLoginIds`).
  *
  * Returns null when nothing can be read. Providers declared only in a
  * project-level `opencode.json` are not visible here, so callers retain the
@@ -444,6 +473,70 @@ const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> =
   }
 
   return providerIds.size > 0 ? providerIds : null;
+};
+
+/**
+ * The integrations OpenCode has a login for in `opencode.db`: the
+ * `integration_id` of each row of its `credential` table, never the stored
+ * secret. OpenCode 2.x keeps its logins there (it imports `auth.json` once,
+ * when it migrates a 1.x database, and a fresh 2.x install never writes
+ * `auth.json`); 1.x databases have the same table, empty. 2.x reads a row
+ * without an integration as no login at all. Empty when the database or the
+ * table is missing or cannot be read.
+ */
+const readOpenCodeCredentialIntegrationIds = (): string[] => {
+  let db: Database.Database | null = null;
+  try {
+    db = new Database(getOpenCodeDatabasePath(), { readonly: true, fileMustExist: true });
+    const hasCredentialTable = db.prepare(`
+      SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'credential'
+    `).get() !== undefined;
+    if (!hasCredentialTable) {
+      return [];
+    }
+    return db.prepare(`
+      SELECT DISTINCT integration_id FROM credential
+      WHERE integration_id IS NOT NULL AND integration_id <> ''
+      ORDER BY integration_id
+    `).pluck().all() as string[];
+  } catch {
+    return [];
+  } finally {
+    db?.close();
+  }
+};
+
+/**
+ * The model providers OpenCode 2.x has a login for in its database (see
+ * `readOpenCodeCredentialIntegrationIds`), in the order of their ids.
+ *
+ * Not every integration is a model provider: 2.x keeps web search keys (exa,
+ * parallel, tavily, firecrawl, tinyfish) and MCP OAuth tokens in the same
+ * table. So a login counts only for a provider the picker offers models of:
+ * one of the CLI listing `readModelReferences` gives, or, when that is empty,
+ * one of the curated catalog, which then stands in for it. The listing is
+ * only read when there is a login to check.
+ *
+ * None unless the installed CLI is 2.x: 1.x reads its logins from
+ * `auth.json`, and a row a 2.x trial left behind is no 1.x login.
+ */
+const readOpenCodeV2ModelLoginIds = async (readModelReferences: () => Promise<string[]>): Promise<string[]> => {
+  const integrationIds = readOpenCodeCredentialIntegrationIds();
+  if (integrationIds.length === 0) {
+    return [];
+  }
+
+  const majorVersion = (await readOpenCodeCli().catch(() => null))?.majorVersion ?? null;
+  if (majorVersion === null || majorVersion < 2) {
+    return [];
+  }
+
+  const modelReferences = await readModelReferences();
+  const offeredModels = modelReferences.length > 0
+    ? modelReferences
+    : OPENCODE_PREDEFINED_MODELS.OPTIONS.map((option) => option.value);
+  const offeredProviderIds = new Set(offeredModels.map((model) => model.split('/')[0]));
+  return integrationIds.filter((integrationId) => offeredProviderIds.has(integrationId));
 };
 
 /**
@@ -553,7 +646,7 @@ export class OpenCodeProviderModels implements IProviderModels {
 
   /** Used by the provider registry and focused adapter tests to read local OpenCode models. */
   constructor(
-    private readonly readModels = readInstalledOpenCodeModels,
+    private readonly readModels: () => Promise<string[]> = readModelsWithInstalledOpenCode,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -590,11 +683,25 @@ export class OpenCodeProviderModels implements IProviderModels {
     return this.cachedModelReferences.references;
   }
 
+  /**
+   * The model providers OpenCode 2.x has a login for in its database, judged
+   * against this picker's listing (see `readOpenCodeV2ModelLoginIds`). Used by
+   * the OpenCode auth provider, so the login status counts the logins the
+   * picker counts.
+   */
+  async readModelLoginProviderIds(): Promise<string[]> {
+    return readOpenCodeV2ModelLoginIds(() => this.readModelReferences());
+  }
+
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    const [connectedProviderIds, modelReferences] = await Promise.all([
+    const [configuredProviderIds, modelReferences] = await Promise.all([
       readConnectedOpenCodeProviderIds(),
       this.readModelReferences(),
     ]);
+    const loginProviderIds = await readOpenCodeV2ModelLoginIds(async () => modelReferences);
+    const connectedProviderIds = loginProviderIds.length > 0
+      ? new Set([...(configuredProviderIds ?? []), ...loginProviderIds])
+      : configuredProviderIds;
     const discovered = createDiscoveredOpenCodeModels(modelReferences, connectedProviderIds);
     if (discovered) {
       return discovered;
@@ -621,6 +728,9 @@ export class OpenCodeProviderModels implements IProviderModels {
       const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 
       try {
+        // OpenCode 2.x keeps the session's model (same JSON) in `session_v2`;
+        // read the session's live copy.
+        const sessionTable = readOpenCodeLiveSessionTable(db, providerSessionId) ?? 'session';
         const row = db.prepare(`
           SELECT
             s.id AS sessionId,
@@ -629,7 +739,7 @@ export class OpenCodeProviderModels implements IProviderModels {
             s.directory AS directory,
             s.time_updated AS timeUpdated,
             s.time_created AS timeCreated
-          FROM session s
+          FROM ${sessionTable} s
           WHERE s.id = ?
           ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC
           LIMIT 1
@@ -647,6 +757,16 @@ export class OpenCodeProviderModels implements IProviderModels {
           return {
             model,
           };
+        }
+
+        // With both layouts, a live copy without a model leaves it to the
+        // other layout's row, as the session's first prompt is read.
+        const otherTable = readOpenCodeSessionTables(db).find((table) => table !== sessionTable);
+        const otherModel = otherTable
+          ? parseOpenCodeSessionModelValue(db.prepare(`SELECT model FROM ${otherTable} WHERE id = ?`).pluck().get(providerSessionId))
+          : null;
+        if (otherModel) {
+          return { model: otherModel };
         }
       } finally {
         db.close();

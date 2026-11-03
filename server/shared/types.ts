@@ -943,6 +943,35 @@ export type CliVersionProbe = {
   version: string | null;
 };
 
+/**
+ * The `opencode` CLI on PATH, as `readOpenCodeCli` in the shared utils found
+ * it: the absolute path of the file a spawn of the bare command runs, and the
+ * major version that file printed for `--version` (null when it did not say).
+ *
+ * The OpenCode runtime and models provider pick the 2.x code path by
+ * `majorVersion` and then spawn `executablePath`, so the CLI they run is the
+ * one whose version they read.
+ */
+export type OpenCodeCli = {
+  executablePath: string;
+  majorVersion: number | null;
+};
+
+// ---------------------------
+//----------------- OPENCODE STORAGE TYPES ------------
+/**
+ * The table of OpenCode's shared `opencode.db` that lists its sessions:
+ * `session` for OpenCode 1.x (messages in `message` and `part`) or
+ * `session_v2` for 2.x (messages in `session_message` and `session_part`).
+ *
+ * Returned by `readOpenCodeSessionTables`, `readOpenCodeLiveSessionTable` and
+ * `readOpenCodeHistorySessionTable` in the shared utils. The OpenCode provider's session synchronizer, sessions
+ * provider, models provider and runtime and the token usage service pass it
+ * to the queries that read sessions and token totals, so each reads the
+ * layout that holds the session.
+ */
+export type OpenCodeSessionTable = 'session' | 'session_v2';
+
 // ---------------------------
 //----------------- SHARED DATABASE CREDENTIAL TYPES ------------
 /**

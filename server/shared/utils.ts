@@ -16,6 +16,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
+import type Database from 'better-sqlite3';
 import spawn from 'cross-spawn';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
@@ -26,6 +27,8 @@ import type {
   AppErrorOptions,
   CliVersionProbe,
   NormalizedMessage,
+  OpenCodeCli,
+  OpenCodeSessionTable,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderSkillSource,
@@ -1075,6 +1078,103 @@ export function unwrapJsonStringLiteral(value: string): string {
   }
 }
 
+/**
+ * The session tables `opencode.db` has, 1.x first: `session` (OpenCode 1.x),
+ * `session_v2` (2.x), both, or none.
+ *
+ * OpenCode 2.x migrates a 1.x database in place, in batches over several runs
+ * (each session keeps its `time_updated`), and leaves the 1.x tables behind.
+ * A 1.x CLI run against that database afterwards still writes only the 1.x
+ * tables, and 2.x does not import what it wrote, so with both tables a
+ * session can be in either or both (see `readOpenCodeLiveSessionTable`).
+ *
+ * Used by the OpenCode session synchronizer, which lists the sessions of
+ * every table there is, the OpenCode sessions provider, which reads a
+ * subagent's timeline from the other table when the child's live copy has
+ * none, `readOpenCodeHistorySessionTable`, which does the same for a
+ * session's history, and the OpenCode models provider, which reads a
+ * session's model from there when the live copy names none.
+ */
+export function readOpenCodeSessionTables(db: Database.Database): OpenCodeSessionTable[] {
+  const tables = new Set(db.prepare(`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('session', 'session_v2')
+  `).pluck().all() as string[]);
+  return (['session', 'session_v2'] as const).filter((table) => tables.has(table));
+}
+
+/**
+ * The table holding the live copy of one OpenCode session: the only session
+ * table there is, or, when `opencode.db` has both (see
+ * `readOpenCodeSessionTables`), the one whose row for the session was updated
+ * last. A tie goes to `session_v2`, since 2.x copies a session with its
+ * timestamps when it migrates it; a session in neither table reads as
+ * `session_v2`. Null when the database has no session table.
+ *
+ * A database with one table costs no lookup of the session. Used by the
+ * OpenCode session synchronizer, sessions provider and models provider,
+ * which read a session's first prompt, a subagent's timeline and a session's
+ * model from that copy, and by `readOpenCodeHistorySessionTable`.
+ */
+export function readOpenCodeLiveSessionTable(db: Database.Database, sessionId: string): OpenCodeSessionTable | null {
+  const tables = readOpenCodeSessionTables(db);
+  if (tables.length < 2) {
+    return tables[0] ?? null;
+  }
+
+  const readUpdatedAt = (table: OpenCodeSessionTable): number | null => {
+    const value = db.prepare(`
+      SELECT COALESCE(time_updated, time_created, 0) FROM ${table} WHERE id = ?
+    `).pluck().get(sessionId);
+    return value === undefined ? null : Number(value);
+  };
+  const v1UpdatedAt = readUpdatedAt('session');
+  const v2UpdatedAt = readUpdatedAt('session_v2');
+  return v1UpdatedAt !== null && (v2UpdatedAt === null || v1UpdatedAt > v2UpdatedAt) ? 'session' : 'session_v2';
+}
+
+/**
+ * The table whose layout holds one OpenCode session's messages: the table of
+ * its live copy (see `readOpenCodeLiveSessionTable`), or the other one when
+ * `opencode.db` has both layouts and only the other copy has messages
+ * (`message` for 1.x, `session_message` for 2.x). Null when the database has
+ * no session table.
+ *
+ * Used by the OpenCode sessions provider, which reads a session's history
+ * from that layout, and by the providers module's token usage service, which
+ * reads that table's token totals, so the totals a chat shows belong to the
+ * messages it shows.
+ */
+export function readOpenCodeHistorySessionTable(db: Database.Database, sessionId: string): OpenCodeSessionTable | null {
+  const liveTable = readOpenCodeLiveSessionTable(db, sessionId);
+  const otherTable = readOpenCodeSessionTables(db).find((table) => table !== liveTable);
+  if (!liveTable || !otherTable) {
+    return liveTable;
+  }
+
+  const hasMessages = (table: OpenCodeSessionTable): boolean => {
+    const messageTable = table === 'session' ? 'message' : 'session_message';
+    const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(messageTable) !== undefined;
+    return exists && db.prepare(`SELECT 1 FROM ${messageTable} WHERE session_id = ? LIMIT 1`).get(sessionId) !== undefined;
+  };
+  return hasMessages(liveTable) || !hasMessages(otherTable) ? liveTable : otherTable;
+}
+
+/**
+ * The id OpenCode 2.x gives a part of a stored assistant message, built from
+ * the message id and a suffix: `text-<n>` and `reasoning-<n>` (numbered per
+ * message and kind, in order), `step-finish`. `opencode run` prints this id
+ * for the parts it reads back from storage; the parts it streams carry fresh
+ * ids instead.
+ *
+ * Used by the OpenCode sessions provider, which ids the history rows of a
+ * 2.x session with it, and the OpenCode runtime, which gives a 2.x turn's
+ * live text the same id, so the chat replaces the live row with the stored
+ * one instead of showing both.
+ */
+export function toOpenCodeV2PartId(messageId: string, suffix: string): string {
+  return `prt_${messageId.replace(/^msg_/, '')}_${suffix}`;
+}
+
 // ---------------------------
 //----------------- JSONC UTILITIES ------------
 /**
@@ -1450,7 +1550,8 @@ export const terminalTextStyles = {
  * Pulls the version number out of what a CLI prints for `--version`.
  *
  * Each provider CLI wraps it differently: `2.1.295 (Claude Code)`,
- * `codex-cli 0.156.1`, a bare `1.18.25` from OpenCode, and the date-based
+ * `codex-cli 0.156.1`, a bare `1.18.25` from OpenCode 1.x (`opencode v2.2.3`
+ * from 2.x), and the date-based
  * `2026.07.20-8cc9c0b` from cursor-agent. This returns the first
  * `major.minor.patch` token with any `-prerelease` or `+build` suffix, or null
  * when the text has none.
@@ -1493,6 +1594,195 @@ export function probeCliVersion(command: string, args: string[] = ['--version'])
     exitCode: result.status,
     version: result.status === 0 ? parseCliVersion(String(result.stdout ?? '')) : null,
   };
+}
+
+/** How long an `opencode --version` answer is trusted while the executable stays unchanged. */
+const OPENCODE_CLI_VERSION_TTL_MS = 5 * 60_000;
+/** An OpenCode that could not be asked (failing, too slow) is asked again sooner. */
+const OPENCODE_CLI_VERSION_RETRY_MS = 30_000;
+/**
+ * How long `opencode --version` may take for an executable file that has not
+ * answered yet. The first run of a just installed or upgraded binary (252 MB
+ * for 2.2.3) can take seconds, more while a virus scanner reads it.
+ */
+const OPENCODE_CLI_VERSION_TIMEOUT_MS = 20_000;
+/**
+ * How long a file that has answered gets when it is asked again. Its answer
+ * stands when it runs out of time, so a `--version` that starts hanging
+ * holds a turn up for 5 s at most.
+ */
+const OPENCODE_CLI_VERSION_RECHECK_TIMEOUT_MS = 5_000;
+/** How long a `--version` that ran out of time gets to exit after SIGTERM before it gets SIGKILL. */
+const OPENCODE_CLI_VERSION_KILL_GRACE_MS = 1_000;
+/** How many characters of `--version` output are kept: far more than its version line, never a flood. */
+const OPENCODE_CLI_VERSION_OUTPUT_LIMIT = 64 * 1024;
+
+type OpenCodeCliVersionEntry = {
+  /** Identifies the executable file the answer came from (see `findOpenCodeExecutable`). */
+  fingerprint: string;
+  expiresAt: number;
+  major: Promise<number | null>;
+  /** The major this file printed last, null until it has; kept while it is asked again. */
+  answeredMajor: number | null;
+};
+
+const openCodeCliMajorVersions = new Map<string, OpenCodeCliVersionEntry>();
+
+/**
+ * The `opencode` a spawn of the bare command runs: the first match on PATH,
+ * by PATHEXT on Windows, where a quoted PATH entry names the folder inside
+ * the quotes (as cross-spawn reads it). The path is absolute: a relative PATH
+ * entry is resolved against CloudCLI's directory, as a spawn without a cwd
+ * resolves it. The fingerprint changes whenever the file is replaced, also
+ * when it keeps its mtime (release tarballs date it 1970-01-01): it holds the
+ * size and inode too.
+ */
+function findOpenCodeExecutable(): { filePath: string; fingerprint: string } | null {
+  const isWindows = process.platform === 'win32';
+  const extensions = isWindows
+    ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
+    : [''];
+  for (const entry of (process.env.PATH || '').split(path.delimiter)) {
+    const directory = isWindows ? entry.replace(/^"(.*)"$/, '$1') : entry;
+    if (!directory) {
+      continue;
+    }
+    for (const extension of extensions) {
+      const filePath = path.resolve(directory, `opencode${extension}`);
+      try {
+        const stats = fs.statSync(filePath);
+        if (stats.isFile() && (isWindows || (stats.mode & 0o111) !== 0)) {
+          return { filePath, fingerprint: `${stats.mtimeMs}:${stats.size}:${stats.ino}` };
+        }
+      } catch {
+        // Not in this directory.
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The major version `opencode --version` prints in its first 64 KiB of
+ * output, null when it did not say, and whether it ran out of time. Out of
+ * time, it answers at once and the process gets SIGTERM, then SIGKILL 1 s
+ * later if it is still running.
+ */
+function probeOpenCodeMajorVersion(
+  filePath: string,
+  timeoutMs: number,
+): Promise<{ major: number | null; timedOut: boolean }> {
+  return new Promise((resolve) => {
+    let output = '';
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
+    const finish = (major: number | null, timedOut = false) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve({ major, timedOut });
+      }
+    };
+
+    const child = spawn(filePath, ['--version'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    timer = setTimeout(() => {
+      child.kill();
+      // One that ignores SIGTERM would keep running beside the next try.
+      killTimer = setTimeout(() => child.kill('SIGKILL'), OPENCODE_CLI_VERSION_KILL_GRACE_MS);
+      finish(null, true);
+    }, timeoutMs);
+    child.stdout?.on('data', (chunk: Buffer) => {
+      // Nothing is read once the probe has answered.
+      if (!settled && output.length < OPENCODE_CLI_VERSION_OUTPUT_LIMIT) {
+        output = (output + chunk.toString()).slice(0, OPENCODE_CLI_VERSION_OUTPUT_LIMIT);
+      }
+    });
+    child.on('error', () => {
+      clearTimeout(killTimer);
+      finish(null);
+    });
+    child.on('close', (code) => {
+      clearTimeout(killTimer);
+      // `opencode v2.2.3` from 2.x, a bare `1.18.25` from 1.x; `0.0.0-…` snapshots read as 0.
+      const version = code === 0 ? parseCliVersion(output) : null;
+      finish(version ? Number.parseInt(version, 10) : null);
+    });
+  });
+}
+
+/**
+ * Asks a file for its major version: within the short budget when it has
+ * answered before (`answeredMajor`), otherwise within the long one, and then
+ * once more when that runs out, since the slow first run of a new binary has
+ * read it in by then. Never more than twice.
+ */
+async function askOpenCodeMajorVersion(
+  filePath: string,
+  answeredMajor: number | null,
+): Promise<{ major: number | null; timedOut: boolean }> {
+  if (answeredMajor !== null) {
+    return probeOpenCodeMajorVersion(filePath, OPENCODE_CLI_VERSION_RECHECK_TIMEOUT_MS);
+  }
+
+  const first = await probeOpenCodeMajorVersion(filePath, OPENCODE_CLI_VERSION_TIMEOUT_MS);
+  return first.timedOut ? probeOpenCodeMajorVersion(filePath, OPENCODE_CLI_VERSION_TIMEOUT_MS) : first;
+}
+
+/**
+ * The `opencode` CLI on PATH (see `OpenCodeCli`), or null when there is none.
+ * A null `majorVersion` means it did not answer `--version`; callers then
+ * keep their OpenCode 1.x behaviour.
+ *
+ * OpenCode 2.x changed its CLI flags, its server API and its storage, so the
+ * OpenCode provider picks its code path by this. The answer is cached per
+ * executable for a few minutes and asked again as soon as the file changes,
+ * which an upgrade does; a failed answer is retried sooner. A file asked
+ * again after it answered gets 5 s and keeps its last answer when it runs out
+ * of time, until that retry. A file that has not answered, a replaced one
+ * included, gets 20 s and a second try: read as unknown, a 2.x install would
+ * run its turns through the SDK, which cannot drive it. Concurrent callers
+ * share one read; `--version` never starts OpenCode 2.x's background service.
+ *
+ * Used by the OpenCode runtime (a 2.x chat turn runs `opencode run` with
+ * `executablePath`) and the OpenCode models provider (2.x lists models with
+ * `--standalone` from `executablePath`, and its logins count only for a 2.x
+ * CLI).
+ */
+export function readOpenCodeCli(): Promise<OpenCodeCli | null> {
+  const executable = findOpenCodeExecutable();
+  if (!executable) {
+    return Promise.resolve(null);
+  }
+
+  const toCli = (majorVersion: number | null): OpenCodeCli => ({ executablePath: executable.filePath, majorVersion });
+  const previous = openCodeCliMajorVersions.get(executable.filePath);
+  const isSameFile = previous !== undefined && previous.fingerprint === executable.fingerprint;
+  if (previous && isSameFile && previous.expiresAt > Date.now()) {
+    return previous.major.then(toCli);
+  }
+
+  // Only this very file's earlier answer counts: a replaced file is asked as a new one.
+  const answeredMajor = previous && isSameFile ? previous.answeredMajor : null;
+  const entry: OpenCodeCliVersionEntry = {
+    fingerprint: executable.fingerprint,
+    expiresAt: Date.now() + OPENCODE_CLI_VERSION_TTL_MS,
+    major: Promise.resolve(null),
+    answeredMajor,
+  };
+  entry.major = askOpenCodeMajorVersion(executable.filePath, answeredMajor).then(({ major, timedOut }) => {
+    if (major !== null) {
+      entry.answeredMajor = major;
+      return major;
+    }
+
+    entry.expiresAt = Math.min(entry.expiresAt, Date.now() + OPENCODE_CLI_VERSION_RETRY_MS);
+    // Out of time, a known file keeps its answer; an answer that is an error keeps none.
+    entry.answeredMajor = timedOut ? answeredMajor : null;
+    return entry.answeredMajor;
+  });
+  openCodeCliMajorVersions.set(executable.filePath, entry);
+  return entry.major.then(toCli);
 }
 
 // ---------------------------

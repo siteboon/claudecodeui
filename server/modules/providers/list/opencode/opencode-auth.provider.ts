@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { OpenCodeProviderModels } from '@/modules/providers/list/opencode/opencode-models.provider.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { CliVersionProbe, ProviderAuthStatus } from '@/shared/types.js';
 import { probeCliVersion, readObjectRecord, readOptionalString } from '@/shared/utils.js';
@@ -22,6 +23,14 @@ const OPENCODE_ENV_CREDENTIAL_KEYS = [
 ];
 
 export class OpenCodeProviderAuth implements IProviderAuth {
+  /**
+   * `models` is the OpenCode model picker: a login OpenCode 2.x keeps in its
+   * database counts only for a provider the picker offers models of (see
+   * `OpenCodeProviderModels.readModelLoginProviderIds`). The OpenCode provider
+   * passes its own picker, so both read one listing.
+   */
+  constructor(private readonly models: OpenCodeProviderModels = new OpenCodeProviderModels()) {}
+
   /**
    * Checks whether the OpenCode CLI is available to the server process, and
    * which version it is. Unlike the other CLIs it has always needed a clean
@@ -51,9 +60,11 @@ export class OpenCodeProviderAuth implements IProviderAuth {
   }
 
   /**
-   * Reads OpenCode's auth store or falls back to provider API key environment variables.
+   * Reads OpenCode's auth store (`auth.json`, and the logins OpenCode 2.x keeps
+   * in its database) or falls back to provider API key environment variables.
    */
   private async checkCredentials(): Promise<OpenCodeCredentialsStatus> {
+    let authFileFailure: OpenCodeCredentialsStatus | null = null;
     try {
       const authPath = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
       const content = await readFile(authPath, 'utf8');
@@ -79,13 +90,26 @@ export class OpenCodeProviderAuth implements IProviderAuth {
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== 'ENOENT') {
-        return {
+        authFileFailure = {
           authenticated: false,
           email: null,
           method: null,
           error: error instanceof Error ? error.message : 'Failed to read OpenCode auth',
         };
       }
+    }
+
+    // OpenCode 2.x keeps its logins in its database, and reads `auth.json` only once.
+    const [databaseProviderId] = await this.models.readModelLoginProviderIds();
+    if (databaseProviderId) {
+      return {
+        authenticated: true,
+        email: `${databaseProviderId} credentials`,
+        method: 'credentials_db',
+      };
+    }
+    if (authFileFailure) {
+      return authFileFailure;
     }
 
     const envCredential = OPENCODE_ENV_CREDENTIAL_KEYS.find((key) => process.env[key]?.trim());
