@@ -486,6 +486,63 @@ test('what a process `run` left behind prints after the run ended is not part of
   assert.equal(turn.frames.some((frame) => frame.content === 'Printed after the run.'), false);
 });
 
+test('a line of `run` output over 64 MiB is skipped with one notice, and a tool output of several MiB still shows', async () => {
+  setInstalledVersion('opencode v2.2.3');
+  // A shell call whose output is `chars` long, printed before the replayed turn.
+  const withLongOutput = (chars: number, pauseMs = 0) => ({
+    scenario: {
+      longLine: {
+        chars,
+        pauseMs,
+        line: {
+          ...toolTurn[1],
+          part: { ...toolTurn[1].part, partID: 'prt_1a2419999003LongLongLongLo', id: 'call_long_output', state: { ...toolTurn[1].part.state, output: '__LONG__' } },
+        },
+      },
+      lines: toolTurn,
+    },
+  });
+  const outputLengths = (frames: Frame[]) => frames
+    .filter((frame) => frame.kind === 'tool_use')
+    .map((frame) => String(frame.toolResult?.content ?? '').length);
+  const shortOutput = 'hello-from-fake-tool\n'.length;
+
+  const large = await runTurn(withLongOutput(8 * 1024 * 1024));
+  assert.equal(large.error, null);
+  assert.deepEqual(outputLengths(large.frames), [8 * 1024 * 1024, shortOutput]);
+  assert.equal(large.frames.some((frame) => frame.kind === 'error'), false);
+
+  // Past the limit: dropped while it still grows (the notice comes before the line ends), one
+  // notice, and the rest of the turn shows and completes.
+  const frameTimes = new Map<Frame, number>();
+  const huge = await runTurn({
+    ...withLongOutput(64 * 1024 * 1024, 1_500),
+    onFrame: (frame) => frameTimes.set(frame, Date.now()),
+  });
+  const notice = huge.frames.find((frame) => frame.kind === 'error');
+  const firstAfterLine = huge.frames.find((frame) => frame.kind === 'tool_use');
+  assert.ok(notice && firstAfterLine);
+  assert.ok((frameTimes.get(firstAfterLine) ?? 0) - (frameTimes.get(notice) ?? 0) >= 1_000);
+  assert.equal(huge.error, null);
+  assert.deepEqual(outputLengths(huge.frames), [shortOutput]);
+  assert.deepEqual(
+    huge.frames.filter((frame) => frame.kind === 'error').map((frame) => frame.content),
+    ['Part of OpenCode\'s output was longer than 64 MiB and is not shown.'],
+  );
+  assert.equal(huge.frames.at(-1)?.kind, 'complete');
+  assert.equal(huge.frames.at(-1)?.exitCode, 0);
+
+  // A line that only its end, after a pause, takes past the limit is skipped too.
+  const lineLimit = 64 * 1024 * 1024;
+  const crossing = withLongOutput(0, 300);
+  const headLength = JSON.stringify(crossing.scenario.longLine.line).indexOf('"__LONG__"') + 1;
+  crossing.scenario.longLine.chars = lineLimit - headLength - 10;
+  const crossed = await runTurn(crossing);
+  assert.equal(crossed.error, null);
+  assert.deepEqual(outputLengths(crossed.frames), [shortOutput]);
+  assert.equal(crossed.frames.filter((frame) => frame.kind === 'error').length, 1);
+});
+
 test('a run that fails without an error line shows what it printed', async () => {
   setInstalledVersion('opencode v2.2.3');
   const refused = await runTurn({

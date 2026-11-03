@@ -25,6 +25,13 @@ type Scenario = {
   versionDelayMs?: number;
   /** Events printed on stdout, one JSON line each. */
   lines?: unknown[];
+  /**
+   * Printed before `lines`: this event, with the JSON string `"__LONG__"` in
+   * it replaced by one of `chars` characters ('x' repeated), written 1 MiB at
+   * a time, as `run` prints a long tool output; the line ends `pauseMs` after
+   * the last of them.
+   */
+  longLine?: { chars: number; line: unknown; pauseMs?: number };
   /** Raw text printed on stdout after the lines. */
   stdout?: string;
   /**
@@ -167,6 +174,16 @@ if (args[0] === '--version') {
       });
     }
 
+    if (scenario.longLine) {
+      const [head, tail] = JSON.stringify(scenario.longLine.line).split('"__LONG__"');
+      const block = 'x'.repeat(1024 * 1024);
+      process.stdout.write(`${head}"`);
+      for (let left = scenario.longLine.chars; left > 0; left -= block.length) {
+        process.stdout.write(left >= block.length ? block : block.slice(0, left));
+      }
+      await new Promise((resolve) => setTimeout(resolve, scenario.longLine?.pauseMs ?? 0));
+      process.stdout.write(`"${tail}\n`);
+    }
     for (const line of scenario.lines ?? []) {
       process.stdout.write(`${JSON.stringify(line)}\n`);
     }

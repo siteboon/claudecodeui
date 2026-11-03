@@ -1485,6 +1485,17 @@ const RUN_KILL_GRACE_MS = 2_000;
 const RUN_DIAGNOSTICS_LIMIT = 2_000;
 
 /**
+ * The longest line of `opencode run` output that is read, in characters
+ * (64 MiB of ASCII). Each event is one line, so a tool output of several MiB
+ * is one long line; a line past this is skipped as it arrives instead of
+ * being held in memory until its end.
+ */
+const RUN_LINE_LIMIT = 64 * 1024 * 1024;
+
+/** What the chat shows, once per turn, when a line was skipped (see `RUN_LINE_LIMIT`). */
+const RUN_LINE_SKIPPED_MESSAGE = 'Part of OpenCode\'s output was longer than 64 MiB and is not shown.';
+
+/**
  * One OpenCode 2.x turn, keyed in `activeV2Turns` by the session it runs for.
  * While the installed CLI's version is read, a placeholder without a process
  * stands in for the turn, so a stop can already reach it.
@@ -1885,13 +1896,45 @@ async function runOpenCodeV2Turn(
     child.stdin?.on('error', () => {});
     child.stdin?.end(promptWithAttachments);
 
+    // Only the new chunk is searched for line ends, and a line past
+    // RUN_LINE_LIMIT is dropped, while it grows or once it ends: one notice,
+    // and the turn goes on.
     let stdoutBuffer = '';
+    let skippingLine = false;
+    let skippedLineReported = false;
+    const skipLine = () => {
+      stdoutBuffer = '';
+      skippingLine = true;
+      console.warn(`[OpenCode] Skipped a line of opencode run output longer than ${RUN_LINE_LIMIT} characters.`);
+      if (!skippedLineReported && !turn.aborted && !processEnded) {
+        skippedLineReported = true;
+        // Shown, but not the turn's failure: the rest of the turn is fine.
+        send(createNormalizedMessage({ kind: 'error', content: RUN_LINE_SKIPPED_MESSAGE, sessionId: turnSessionId(), provider: PROVIDER }));
+      }
+    };
+    const takeLine = (line: string) => {
+      if (!skippingLine && line.length > RUN_LINE_LIMIT) {
+        skipLine();
+      }
+      if (!skippingLine) {
+        handleLineSafely(line.endsWith('\r') ? line.slice(0, -1) : line);
+      }
+      stdoutBuffer = '';
+      skippingLine = false;
+    };
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
-      stdoutBuffer += chunk;
-      const lines = stdoutBuffer.split(/\r?\n/);
-      stdoutBuffer = lines.pop() ?? '';
-      lines.forEach(handleLineSafely);
+      let lineStart = 0;
+      for (let lineEnd = chunk.indexOf('\n'); lineEnd !== -1; lineEnd = chunk.indexOf('\n', lineStart)) {
+        takeLine(stdoutBuffer + chunk.slice(lineStart, lineEnd));
+        lineStart = lineEnd + 1;
+      }
+      if (!skippingLine) {
+        stdoutBuffer += chunk.slice(lineStart);
+        if (stdoutBuffer.length > RUN_LINE_LIMIT) {
+          skipLine();
+        }
+      }
     });
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', (chunk: string) => keepDiagnostics(chunk));
@@ -1909,7 +1952,7 @@ async function runOpenCodeV2Turn(
         exitTimer = setTimeout(() => settle({ code, signal, error: null }), RUN_KILL_GRACE_MS);
       });
     });
-    handleLineSafely(stdoutBuffer);
+    takeLine(stdoutBuffer);
     // Whatever a process left behind still writes is not part of the turn.
     processEnded = true;
     if (turn.aborted) {
