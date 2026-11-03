@@ -640,9 +640,12 @@ function resolveWindowsConptyOptions(
 }
 
 /**
- * Spawns the shell, retrying with Windows' own ConPTY when the bundled one
- * cannot start (a conpty.dll blocked by policy or quarantined by antivirus must
- * not take the Shell tab down).
+ * Spawns the shell. node-pty throws right away when the bundled ConPTY cannot be
+ * loaded or launched (a conpty.dll or OpenConsole.exe blocked by policy or
+ * antivirus), and the shell is then retried on Windows' own ConPTY. Its errors
+ * name conpty; any other ("File not found: <shell>") would fail the same way
+ * there and is thrown as it is. A bundled host that starts and then dies is not
+ * caught here: CLOUDCLI_WINDOWS_USE_CONPTY_DLL=false avoids it.
  */
 function spawnShellPty(
   spawnPty: typeof pty.spawn,
@@ -657,7 +660,10 @@ function spawnShellPty(
     return spawnPty(file, args, options);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[WARN] Bundled ConPTY failed to start (${message}); using the Windows ConPTY instead`);
+    if (!/conpty/i.test(message)) {
+      throw error;
+    }
+    console.warn(`[WARN] Bundled ConPTY failed to start (${message}); retrying on the Windows ConPTY`);
     const { useConptyDll: _useConptyDll, conptyInheritCursor: _conptyInheritCursor, ...windowsConptyOptions } = options;
     return spawnPty(file, args, windowsConptyOptions);
   }

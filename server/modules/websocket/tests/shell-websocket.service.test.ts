@@ -1008,31 +1008,79 @@ test('without a nodePtyRoot the bundled ConPTY is looked up in the node-pty the 
   assert.deepEqual(hosts, ['bundled']);
 });
 
-test('a bundled ConPTY that cannot start falls back to the Windows ConPTY', (t) => {
+test('a bundled ConPTY that cannot start is retried on the Windows ConPTY with the same launch', (t) => {
   asWindows(t);
   const warn = t.mock.method(console, 'warn', () => undefined);
   withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
     addon(prebuildDir);
-    const attempts: string[] = [];
+    const attempts: Array<{ shell: string; args: string[]; options: Record<string, unknown> }> = [];
     const dependencies = {
       resolveProviderSessionId: () => null,
       nodePtyRoot,
-      spawnPty: (_shell: string, _args: string | string[], options?: SpawnOptions) => {
-        attempts.push(conptyHost(options ?? {}));
+      spawnPty: (shell: string, args: string | string[], options?: SpawnOptions) => {
+        attempts.push({ shell, args: Array.isArray(args) ? [...args] : [args], options: { ...options } });
         if (options?.useConptyDll) {
-          throw new Error('Failed to load conpty.dll');
+          throw new Error('Failed to load conpty.dll, error code: 5');
         }
         return createFakePty() as never;
       },
     };
 
-    const socket = launch(dependencies, plainShell, projectPath);
+    const socket = launch(dependencies, { ...plainShell, cols: 132, rows: 43 }, projectPath);
 
-    assert.deepEqual(attempts, ['bundled', 'windows']);
+    assert.equal(attempts.length, 2);
+    const { useConptyDll, conptyInheritCursor, ...launchOptions } = attempts[0].options;
+    assert.deepEqual([useConptyDll, conptyInheritCursor], [true, true]);
+    assert.deepEqual(attempts[1], { shell: attempts[0].shell, args: attempts[0].args, options: launchOptions });
+    assert.deepEqual([launchOptions.cwd, launchOptions.cols, launchOptions.rows], [projectPath, 132, 43]);
     assert.equal(warn.mock.callCount(), 1);
-    assert.match(String(warn.mock.calls[0].arguments[0]), /Bundled ConPTY failed to start \(Failed to load conpty\.dll\)/);
+    assert.match(
+      String(warn.mock.calls[0].arguments[0]),
+      /Bundled ConPTY failed to start \(Failed to load conpty\.dll, error code: 5\); retrying on the Windows ConPTY/
+    );
     const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
     assert.deepEqual(frames.map((frame) => frame.type), ['output']);
+  });
+});
+
+test('only a start failure of the bundled ConPTY is retried', (t) => {
+  const setWindows = asWindows(t);
+  const warn = t.mock.method(console, 'warn', () => undefined);
+  t.mock.method(console, 'error', () => undefined);
+  withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
+    addon(prebuildDir);
+    const attemptLaunch = (errors: string[]) => {
+      const hosts: string[] = [];
+      const dependencies = {
+        resolveProviderSessionId: () => null,
+        nodePtyRoot,
+        spawnPty: (_shell: string, _args: string | string[], options?: SpawnOptions) => {
+          hosts.push(conptyHost(options ?? {}));
+          const error = errors[hosts.length - 1];
+          if (error) {
+            throw new Error(error);
+          }
+          return createFakePty() as never;
+        },
+      };
+      const socket = launch(dependencies, plainShell, projectPath);
+      const outputs = socket.frames.map((frame) => String((JSON.parse(frame) as { data?: string }).data));
+      return { hosts, error: outputs.find((data) => data.includes('Error: ')) ?? null };
+    };
+
+    // node-pty checks the shell before it touches any ConPTY: no retry.
+    const missingShell = attemptLaunch(['File not found: powershell.exe']);
+    const bothHostsFail = attemptLaunch(['Cannot launch conpty', 'Cannot launch conpty']);
+    setWindows('10.0.26100');
+    const windowsHostFails = attemptLaunch(['Cannot launch conpty']);
+
+    assert.deepEqual(missingShell.hosts, ['bundled']);
+    assert.match(String(missingShell.error), /Error: File not found: powershell\.exe/);
+    assert.deepEqual(bothHostsFail.hosts, ['bundled', 'windows']);
+    assert.match(String(bothHostsFail.error), /Error: Cannot launch conpty/);
+    assert.deepEqual(windowsHostFails.hosts, ['windows']);
+    assert.match(String(windowsHostFails.error), /Error: Cannot launch conpty/);
+    assert.equal(warn.mock.callCount(), 1, 'only the bundled host failure is retried');
   });
 });
 
