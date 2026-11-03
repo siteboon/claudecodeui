@@ -11,21 +11,6 @@ import { WebSocket } from 'ws';
 
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
 
-// The Shell's own terminal emulator (src/modules/shell). Without open() it parses
-// output and answers terminal queries without a DOM, the way the browser does.
-// Typed here: xterm's own typings would pull the DOM lib into the server build.
-type XtermTerminal = {
-  buffer: {
-    active: { length: number; getLine: (row: number) => { translateToString: (trimRight: boolean) => string } | undefined };
-  };
-  dispose: () => void;
-  onData: (listener: (data: string) => void) => unknown;
-  write: (data: string, callback: () => void) => void;
-};
-const { Terminal } = createRequire(import.meta.url)('@xterm/xterm') as {
-  Terminal: new (options: Record<string, unknown>) => XtermTerminal;
-};
-
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
     readyState: number;
@@ -1124,6 +1109,21 @@ test('a node-pty without the expected Windows internals still starts the shell',
     assert.match(String(frames[0].data), /Starting terminal in/);
   }
 });
+
+// The Shell's own terminal emulator (src/modules/shell). Without open() it parses
+// output and answers terminal queries without a DOM, the way the browser does.
+// Typed here: xterm's own typings would pull the DOM lib into the server build.
+type XtermTerminal = {
+  buffer: {
+    active: { length: number; getLine: (row: number) => { translateToString: (trimRight: boolean) => string } | undefined };
+  };
+  dispose: () => void;
+  onData: (listener: (data: string) => void) => unknown;
+  write: (data: string, callback: () => void) => void;
+};
+const { Terminal } = createRequire(import.meta.url)('@xterm/xterm') as {
+  Terminal: new (options: Record<string, unknown>) => XtermTerminal;
+};
 
 // The Shell unmounts its terminal whenever its tab is left, so every return to
 // the tab, page reload or dropped socket replays the PTY's output into a fresh
