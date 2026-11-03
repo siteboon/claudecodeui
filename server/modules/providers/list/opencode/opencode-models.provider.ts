@@ -381,7 +381,8 @@ const readInstalledOpenCodeModels = async (args = ['models']): Promise<string[]>
  */
 const readModelsWithInstalledOpenCode = async (): Promise<string[]> => {
   const majorVersion = await readOpenCodeCliMajorVersion();
-  return readInstalledOpenCodeModels(majorVersion !== null && majorVersion >= 2 ? ['models', '--standalone'] : ['models']);
+  const isOpenCodeV2 = majorVersion !== null && majorVersion >= 2;
+  return readInstalledOpenCodeModels(isOpenCodeV2 ? ['models', '--standalone'] : ['models']);
 };
 
 const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, unknown> | null> => {
