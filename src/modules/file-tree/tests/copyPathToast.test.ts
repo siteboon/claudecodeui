@@ -14,15 +14,16 @@ import type { FileTreeNode } from '@/shared/types';
  * what really happened.
  */
 
-// Hands back the English default, so the assertions read like the toasts.
+// Hands back the key and the English default, so the assertions read like the toasts
+// and still pin the translation keys every locale provides.
 vi.mock('react-i18next', () => {
-  const t = (_key: string, defaultValue: string) => defaultValue;
+  const t = (key: string, defaultValue: string) => `[${key}] ${defaultValue}`;
   return { useTranslation: () => ({ t }) };
 });
 
 const FILE: FileTreeNode = { name: 'a.txt', type: 'file', path: '/repo/src/a.txt' };
-const COPIED_TOAST = ['Path copied to clipboard', 'success'];
-const FAILED_TOAST = ['Failed to copy path', 'error'];
+const COPIED_TOAST = ['[fileTree.toast.pathCopied] Path copied to clipboard', 'success'];
+const FAILED_TOAST = ['[fileTree.toast.copyFailed] Failed to copy path', 'error'];
 
 type ClipboardStub = { writeText: (text: string) => Promise<void> };
 
@@ -121,12 +122,21 @@ test('a working Clipboard API copies the path without the fallback', async () =>
 
 test('no toast shows while the Clipboard API has not answered yet', async () => {
   let rejectWrite: (reason: unknown) => void = () => {};
-  stubClipboardApi({ writeText: () => new Promise<void>((_resolve, reject) => { rejectWrite = reject; }) });
+  const writes: string[] = [];
+  stubClipboardApi({
+    writeText: (text) => {
+      writes.push(text);
+      return new Promise<void>((_resolve, reject) => { rejectWrite = reject; });
+    },
+  });
   const fallback = stubExecCommand(true);
   const { result, toasts } = renderOperations();
 
   await act(async () => {
     result.current.handleCopyPath(FILE);
+    // The write must start inside the click handler: browsers only allow clipboard
+    // writes while the click still counts as a user activation.
+    assert.deepEqual(writes, [FILE.path]);
     await settle();
   });
   assert.equal(toasts().length, 0);
