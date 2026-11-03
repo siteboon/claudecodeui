@@ -250,6 +250,10 @@ function resolveToolApproval(requestId: string, decision: ToolApprovalDecision) 
 // rule must not approve `git status && rm -rf ~`.
 const SHELL_CONTROL_PATTERN = /[;&|`<>\n\r]|\$\(/;
 
+function isScopedBashPermission(entry: string): boolean {
+  return /^Bash\(/.test(entry);
+}
+
 // Match stored permission entries against a tool + input combo.
 // This only supports exact tool names and the Bash(command:*) shorthand
 // used by the UI; it intentionally does not implement full glob semantics,
@@ -314,7 +318,17 @@ export function buildClaudeSdkEnv(hostEnv: NodeJS.ProcessEnv = process.env): Nod
   };
 }
 
-function mapCliOptionsToSDK(options: AnyRecord = {}) {
+/**
+ * Maps CloudCLI session and tool options into the Claude Agent SDK options object.
+ *
+ * Scoped `Bash(...)` permission entries are stripped from `sdkOptions.allowedTools`
+ * so the CLI does not pre-approve matching prefixes before `canUseTool` can
+ * reject chained or redirected commands.
+ *
+ * @param {AnyRecord} [options] - Runtime CLI options
+ * @returns {AnyRecord} Options object for the Claude Agent SDK
+ */
+export function mapCliOptionsToSDK(options: AnyRecord = {}) {
   const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch } = options;
 
   const sdkOptions: AnyRecord = {};
@@ -348,7 +362,9 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
     sdkOptions.permissionMode = 'bypassPermissions';
   }
 
-  let allowedTools = [...(settings.allowedTools || [])];
+  let allowedTools = (settings.allowedTools || []).filter(
+    (entry: string) => !isScopedBashPermission(entry),
+  );
 
   if (permissionMode === 'plan') {
     const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];
@@ -1153,6 +1169,11 @@ async function queryClaudeSDK(
       }]
     };
 
+    const allowedToolPermissions: string[] = Array.from(new Set([
+      ...(Array.isArray(options.toolsSettings?.allowedTools) ? options.toolsSettings.allowedTools : []),
+      ...(Array.isArray(sdkOptions.allowedTools) ? sdkOptions.allowedTools : []),
+    ]));
+
     // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
     // at the permission-mode step and skips this callback, so interactive tools
     // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
@@ -1174,7 +1195,7 @@ async function queryClaudeSDK(
           return { behavior: 'deny', message: 'Tool disallowed by settings' };
         }
 
-        const isAllowed = (sdkOptions.allowedTools || []).some((entry: string) =>
+        const isAllowed = allowedToolPermissions.some((entry: string) =>
           matchesToolPermission(entry, toolName, input)
         );
         if (isAllowed) {
@@ -1227,7 +1248,13 @@ async function queryClaudeSDK(
 
       if (decision.allow) {
         if (decision.rememberEntry && typeof decision.rememberEntry === 'string') {
-          if (!sdkOptions.allowedTools.includes(decision.rememberEntry)) {
+          if (!allowedToolPermissions.includes(decision.rememberEntry)) {
+            allowedToolPermissions.push(decision.rememberEntry);
+          }
+          if (
+            !isScopedBashPermission(decision.rememberEntry)
+            && !sdkOptions.allowedTools.includes(decision.rememberEntry)
+          ) {
             sdkOptions.allowedTools.push(decision.rememberEntry);
           }
           if (Array.isArray(sdkOptions.disallowedTools)) {

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { matchesToolPermission } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import {
+  mapCliOptionsToSDK,
+  matchesToolPermission,
+} from '@/modules/providers/list/claude/claude-runtime.provider.js';
 
 test('a Bash allow rule approves the command it names', () => {
   assert.equal(matchesToolPermission('Bash(npm:*)', 'Bash', { command: 'npm test' }), true);
@@ -39,3 +42,16 @@ test('exact tool names still match', () => {
   assert.equal(matchesToolPermission('Read', 'Read', { file_path: '/tmp/x' }), true);
   assert.equal(matchesToolPermission('Read', 'Write', { file_path: '/tmp/x' }), false);
 });
+
+test('mapCliOptionsToSDK keeps scoped Bash permissions out of sdkOptions.allowedTools', () => {
+  const sdkOptions = mapCliOptionsToSDK({
+    toolsSettings: {
+      allowedTools: ['Read', 'Bash(npm:*)', 'Write', 'Bash(git status:*)'],
+      disallowedTools: [],
+      skipPermissions: false,
+    },
+  });
+
+  assert.deepEqual(sdkOptions.allowedTools, ['Read', 'Write']);
+});
+
