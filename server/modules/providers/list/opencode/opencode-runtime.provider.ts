@@ -75,7 +75,7 @@ import {
   createNormalizedMessage,
   getOpenCodeDatabasePath,
   readObjectRecord,
-  readOpenCodeCliMajorVersion,
+  readOpenCodeCli,
   readOptionalString,
   stripAnsiSequences,
   stripJsonComments,
@@ -1670,6 +1670,11 @@ function buildOpenCodeRunEnv(workingDir: string): NodeJS.ProcessEnv {
  * and cancels questions, as 1.x `run` did. A stdin left open would make it
  * wait for an answer instead.
  *
+ * `executablePath` is the `opencode` whose version was read (see
+ * `readOpenCodeCli`). The bare command would be looked up again with the
+ * workspace as cwd, where a relative PATH entry, or on Windows the workspace
+ * itself, can name another file.
+ *
  * Same contract as `runOpenCodeTurn`: resolves when the turn completed, rejects
  * when it failed, and an aborted turn resolves once its stop has finished.
  */
@@ -1678,6 +1683,7 @@ async function runOpenCodeV2Turn(
   options: AnyRecord,
   writer: ProviderRuntimeWriter,
   context: ProviderRuntimeContext,
+  executablePath: string,
 ): Promise<void> {
   const {
     sessionId,
@@ -1842,7 +1848,7 @@ async function runOpenCodeV2Turn(
     }
 
     const spawnedAt = Date.now();
-    const child = spawn('opencode', buildOpenCodeRunArgs({
+    const child = spawn(executablePath, buildOpenCodeRunArgs({
       providerSessionId: turn.providerSessionId,
       model: resolvedModel,
       variant: resolveOpenCodeEffort(resolvedModel, effort, effortModels),
@@ -2031,20 +2037,19 @@ async function runOpenCodeTurnForInstalledCli(
     activeV2Turns.set(placeholder.key, placeholder);
   }
 
-  let majorVersion: number | null = null;
-  try {
-    majorVersion = await readOpenCodeCliMajorVersion().catch(() => null);
-  } finally {
-    if (placeholder && activeV2Turns.get(placeholder.key) === placeholder) {
-      activeV2Turns.delete(placeholder.key);
-    }
-  }
+  const cli = await readOpenCodeCli()
+    .catch(() => null)
+    .finally(() => {
+      if (placeholder && activeV2Turns.get(placeholder.key) === placeholder) {
+        activeV2Turns.delete(placeholder.key);
+      }
+    });
   if (placeholder?.aborted) {
     return finishStoppedV2Turn(placeholder);
   }
 
-  return majorVersion !== null && majorVersion >= 2
-    ? runOpenCodeV2Turn(command, options, writer, context)
+  return cli && cli.majorVersion !== null && cli.majorVersion >= 2
+    ? runOpenCodeV2Turn(command, options, writer, context, cli.executablePath)
     : runOpenCodeTurn(command, options, writer, context);
 }
 

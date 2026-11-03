@@ -116,6 +116,8 @@ if (args[0] === '--version') {
     pwd: process.env.PWD ?? null,
     pid: process.pid,
     stdin: stdinKind,
+    // The path the wrapper on PATH was started by (see the runtime tests).
+    invokedAs: process.env.FAKE_OPENCODE_V2_INVOKED_AS ?? null,
     prompt,
     configContent: process.env.OPENCODE_CONFIG_CONTENT ?? null,
   });

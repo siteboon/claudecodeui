@@ -91,6 +91,8 @@ before(async () => {
     wrapperPath = path.join(binDir, 'opencode');
     await writeFile(wrapperPath, [
       '#!/bin/sh',
+      // The path this was started by: absolute when spawned by path, as found when looked up on PATH.
+      'export FAKE_OPENCODE_V2_INVOKED_AS="$0"',
       // A run that only holds its session (FAKE_OPENCODE_V2_HOLD_LINE) prints that line and waits, without node.
       'if [ "$1" = run ] && [ -n "$FAKE_OPENCODE_V2_HOLD_LINE" ]; then printf \'%s\\n\' "$FAKE_OPENCODE_V2_HOLD_LINE"; exec sleep 30; fi',
       `exec "${process.execPath}" --import "${TSX_LOADER}" "${FIXTURE_PATH}" "$@"`,
@@ -726,6 +728,39 @@ test('the installed CLI picks the runtime, and its version is read again once th
   // An unchanged executable is not asked again.
   const again = await runTurn({ scenario: { lines: toolTurn } });
   assert.deepEqual(again.commands, ['run']);
+});
+
+test('a 2.x turn and the 2.x model listing run the `opencode` whose version was read, also through a relative PATH entry', { skip: process.platform === 'win32' }, async () => {
+  setInstalledVersion('opencode v2.2.3');
+  // `bin` names the fake from CloudCLI's directory, and a decoy from the workspace, where `run` starts.
+  const decoyDir = path.join(projectDir, 'bin');
+  await mkdir(decoyDir);
+  await writeFile(path.join(decoyDir, 'opencode'), '#!/bin/sh\necho \'{"command":"decoy"}\' >> "$FAKE_OPENCODE_V2_LOG"\nexit 1\n');
+  await chmod(path.join(decoyDir, 'opencode'), 0o755);
+  const pathKey = findEnvKey('PATH');
+  const savedPath = process.env[pathKey];
+  const savedCwd = process.cwd();
+  process.chdir(tempRoot);
+  process.env[pathKey] = `bin${path.delimiter}${savedPath}`;
+  try {
+    const turn = await runTurn({ scenario: { lines: toolTurn } });
+    assert.equal(turn.error, null);
+    assert.equal(turn.commands.includes('decoy'), false);
+    assert.deepEqual(turn.runs.map((run) => run.invokedAs), [wrapperPath]);
+
+    const logPath = path.join(tempRoot, `models-${++logCounter}.jsonl`);
+    setEnv('FAKE_OPENCODE_V2_LOG', logPath);
+    setEnv('FAKE_OPENCODE_V2_SCENARIO', JSON.stringify({ models: [MODEL] }));
+    const catalog = await new OpenCodeProviderModels().getSupportedModels();
+    const listings = (await readFile(logPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line))
+      .filter((entry) => entry.command === 'models');
+    assert.deepEqual(listings.map((entry) => [entry.args, entry.invokedAs]), [[['models', '--standalone'], wrapperPath]]);
+    assert.deepEqual(catalog.OPTIONS.map((option) => option.value), [MODEL]);
+  } finally {
+    process.chdir(savedCwd);
+    process.env[pathKey] = savedPath;
+    await rm(decoyDir, { recursive: true, force: true });
+  }
 });
 
 test('the model picker lists 2.x models with --standalone, and 1.x models without it', async () => {

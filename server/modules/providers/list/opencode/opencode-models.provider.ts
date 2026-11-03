@@ -15,7 +15,7 @@ import {
   buildDefaultProviderCurrentActiveModel,
   getOpenCodeDatabasePath,
   readObjectRecord,
-  readOpenCodeCliMajorVersion,
+  readOpenCodeCli,
   readOpenCodeLiveSessionTable,
   readOpenCodeSessionTables,
   readOptionalString,
@@ -328,6 +328,7 @@ const OPENCODE_MODEL_REFERENCE_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9
 const readInstalledOpenCodeModels = async (
   args = ['models'],
   timeoutMs = OPENCODE_MODELS_TIMEOUT_MS,
+  command = 'opencode',
 ): Promise<string[]> => new Promise((resolve) => {
   let settled = false;
   let output = '';
@@ -343,7 +344,7 @@ const readInstalledOpenCodeModels = async (
     }
     resolve([...models]);
   };
-  const child = spawn('opencode', args, {
+  const child = spawn(command, args, {
     stdio: ['ignore', 'pipe', 'ignore'],
     shell: false,
   });
@@ -388,13 +389,13 @@ const OPENCODE_V2_MODELS_TIMEOUT_MS = 20_000;
  * Lists models with the installed CLI. OpenCode 2.x runs every command
  * through a shared background service that it starts when none is running
  * and that outlives the command; `--standalone` gives the listing a private
- * server that ends with it. 1.x has no such service and rejects the flag.
+ * server that ends with it, and the listing runs the file whose version was
+ * read. 1.x has no such service and rejects the flag.
  */
 const readModelsWithInstalledOpenCode = async (): Promise<string[]> => {
-  const majorVersion = await readOpenCodeCliMajorVersion();
-  const isOpenCodeV2 = majorVersion !== null && majorVersion >= 2;
-  return isOpenCodeV2
-    ? readInstalledOpenCodeModels(['models', '--standalone'], OPENCODE_V2_MODELS_TIMEOUT_MS)
+  const cli = await readOpenCodeCli();
+  return cli && cli.majorVersion !== null && cli.majorVersion >= 2
+    ? readInstalledOpenCodeModels(['models', '--standalone'], OPENCODE_V2_MODELS_TIMEOUT_MS, cli.executablePath)
     : readInstalledOpenCodeModels(['models']);
 };
 
@@ -525,7 +526,7 @@ const readOpenCodeV2ModelLoginIds = async (readModelReferences: () => Promise<st
     return [];
   }
 
-  const majorVersion = await readOpenCodeCliMajorVersion().catch(() => null);
+  const majorVersion = (await readOpenCodeCli().catch(() => null))?.majorVersion ?? null;
   if (majorVersion === null || majorVersion < 2) {
     return [];
   }

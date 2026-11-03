@@ -7,7 +7,10 @@ import test, { mock } from 'node:test';
 
 import Database from 'better-sqlite3';
 
-import { readOpenCodeCliMajorVersion, readOpenCodeLiveSessionTable, readOpenCodeSessionTables } from '@/shared/utils.js';
+import { readOpenCodeCli, readOpenCodeLiveSessionTable, readOpenCodeSessionTables } from '@/shared/utils.js';
+
+/** The major version `readOpenCodeCli` reads, null without a CLI. Starts the read at once. */
+const readMajorVersion = () => readOpenCodeCli().then((cli) => cli?.majorVersion ?? null);
 
 /** An opencode.db with these session tables, each row as `[id, time_updated]` (null: only `time_created`, 5). */
 const createDatabase = (tables: Record<string, Array<[string, number | null]>>) => {
@@ -83,23 +86,30 @@ test('the major version of the OpenCode CLI on PATH is read once per executable 
   process.env.PATH = binDir;
   try {
     install('opencode v2.2.3');
-    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+    assert.equal(await readMajorVersion(), 2);
     // Cached, and concurrent readers share one run.
-    assert.deepEqual(await Promise.all([readOpenCodeCliMajorVersion(), readOpenCodeCliMajorVersion()]), [2, 2]);
+    assert.deepEqual(await Promise.all([readMajorVersion(), readMajorVersion()]), [2, 2]);
     assert.deepEqual(await probes(), ['--version']);
 
     install('1.18.25');
-    assert.equal(await readOpenCodeCliMajorVersion(), 1);
+    assert.equal(await readMajorVersion(), 1);
     install('0.0.0-dev-202610300000');
-    assert.equal(await readOpenCodeCliMajorVersion(), 0);
+    assert.equal(await readMajorVersion(), 0);
     install('no version here');
-    assert.equal(await readOpenCodeCliMajorVersion(), null);
+    assert.equal(await readMajorVersion(), null);
     install('opencode v2.2.3', 1);
-    assert.equal(await readOpenCodeCliMajorVersion(), null);
+    assert.equal(await readMajorVersion(), null);
     assert.equal((await probes()).length, 5);
 
+    // The file the read names is absolute, also for a relative PATH entry (spawned
+    // with another cwd, the bare command could find another file).
+    install('opencode v2.2.3');
+    process.env.PATH = path.relative(process.cwd(), binDir);
+    assert.ok(!path.isAbsolute(process.env.PATH));
+    assert.deepEqual(await readOpenCodeCli(), { executablePath: executable, majorVersion: 2 });
+
     process.env.PATH = path.join(binDir, 'missing');
-    assert.equal(await readOpenCodeCliMajorVersion(), null);
+    assert.equal(await readOpenCodeCli(), null);
   } finally {
     process.env.PATH = savedPath;
     delete process.env.FAKE_OPENCODE_VERSION_OUTPUT;
@@ -195,7 +205,7 @@ test('a file that has not answered gets 20 s for `opencode --version`, and one m
     mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
     fake.answer('opencode v2.2.3');
     fake.hang(true);
-    const first = readOpenCodeCliMajorVersion();
+    const first = readMajorVersion();
     // Started, and hanging.
     assert.equal(await fake.waitForProbes(1), 1);
     mock.timers.tick(19_999);
@@ -212,7 +222,7 @@ test('a file that has not answered gets 20 s for `opencode --version`, and one m
     mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
     fake.answer('opencode v2.2.3');
     fake.hang(true);
-    const stuck = readOpenCodeCliMajorVersion();
+    const stuck = readMajorVersion();
     assert.equal(await fake.waitForProbes(1), 1);
     mock.timers.tick(20_000);
     assert.equal(await fake.waitForProbes(2), 2);
@@ -221,9 +231,9 @@ test('a file that has not answered gets 20 s for `opencode --version`, and one m
     assert.equal(await fake.waitForProbes(3), 2);
     fake.hang(false);
     mock.timers.tick(29_000);
-    assert.equal(await readOpenCodeCliMajorVersion(), null);
+    assert.equal(await readMajorVersion(), null);
     mock.timers.tick(2_000);
-    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+    assert.equal(await readMajorVersion(), 2);
     assert.equal(await fake.probes(), 3);
   });
 });
@@ -232,13 +242,13 @@ test('a replaced `opencode` that runs out of time gets no answer from the file i
   await withFakeOpenCode(async (fake) => {
     mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
     fake.answer('1.18.25');
-    assert.equal(await readOpenCodeCliMajorVersion(), 1);
+    assert.equal(await readMajorVersion(), 1);
 
     // Upgraded to 2.x, whose first `--version` runs out of time: asked again, never answered with 1.
     fake.touch();
     fake.answer('opencode v2.2.3');
     fake.hang(true);
-    const upgraded = readOpenCodeCliMajorVersion();
+    const upgraded = readMajorVersion();
     assert.equal(await fake.waitForProbes(2), 2);
     mock.timers.tick(20_000);
     fake.hang(false);
@@ -248,7 +258,7 @@ test('a replaced `opencode` that runs out of time gets no answer from the file i
     fake.touch();
     fake.answer('1.18.25');
     fake.hang(true);
-    const downgraded = readOpenCodeCliMajorVersion();
+    const downgraded = readMajorVersion();
     assert.equal(await fake.waitForProbes(4), 4);
     mock.timers.tick(20_000);
     assert.equal(await fake.waitForProbes(5), 5);
@@ -261,12 +271,12 @@ test('a file that answered is asked again within 5 s, and its answer stands when
   await withFakeOpenCode(async (fake) => {
     mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
     fake.answer('opencode v2.2.3');
-    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+    assert.equal(await readMajorVersion(), 2);
 
     // Once the answer is old, the same file is asked again, and hangs: 5 s, then the answer stands.
     mock.timers.tick(5 * 60_000);
     fake.hang(true);
-    const again = readOpenCodeCliMajorVersion();
+    const again = readMajorVersion();
     assert.equal(await fake.waitForProbes(2), 2);
     mock.timers.tick(4_999);
     assert.equal(await settledValue(again), 'pending');
@@ -279,9 +289,9 @@ test('a file that answered is asked again within 5 s, and its answer stands when
     fake.hang(false);
     fake.answer('opencode v2.2.3', 1);
     mock.timers.tick(29_000);
-    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+    assert.equal(await readMajorVersion(), 2);
     mock.timers.tick(2_000);
-    assert.equal(await readOpenCodeCliMajorVersion(), null);
+    assert.equal(await readMajorVersion(), null);
     assert.equal(await fake.probes(), 3);
   });
 });
@@ -290,18 +300,18 @@ test('a failed `opencode --version` is asked again after 30 s, not sooner, and k
   await withFakeOpenCode(async (fake) => {
     mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
     fake.answer('opencode v2.2.3');
-    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+    assert.equal(await readMajorVersion(), 2);
 
     // An answer that is an error is not a slow answer: unknown.
     fake.touch();
     fake.answer('opencode v2.2.3', 1);
-    assert.equal(await readOpenCodeCliMajorVersion(), null);
+    assert.equal(await readMajorVersion(), null);
     fake.answer('opencode v2.2.3');
     mock.timers.tick(10_000);
-    assert.equal(await readOpenCodeCliMajorVersion(), null);
+    assert.equal(await readMajorVersion(), null);
     assert.equal(await fake.probes(), 2);
     mock.timers.tick(21_000);
-    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+    assert.equal(await readMajorVersion(), 2);
     assert.equal(await fake.probes(), 3);
   });
 });
@@ -318,12 +328,12 @@ test('a replaced `opencode` is asked again even when it keeps the old mtime', { 
 
     await keepMtime(async () => {});
     fake.answer('opencode v2.2.3');
-    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+    assert.equal(await readMajorVersion(), 2);
 
     // Rewritten in place with another size.
     fake.answer('1.18.25');
     await keepMtime(async () => writeFile(fake.executable, `${await readFile(fake.executable, 'utf8')}# 1.x\n`));
-    assert.equal(await readOpenCodeCliMajorVersion(), 1);
+    assert.equal(await readMajorVersion(), 1);
 
     // Same size, another file moved over it.
     fake.answer('opencode v2.2.5');
@@ -333,7 +343,7 @@ test('a replaced `opencode` is asked again even when it keeps the old mtime', { 
       await chmod(replacement, 0o755);
       await rename(replacement, fake.executable);
     });
-    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+    assert.equal(await readMajorVersion(), 2);
     assert.equal(await fake.probes(), 3);
   });
 });

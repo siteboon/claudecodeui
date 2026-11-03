@@ -943,6 +943,20 @@ export type CliVersionProbe = {
   version: string | null;
 };
 
+/**
+ * The `opencode` CLI on PATH, as `readOpenCodeCli` in the shared utils found
+ * it: the absolute path of the file a spawn of the bare command runs, and the
+ * major version that file printed for `--version` (null when it did not say).
+ *
+ * The OpenCode runtime and models provider pick the 2.x code path by
+ * `majorVersion` and then spawn `executablePath`, so the CLI they run is the
+ * one whose version they read.
+ */
+export type OpenCodeCli = {
+  executablePath: string;
+  majorVersion: number | null;
+};
+
 // ---------------------------
 //----------------- OPENCODE STORAGE TYPES ------------
 /**

@@ -27,6 +27,7 @@ import type {
   AppErrorOptions,
   CliVersionProbe,
   NormalizedMessage,
+  OpenCodeCli,
   OpenCodeSessionTable,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
@@ -1598,9 +1599,11 @@ const openCodeCliMajorVersions = new Map<string, OpenCodeCliVersionEntry>();
 /**
  * The `opencode` a spawn of the bare command runs: the first match on PATH,
  * by PATHEXT on Windows, where a quoted PATH entry names the folder inside
- * the quotes (as cross-spawn reads it). The fingerprint changes whenever the
- * file is replaced, also when it keeps its mtime (release tarballs date it
- * 1970-01-01): it holds the size and inode too.
+ * the quotes (as cross-spawn reads it). The path is absolute: a relative PATH
+ * entry is resolved against CloudCLI's directory, as a spawn without a cwd
+ * resolves it. The fingerprint changes whenever the file is replaced, also
+ * when it keeps its mtime (release tarballs date it 1970-01-01): it holds the
+ * size and inode too.
  */
 function findOpenCodeExecutable(): { filePath: string; fingerprint: string } | null {
   const isWindows = process.platform === 'win32';
@@ -1613,7 +1616,7 @@ function findOpenCodeExecutable(): { filePath: string; fingerprint: string } | n
       continue;
     }
     for (const extension of extensions) {
-      const filePath = path.join(directory, `opencode${extension}`);
+      const filePath = path.resolve(directory, `opencode${extension}`);
       try {
         const stats = fs.statSync(filePath);
         if (stats.isFile() && (isWindows || (stats.mode & 0o111) !== 0)) {
@@ -1680,9 +1683,9 @@ async function askOpenCodeMajorVersion(
 }
 
 /**
- * Major version of the `opencode` CLI on PATH, or null when there is none or
- * it did not answer `--version`; callers then keep their OpenCode 1.x
- * behaviour.
+ * The `opencode` CLI on PATH (see `OpenCodeCli`), or null when there is none.
+ * A null `majorVersion` means it did not answer `--version`; callers then
+ * keep their OpenCode 1.x behaviour.
  *
  * OpenCode 2.x changed its CLI flags, its server API and its storage, so the
  * OpenCode provider picks its code path by this. The answer is cached per
@@ -1694,20 +1697,22 @@ async function askOpenCodeMajorVersion(
  * run its turns through the SDK, which cannot drive it. Concurrent callers
  * share one read; `--version` never starts OpenCode 2.x's background service.
  *
- * Used by the OpenCode runtime (a 2.x chat turn runs through `opencode run`)
- * and the OpenCode models provider (2.x lists models with `--standalone`, and
- * its logins count only for a 2.x CLI).
+ * Used by the OpenCode runtime (a 2.x chat turn runs `opencode run` with
+ * `executablePath`) and the OpenCode models provider (2.x lists models with
+ * `--standalone` from `executablePath`, and its logins count only for a 2.x
+ * CLI).
  */
-export function readOpenCodeCliMajorVersion(): Promise<number | null> {
+export function readOpenCodeCli(): Promise<OpenCodeCli | null> {
   const executable = findOpenCodeExecutable();
   if (!executable) {
     return Promise.resolve(null);
   }
 
+  const toCli = (majorVersion: number | null): OpenCodeCli => ({ executablePath: executable.filePath, majorVersion });
   const previous = openCodeCliMajorVersions.get(executable.filePath);
   const isSameFile = previous !== undefined && previous.fingerprint === executable.fingerprint;
   if (previous && isSameFile && previous.expiresAt > Date.now()) {
-    return previous.major;
+    return previous.major.then(toCli);
   }
 
   // Only this very file's earlier answer counts: a replaced file is asked as a new one.
@@ -1730,7 +1735,7 @@ export function readOpenCodeCliMajorVersion(): Promise<number | null> {
     return entry.answeredMajor;
   });
   openCodeCliMajorVersions.set(executable.filePath, entry);
-  return entry.major;
+  return entry.major.then(toCli);
 }
 
 // ---------------------------
