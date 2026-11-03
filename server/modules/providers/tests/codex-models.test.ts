@@ -27,6 +27,30 @@ test('lists GPT-6 Sol and GPT-6 Luna with the effort levels the Codex CLI accept
   );
 });
 
+test('lists GPT-6.1 Sol with the effort levels the Codex CLI accepts', () => {
+  const sol = findCodexModel('gpt-6.1-sol');
+  assert.equal(sol?.label, 'GPT-6.1 Sol');
+  assert.equal(sol?.effort?.default, 'low');
+  assert.deepEqual(
+    sol?.effort?.values.map((effort) => effort.value),
+    ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  );
+});
+
+test('chats run a Codex CLI new enough to know the GPT-6.1 Sol model', () => {
+  // Codex only ships metadata for gpt-6.1-sol from 0.159.1 on. An older CLI
+  // still sends the request, but on fallback metadata: it warns "Model
+  // metadata ... not found" and quietly sends `ultra` effort as `medium`.
+  // Resolved from the SDK, the way it finds the CLI it spawns for chats.
+  const sdkRequire = createRequire(import.meta.resolve('@openai/codex-sdk'));
+  const { version } = sdkRequire('@openai/codex/package.json') as { version: string };
+  const [major, minor, patch] = version.split('.').map(Number);
+  assert.ok(
+    major > 0 || minor > 159 || (minor === 159 && patch >= 1),
+    `bundled @openai/codex ${version} predates 0.159.1`,
+  );
+});
+
 test('bundles a Codex CLI new enough to know the GPT-6 Sol and Luna models', () => {
   // Codex only ships metadata for gpt-6-sol / gpt-6-luna from 0.155.0 on. An
   // older CLI still sends the request, but on fallback metadata: it warns

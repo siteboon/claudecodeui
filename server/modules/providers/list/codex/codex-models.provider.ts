@@ -19,6 +19,22 @@ import {
 export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
     {
+      value: 'gpt-6.1-sol',
+      label: 'GPT-6.1 Sol',
+      description: 'Latest workhorse model for coding and everyday work.',
+      effort: {
+        default: 'low',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          { value: 'ultra' },
+        ],
+      },
+    },
+    {
       value: 'gpt-6-astra',
       label: 'GPT-6 Astra',
       description: 'Our most capable model for complex, demanding work.',
