@@ -907,3 +907,44 @@ test('a bundled ConPTY that cannot start falls back to the Windows ConPTY', (t) 
     assert.deepEqual(frames.map((frame) => frame.type), ['output']);
   });
 });
+
+// node-pty's Windows terminal writes input into the console host's pipe with no
+// 'error' listener (microsoft/node-pty#942). The bundled ConPTY host exits with
+// its shell, so a key pressed during that exit failed the write and the
+// unhandled 'error' event ended the server (#1665).
+test('on Windows an input pipe error is logged once instead of ending the server', (t) => {
+  t.mock.method(os, 'platform', () => 'win32');
+  const warn = t.mock.method(console, 'warn', () => undefined);
+  const inSocket = new EventEmitter();
+  const shellPty = Object.assign(createFakePty(), { _agent: { inSocket } });
+  const dependencies = { resolveProviderSessionId: () => null, nodePtyRoot: null, spawnPty: () => shellPty as never };
+
+  const socket = launch(dependencies, plainShell);
+  inSocket.emit('error', Object.assign(new Error('write EAGAIN'), { code: 'EAGAIN' }));
+  inSocket.emit('error', new Error('write EPIPE'));
+  shellPty.emitExit();
+
+  assert.equal(warn.mock.callCount(), 1);
+  assert.match(String(warn.mock.calls[0].arguments[0]), /could not reach the console host \(write EAGAIN\)/);
+  const outputs = socket.frames.map((frame) => String((JSON.parse(frame) as { data?: string }).data));
+  assert.equal(outputs.some((data) => data.includes('Process exited with code 0')), true);
+});
+
+test('a node-pty without the expected Windows internals still starts the shell', (t) => {
+  t.mock.method(os, 'platform', () => 'win32');
+  const throwingAgent = Object.defineProperty(createFakePty(), '_agent', {
+    get() {
+      throw new Error('moved');
+    },
+  });
+  const ptys = [createFakePty(), throwingAgent, Object.assign(createFakePty(), { _agent: { inSocket: {} } })];
+
+  for (const shellPty of ptys) {
+    const dependencies = { resolveProviderSessionId: () => null, nodePtyRoot: null, spawnPty: () => shellPty as never };
+    const socket = launch(dependencies, plainShell);
+
+    const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string; data?: string });
+    assert.deepEqual(frames.map((frame) => frame.type), ['output']);
+    assert.match(String(frames[0].data), /Starting terminal in/);
+  }
+});

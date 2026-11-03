@@ -603,6 +603,43 @@ function spawnShellPty(
   }
 }
 
+// The part of node-pty's Windows terminal (private, not in its typings) that
+// holds the console host's input pipe.
+type NodePtyWindowsInternals = {
+  _agent?: { inSocket?: { on?: (event: 'error', listener: (error: Error) => void) => unknown } };
+};
+
+/**
+ * node-pty writes Windows input into the console host's input pipe without an
+ * 'error' listener (microsoft/node-pty#942, #976). Input that arrives after the
+ * host closed the pipe, but before node-pty reports the exit, fails with EAGAIN
+ * or EPIPE, and the unhandled 'error' event would end the whole server. The
+ * bundled ConPTY exits together with its shell, so one key pressed while a shell
+ * exits was enough (#1665). The listener only logs the first error; the exit is
+ * still reported through onExit. node-pty may move its internals, so every step
+ * is guarded: another layout only means no listener.
+ */
+function handleWindowsInputPipeErrors(shellProcess: IPty): void {
+  if (os.platform() !== 'win32') {
+    return;
+  }
+  try {
+    const inSocket = (shellProcess as unknown as NodePtyWindowsInternals)._agent?.inSocket;
+    if (typeof inSocket?.on !== 'function') {
+      return;
+    }
+    let reported = false;
+    inSocket.on('error', (error) => {
+      if (!reported) {
+        reported = true;
+        console.warn(`[WARN] Shell input could not reach the console host (${error.message}); dropping it`);
+      }
+    });
+  } catch {
+    // A getter of another node-pty version threw; the shell runs without the listener.
+  }
+}
+
 /**
  * Used by this module's websocket gateway to connect the standalone Shell UI
  * to a retained PTY while keeping process lifecycle ownership on the server.
@@ -745,6 +782,7 @@ export function handleShellConnection(
           },
           ...resolveConptyDllOption(dependencies.nodePtyRoot),
         });
+        handleWindowsInputPipeErrors(shellProcess);
 
         ptySessionsMap.set(ptySessionKey, {
           pty: shellProcess,
