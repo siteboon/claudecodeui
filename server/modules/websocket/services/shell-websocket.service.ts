@@ -553,15 +553,22 @@ function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; valu
   return { key: pathKey, value };
 }
 
-// Windows' own ConPTY host (conhost.exe) is only fixed with the OS. Older ones
-// fail fast with 0xC0000409 ("stack-based buffer overrun") on a resize: Server
-// 2022's while a typed command line is still being edited, Windows 10's also when
-// the resize reflows partly overwritten wide (CJK) glyphs (#1665;
-// microsoft/terminal#1856, #4907, #14600). node-pty ships a current conpty.dll +
-// OpenConsole.exe; `useConptyDll` runs those instead, as VS Code has done by
-// default since 1.121.
+// Windows' own ConPTY host (conhost.exe) is only fixed with the OS. Before
+// Windows 11 it fails fast with 0xC0000409 ("stack-based buffer overrun") when a
+// resize reflows wide (CJK) glyphs that a program partly overwrote, or a command
+// line with them that is still being typed; Server 2022 crashed on both on CI
+// (#1665; microsoft/terminal#1856, #4907, #14600). node-pty ships a current
+// conpty.dll + OpenConsole.exe, which `useConptyDll` runs instead (VS Code's
+// default since 1.121). It is only the default where the built-in host crashes:
+// OpenConsole asks the terminal for the cursor position and waits up to 500 ms
+// for each answer, which a detached Shell or a slow link cannot give in time.
+// Windows 11 and Server 2025 keep their own host (builds 26100 and 26200 did not
+// crash on CI; 22000-22631 were not tested).
 const CONPTY_DLL_ENV = 'CLOUDCLI_WINDOWS_USE_CONPTY_DLL';
+const CONPTY_DLL_ON_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const CONPTY_DLL_OFF_VALUES = new Set(['0', 'false', 'no', 'off']);
+// Windows 11 21H2. Windows 10 and Server 2019/2022 have lower build numbers.
+const FIRST_WINDOWS_11_BUILD = 22000;
 
 function resolveNodePtyRoot(): string | null {
   try {
@@ -569,6 +576,15 @@ function resolveNodePtyRoot(): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The Windows build number from `os.release()` ("10.0.<build>"), or null when
+ * it does not read like one.
+ */
+function readWindowsBuildNumber(): number | null {
+  const match = /^10\.0\.(\d+)$/.exec(os.release().trim());
+  return match ? Number(match[1]) : null;
 }
 
 /**
@@ -583,30 +599,41 @@ function hasBundledConpty(nodePtyRoot: string): boolean {
   const addonDir = ['build/Release', 'build/Debug', `prebuilds/win32-${process.arch}`]
     .flatMap((dir) => [path.join(nodePtyRoot, dir), path.join(nodePtyRoot, 'lib', dir)])
     .find((dir) => fs.existsSync(path.join(dir, 'conpty.node')));
-  return Boolean(addonDir) &&
-    ['conpty.dll', 'OpenConsole.exe'].every((file) => fs.existsSync(path.join(addonDir as string, 'conpty', file)));
+  if (!addonDir) {
+    return false;
+  }
+  return ['conpty.dll', 'OpenConsole.exe'].every((file) => fs.existsSync(path.join(addonDir, 'conpty', file)));
 }
 
 /**
- * On Windows, asks node-pty for its bundled ConPTY when it is installed, unless
- * CLOUDCLI_WINDOWS_USE_CONPTY_DLL is set to 0/false/no/off. Other platforms get
- * no option at all. `nodePtyRoot` undefined means "the node-pty this server
- * resolves"; null means none was found.
+ * Picks the ConPTY host for a Windows shell. CLOUDCLI_WINDOWS_USE_CONPTY_DLL set
+ * to 1/true/yes/on asks for node-pty's bundled host on any build, 0/false/no/off
+ * for Windows' own; unset or anything else picks the bundled host on builds
+ * before Windows 11, and Windows' own when the build cannot be read. The bundled
+ * host is only used when it is installed. Other platforms get no option at all.
+ * `nodePtyRoot` undefined means "the node-pty this server resolves"; null means
+ * none was found.
  *
  * The bundled host also gets `conptyInheritCursor`: it then asks the terminal
  * where the cursor is before the shell starts. Unlike conhost it does not clear
  * the screen first, so without it the first prompt was drawn one row above the
  * cursor, over the "Starting terminal in" line the server writes first.
  */
-function resolveConptyDllOption(
+function resolveWindowsConptyOptions(
   nodePtyRoot: string | null | undefined,
 ): Pick<IWindowsPtyForkOptions, 'useConptyDll' | 'conptyInheritCursor'> {
   if (os.platform() !== 'win32') {
     return {};
   }
-  const setting = process.env[CONPTY_DLL_ENV]?.trim().toLowerCase();
-  if (setting && CONPTY_DLL_OFF_VALUES.has(setting)) {
+  const setting = process.env[CONPTY_DLL_ENV]?.trim().toLowerCase() ?? '';
+  if (CONPTY_DLL_OFF_VALUES.has(setting)) {
     return {};
+  }
+  if (!CONPTY_DLL_ON_VALUES.has(setting)) {
+    const build = readWindowsBuildNumber();
+    if (build === null || build >= FIRST_WINDOWS_11_BUILD) {
+      return {};
+    }
   }
   const root = nodePtyRoot === undefined ? resolveNodePtyRoot() : nodePtyRoot;
   return root && hasBundledConpty(root) ? { useConptyDll: true, conptyInheritCursor: true } : {};
@@ -812,7 +839,7 @@ export function handleShellConnection(
             // theme before its OSC 11 reply arrives) read it to pick light or dark.
             ...(colorScheme ? { COLORFGBG: colorScheme === 'light' ? '0;15' : '15;0' } : {}),
           },
-          ...resolveConptyDllOption(dependencies.nodePtyRoot),
+          ...resolveWindowsConptyOptions(dependencies.nodePtyRoot),
         });
         handleWindowsInputPipeErrors(shellProcess);
 

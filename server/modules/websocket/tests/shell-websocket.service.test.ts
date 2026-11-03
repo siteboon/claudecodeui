@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 
 import { WebSocket } from 'ws';
 
@@ -284,7 +284,7 @@ function spawnRecorder(resumeSessionId: string | null = null, nodePtyRoot: strin
 let launchCount = 0;
 
 function launch(
-  dependencies: ReturnType<typeof spawnRecorder>['dependencies'],
+  dependencies: Parameters<typeof handleShellConnection>[1],
   init: Record<string, unknown>,
   projectPath = process.cwd()
 ) {
@@ -818,11 +818,51 @@ function withNodePtyFixture(body: (fixture: NodePtyFixture) => void) {
 const plainShell = { provider: 'plain-shell', isPlainShell: true, initialCommand: 'cmd' };
 const prebuildDir = `prebuilds/win32-${process.arch}`;
 
-// Windows' own conhost fails fast (0xC0000409) on resizes that reflow a line
-// being typed or partly overwritten wide glyphs; the conpty.dll + OpenConsole.exe
-// that node-pty ships do not (#1665).
-test('on Windows the shell runs on the ConPTY bundled with node-pty', (t) => {
+function setConptySetting(value: string | undefined) {
+  if (value === undefined) {
+    delete process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL;
+  } else {
+    process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL = value;
+  }
+}
+
+// Sets CLOUDCLI_WINDOWS_USE_CONPTY_DLL for one test, whatever the developer's
+// own environment has, and puts that back afterwards.
+function useConptySetting(t: TestContext, value: string | undefined) {
+  const savedSetting = process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL;
+  t.after(() => setConptySetting(savedSetting));
+  setConptySetting(value);
+}
+
+/**
+ * Makes the service see Windows `release` (os.release() there is
+ * "10.0.<build>") with CLOUDCLI_WINDOWS_USE_CONPTY_DLL unset. The returned
+ * function switches release and setting for the launches that follow.
+ */
+function asWindows(t: TestContext, release = '10.0.20348') {
+  let currentRelease = release;
   t.mock.method(os, 'platform', () => 'win32');
+  t.mock.method(os, 'release', () => currentRelease);
+  useConptySetting(t, undefined);
+  return (nextRelease: string, setting?: string) => {
+    currentRelease = nextRelease;
+    setConptySetting(setting);
+  };
+}
+
+// The console host a launch asked node-pty for.
+function conptyHost(options: Pick<SpawnOptions, 'useConptyDll' | 'conptyInheritCursor'>) {
+  if (options.useConptyDll === true && options.conptyInheritCursor === true) {
+    return 'bundled';
+  }
+  return options.useConptyDll === undefined && options.conptyInheritCursor === undefined ? 'windows' : 'mixed';
+}
+
+// Windows' own conhost before Windows 11 fails fast (0xC0000409) on resizes that
+// reflow partly overwritten wide glyphs or a line still being typed with them;
+// the conpty.dll + OpenConsole.exe that node-pty ships do not (#1665).
+test('on Server 2022 the shell runs on the ConPTY bundled with node-pty', (t) => {
+  asWindows(t, '10.0.20348');
   withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
     const { calls, dependencies } = spawnRecorder(null, nodePtyRoot);
 
@@ -833,36 +873,77 @@ test('on Windows the shell runs on the ConPTY bundled with node-pty', (t) => {
     addon('build/Release');
     launch(dependencies, plainShell, projectPath);
 
-    // The bundled host asks where the cursor is, below the server's first line.
+    // The bundled host also asks where the cursor is, below the server's first line.
     assert.deepEqual(
-      calls.map((call) => [call.shell, call.useConptyDll, call.conptyInheritCursor]),
+      calls.map((call) => [call.shell, conptyHost(call)]),
       [
-        ['powershell.exe', true, true],
-        ['powershell.exe', true, true],
+        ['powershell.exe', 'bundled'],
+        ['powershell.exe', 'bundled'],
       ]
     );
   });
 });
 
-test('the shell keeps the Windows ConPTY when the bundled one is incomplete or turned off', (t) => {
-  t.mock.method(os, 'platform', () => 'win32');
-  const savedSetting = process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL;
-  t.after(() => {
-    if (savedSetting === undefined) {
-      delete process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL;
-    } else {
-      process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL = savedSetting;
-    }
-  });
-  delete process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL;
+// The bundled host waits up to 500 ms for every cursor query the terminal does
+// not answer (a detached Shell, a slow link), so it is only the default where
+// the built-in host crashes. Windows 11 and Server 2025 keep today's host.
+test('the bundled ConPTY is the default only before Windows 11, unless the setting says otherwise', (t) => {
+  const setWindows = asWindows(t);
+  withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
+    addon(prebuildDir);
+    const { calls, dependencies } = spawnRecorder(null, nodePtyRoot);
+    const cases: Array<[release: string, setting: string | undefined, host: string]> = [
+      ['10.0.17763', undefined, 'bundled'], // Windows 10 1809, Server 2019
+      ['10.0.19045', undefined, 'bundled'], // Windows 10 22H2
+      ['10.0.20348', undefined, 'bundled'], // Server 2022
+      ['10.0.21999', undefined, 'bundled'],
+      ['10.0.22000', undefined, 'windows'], // Windows 11 21H2
+      ['10.0.26100', undefined, 'windows'], // Windows 11 24H2, Server 2025
+      ['10.0.26200', '', 'windows'],
+      ['10.0.26100', 'auto', 'windows'],
+      ['10.0.20348', 'auto', 'bundled'],
+      // A release that does not read as a Windows 10+ build keeps today's host.
+      ['10.0', undefined, 'windows'],
+      ['', undefined, 'windows'],
+      ['6.3.9600', undefined, 'windows'],
+      ['10.0.2x', undefined, 'windows'],
+      ['10.0.26100', 'true', 'bundled'],
+      ['10.0.26200', ' ON ', 'bundled'],
+      ['10.0.22000', '1', 'bundled'],
+      ['', 'yes', 'bundled'],
+      ['10.0.20348', 'false', 'windows'],
+      ['10.0.17763', '0', 'windows'],
+      ['10.0.19045', ' Off ', 'windows'],
+      ['10.0.20348', 'no', 'windows'],
+    ];
 
+    for (const [release, setting] of cases) {
+      setWindows(release, setting);
+      launch(dependencies, plainShell, projectPath);
+    }
+
+    assert.deepEqual(
+      calls.map((call, index) => [cases[index][0], cases[index][1], conptyHost(call)]),
+      cases
+    );
+  });
+});
+
+test('the shell keeps the Windows ConPTY when the bundled one is missing, incomplete or turned off', (t) => {
+  const setWindows = asWindows(t);
   withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
     const unresolved = spawnRecorder(null, null);
     launch(unresolved.dependencies, plainShell, projectPath);
+    setWindows('10.0.26100', 'true');
+    launch(unresolved.dependencies, plainShell, projectPath);
+    setWindows('10.0.20348');
 
     const { calls, dependencies } = spawnRecorder(null, nodePtyRoot);
     addon(prebuildDir, ['conpty.dll']);
     launch(dependencies, plainShell, projectPath);
+    setWindows('10.0.26100', 'on');
+    launch(dependencies, plainShell, projectPath);
+    setWindows('10.0.20348');
     // node-pty would load this rebuilt addon and find no conpty folder beside
     // it, even though the prebuild next to it is complete.
     addon(prebuildDir);
@@ -875,17 +956,16 @@ test('the shell keeps the Windows ConPTY when the bundled one is incomplete or t
     fs.rmSync(path.join(nodePtyRoot, 'lib'), { recursive: true, force: true });
 
     for (const setting of ['false', '0', ' OFF ', 'no']) {
-      process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL = setting;
+      setWindows('10.0.20348', setting);
       launch(dependencies, plainShell, projectPath);
     }
-    process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL = 'true';
+    setWindows('10.0.20348', 'true');
     launch(dependencies, plainShell, projectPath);
 
-    assert.deepEqual(unresolved.calls.map((call) => call.useConptyDll), [undefined]);
-    assert.deepEqual(
-      calls.map((call) => call.useConptyDll),
-      [undefined, undefined, undefined, undefined, undefined, undefined, undefined, true]
-    );
+    assert.deepEqual(unresolved.calls.map(conptyHost), ['windows', 'windows']);
+    assert.deepEqual(calls.map(conptyHost), [
+      'windows', 'windows', 'windows', 'windows', 'windows', 'windows', 'windows', 'windows', 'bundled',
+    ]);
   });
 });
 
@@ -894,26 +974,51 @@ test('other platforms never ask node-pty for a ConPTY', (t) => {
     t.skip('asserts the bash launch');
     return;
   }
+  useConptySetting(t, 'true');
   withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
     const { calls, dependencies } = spawnRecorder(null, nodePtyRoot);
     addon(prebuildDir);
     launch(dependencies, plainShell, projectPath);
 
-    assert.deepEqual(calls.map((call) => [call.shell, call.useConptyDll]), [['bash', undefined]]);
+    assert.deepEqual(calls.map((call) => [call.shell, conptyHost(call)]), [['bash', 'windows']]);
   });
 });
 
+// Production wiring passes no nodePtyRoot, so the service looks in the node-pty
+// it resolves itself. npm installs node-pty's win32 prebuilds on every platform.
+test('without a nodePtyRoot the bundled ConPTY is looked up in the node-pty the server loads', (t) => {
+  const nodePtyRoot = path.dirname(createRequire(import.meta.url).resolve('node-pty/package.json'));
+  const prebuildFiles = ['conpty.node', 'conpty/conpty.dll', 'conpty/OpenConsole.exe'];
+  if (!prebuildFiles.every((file) => fs.existsSync(path.join(nodePtyRoot, prebuildDir, file)))) {
+    t.skip(`this node-pty install has no ${prebuildDir} prebuild with the bundled ConPTY`);
+    return;
+  }
+  asWindows(t, '10.0.20348');
+  const hosts: string[] = [];
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    spawnPty: (_shell: string, _args: string | string[], options?: SpawnOptions) => {
+      hosts.push(conptyHost(options ?? {}));
+      return createFakePty() as never;
+    },
+  };
+
+  launch(dependencies, plainShell);
+
+  assert.deepEqual(hosts, ['bundled']);
+});
+
 test('a bundled ConPTY that cannot start falls back to the Windows ConPTY', (t) => {
-  t.mock.method(os, 'platform', () => 'win32');
+  asWindows(t);
   const warn = t.mock.method(console, 'warn', () => undefined);
   withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
     addon(prebuildDir);
-    const attempts: Array<[boolean | undefined, boolean | undefined]> = [];
+    const attempts: string[] = [];
     const dependencies = {
       resolveProviderSessionId: () => null,
       nodePtyRoot,
       spawnPty: (_shell: string, _args: string | string[], options?: SpawnOptions) => {
-        attempts.push([options?.useConptyDll, options?.conptyInheritCursor]);
+        attempts.push(conptyHost(options ?? {}));
         if (options?.useConptyDll) {
           throw new Error('Failed to load conpty.dll');
         }
@@ -923,7 +1028,7 @@ test('a bundled ConPTY that cannot start falls back to the Windows ConPTY', (t) 
 
     const socket = launch(dependencies, plainShell, projectPath);
 
-    assert.deepEqual(attempts, [[true, true], [undefined, undefined]]);
+    assert.deepEqual(attempts, ['bundled', 'windows']);
     assert.equal(warn.mock.callCount(), 1);
     assert.match(String(warn.mock.calls[0].arguments[0]), /Bundled ConPTY failed to start \(Failed to load conpty\.dll\)/);
     const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
