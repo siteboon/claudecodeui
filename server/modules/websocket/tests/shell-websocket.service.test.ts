@@ -1226,6 +1226,9 @@ test('the replay drops only terminal queries and the live output stays byte for 
     '6n\x1b[?2026$p\x1b[>0q\x1bP$qm\x1b\\\x1b[5n\x1b[?6n\x1b[>c',
     // A palette change stays; a clipboard read goes.
     '\x1b]4;1;rgb:ff/00/00\x07\x1b]52;c;?\x07\x1b]10;?\x1b\\',
+    // Palette and cursor colour reads, DA1 with its 0, an ANSI-mode DECRQM and a
+    // read of the primary selection, which the clipboard addon answers too.
+    '\x1b]4;1;?\x07\x1b]4;2;?;3;?\x1b\\\x1b]12;?\x07\x1b[0c\x1b[4$p\x1b]52;p;?\x1b\\',
     'done\r\n',
   ];
 
