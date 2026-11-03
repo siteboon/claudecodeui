@@ -29,7 +29,7 @@ type Scenario = {
   stdout?: string;
   /**
    * A process the run leaves behind, still holding its stdout, prints this
-   * event after the run exited.
+   * event after the run exited, then logs `{ late: 'printed' }`.
    */
   lateLine?: { delayMs: number; line: unknown };
   stderr?: string;
@@ -52,6 +52,19 @@ type Scenario = {
 
 const args = process.argv.slice(2);
 const scenario = JSON.parse(process.env.FAKE_OPENCODE_V2_SCENARIO || '{}') as Scenario;
+
+/**
+ * What the process `run` leaves behind runs: it prints its first argument
+ * after the delay its second names, then logs that it did to the file its
+ * third names. The line and the delay are arguments of this fixed script, so
+ * no code is built from scenario data.
+ */
+const LATE_LINE_SCRIPT = `
+const [line, delayMs, logPath] = process.argv.slice(1);
+setTimeout(() => process.stdout.write(line, () => {
+  if (logPath) require('node:fs').appendFileSync(logPath, '{"late":"printed"}\\n');
+}), Number(delayMs));
+`;
 
 const log = (entry: Record<string, unknown>) => {
   if (process.env.FAKE_OPENCODE_V2_LOG) {
@@ -165,7 +178,10 @@ if (args[0] === '--version') {
       const { delayMs, line } = scenario.lateLine;
       spawn(process.execPath, [
         '-e',
-        `setTimeout(() => process.stdout.write(${JSON.stringify(`${JSON.stringify(line)}\n`)}), ${delayMs});`,
+        LATE_LINE_SCRIPT,
+        `${JSON.stringify(line)}\n`,
+        String(delayMs),
+        process.env.FAKE_OPENCODE_V2_LOG ?? '',
       ], { stdio: ['ignore', 'inherit', 'ignore'], detached: true }).unref();
     }
 

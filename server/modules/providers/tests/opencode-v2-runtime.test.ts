@@ -229,6 +229,7 @@ async function runTurn(options: TurnOptions) {
     frames,
     error: outcome,
     writer,
+    logPath,
     runs: log.filter((entry) => entry.command === 'run'),
     commands: log.map((entry) => entry.command ?? `signal:${entry.signal}`),
     signals: log.filter((entry) => entry.signal).map((entry) => entry.signal),
@@ -467,7 +468,12 @@ test('what a process `run` left behind prints after the run ended is not part of
   assert.equal(turn.frames.at(-1)?.kind, 'complete');
 
   // The pipe stays open until the leftover process prints, after the turn settled.
-  await new Promise((resolve) => setTimeout(resolve, 2_500));
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline && !(await readFile(turn.logPath, 'utf8')).includes('"late":"printed"')) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok((await readFile(turn.logPath, 'utf8')).includes('"late":"printed"'), 'the leftover process never printed');
+  await new Promise((resolve) => setTimeout(resolve, 300));
   assert.equal(turn.frames.length, framesAtEnd);
   assert.equal(turn.frames.some((frame) => frame.content === 'Printed after the run.'), false);
 });
