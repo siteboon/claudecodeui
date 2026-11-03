@@ -1,8 +1,9 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
-import pty, { type IPty } from 'node-pty';
+import pty, { type IPty, type IWindowsPtyForkOptions } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
@@ -120,6 +121,9 @@ type ShellWebSocketDependencies = {
     provider: string,
   ) => string | null | undefined;
   spawnPty?: typeof pty.spawn;
+  // Where node-pty is installed (null: nowhere); defaults to the package this
+  // server resolves. Only read on Windows, to find node-pty's bundled ConPTY.
+  nodePtyRoot?: string | null;
 };
 
 /**
@@ -523,6 +527,82 @@ function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; valu
   return { key: pathKey, value };
 }
 
+// Windows' own ConPTY host (conhost.exe) is only fixed with the OS. Older ones
+// fail fast with 0xC0000409 ("stack-based buffer overrun") on a resize: Server
+// 2022's while a typed command line is still being edited, Windows 10's also when
+// the resize reflows partly overwritten wide (CJK) glyphs (#1665;
+// microsoft/terminal#1856, #4907, #14600). node-pty ships a current conpty.dll +
+// OpenConsole.exe; `useConptyDll` runs those instead, as VS Code has done by
+// default since 1.121.
+const CONPTY_DLL_ENV = 'CLOUDCLI_WINDOWS_USE_CONPTY_DLL';
+const CONPTY_DLL_OFF_VALUES = new Set(['0', 'false', 'no', 'off']);
+
+function resolveNodePtyRoot(): string | null {
+  try {
+    return path.dirname(createRequire(import.meta.url).resolve('node-pty/package.json'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the conpty.dll + OpenConsole.exe pair sits next to the Windows addon
+ * that node-pty will actually load. node-pty takes the first `conpty.node` of
+ * `build/Release`, `build/Debug` and `prebuilds/win32-<arch>` (each beside and
+ * inside `lib/`) and looks for `conpty/conpty.dll` in that folder. A source
+ * rebuild (electron-rebuild) leaves `build/Release/conpty.node` without that
+ * folder, and asking for the DLL there would make every spawn throw.
+ */
+function hasBundledConpty(nodePtyRoot: string): boolean {
+  const addonDir = ['build/Release', 'build/Debug', `prebuilds/win32-${process.arch}`]
+    .flatMap((dir) => [path.join(nodePtyRoot, dir), path.join(nodePtyRoot, 'lib', dir)])
+    .find((dir) => fs.existsSync(path.join(dir, 'conpty.node')));
+  return Boolean(addonDir) &&
+    ['conpty.dll', 'OpenConsole.exe'].every((file) => fs.existsSync(path.join(addonDir as string, 'conpty', file)));
+}
+
+/**
+ * On Windows, asks node-pty for its bundled ConPTY when it is installed, unless
+ * CLOUDCLI_WINDOWS_USE_CONPTY_DLL is set to 0/false/no/off. Other platforms get
+ * no option at all. `nodePtyRoot` undefined means "the node-pty this server
+ * resolves"; null means none was found.
+ */
+function resolveConptyDllOption(nodePtyRoot: string | null | undefined): Pick<IWindowsPtyForkOptions, 'useConptyDll'> {
+  if (os.platform() !== 'win32') {
+    return {};
+  }
+  const setting = process.env[CONPTY_DLL_ENV]?.trim().toLowerCase();
+  if (setting && CONPTY_DLL_OFF_VALUES.has(setting)) {
+    return {};
+  }
+  const root = nodePtyRoot === undefined ? resolveNodePtyRoot() : nodePtyRoot;
+  return root && hasBundledConpty(root) ? { useConptyDll: true } : {};
+}
+
+/**
+ * Spawns the shell, retrying with Windows' own ConPTY when the bundled one
+ * cannot start (a conpty.dll blocked by policy or quarantined by antivirus must
+ * not take the Shell tab down).
+ */
+function spawnShellPty(
+  spawnPty: typeof pty.spawn,
+  file: string,
+  args: string[],
+  options: IWindowsPtyForkOptions,
+): IPty {
+  if (!options.useConptyDll) {
+    return spawnPty(file, args, options);
+  }
+  try {
+    return spawnPty(file, args, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[WARN] Bundled ConPTY failed to start (${message}); using the Windows ConPTY instead`);
+    const { useConptyDll: _useConptyDll, ...windowsConptyOptions } = options;
+    return spawnPty(file, args, windowsConptyOptions);
+  }
+}
+
 /**
  * Used by this module's websocket gateway to connect the standalone Shell UI
  * to a retained PTY while keeping process lifecycle ownership on the server.
@@ -647,7 +727,7 @@ export function handleShellConnection(
         const termRows = readNumber(data.rows, 24);
         const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
 
-        shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
+        shellProcess = spawnShellPty(dependencies.spawnPty ?? pty.spawn, shell, shellArgs, {
           name: 'xterm-256color',
           cols: termCols,
           rows: termRows,
@@ -663,6 +743,7 @@ export function handleShellConnection(
             // theme before its OSC 11 reply arrives) read it to pick light or dark.
             ...(colorScheme ? { COLORFGBG: colorScheme === 'light' ? '0;15' : '15;0' } : {}),
           },
+          ...resolveConptyDllOption(dependencies.nodePtyRoot),
         });
 
         ptySessionsMap.set(ptySessionKey, {

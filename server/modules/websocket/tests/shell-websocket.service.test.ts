@@ -228,18 +228,30 @@ test('a missing project directory is reported as an error frame and starts no pt
   );
 });
 
-type SpawnCall = { shell: string; args: string[]; command: string; env: Record<string, string | undefined> };
+type SpawnOptions = { env?: Record<string, string | undefined>; useConptyDll?: boolean };
 
-function spawnRecorder(resumeSessionId: string | null = null) {
+type SpawnCall = {
+  shell: string;
+  args: string[];
+  command: string;
+  env: Record<string, string | undefined>;
+  useConptyDll?: boolean;
+};
+
+// `nodePtyRoot` is where the service looks for node-pty's bundled ConPTY; null
+// (no node-pty found) keeps these launches independent of the real install.
+function spawnRecorder(resumeSessionId: string | null = null, nodePtyRoot: string | null = null) {
   const calls: SpawnCall[] = [];
   const dependencies = {
     resolveProviderSessionId: () => resumeSessionId,
-    spawnPty: (shell: string, args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
+    nodePtyRoot,
+    spawnPty: (shell: string, args: string | string[], options?: SpawnOptions) => {
       calls.push({
         shell,
         args: Array.isArray(args) ? args : [args],
         command: Array.isArray(args) ? args[args.length - 1] : args,
         env: options?.env ?? {},
+        useConptyDll: options?.useConptyDll,
       });
       return createFakePty() as never;
     },
@@ -744,5 +756,150 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
       calls.map((call) => call.env.COLORFGBG),
       ['0;15', '0;15', '0;15', '15;0']
     );
+  });
+});
+
+type NodePtyFixture = {
+  nodePtyRoot: string;
+  projectPath: string;
+  // Adds a Windows addon to `dir` of the fake node-pty, with the bundled ConPTY
+  // files next to it unless they are left out.
+  addon: (dir: string, conptyFiles?: string[]) => void;
+};
+
+/**
+ * Runs `body` against a throwaway node-pty install laid out like the real one,
+ * so each case controls which addon node-pty would load and what sits beside it.
+ */
+function withNodePtyFixture(body: (fixture: NodePtyFixture) => void) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-node-pty-'));
+  const nodePtyRoot = path.join(root, 'node-pty');
+  const projectPath = path.join(root, 'project');
+  fs.mkdirSync(projectPath, { recursive: true });
+  const addon = (dir: string, conptyFiles = ['conpty.dll', 'OpenConsole.exe']) => {
+    const addonDir = path.join(nodePtyRoot, dir);
+    fs.mkdirSync(addonDir, { recursive: true });
+    fs.writeFileSync(path.join(addonDir, 'conpty.node'), '');
+    for (const file of conptyFiles) {
+      fs.mkdirSync(path.join(addonDir, 'conpty'), { recursive: true });
+      fs.writeFileSync(path.join(addonDir, 'conpty', file), '');
+    }
+  };
+
+  try {
+    body({ nodePtyRoot, projectPath, addon });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const plainShell = { provider: 'plain-shell', isPlainShell: true, initialCommand: 'cmd' };
+const prebuildDir = `prebuilds/win32-${process.arch}`;
+
+// Windows' own conhost fails fast (0xC0000409) on resizes that reflow a line
+// being typed or partly overwritten wide glyphs; the conpty.dll + OpenConsole.exe
+// that node-pty ships do not (#1665).
+test('on Windows the shell runs on the ConPTY bundled with node-pty', (t) => {
+  t.mock.method(os, 'platform', () => 'win32');
+  withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
+    const { calls, dependencies } = spawnRecorder(null, nodePtyRoot);
+
+    addon(prebuildDir);
+    launch(dependencies, plainShell, projectPath);
+    // A rebuilt addon (electron-rebuild) is loaded first; with the files copied
+    // next to it, it gets the bundled ConPTY too.
+    addon('build/Release');
+    launch(dependencies, plainShell, projectPath);
+
+    assert.deepEqual(
+      calls.map((call) => [call.shell, call.useConptyDll]),
+      [
+        ['powershell.exe', true],
+        ['powershell.exe', true],
+      ]
+    );
+  });
+});
+
+test('the shell keeps the Windows ConPTY when the bundled one is incomplete or turned off', (t) => {
+  t.mock.method(os, 'platform', () => 'win32');
+  const savedSetting = process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL;
+  t.after(() => {
+    if (savedSetting === undefined) {
+      delete process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL;
+    } else {
+      process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL = savedSetting;
+    }
+  });
+  delete process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL;
+
+  withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
+    const unresolved = spawnRecorder(null, null);
+    launch(unresolved.dependencies, plainShell, projectPath);
+
+    const { calls, dependencies } = spawnRecorder(null, nodePtyRoot);
+    addon(prebuildDir, ['conpty.dll']);
+    launch(dependencies, plainShell, projectPath);
+    // node-pty would load this rebuilt addon and find no conpty folder beside
+    // it, even though the prebuild next to it is complete.
+    addon(prebuildDir);
+    addon('build/Release', []);
+    launch(dependencies, plainShell, projectPath);
+
+    fs.rmSync(path.join(nodePtyRoot, 'build'), { recursive: true, force: true });
+    for (const setting of ['false', '0', ' OFF ', 'no']) {
+      process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL = setting;
+      launch(dependencies, plainShell, projectPath);
+    }
+    process.env.CLOUDCLI_WINDOWS_USE_CONPTY_DLL = 'true';
+    launch(dependencies, plainShell, projectPath);
+
+    assert.deepEqual(unresolved.calls.map((call) => call.useConptyDll), [undefined]);
+    assert.deepEqual(
+      calls.map((call) => call.useConptyDll),
+      [undefined, undefined, undefined, undefined, undefined, undefined, true]
+    );
+  });
+});
+
+test('other platforms never ask node-pty for a ConPTY', (t) => {
+  if (os.platform() === 'win32') {
+    t.skip('asserts the bash launch');
+    return;
+  }
+  withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
+    const { calls, dependencies } = spawnRecorder(null, nodePtyRoot);
+    addon(prebuildDir);
+    launch(dependencies, plainShell, projectPath);
+
+    assert.deepEqual(calls.map((call) => [call.shell, call.useConptyDll]), [['bash', undefined]]);
+  });
+});
+
+test('a bundled ConPTY that cannot start falls back to the Windows ConPTY', (t) => {
+  t.mock.method(os, 'platform', () => 'win32');
+  const warn = t.mock.method(console, 'warn', () => undefined);
+  withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
+    addon(prebuildDir);
+    const attempts: Array<boolean | undefined> = [];
+    const dependencies = {
+      resolveProviderSessionId: () => null,
+      nodePtyRoot,
+      spawnPty: (_shell: string, _args: string | string[], options?: SpawnOptions) => {
+        attempts.push(options?.useConptyDll);
+        if (options?.useConptyDll) {
+          throw new Error('Failed to load conpty.dll');
+        }
+        return createFakePty() as never;
+      },
+    };
+
+    const socket = launch(dependencies, plainShell, projectPath);
+
+    assert.deepEqual(attempts, [true, undefined]);
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(String(warn.mock.calls[0].arguments[0]), /Bundled ConPTY failed to start \(Failed to load conpty\.dll\)/);
+    const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
+    assert.deepEqual(frames.map((frame) => frame.type), ['output']);
   });
 });
