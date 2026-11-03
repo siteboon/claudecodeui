@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
@@ -38,6 +38,8 @@ const sessionsProvider = new OpenCodeSessionsProvider();
 
 let tempRoot = '';
 let projectDir = '';
+/** The workspace path turns get: a symlink to projectDir where links can be made. */
+let workspacePath = '';
 let wrapperPath = '';
 let logCounter = 0;
 let mtimeBump = 0;
@@ -70,6 +72,13 @@ before(async () => {
   const binDir = path.join(tempRoot, 'bin');
   projectDir = path.join(tempRoot, 'project');
   await Promise.all([mkdir(binDir), mkdir(projectDir)]);
+  // Through a link, the path a turn was given differs from its resolved
+  // directory, which is how a shell started with the wrong PWD gives itself away.
+  workspacePath = projectDir;
+  if (process.platform !== 'win32') {
+    workspacePath = path.join(tempRoot, 'workspace-link');
+    await symlink(projectDir, workspacePath);
+  }
 
   // `opencode` on PATH runs the fixture through tsx, as the real CLI would run.
   if (process.platform === 'win32') {
@@ -186,7 +195,7 @@ async function runTurn(options: TurnOptions) {
   const appSessionId = options.appSessionId ?? 'app-v2-session';
   const running = opencodeRuntime.run(options.command ?? 'Hi', {
     sessionId: appSessionId,
-    cwd: projectDir,
+    cwd: workspacePath,
     model: MODEL,
     effort: options.effort,
     permissionMode: options.permissionMode,
@@ -235,6 +244,9 @@ test('a 2.x turn runs `opencode run` in the workspace with the prompt on stdin, 
   // No --dir and no --variant: 2.x refuses both. No message argument either.
   assert.deepEqual(run.args, ['run', '--standalone', '--format', 'json', '--model', MODEL]);
   assert.equal(realPath(run.cwd), realPath(projectDir));
+  // 2.x works in the directory PWD names, so PWD has to be the workspace too:
+  // inherited, it would name CloudCLI's own directory.
+  assert.equal(run.pwd, workspacePath);
   // Written to stdin, which is then closed: `run` reads its prompt to the end
   // (the turn would never finish otherwise) and cannot wait on stdin for an answer.
   assert.equal(run.prompt, 'Hi');

@@ -1520,7 +1520,8 @@ function installV2ExitHook(): void {
  * - `--session` continues the chat's session (2.x creates one under that id
  *   when it does not know it).
  * - the effort rides on the model as OpenCode's `#variant`; 2.x has no
- *   `--variant`, and no `--dir` either: the workspace is the process's cwd.
+ *   `--variant`, and no `--dir` either: the workspace is the process's cwd
+ *   and PWD (see `buildOpenCodeRunEnv`).
  * - plan runs the read-only `plan` agent; bypassPermissions adds `--auto`,
  *   which allows what the user's rules leave to `ask`.
  * - there is no message argument: the prompt goes on stdin (see `runOpenCodeV2Turn`).
@@ -1548,14 +1549,17 @@ function buildOpenCodeRunArgs(turn: {
 }
 
 /**
- * Environment of a 2.x turn's `opencode run`. acceptEdits allows file edits
+ * Environment of a 2.x turn's `opencode run`. 2.x works in the directory PWD
+ * names, not in the process's cwd, so PWD is set to the workspace: inherited,
+ * it would name CloudCLI's own directory. acceptEdits allows file edits
  * through OPENCODE_CONFIG_CONTENT, merged into the user's own inline config
  * (2.x ignores the OPENCODE_PERMISSION variable 1.x `run` read). The rule goes
  * last, since OpenCode applies the last rule that matches.
  */
-function buildOpenCodeRunEnv(permissionMode: unknown): NodeJS.ProcessEnv {
+function buildOpenCodeRunEnv(permissionMode: unknown, workingDir: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, PWD: workingDir };
   if (permissionMode !== 'acceptEdits') {
-    return { ...process.env };
+    return env;
   }
 
   const inlineConfig = (readInlineConfig() ?? {}) as AnyRecord;
@@ -1564,10 +1568,8 @@ function buildOpenCodeRunEnv(permissionMode: unknown): NodeJS.ProcessEnv {
     ? { '*': inlineConfig.permission }
     : { ...readObjectRecord(inlineConfig.permission) };
   delete rules.edit;
-  return {
-    ...process.env,
-    OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...inlineConfig, permission: { ...rules, edit: 'allow' } }),
-  };
+  env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ ...inlineConfig, permission: { ...rules, edit: 'allow' } });
+  return env;
 }
 
 /**
@@ -1752,7 +1754,7 @@ async function runOpenCodeV2Turn(
       permissionMode,
     }), {
       cwd: workingDir,
-      env: buildOpenCodeRunEnv(permissionMode),
+      env: buildOpenCodeRunEnv(permissionMode, workingDir),
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });

@@ -81,6 +81,8 @@ if (args[0] === '--version') {
     command: args[0],
     args,
     cwd: process.cwd(),
+    // The directory 2.x really works in.
+    pwd: process.env.PWD ?? null,
     pid: process.pid,
     stdin: stdinKind,
     prompt,
