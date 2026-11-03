@@ -154,6 +154,24 @@ test('original filenames round-trip through the tag', () => {
   ]);
 });
 
+test('decoded non-Latin names round-trip, minus Unicode line separators', () => {
+  const contract = '/home/x/.cloudcli/assets/1-2-Счет-фактура___1_от_31.07.2026.docx';
+  const notes = '/home/x/.cloudcli/assets/3-4-line_sep.txt';
+  const descriptors = [
+    { path: contract, name: 'Счет-фактура № 1 от 31.07.2026.docx' },
+    { path: notes, name: 'line\u2028sep\u2029.txt' },
+  ];
+
+  // U+2028/U+2029 are dropped like newlines; left in, the entry pattern
+  // cannot match across them and the whole attachment disappears.
+  const expected = [
+    { path: contract, name: 'Счет-фактура № 1 от 31.07.2026.docx' },
+    { path: notes, name: 'linesep.txt' },
+  ];
+  assert.deepEqual(parseFilesInputTag(appendFilesInputTag('read these', descriptors)).attachments, expected);
+  assert.deepEqual(parseImagesInputTag(appendImagesInputTag('see these', descriptors)).attachments, expected);
+});
+
 test('only the LAST images_input block is treated as the attachment carrier', () => {
   const userTypedTag = 'What does <images_input> mean in this codebase?';
   const tagged = appendImagesInputTag(
