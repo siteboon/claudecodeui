@@ -1449,9 +1449,10 @@ const activeV2Turns = new Map<string, OpenCodeV2Turn>();
 let v2ExitHookInstalled = false;
 
 /**
- * Sends a signal to a turn's `opencode run`. On Windows, where the CLI runs
- * behind a `.cmd` shim and signals do not exist, the whole process tree is
- * ended instead, as the SDK stops its servers there.
+ * Sends a signal to a turn's `opencode run`. Windows has no signals to send
+ * and runs the CLI behind a `.cmd` shim, so there the whole process tree is
+ * ended at once instead, as the SDK stops its servers; the interrupt SIGINT
+ * gives elsewhere does not happen then (see `stopRunProcess`).
  */
 function signalRunProcess(child: ChildProcess, signal: NodeJS.Signals): void {
   if (child.exitCode !== null || child.signalCode !== null) {
@@ -1658,6 +1659,7 @@ async function runOpenCodeV2Turn(
   };
 
   let sawEvent = false;
+  let processEnded = false;
   const forwardedParts = new Set<string>();
   let diagnostics = '';
   const keepDiagnostics = (text: string) => {
@@ -1665,7 +1667,7 @@ async function runOpenCodeV2Turn(
   };
 
   const handleLine = (line: string) => {
-    if (!line.trim()) {
+    if (!line.trim() || processEnded) {
       return;
     }
 
@@ -1711,6 +1713,14 @@ async function runOpenCodeV2Turn(
         continue;
       }
       send(message);
+    }
+  };
+  const handleLineSafely = (line: string) => {
+    try {
+      handleLine(line);
+    } catch (error) {
+      // One line that cannot be handled must not end the turn.
+      console.error('[OpenCode] Failed to handle a line of opencode run:', readErrorMessage(error));
     }
   };
 
@@ -1762,14 +1772,7 @@ async function runOpenCodeV2Turn(
       stdoutBuffer += chunk;
       const lines = stdoutBuffer.split(/\r?\n/);
       stdoutBuffer = lines.pop() ?? '';
-      for (const line of lines) {
-        try {
-          handleLine(line);
-        } catch (error) {
-          // One line that cannot be handled must not end the turn.
-          console.error('[OpenCode] Failed to handle a line of opencode run:', readErrorMessage(error));
-        }
-      }
+      lines.forEach(handleLineSafely);
     });
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', (chunk: string) => keepDiagnostics(chunk));
@@ -1787,9 +1790,9 @@ async function runOpenCodeV2Turn(
         exitTimer = setTimeout(() => settle({ code, signal, error: null }), RUN_KILL_GRACE_MS);
       });
     });
-    if (stdoutBuffer.trim()) {
-      handleLine(stdoutBuffer);
-    }
+    handleLineSafely(stdoutBuffer);
+    // Whatever a process left behind still writes is not part of the turn.
+    processEnded = true;
     if (turn.aborted) {
       return await finishStoppedV2Turn(turn);
     }
@@ -1803,9 +1806,13 @@ async function runOpenCodeV2Turn(
       if (printed) {
         console.warn('[OpenCode] opencode run failed:', printed);
       }
-      sendError(printed || (outcome.code !== null
-        ? `OpenCode exited with code ${outcome.code}.`
-        : `OpenCode was stopped by ${outcome.signal ?? 'a signal'}.`));
+      let exitDescription = `OpenCode was stopped by ${outcome.signal ?? 'a signal'}.`;
+      if (outcome.code === 0) {
+        exitDescription = 'OpenCode ended the turn without running it.';
+      } else if (outcome.code !== null) {
+        exitDescription = `OpenCode exited with code ${outcome.code}.`;
+      }
+      sendError(printed || exitDescription);
     }
   } catch (error) {
     if (turn.aborted) {
