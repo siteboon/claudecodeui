@@ -491,7 +491,11 @@ const readOpenCodeV2ToolState = (toolName: string, state: AnyRecord): AnyRecord 
   };
 };
 
-/** The id OpenCode 2.x's `run` gives a part it prints from storage (`prt_…_text-0`). */
+/**
+ * The id OpenCode 2.x gives a stored part when `run` prints it from storage
+ * (`prt_<message>_text-0`, `prt_<message>_step-finish`). Parts `run` prints
+ * while they stream, such as a turn's text, carry fresh ids instead.
+ */
 const toOpenCodeV2PartId = (messageId: string, suffix: string): string =>
   `prt_${messageId.replace(/^msg_/, '')}_${suffix}`;
 
@@ -731,11 +735,13 @@ const fetchOpenCodeV2HistoryPage = (
   providerSessionId: string,
   options: FetchHistoryOptions,
 ): FetchHistoryResult | null => {
-  if (readOpenCodeSessionTable(db) !== 'session_v2') {
-    return null;
-  }
-
+  // Inside the try: a database that cannot be read gives the empty page and
+  // warning the 1.x reader gives, and the caller still closes it.
   try {
+    if (readOpenCodeSessionTable(db) !== 'session_v2') {
+      return null;
+    }
+
     const normalized = normalizeOpenCodeV2History(db, providerSessionId, sessionId);
     if (!normalized && hasOpenCodeTable(db, 'message')) {
       return null;

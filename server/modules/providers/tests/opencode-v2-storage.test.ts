@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readlink, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import Database from 'better-sqlite3';
 
@@ -351,6 +351,34 @@ test('an upgraded database lists each session once, and a 1.x CLI writing it aga
       'assistant:migrated answer',
       'end',
     ]);
+  });
+});
+
+test('a database the history reader cannot read gives an empty page and a warning, and is closed', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_2_SCHEMA, async ({ db, homeDir, workspace }) => {
+    insertV2Session(db, { id: 'ses_unreadable', directory: workspace, timeUpdated: 1_793_723_590_000 });
+    // A 1.x session table without the columns OpenCode writes cannot be read.
+    db.exec('CREATE TABLE session (id TEXT PRIMARY KEY)');
+    const dbPath = path.join(homeDir, '.local', 'share', 'opencode', 'opencode.db');
+    const openHandles = async () => {
+      if (process.platform !== 'linux') {
+        return 0;
+      }
+      const fds = await readdir('/proc/self/fd');
+      const targets = await Promise.all(fds.map((fd) => readlink(`/proc/self/fd/${fd}`).catch(() => '')));
+      return targets.filter((target) => target === dbPath).length;
+    };
+    const handlesBefore = await openHandles();
+    const warn = mock.method(console, 'warn', () => {});
+    try {
+      const history = await new OpenCodeSessionsProvider().fetchHistory('ses_unreadable');
+
+      assert.deepEqual(history, { messages: [], total: 0, hasMore: false, offset: 0, limit: null });
+      assert.equal(warn.mock.calls.some((call) => String(call.arguments[0]).includes('Failed to load session ses_unreadable')), true);
+    } finally {
+      warn.mock.restore();
+    }
+    assert.equal(await openHandles(), handlesBefore);
   });
 });
 
