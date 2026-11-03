@@ -113,24 +113,24 @@ const seedRandomSession = (
   for (let index = 0; index < messageCount; index += 1) {
     const messageId = nextId('msg');
     const role = random() < 0.35 ? 'user' : 'assistant';
-    // [data, whether the message shows an error]
-    const [messageData, showsError] = role === 'user'
-      ? pick<[unknown, boolean]>([
-        [json({ role: 'user' }), false],
-        [json({ role: ' user ' }), false],
-        ['[1,2]', false],
-        ['{"role":"user",', false],
+    // [data, whether the message shows an error, whether it reads as a user message]
+    const [messageData, showsError, readsAsUser] = role === 'user'
+      ? pick<[unknown, boolean, boolean]>([
+        [json({ role: 'user' }), false, true],
+        [json({ role: ' user ' }), false, true],
+        ['[1,2]', false, false],
+        ['{"role":"user",', false, false],
       ])
-      : pick<[unknown, boolean]>([
-        [json({ role: 'assistant', tokens: { input: 3, output: 2, reasoning: 1, cache: { read: 4, write: 1 } } }), false],
-        [json({ role: 'assistant', tokens: { input: 1, output: 1 } }), false],
-        [json({ role: 'assistant', error: { name: 'APIError', data: { message: `Rate limited ${index}` } } }), true],
-        [json({ role: ' assistant ', error: `plain failure ${index}` }), true],
-        [json({ role: 'assistant', error: { name: 'MessageAbortedError', data: { message: 'Aborted' } } }), false],
-        [json({ role: 'assistant', error: null }), false],
-        [json({ role: 'assistant', error: 0 }), true],
-        ['{"role":"assistant","error":', false],
-        [Buffer.from(json({ role: 'assistant', error: 'stored as a blob' })), false],
+      : pick<[unknown, boolean, boolean]>([
+        [json({ role: 'assistant', tokens: { input: 3, output: 2, reasoning: 1, cache: { read: 4, write: 1 } } }), false, false],
+        [json({ role: 'assistant', tokens: { input: 1, output: 1 } }), false, false],
+        [json({ role: 'assistant', error: { name: 'APIError', data: { message: `Rate limited ${index}` } } }), true, false],
+        [json({ role: ' assistant ', error: `plain failure ${index}` }), true, false],
+        [json({ role: 'assistant', error: { name: 'MessageAbortedError', data: { message: 'Aborted' } } }), false, false],
+        [json({ role: 'assistant', error: null }), false, false],
+        [json({ role: 'assistant', error: 0 }), true, false],
+        ['{"role":"assistant","error":', false, false],
+        [Buffer.from(json({ role: 'assistant', error: 'stored as a blob' })), false, false],
       ]);
     insertMessage.run(messageId, sessionId, tick(), messageData);
     if (showsError) {
@@ -148,6 +148,9 @@ const seedRandomSession = (
         [json({ type: 'text', text: appendImagesInputTag(prompt, [{ path: `/assets/${index}.png`, name: 'shot.png' }]) }), 'text'],
         [json({ type: 'text', text: appendFilesInputTag(prompt, [{ path: `/assets/${index}.txt`, name: 'notes.txt' }]) }), 'text'],
         [json({ type: 'text', text: appendImagesInputTag('', [{ path: `/assets/only-${index}.png` }]) }), 'text'],
+        // An attachment block that names no file is all a user prompt holds; elsewhere it is text.
+        [json({ type: 'text', text: '<images_input>\n</images_input>' }), readsAsUser ? null : 'text'],
+        [json({ type: 'text', text: '<files_input>\nnothing listed\n</files_input>' }), readsAsUser ? null : 'text'],
         [json({ type: 'text', text: '' }), null],
         [json({ type: 'text', text: '   ' }), null],
         [json({ type: 'text', text: '"   "' }), null],
@@ -185,7 +188,7 @@ const seedRandomSession = (
         [Buffer.from(json({ type: 'tool', tool: 'bash' })), null],
       ];
       // User messages mostly carry prompts: the text shapes come first.
-      const [partData, kind] = pick(role === 'user' && random() < 0.8 ? shapes.slice(0, 10) : shapes);
+      const [partData, kind] = pick(role === 'user' && random() < 0.8 ? shapes.slice(0, 12) : shapes);
       const partId = nextId('prt');
       insertPart.run(partId, messageId, sessionId, tick(), partData);
       expectations.partKinds.set(partId, kind);
