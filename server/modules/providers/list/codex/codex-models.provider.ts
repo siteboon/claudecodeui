@@ -17,6 +17,10 @@ import {
 
 /** Curated Codex catalog shipped as immutable CloudCLI defaults. */
 export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
+  // Chats run the bundled `@openai/codex` CLI, which only has metadata for the
+  // models in its own bundled catalog (`codex debug models --bundled`); any
+  // other model runs on fallback metadata. So every entry must be one of that
+  // catalog's slugs, which codex-models.test.ts checks.
   OPTIONS: [
     {
       value: 'gpt-6.1-sol',
@@ -132,24 +136,6 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
       value: 'gpt-5.5',
       label: 'GPT-5.5',
       description: 'Frontier model for complex coding, research, and real-world work.',
-      effort: {
-        default: 'medium',
-        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
-      },
-    },
-    {
-      value: 'gpt-5.4',
-      label: 'GPT-5.4',
-      description: 'Strong model for everyday coding.',
-      effort: {
-        default: 'medium',
-        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
-      },
-    },
-    {
-      value: 'gpt-5.4-mini',
-      label: 'GPT-5.4 Mini',
-      description: 'Small, fast, and cost-efficient model for simpler coding tasks.',
       effort: {
         default: 'medium',
         values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
