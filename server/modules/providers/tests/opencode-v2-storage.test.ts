@@ -433,8 +433,11 @@ test('with both layouts each session is listed and read from its own live copy, 
     });
     insertV2Message(db, 'ses_on_2x', 1, 'msg_on_2x_user', 'user', { text: 'asked on 2.x' });
     insertV2Message(db, 'ses_on_2x', 2, 'msg_on_2x_reply', 'assistant', { content: [{ type: 'text', text: '2.x answer' }], finish: 'stop' });
-    // Resumed on 2.x, which made its row before storing anything: the 1.x rows still answer.
-    insertV1Session(db, 'ses_resumed', workspace, BASE_TIME + 6_000, 'answer only 1.x stored', { prompt: 'asked on 1.x only' });
+    // Resumed on 2.x, which made its row before storing anything: the 1.x rows still answer, model included.
+    insertV1Session(db, 'ses_resumed', workspace, BASE_TIME + 6_000, 'answer only 1.x stored', {
+      prompt: 'asked on 1.x only',
+      model: JSON.stringify({ id: 'm-resumed', providerID: 'p4' }),
+    });
     insertV2Session(db, { id: 'ses_resumed', directory: workspace, timeUpdated: BASE_TIME + 25_000 });
     // Each in one table only; the 2.x CLI wrote last.
     insertV1Session(db, 'ses_term1', workspace, BASE_TIME + 15_000, 'a terminal 1.x session');
@@ -449,7 +452,7 @@ test('with both layouts each session is listed and read from its own live copy, 
         async (id) => [id, summarize((await provider.fetchHistory(id)).messages)],
       ))),
       tokens: [(await readServiceTokenUsage(homeDir, workspace, 'ses_cc')).used, (await readServiceTokenUsage(homeDir, workspace, 'ses_on_2x')).used],
-      models: [(await models.getCurrentActiveModel('ses_cc')).model, (await models.getCurrentActiveModel('ses_on_2x')).model],
+      models: await Promise.all(['ses_cc', 'ses_on_2x', 'ses_resumed'].map(async (id) => (await models.getCurrentActiveModel(id)).model)),
     });
     const expected = {
       histories: {
@@ -460,7 +463,7 @@ test('with both layouts each session is listed and read from its own live copy, 
         ses_term2: ['user:made on 2.x', 'assistant:terminal 2.x answer', 'end'],
       },
       tokens: [15, 36],
-      models: ['p1/m-1x', 'p3/m-new'],
+      models: ['p1/m-1x', 'p3/m-new', 'p4/m-resumed'],
     };
 
     assert.equal(await new OpenCodeSessionSynchronizer().synchronize(), 5);

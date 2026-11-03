@@ -1088,8 +1088,10 @@ export function unwrapJsonStringLiteral(value: string): string {
  * session can be in either or both (see `readOpenCodeLiveSessionTable`).
  *
  * Used by the OpenCode session synchronizer, which lists the sessions of
- * every table there is, and the OpenCode sessions provider, which reads a
- * session's history from the other table when its live copy has none.
+ * every table there is, the OpenCode sessions provider, which reads a
+ * session's history from the other table when its live copy has none, and
+ * the OpenCode models provider, which reads a session's model from there
+ * when the live copy names none.
  */
 export function readOpenCodeSessionTables(db: Database.Database): OpenCodeSessionTable[] {
   const tables = new Set(db.prepare(`

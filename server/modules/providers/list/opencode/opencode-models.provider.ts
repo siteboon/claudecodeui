@@ -17,6 +17,7 @@ import {
   readObjectRecord,
   readOpenCodeCliMajorVersion,
   readOpenCodeLiveSessionTable,
+  readOpenCodeSessionTables,
   readOptionalString,
 } from '@/shared/utils.js';
 
@@ -755,6 +756,16 @@ export class OpenCodeProviderModels implements IProviderModels {
           return {
             model,
           };
+        }
+
+        // With both layouts, a live copy without a model leaves it to the
+        // other layout's row, as the session's first prompt is read.
+        const otherTable = readOpenCodeSessionTables(db).find((table) => table !== sessionTable);
+        const otherModel = otherTable
+          ? parseOpenCodeSessionModelValue(db.prepare(`SELECT model FROM ${otherTable} WHERE id = ?`).pluck().get(providerSessionId))
+          : null;
+        if (otherModel) {
+          return { model: otherModel };
         }
       } finally {
         db.close();
