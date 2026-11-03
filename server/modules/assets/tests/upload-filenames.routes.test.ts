@@ -153,6 +153,21 @@ test('names that arrive decoded or as genuine latin1 are not decoded twice', asy
   assert.match(path.basename(latin1.path), /^\d+-\d+-café\.txt$/);
 });
 
+test('a download keeps the type the assets service resolved', async () => {
+  const record = await readSingleRecord(
+    await uploadLikeBrowser('files', 'Заметки.txt', Buffer.from('e'), 'text/plain'),
+    'attachments',
+  );
+  const storedName = path.basename(record.path);
+
+  const download = await send(`${baseUrl}/files/${encodeURIComponent(storedName)}`);
+  assert.equal(download.status, 200);
+  // res.attachment() alone would label it `text/plain; charset=utf-8`.
+  assert.equal(download.headers.get('content-type'), 'text/plain');
+  assert.equal(readExtendedFilename(download.headers.get('content-disposition')), storedName);
+  await download.arrayBuffer();
+});
+
 test('long names are stored within the filesystem name limit and stay downloadable', async () => {
   for (const originalName of [`${'ж'.repeat(120)}.docx`, `${'x'.repeat(240)}.txt`]) {
     const record = await readSingleRecord(

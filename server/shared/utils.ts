@@ -108,17 +108,20 @@ const STRICT_UTF8_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: t
  * bytes, but busboy (multer's parser) reads header parameters as latin1: multer
  * 2.0.x cannot pass it a charset at all, and later 2.x releases default the
  * option to latin1. Multer's `originalname` therefore arrives with each UTF-8
- * byte turned into one character, e.g. `Ð¡ÑÐµÑ.docx` for `Счет.docx`.
+ * byte turned into one character, e.g. `Счет.docx` arrives as
+ * `Ð¡Ñ\x87ÐµÑ\x82.docx` (two of those characters are invisible C1 controls).
  *
- * The name is re-read as UTF-8 only when that is unambiguous, so the result does
- * not depend on the installed multer version or its options:
+ * The name is re-read as UTF-8 only when its bytes form valid UTF-8, which a
+ * genuine latin1 name practically never does, so the result does not depend on
+ * the installed multer version or its options:
  * - an ASCII-only name, or one that already holds a character above U+00FF
  *   (busboy decoded it, e.g. from an RFC 5987 `filename*=UTF-8''...` parameter),
  *   is returned unchanged;
  * - otherwise the characters are turned back into the bytes they came from and
  *   decoded as UTF-8; a name whose bytes are not valid UTF-8 (a real latin1 name
  *   such as `café.txt` sent as `filename*=ISO-8859-1''caf%E9.txt`) is returned
- *   unchanged.
+ *   unchanged. The one misread: a latin1 name that itself looks like mojibake,
+ *   such as `Â©2024.txt`, is re-read as `©2024.txt`.
  *
  * The result is meant for display and for callers that confine it themselves;
  * it is not sanitized for use as a path.

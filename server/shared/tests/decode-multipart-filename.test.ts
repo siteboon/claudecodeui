@@ -42,6 +42,11 @@ test('keeps a genuine latin1 name whose bytes are not valid UTF-8', () => {
   assert.equal(decodeMultipartFilename('naïve résumé.pdf'), 'naïve résumé.pdf');
 });
 
+test('keeps a leading byte order mark instead of dropping it', () => {
+  // The BOM is part of the name the client sent, so it must survive the re-read.
+  assert.equal(decodeMultipartFilename(asBusboyLatin1('\uFEFFСчет.txt')), '\uFEFFСчет.txt');
+});
+
 test('leaves ASCII names unchanged', () => {
   assert.equal(decodeMultipartFilename('report (final) v2.pdf'), 'report (final) v2.pdf');
   assert.equal(decodeMultipartFilename(''), '');

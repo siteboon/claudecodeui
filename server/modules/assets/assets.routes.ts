@@ -135,9 +135,10 @@ router.get('/files/:filename', async (req, res) => {
   }
 
   // Stored names keep non-Latin letters, and Node throws on a raw header value
-  // outside latin1, so res.attachment() writes the RFC 6266 form: an ASCII
-  // `filename` fallback plus a UTF-8 `filename*`. It also guesses a
-  // Content-Type from the extension, which the service's type then replaces.
+  // outside latin1, so res.attachment() writes the RFC 6266 form: a latin1
+  // `filename` fallback, plus a UTF-8 `filename*` when the name has characters
+  // above U+00FF. It also guesses a Content-Type from the extension (with a
+  // charset for text types), which the service's type then replaces.
   res.attachment(req.params.filename);
   res.setHeader('Content-Type', asset.contentType);
   res.setHeader('X-Content-Type-Options', 'nosniff');
