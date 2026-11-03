@@ -115,6 +115,32 @@ function shouldAutoOpenUrlFromOutput(value: string): boolean {
   );
 }
 
+// Terminal queries the Shell's xterm.js answers.
+const TERMINAL_QUERY_REGEX = new RegExp(
+  [
+    // CSI: DSR and cursor position (also DECXCPR), DA1/DA2/DA3, XTVERSION,
+    // DECRQM, kitty keyboard flags, the XTWINOPS size reports.
+    /\x1b\[(?:\??\d*n|[>=]?0?c|>0?q|\??[\d;]*\$p|\?u|1[468]t)/.source,
+    // OSC 4/10/11/12 colour and OSC 52 clipboard queries that set nothing.
+    /\x1b\](?:4(?:;\d+;\?)+|1[0-2](?:;\?)+|52;[a-z0-9]*;\?)(?:\x07|\x1b\\)/.source,
+    // DECRQSS.
+    /\x1bP\$q[^\x1b]*\x1b\\/.source,
+  ].join('|'),
+  'g',
+);
+
+/**
+ * The buffered output a reattaching client replays, as one string without the
+ * terminal queries in it. Each one was answered when the program sent it; a new
+ * terminal would answer it again, and that reply reaches the program as typed
+ * input (OpenConsole turns a second DA1 reply into text and a cursor report
+ * nobody waits for into an F3 key, #1665). Joined first because a query can be
+ * split across chunks.
+ */
+function buildReplayOutput(buffer: string[]): string {
+  return buffer.join('').replace(TERMINAL_QUERY_REGEX, '');
+}
+
 type ShellWebSocketDependencies = {
   resolveProviderSessionId: (
     sessionId: string,
@@ -717,15 +743,14 @@ export function handleShellConnection(
             })
           );
 
-          if (existingSession.buffer.length > 0) {
-            existingSession.buffer.forEach((bufferedData) => {
-              ws.send(
-                JSON.stringify({
-                  type: 'output',
-                  data: bufferedData,
-                })
-              );
-            });
+          const replay = buildReplayOutput(existingSession.buffer);
+          if (replay) {
+            ws.send(
+              JSON.stringify({
+                type: 'output',
+                data: replay,
+              })
+            );
           }
 
           existingSession.ws = ws;

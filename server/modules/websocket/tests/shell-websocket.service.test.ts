@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -9,6 +10,21 @@ import test from 'node:test';
 import { WebSocket } from 'ws';
 
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
+
+// The Shell's own terminal emulator (src/modules/shell). Without open() it parses
+// output and answers terminal queries without a DOM, the way the browser does.
+// Typed here: xterm's own typings would pull the DOM lib into the server build.
+type XtermTerminal = {
+  buffer: {
+    active: { length: number; getLine: (row: number) => { translateToString: (trimRight: boolean) => string } | undefined };
+  };
+  dispose: () => void;
+  onData: (listener: (data: string) => void) => unknown;
+  write: (data: string, callback: () => void) => void;
+};
+const { Terminal } = createRequire(import.meta.url)('@xterm/xterm') as {
+  Terminal: new (options: Record<string, unknown>) => XtermTerminal;
+};
 
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
@@ -947,4 +963,127 @@ test('a node-pty without the expected Windows internals still starts the shell',
     assert.deepEqual(frames.map((frame) => frame.type), ['output']);
     assert.match(String(frames[0].data), /Starting terminal in/);
   }
+});
+
+// The Shell unmounts its terminal whenever its tab is left, so every return to
+// the tab, page reload or dropped socket replays the PTY's output into a fresh
+// xterm.js. The bundled Windows ConPTY starts with a DA1 query and asks for the
+// cursor position after resizes; answered again on replay, the replies reached
+// the shell as typed text and F3 keys (#1665). Programs' own queries too.
+test('a reattaching terminal answers none of the queries in the replayed output', async () => {
+  const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-replay-'));
+  const writes: Array<{ phase: string; data: string }> = [];
+  let phase = 'attached';
+  const shellPty = Object.assign(createFakePty(), {
+    write(data: string) {
+      writes.push({ phase, data });
+    },
+  });
+  const dependencies = { resolveProviderSessionId: () => null, nodePtyRoot: null, spawnPty: () => shellPty as never };
+  const terminals: XtermTerminal[] = [];
+  const parsing: Array<Promise<void>> = [];
+  const openShellTab = () => {
+    const terminal = new Terminal({ cols: 200, rows: 24, allowProposedApi: true, convertEol: true });
+    terminals.push(terminal);
+    const socket = createFakeSocket();
+    socket.send = (frame: string) => {
+      socket.frames.push(frame);
+      const message = JSON.parse(frame) as { type: string; data?: string };
+      if (message.type === 'output') {
+        parsing.push(new Promise((resolve) => terminal.write(String(message.data), resolve)));
+      }
+    };
+    terminal.onData((data) => socket.emit('message', JSON.stringify({ type: 'input', data })));
+    handleShellConnection(socket as never, dependencies);
+    socket.emit(
+      'message',
+      JSON.stringify({ type: 'init', projectPath, sessionId: 'replay-queries', hasSession: false, ...plainShell })
+    );
+    return socket;
+  };
+  const parsed = async () => {
+    while (parsing.length > 0) {
+      await parsing.shift();
+    }
+  };
+
+  try {
+    const firstTab = openShellTab();
+    shellPty.emitData('\x1b[c\x1b[?1004h\x1b[?9001h');
+    shellPty.emitData('C:\\project>\x1b[');
+    shellPty.emitData('6n\x1b[?2026$p');
+    await parsed();
+    phase = 'detached';
+    firstTab.emit('close');
+    shellPty.emitData('\r\nbuild finished\r\nC:\\project>\x1b[6n');
+    phase = 'reattached';
+    const secondTab = openShellTab();
+    await parsed();
+
+    // While attached the answers go through untouched: DA1, the focus report
+    // that turning focus events on triggers, the split cursor query and the
+    // program's DECRQM.
+    const answers = (writePhase: string) =>
+      writes.filter((write) => write.phase === writePhase).map((write) => write.data);
+    const liveAnswers = answers('attached');
+    assert.equal(liveAnswers.length, 4, JSON.stringify(liveAnswers));
+    assert.deepEqual([liveAnswers[0], liveAnswers[1], liveAnswers[3]], ['\x1b[?1;2c', '\x1b[O', '\x1b[?2026;0$y']);
+    assert.match(liveAnswers[2], /^\x1b\[\d+;12R$/);
+    assert.deepEqual(answers('detached'), []);
+    // The replay keeps modes such as focus events, so the new terminal reports
+    // its own focus once; no query is answered again.
+    assert.deepEqual(answers('reattached'), ['\x1b[O']);
+    const screen = terminals[1].buffer.active;
+    const lines = Array.from({ length: screen.length }, (_, row) => screen.getLine(row)?.translateToString(true) ?? '');
+    assert.deepEqual(lines.slice(0, 4), [
+      '[Reconnected to existing session]',
+      'C:\\project>',
+      'build finished',
+      'C:\\project>',
+    ]);
+    assert.equal(secondTab.frames.length, 2, 'the buffer is replayed as one frame');
+  } finally {
+    terminals.forEach((terminal) => terminal.dispose());
+    shellPty.emitExit();
+    fs.rmSync(projectPath, { recursive: true, force: true });
+  }
+});
+
+test('the replay drops only terminal queries and the live output stays byte for byte', () => {
+  const shellPty = createFakePty();
+  const dependencies = { resolveProviderSessionId: () => null, nodePtyRoot: null, spawnPty: () => shellPty as never };
+  const init = JSON.stringify({
+    type: 'init',
+    projectPath: process.cwd(),
+    sessionId: `replay-bytes-${Date.now()}`,
+    hasSession: false,
+    ...plainShell,
+  });
+  const chunks = [
+    '\x1b[c\x1b[?1004h\x1b[?9001h',
+    // A CLI asking for the background colour and the cursor, split across chunks.
+    'PS C:\\p> \x1b]11;?\x07\x1b[',
+    '6n\x1b[?2026$p\x1b[>0q\x1bP$qm\x1b\\\x1b[5n\x1b[?6n\x1b[>c',
+    // A palette change stays; a clipboard read goes.
+    '\x1b]4;1;rgb:ff/00/00\x07\x1b]52;c;?\x07\x1b]10;?\x1b\\',
+    'done\r\n',
+  ];
+
+  const firstSocket = createFakeSocket();
+  handleShellConnection(firstSocket as never, dependencies);
+  firstSocket.emit('message', init);
+  firstSocket.frames.length = 0;
+  chunks.forEach((chunk) => shellPty.emitData(chunk));
+  firstSocket.emit('close');
+  const secondSocket = createFakeSocket();
+  handleShellConnection(secondSocket as never, dependencies);
+  secondSocket.emit('message', init);
+
+  assert.deepEqual(firstSocket.frames.map((frame) => (JSON.parse(frame) as { data: string }).data), chunks);
+  assert.deepEqual(secondSocket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>), [
+    { type: 'output', data: '\x1b[36m[Reconnected to existing session]\x1b[0m\r\n' },
+    { type: 'output', data: '\x1b[?1004h\x1b[?9001hPS C:\\p> \x1b]4;1;rgb:ff/00/00\x07done\r\n' },
+  ]);
+
+  shellPty.emitExit();
 });
