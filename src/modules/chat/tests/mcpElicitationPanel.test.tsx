@@ -204,3 +204,30 @@ test('a date-time answer is sent as an RFC 3339 instant with an offset', () => {
     decision: { allow: true, updatedInput: { content: { answer: new Date('2026-11-03T17:05').toISOString() } } },
   }]);
 });
+
+test('length limits apply to a choice\'s value too', () => {
+  const { getByText, getAllByText, getByLabelText, decisions } = renderBanner(
+    singleField('eli_9', { type: 'string', enum: ['ab', 'abcdef'], maxLength: 4 }),
+  );
+
+  fireEvent.change(getByLabelText(/Answer/), { target: { value: '1' } });
+  fireEvent.click(getByText('Submit'));
+  assert.equal(decisions.length, 0);
+  assert.equal(getAllByText('At most 4 characters').length, 1);
+
+  fireEvent.change(getByLabelText(/Answer/), { target: { value: '0' } });
+  fireEvent.click(getByText('Submit'));
+  assert.deepEqual(decisions, [{ ids: 'eli_9', decision: { allow: true, updatedInput: { content: { answer: 'ab' } } } }]);
+});
+
+test('a date-time is measured as the UTC instant that is sent, not as typed', () => {
+  // '2026-11-03T17:05' is 16 characters; the instant sent is 24.
+  const { getByText, getByLabelText, decisions } = renderBanner(
+    singleField('eli_10', { type: 'string', format: 'date-time', maxLength: 20 }),
+  );
+
+  fireEvent.change(getByLabelText(/Answer/), { target: { value: '2026-11-03T17:05' } });
+  fireEvent.click(getByText('Submit'));
+  assert.equal(decisions.length, 0);
+  assert.ok(getByText('At most 20 characters'));
+});

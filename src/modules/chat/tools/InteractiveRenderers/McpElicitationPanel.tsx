@@ -149,6 +149,25 @@ const matchesFormat = (format: string, value: string): boolean => {
   return true;
 };
 
+/**
+ * The string a choice or text field would send, so every check runs on what the
+ * server will validate rather than on what was typed. `answered: false` is an
+ * empty field; `text: null` is a date-time that does not parse.
+ */
+const toSentString = (
+  field: ElicitationField,
+  value: RawValues[string] | undefined,
+): { answered: false } | { answered: true; text: string | null } => {
+  if (field.kind === 'choice') {
+    // Held as a position: '' is "nothing chosen", and the enum value itself goes
+    // out untrimmed, because an empty or blank value is a real choice.
+    const choice = typeof value === 'string' && value !== '' ? field.choices[Number(value)] : undefined;
+    return choice ? { answered: true, text: choice.value } : { answered: false };
+  }
+  const typed = typeof value === 'string' ? value.trim() : '';
+  return typed ? { answered: true, text: toSubmittedText(field, typed) } : { answered: false };
+};
+
 const FORMAT_ERRORS: Record<string, { key: string; text: string }> = {
   email: { key: 'notAnEmail', text: 'Enter an email address' },
   uri: { key: 'notAUri', text: 'Enter a full address, such as https://example.com' },
@@ -211,16 +230,9 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
       }
       return null;
     }
-    if (field.kind === 'choice') {
-      // Held as a position, so only '' is unanswered; a blank choice is an answer.
-      const answered = typeof value === 'string' && value !== '';
-      return !answered && field.required ? t('chat:mcpElicitation.required', { defaultValue: 'Required' }) : null;
-    }
-    const text = typeof value === 'string' ? value.trim() : '';
-    if (!text) {
-      return field.required ? t('chat:mcpElicitation.required', { defaultValue: 'Required' }) : null;
-    }
     if (field.kind === 'number' || field.kind === 'integer') {
+      const text = typeof value === 'string' ? value.trim() : '';
+      if (!text) return field.required ? t('chat:mcpElicitation.required', { defaultValue: 'Required' }) : null;
       const number = Number(text);
       if (!Number.isFinite(number)) return t('chat:mcpElicitation.notANumber', { defaultValue: 'Enter a number' });
       if (field.kind === 'integer' && !Number.isInteger(number)) {
@@ -234,23 +246,28 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
       }
       return null;
     }
+    // Choice and text fields: every limit applies to the string that is sent,
+    // which for a date-time is the UTC instant, not what the picker shows.
+    const sent = toSentString(field, value);
+    if (!sent.answered) {
+      return field.required ? t('chat:mcpElicitation.required', { defaultValue: 'Required' }) : null;
+    }
+    const formatError = () => {
+      const message = field.format ? FORMAT_ERRORS[field.format] : undefined;
+      return message
+        ? t(`chat:mcpElicitation.${message.key}`, { defaultValue: message.text })
+        : t('chat:mcpElicitation.notTheFormat', { format: field.format, defaultValue: 'Not a valid {{format}}' });
+    };
+    if (sent.text === null) return formatError();
     // JSON Schema counts characters as code points, so an emoji is one, not two.
-    const length = [...text].length;
+    const length = [...sent.text].length;
     if (field.minLength !== undefined && length < field.minLength) {
       return t('chat:mcpElicitation.tooShort', { count: field.minLength, defaultValue: 'At least {{count}} characters' });
     }
     if (field.maxLength !== undefined && length > field.maxLength) {
       return t('chat:mcpElicitation.tooLong', { count: field.maxLength, defaultValue: 'At most {{count}} characters' });
     }
-    if (field.format) {
-      const submitted = toSubmittedText(field, text);
-      if (submitted === null || !matchesFormat(field.format, submitted)) {
-        const message = FORMAT_ERRORS[field.format];
-        return message
-          ? t(`chat:mcpElicitation.${message.key}`, { defaultValue: message.text })
-          : t('chat:mcpElicitation.notTheFormat', { format: field.format, defaultValue: 'Not a valid {{format}}' });
-      }
-    }
+    if (field.format && !matchesFormat(field.format, sent.text)) return formatError();
     return null;
   }, [values, t]);
 
@@ -264,16 +281,13 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
       } else if (field.kind === 'multi') {
         const picked = Array.isArray(value) ? value : [];
         if (picked.length > 0) content[field.key] = picked;
-      } else if (field.kind === 'choice') {
-        // The enum value itself, untrimmed: a blank value is a real choice.
-        const choice = typeof value === 'string' && value !== '' ? field.choices[Number(value)] : undefined;
-        if (choice) content[field.key] = choice.value;
-      } else {
+      } else if (field.kind === 'number' || field.kind === 'integer') {
         const text = typeof value === 'string' ? value.trim() : '';
-        if (!text) continue;
-        content[field.key] = field.kind === 'number' || field.kind === 'integer'
-          ? Number(text)
-          : toSubmittedText(field, text) ?? text;
+        if (text) content[field.key] = Number(text);
+      } else {
+        // The same string the checks above ran on.
+        const sent = toSentString(field, value);
+        if (sent.answered && sent.text !== null) content[field.key] = sent.text;
       }
     }
     return content;
