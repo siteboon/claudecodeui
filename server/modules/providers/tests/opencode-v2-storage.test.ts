@@ -8,7 +8,7 @@ import Database from 'better-sqlite3';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { OpenCodeProviderAuth } from '@/modules/providers/list/opencode/opencode-auth.provider.js';
-import { OpenCodeProviderModels } from '@/modules/providers/list/opencode/opencode-models.provider.js';
+import { OPENCODE_PREDEFINED_MODELS, OpenCodeProviderModels } from '@/modules/providers/list/opencode/opencode-models.provider.js';
 import { OpenCodeSessionSynchronizer } from '@/modules/providers/list/opencode/opencode-session-synchronizer.provider.js';
 import { OpenCodeSessionsProvider } from '@/modules/providers/list/opencode/opencode-sessions.provider.js';
 import { createProviderTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
@@ -562,42 +562,131 @@ test('a database the history reader cannot read gives an empty page and a warnin
   });
 });
 
+/** Provider keys in the environment, which the picker and the login status also count. */
+const OPENCODE_CREDENTIAL_ENV_KEYS = [
+  'OPENCODE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY',
+  'OPENROUTER_API_KEY', 'OPENCODE_CONFIG', 'OPENCODE_CONFIG_CONTENT',
+];
+
+/**
+ * Runs `runTest` with a fake `opencode` alone on PATH that prints `version`
+ * for `--version`, and without provider keys in the environment: database
+ * logins count only for a 2.x CLI. Each call makes a new file, which the
+ * version cache asks again.
+ */
+async function withOpenCodeCli(homeDir: string, version: string, runTest: () => Promise<void>): Promise<void> {
+  const binDir = await mkdtemp(path.join(homeDir, 'bin-'));
+  if (process.platform === 'win32') {
+    await writeFile(path.join(binDir, 'opencode.cmd'), `@echo off\r\necho ${version}\r\n`);
+  } else {
+    await writeFile(path.join(binDir, 'opencode'), `#!/bin/sh\necho '${version}'\n`, { mode: 0o755 });
+  }
+  const saved = Object.fromEntries(['PATH', ...OPENCODE_CREDENTIAL_ENV_KEYS].map((key) => [key, process.env[key]]));
+  OPENCODE_CREDENTIAL_ENV_KEYS.forEach((key) => delete process.env[key]);
+  process.env.PATH = binDir;
+  try {
+    await runTest();
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
+/** What the model picker offers and what the login status says, both reading `listed` as the CLI listing. */
+const readPickerAndStatus = async (listed: string[]) => {
+  const models = new OpenCodeProviderModels(async () => listed);
+  const picker = (await models.getSupportedModels()).OPTIONS.map((option) => option.value);
+  const { authenticated, email, method } = await new OpenCodeProviderAuth(models).getStatus();
+  return { picker, status: { authenticated, email, method } };
+};
+
+const NOT_LOGGED_IN = { authenticated: false, email: null, method: null };
+
 test('logins OpenCode 2.x keeps in opencode.db count for the model picker and the login status', { concurrency: false }, async () => {
   await withOpenCodeHome(OPENCODE_2_SCHEMA + OPENCODE_CREDENTIAL_SCHEMA, async ({ db, homeDir }) => {
-    const listed = ['anthropic/claude-x', 'openai/gpt-y', 'google/gemini-z'];
-    const pickerModels = async () => (await new OpenCodeProviderModels(async () => listed).getSupportedModels())
-      .OPTIONS.map((option) => option.value);
-    const authPath = path.join(homeDir, '.local', 'share', 'opencode', 'auth.json');
-    // No `opencode` to ask for its version: only the credentials are under test.
-    const savedPath = process.env.PATH;
-    const loginStatus = async () => {
-      process.env.PATH = path.join(homeDir, 'no-bin');
-      try {
-        const { authenticated, email, method } = await new OpenCodeProviderAuth().getStatus();
-        return { authenticated, email, method };
-      } finally {
-        process.env.PATH = savedPath;
-      }
-    };
+    await withOpenCodeCli(homeDir, 'opencode v2.2.3', async () => {
+      const listed = ['anthropic/claude-x', 'openai/gpt-y', 'google/gemini-z'];
+      const authPath = path.join(homeDir, '.local', 'share', 'opencode', 'auth.json');
 
-    // auth.json names one provider, and the empty credential table a 1.x install has changes nothing.
-    await writeFile(authPath, JSON.stringify({ openai: { type: 'api', key: 'sk-fake' } }));
-    assert.deepEqual(await pickerModels(), ['openai/gpt-y']);
+      // auth.json names one provider, and the empty credential table a 1.x install has changes nothing.
+      await writeFile(authPath, JSON.stringify({ openai: { type: 'api', key: 'sk-fake' } }));
+      assert.deepEqual((await readPickerAndStatus(listed)).picker, ['openai/gpt-y']);
 
-    // A 2.x login is kept in the database; a row without an integration is no login for 2.x.
-    const insertCredential = db.prepare(`
+      // A 2.x login is kept in the database; a row without an integration is no login for 2.x.
+      const insertCredential = db.prepare(`
+        INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES (?, ?, 'API key', ?, 1, 1)
+      `);
+      insertCredential.run('cred_anthropic', 'anthropic', JSON.stringify({ type: 'key', key: 'sk-fake-anthropic' }));
+      insertCredential.run('cred_stray', null, JSON.stringify({ type: 'key', key: 'sk-fake-stray' }));
+      assert.deepEqual(await readPickerAndStatus(listed), {
+        picker: ['anthropic/claude-x', 'openai/gpt-y'],
+        status: { authenticated: true, email: 'openai credentials', method: 'credentials_file' },
+      });
+
+      // A fresh 2.x install has no auth.json, and a broken one does not hide the database login.
+      await rm(authPath);
+      const databaseLogin = { authenticated: true, email: 'anthropic credentials', method: 'credentials_db' };
+      assert.deepEqual((await readPickerAndStatus(listed)).status, databaseLogin);
+      await writeFile(authPath, '{ not json');
+      assert.deepEqual((await readPickerAndStatus(listed)).status, databaseLogin);
+    });
+  });
+});
+
+test('a 2.x login that is no model provider (web search, MCP) neither empties the picker nor reads as a login', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_2_SCHEMA + OPENCODE_CREDENTIAL_SCHEMA, async ({ db, homeDir }) => {
+    await withOpenCodeCli(homeDir, 'opencode v2.2.3', async () => {
+      // What 2.2.3 lists with no provider login: its free models.
+      const freeModels = Array.from({ length: 10 }, (_, index) => `opencode/free-model-${index}`);
+      const insertCredential = db.prepare(`
+        INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES (?, ?, 'API key', ?, 1, 1)
+      `);
+      // A web search key, as `opencode auth login` / `auth import` stores it, and rows without an integration.
+      insertCredential.run('cred_exa', 'exa', JSON.stringify({ type: 'key', key: 'exa-fake-key' }));
+      insertCredential.run('cred_empty', '', JSON.stringify({ type: 'key', key: 'sk-fake-empty' }));
+      insertCredential.run('cred_null', null, JSON.stringify({ type: 'key', key: 'sk-fake-null' }));
+      assert.deepEqual(await readPickerAndStatus(freeModels), { picker: freeModels, status: NOT_LOGGED_IN });
+      // With no listing the curated catalog stands in, unfiltered as before.
+      const curated = OPENCODE_PREDEFINED_MODELS.OPTIONS.map((option) => option.value);
+      assert.deepEqual(await readPickerAndStatus([]), { picker: curated, status: NOT_LOGGED_IN });
+
+      // A model provider's login still counts, by the listing or, without one, by the curated catalog.
+      insertCredential.run('cred_anthropic', 'anthropic', JSON.stringify({ type: 'key', key: 'sk-fake-anthropic' }));
+      const anthropicLogin = { authenticated: true, email: 'anthropic credentials', method: 'credentials_db' };
+      assert.deepEqual(await readPickerAndStatus([...freeModels, 'anthropic/claude-x']), {
+        picker: ['anthropic/claude-x'],
+        status: anthropicLogin,
+      });
+      assert.deepEqual(await readPickerAndStatus([]), {
+        picker: curated.filter((model) => model.startsWith('anthropic/')),
+        status: anthropicLogin,
+      });
+    });
+  });
+});
+
+test('with a 1.x CLI the logins a 2.x trial left in opencode.db count for neither the picker nor the login status', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_2_SCHEMA + OPENCODE_CREDENTIAL_SCHEMA, async ({ db, homeDir }) => {
+    db.prepare(`
       INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES (?, ?, 'API key', ?, 1, 1)
-    `);
-    insertCredential.run('cred_anthropic', 'anthropic', JSON.stringify({ type: 'key', key: 'sk-fake-anthropic' }));
-    insertCredential.run('cred_stray', null, JSON.stringify({ type: 'key', key: 'sk-fake-stray' }));
-    assert.deepEqual(await pickerModels(), ['anthropic/claude-x', 'openai/gpt-y']);
-    assert.deepEqual(await loginStatus(), { authenticated: true, email: 'openai credentials', method: 'credentials_file' });
+    `).run('cred_anthropic', 'anthropic', JSON.stringify({ type: 'key', key: 'sk-fake-anthropic' }));
+    const listed = ['anthropic/claude-x', 'openai/gpt-y'];
 
-    // A fresh 2.x install has no auth.json, and a broken one does not hide the database login.
-    await rm(authPath);
-    assert.deepEqual(await loginStatus(), { authenticated: true, email: 'anthropic credentials', method: 'credentials_db' });
-    await writeFile(authPath, '{ not json');
-    assert.deepEqual(await loginStatus(), { authenticated: true, email: 'anthropic credentials', method: 'credentials_db' });
+    // 1.x reads its logins from auth.json, which has none.
+    await withOpenCodeCli(homeDir, '1.18.25', async () => {
+      assert.deepEqual(await readPickerAndStatus(listed), { picker: listed, status: NOT_LOGGED_IN });
+    });
+    await withOpenCodeCli(homeDir, 'opencode v2.2.3', async () => {
+      assert.deepEqual(await readPickerAndStatus(listed), {
+        picker: ['anthropic/claude-x'],
+        status: { authenticated: true, email: 'anthropic credentials', method: 'credentials_db' },
+      });
+    });
   });
 });
 

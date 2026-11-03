@@ -16,7 +16,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import spawn from 'cross-spawn';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
@@ -1126,46 +1126,6 @@ export function readOpenCodeLiveSessionTable(db: Database.Database, sessionId: s
   const v1UpdatedAt = readUpdatedAt('session');
   const v2UpdatedAt = readUpdatedAt('session_v2');
   return v1UpdatedAt !== null && (v2UpdatedAt === null || v1UpdatedAt > v2UpdatedAt) ? 'session' : 'session_v2';
-}
-
-/**
- * Providers OpenCode has a login for in `opencode.db`: OpenCode 2.x keeps
- * logins in its `credential` table (it imports `auth.json` there once, when
- * it migrates a 1.x database, and a fresh 2.x install never writes
- * `auth.json`). 1.x databases have the same table, empty. Only the provider
- * column is read, never the stored secret. Empty when the database or table
- * is missing or cannot be read.
- *
- * Used by the OpenCode models provider, which keeps the models of providers
- * the user is logged in to in the picker, and the OpenCode auth provider,
- * which reports such a login as the install's credentials.
- */
-export function readOpenCodeCredentialProviderIds(): string[] {
-  const dbPath = getOpenCodeDatabasePath();
-  if (!fs.existsSync(dbPath)) {
-    return [];
-  }
-
-  let db: Database.Database | null = null;
-  try {
-    db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    const hasCredentialTable = db.prepare(`
-      SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'credential'
-    `).get() !== undefined;
-    if (!hasCredentialTable) {
-      return [];
-    }
-    // 2.x reads a row without an integration as no login at all.
-    return db.prepare(`
-      SELECT DISTINCT integration_id FROM credential
-      WHERE integration_id IS NOT NULL AND integration_id <> ''
-      ORDER BY integration_id
-    `).pluck().all() as string[];
-  } catch {
-    return [];
-  } finally {
-    db?.close();
-  }
 }
 
 /**

@@ -2,14 +2,10 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { OpenCodeProviderModels } from '@/modules/providers/list/opencode/opencode-models.provider.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { CliVersionProbe, ProviderAuthStatus } from '@/shared/types.js';
-import {
-  probeCliVersion,
-  readObjectRecord,
-  readOpenCodeCredentialProviderIds,
-  readOptionalString,
-} from '@/shared/utils.js';
+import { probeCliVersion, readObjectRecord, readOptionalString } from '@/shared/utils.js';
 
 type OpenCodeCredentialsStatus = {
   authenticated: boolean;
@@ -27,6 +23,14 @@ const OPENCODE_ENV_CREDENTIAL_KEYS = [
 ];
 
 export class OpenCodeProviderAuth implements IProviderAuth {
+  /**
+   * `models` is the OpenCode model picker: a login OpenCode 2.x keeps in its
+   * database counts only for a provider the picker offers models of (see
+   * `OpenCodeProviderModels.readModelLoginProviderIds`). The OpenCode provider
+   * passes its own picker, so both read one listing.
+   */
+  constructor(private readonly models: OpenCodeProviderModels = new OpenCodeProviderModels()) {}
+
   /**
    * Checks whether the OpenCode CLI is available to the server process, and
    * which version it is. Unlike the other CLIs it has always needed a clean
@@ -96,7 +100,7 @@ export class OpenCodeProviderAuth implements IProviderAuth {
     }
 
     // OpenCode 2.x keeps its logins in its database, and reads `auth.json` only once.
-    const [databaseProviderId] = readOpenCodeCredentialProviderIds();
+    const [databaseProviderId] = await this.models.readModelLoginProviderIds();
     if (databaseProviderId) {
       return {
         authenticated: true,
