@@ -1310,4 +1310,18 @@ test('a long replay goes out in frames of at most 16,384 characters, in order', 
   // ends in half a surrogate pair, which no UTF-8 decoder emits.
   assert.deepEqual(reattach('empty', []), []);
   assert.deepEqual(reattach('half-pair', ['x', '\ud83d']), ['x\ud83d']);
+  // The edges of the guard: U+10000 and U+10FFFF start with the lowest and the
+  // highest high surrogate, and a pair whose low half ends a frame stays whole
+  // without moving the cut.
+  const pairCuts: Array<[string, number, number]> = [
+    ['\u{10000}', 16383, 16383],
+    ['\u{10FFFF}', 16383, 16383],
+    ['😀', 16382, 16384],
+  ];
+  for (const [astral, padding, firstFrame] of pairCuts) {
+    const text = `${'x'.repeat(padding)}${astral}${'y'.repeat(10)}`;
+    const cut = reattach(`pair-${astral.codePointAt(0)}-${padding}`, [text]);
+    assert.equal(cut.join(''), text);
+    assert.deepEqual(cut.map((frame) => frame.length), [firstFrame, text.length - firstFrame]);
+  }
 });
