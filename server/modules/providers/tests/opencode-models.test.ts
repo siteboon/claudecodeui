@@ -587,9 +587,10 @@ test('OpenCode waits for an `opencode models` listing that takes longer than 5 s
       // Move the clock only once the CLI runs, i.e. once the timeout is armed.
       await fake.waitForStart();
 
-      // Listing is CPU-bound: about 3 s with cores to spare, 5-10 s on one core, and 14.9 s through a
-      // server held to one core. A 5 s budget fell back to the static catalog there, which offered an
-      // OpenRouter user whose key CloudCLI cannot see only models their OpenCode refuses to run (#1695).
+      // Listing is CPU-bound: about 3 s with cores to spare, 5-10 s on one core, and up to 17.7 s
+      // through a server held to one core that another process was also using. A 5 s budget fell
+      // back to the static catalog there, which offered an OpenRouter user whose key CloudCLI cannot
+      // see only models their OpenCode refuses to run (#1695).
       mock.timers.tick(29_999);
       await fake.release();
 
@@ -603,7 +604,8 @@ test('OpenCode waits for an `opencode models` listing that takes longer than 5 s
 });
 
 test('OpenCode still gives up on, and kills, an `opencode models` that never answers', async () => {
-  await withOpenCodeHome(async () => {}, () => withFakeOpenCodeCli('openrouter/qwen/qwen3-coder-flash\n', { gated: true }, async (fake) => {
+  const listing = 'openrouter/qwen/qwen3-coder-flash\n';
+  await withOpenCodeHome(async () => {}, () => withFakeOpenCodeCli(listing, { gated: true }, async (fake) => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
       const pending = new OpenCodeProviderModels().getSupportedModels();
@@ -639,8 +641,9 @@ test('OpenCode reads the whole listing of a CLI that exits as soon as it has wri
 });
 
 test('OpenCode ignores the output of an `opencode models` that fails, and copes with none on PATH', async () => {
+  const listing = 'openrouter/qwen/qwen3-coder-flash\n';
   for (const config of [{ exitCode: 1 }, { missing: true }]) {
-    await withOpenCodeHome(async () => {}, () => withFakeOpenCodeCli('openrouter/qwen/qwen3-coder-flash\n', config, async (fake) => {
+    await withOpenCodeHome(async () => {}, () => withFakeOpenCodeCli(listing, config, async (fake) => {
       // A failed run may have printed only part of its listing.
       assert.deepEqual(await new OpenCodeProviderModels().getSupportedModels(), OPENCODE_PREDEFINED_MODELS);
       assert.deepEqual(await fake.leftoverTempEntries(), []);

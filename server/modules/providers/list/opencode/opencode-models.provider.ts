@@ -309,13 +309,13 @@ const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
 /**
  * How long `opencode models` may take before the static catalog stands in.
  *
- * Listing is CPU-bound: about 3 s with cores to spare, 5-15 s on a small
- * container or VPS or a loaded host, and there every listing is that slow,
- * not only the first. A shorter budget kept failing on such hosts, so the
- * picker stayed on the static catalog, which offers models this OpenCode
- * refuses to run (instead of the user's own) when the install's providers
- * cannot be read. Only the first catalog read after a start waits this long;
- * later ones are served from the cache.
+ * Listing is CPU-bound: about 3 s with cores to spare, but 5-18 s when it
+ * shares a single core (a small container or VPS, a loaded host), and there
+ * every listing is that slow, not only the first. A shorter budget kept
+ * failing on such hosts, so the picker stayed on the static catalog, which
+ * offers models this OpenCode refuses to run (instead of the user's own)
+ * when the install's providers cannot be read. Only the first catalog read
+ * after a start waits this long; later ones are served from the cache.
  */
 const OPENCODE_MODELS_TIMEOUT_MS = 30_000;
 /** How long a successful `opencode models` listing is served before it is refreshed. */
@@ -337,10 +337,10 @@ const OPENCODE_MODEL_REFERENCE_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9
  * fully-qualified `<provider>/<model>` lines are accepted.
  *
  * The CLI writes to a private temp file, read once it has exited, rather than
- * to a pipe: Node's pipe is a socket that takes only about 170 line-sized
- * writes until it is read, and OpenCode exits 0 without the rest of its
- * listing once that is full. On a busy host, where CloudCLI reads late, the
- * piped listing came through cut short and was cached as complete.
+ * to a pipe: Node's pipe is a socket that holds only about 170 small writes
+ * until it is read, and OpenCode exits 0 without the rest of its listing once
+ * that is full. On a busy host, where CloudCLI reads late, the piped listing
+ * came through cut short and was cached as complete.
  */
 const readInstalledOpenCodeModels = async (): Promise<string[]> => {
   const outputDir = await mkdtemp(path.join(os.tmpdir(), 'cloudcli-opencode-models-'));
