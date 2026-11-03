@@ -592,8 +592,15 @@ function hasBundledConpty(nodePtyRoot: string): boolean {
  * CLOUDCLI_WINDOWS_USE_CONPTY_DLL is set to 0/false/no/off. Other platforms get
  * no option at all. `nodePtyRoot` undefined means "the node-pty this server
  * resolves"; null means none was found.
+ *
+ * The bundled host also gets `conptyInheritCursor`: it then asks the terminal
+ * where the cursor is before the shell starts. Unlike conhost it does not clear
+ * the screen first, so without it the first prompt was drawn one row above the
+ * cursor, over the "Starting terminal in" line the server writes first.
  */
-function resolveConptyDllOption(nodePtyRoot: string | null | undefined): Pick<IWindowsPtyForkOptions, 'useConptyDll'> {
+function resolveConptyDllOption(
+  nodePtyRoot: string | null | undefined,
+): Pick<IWindowsPtyForkOptions, 'useConptyDll' | 'conptyInheritCursor'> {
   if (os.platform() !== 'win32') {
     return {};
   }
@@ -602,7 +609,7 @@ function resolveConptyDllOption(nodePtyRoot: string | null | undefined): Pick<IW
     return {};
   }
   const root = nodePtyRoot === undefined ? resolveNodePtyRoot() : nodePtyRoot;
-  return root && hasBundledConpty(root) ? { useConptyDll: true } : {};
+  return root && hasBundledConpty(root) ? { useConptyDll: true, conptyInheritCursor: true } : {};
 }
 
 /**
@@ -624,7 +631,7 @@ function spawnShellPty(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[WARN] Bundled ConPTY failed to start (${message}); using the Windows ConPTY instead`);
-    const { useConptyDll: _useConptyDll, ...windowsConptyOptions } = options;
+    const { useConptyDll: _useConptyDll, conptyInheritCursor: _conptyInheritCursor, ...windowsConptyOptions } = options;
     return spawnPty(file, args, windowsConptyOptions);
   }
 }

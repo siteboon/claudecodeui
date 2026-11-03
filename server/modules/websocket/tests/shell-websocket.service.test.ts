@@ -244,7 +244,11 @@ test('a missing project directory is reported as an error frame and starts no pt
   );
 });
 
-type SpawnOptions = { env?: Record<string, string | undefined>; useConptyDll?: boolean };
+type SpawnOptions = {
+  env?: Record<string, string | undefined>;
+  useConptyDll?: boolean;
+  conptyInheritCursor?: boolean;
+};
 
 type SpawnCall = {
   shell: string;
@@ -252,6 +256,7 @@ type SpawnCall = {
   command: string;
   env: Record<string, string | undefined>;
   useConptyDll?: boolean;
+  conptyInheritCursor?: boolean;
 };
 
 // `nodePtyRoot` is where the service looks for node-pty's bundled ConPTY; null
@@ -268,6 +273,7 @@ function spawnRecorder(resumeSessionId: string | null = null, nodePtyRoot: strin
         command: Array.isArray(args) ? args[args.length - 1] : args,
         env: options?.env ?? {},
         useConptyDll: options?.useConptyDll,
+        conptyInheritCursor: options?.conptyInheritCursor,
       });
       return createFakePty() as never;
     },
@@ -827,11 +833,12 @@ test('on Windows the shell runs on the ConPTY bundled with node-pty', (t) => {
     addon('build/Release');
     launch(dependencies, plainShell, projectPath);
 
+    // The bundled host asks where the cursor is, below the server's first line.
     assert.deepEqual(
-      calls.map((call) => [call.shell, call.useConptyDll]),
+      calls.map((call) => [call.shell, call.useConptyDll, call.conptyInheritCursor]),
       [
-        ['powershell.exe', true],
-        ['powershell.exe', true],
+        ['powershell.exe', true, true],
+        ['powershell.exe', true, true],
       ]
     );
   });
@@ -901,12 +908,12 @@ test('a bundled ConPTY that cannot start falls back to the Windows ConPTY', (t) 
   const warn = t.mock.method(console, 'warn', () => undefined);
   withNodePtyFixture(({ nodePtyRoot, projectPath, addon }) => {
     addon(prebuildDir);
-    const attempts: Array<boolean | undefined> = [];
+    const attempts: Array<[boolean | undefined, boolean | undefined]> = [];
     const dependencies = {
       resolveProviderSessionId: () => null,
       nodePtyRoot,
       spawnPty: (_shell: string, _args: string | string[], options?: SpawnOptions) => {
-        attempts.push(options?.useConptyDll);
+        attempts.push([options?.useConptyDll, options?.conptyInheritCursor]);
         if (options?.useConptyDll) {
           throw new Error('Failed to load conpty.dll');
         }
@@ -916,7 +923,7 @@ test('a bundled ConPTY that cannot start falls back to the Windows ConPTY', (t) 
 
     const socket = launch(dependencies, plainShell, projectPath);
 
-    assert.deepEqual(attempts, [true, undefined]);
+    assert.deepEqual(attempts, [[true, true], [undefined, undefined]]);
     assert.equal(warn.mock.callCount(), 1);
     assert.match(String(warn.mock.calls[0].arguments[0]), /Bundled ConPTY failed to start \(Failed to load conpty\.dll\)/);
     const frames = socket.frames.map((frame) => JSON.parse(frame) as { type: string });
