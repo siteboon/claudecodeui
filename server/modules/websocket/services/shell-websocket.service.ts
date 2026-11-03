@@ -129,16 +129,39 @@ const TERMINAL_QUERY_REGEX = new RegExp(
   'g',
 );
 
+// The most characters (UTF-16 code units, so at most 48 KiB as UTF-8) a replay
+// frame carries. Sent as one frame, a full buffer (5000 chunks of 16 KiB) took
+// a single JSON.stringify of 118 million characters and held the event loop
+// for 1.5 s. Frames of this size serialise about as fast as one frame per chunk
+// did; much larger ones of CJK text are slower again.
+const REPLAY_FRAME_LENGTH = 16 * 1024;
+
 /**
- * The buffered output a reattaching client replays, as one string without the
- * terminal queries in it. Each one was answered when the program sent it; a new
- * terminal would answer it again, and that reply reaches the program as typed
+ * The buffered output a reattaching client replays, without terminal queries,
+ * in frames of at most REPLAY_FRAME_LENGTH characters. A new terminal would
+ * answer every query in it again, and the reply reaches the program as typed
  * input (OpenConsole turns a second DA1 reply into text and a cursor report
- * nobody waits for into an F3 key, #1665). Joined first because a query can be
- * split across chunks.
+ * nobody waits for into an F3 key, #1665). This also drops a query sent while
+ * no client was attached, so a program still waiting for that answer has to
+ * ask again. Joined before stripping because a query can be split across
+ * chunks. A frame may end inside an escape sequence (the terminal's parser
+ * carries it over, as with live chunks) but never between the two halves of a
+ * surrogate pair.
  */
-function buildReplayOutput(buffer: string[]): string {
-  return buffer.join('').replace(TERMINAL_QUERY_REGEX, '');
+function buildReplayFrames(buffer: string[]): string[] {
+  const replay = buffer.join('').replace(TERMINAL_QUERY_REGEX, '');
+  const frames: string[] = [];
+  let start = 0;
+  while (start < replay.length) {
+    let end = Math.min(start + REPLAY_FRAME_LENGTH, replay.length);
+    const lastCode = replay.charCodeAt(end - 1);
+    if (end < replay.length && lastCode >= 0xd800 && lastCode <= 0xdbff) {
+      end -= 1;
+    }
+    frames.push(replay.slice(start, end));
+    start = end;
+  }
+  return frames;
 }
 
 type ShellWebSocketDependencies = {
@@ -783,12 +806,11 @@ export function handleShellConnection(
             })
           );
 
-          const replay = buildReplayOutput(existingSession.buffer);
-          if (replay) {
+          for (const replayFrame of buildReplayFrames(existingSession.buffer)) {
             ws.send(
               JSON.stringify({
                 type: 'output',
-                data: replay,
+                data: replayFrame,
               })
             );
           }

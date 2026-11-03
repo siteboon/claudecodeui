@@ -1247,3 +1247,51 @@ test('the replay drops only terminal queries and the live output stays byte for 
 
   shellPty.emitExit();
 });
+
+// The buffer keeps up to 5000 chunks of up to 64 KiB; sent as one frame, a full
+// one held the server's event loop for over a second in JSON.stringify. The
+// replay is cut into frames of at most 16,384 characters after the queries are
+// stripped.
+test('a long replay goes out in frames of at most 16,384 characters, in order', () => {
+  const shellPty = createFakePty();
+  const dependencies = { resolveProviderSessionId: () => null, nodePtyRoot: null, spawnPty: () => shellPty as never };
+  const init = JSON.stringify({
+    type: 'init',
+    projectPath: process.cwd(),
+    sessionId: `replay-frames-${Date.now()}`,
+    hasSession: false,
+    ...plainShell,
+  });
+  // 20 characters.
+  const line = '\x1b[33m中文\x1b[0m output\r\n';
+  // Queries split across chunks: a cursor query, a background colour read
+  // ended by ST, and DA1.
+  const chunks = [
+    `${line.repeat(500)}\x1b[`,
+    `6n${line.repeat(319)}abc\x1b]11;?\x1b`,
+    `\\😀${line.repeat(1000)}\x1b[c`,
+    'done\r\n',
+  ];
+  // The emoji's surrogate pair sits at characters 16,383 and 16,384.
+  const replay = `${line.repeat(819)}abc😀${line.repeat(1000)}done\r\n`;
+
+  const firstSocket = createFakeSocket();
+  handleShellConnection(firstSocket as never, dependencies);
+  firstSocket.emit('message', init);
+  chunks.forEach((chunk) => shellPty.emitData(chunk));
+  firstSocket.emit('close');
+  const secondSocket = createFakeSocket();
+  handleShellConnection(secondSocket as never, dependencies);
+  secondSocket.emit('message', init);
+  shellPty.emitData('live\r\n');
+
+  const frames = secondSocket.frames.map((frame) => (JSON.parse(frame) as { data: string }).data);
+  assert.equal(frames[0], '\x1b[36m[Reconnected to existing session]\x1b[0m\r\n');
+  assert.equal(frames.at(-1), 'live\r\n');
+  const replayFrames = frames.slice(1, -1);
+  assert.equal(replayFrames.join(''), replay);
+  // The first frame ends one character early to keep the emoji whole.
+  assert.deepEqual(replayFrames.map((frame) => frame.length), [16383, 16384, replay.length - 32767]);
+
+  shellPty.emitExit();
+});
