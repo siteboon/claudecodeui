@@ -5,12 +5,15 @@ import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { OpenCodeSessionTable } from '@/shared/types.js';
 import {
   getOpenCodeDatabasePath,
   normalizeProviderTimestamp,
   normalizeSessionName,
   readJsonRecord,
+  readOpenCodeSessionTable,
   readOptionalString,
+  unquoteOpenCodeRunMessage,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
@@ -72,8 +75,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
 
     const db = new Database(dbPath, { readonly: true, fileMustExist: true });
     try {
+      // OpenCode 2.x lists sessions in `session_v2`, with the same columns read here.
+      const sessionTable = readOpenCodeSessionTable(db) ?? 'session';
       if (pruneChildSessions) {
-        this.pruneChildSessions(db);
+        this.pruneChildSessions(db, sessionTable);
         this.childSessionsReconciled = true;
       }
 
@@ -88,7 +93,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
           s.time_created AS time_created,
           s.time_updated AS time_updated,
           p.worktree AS worktree
-        FROM session s
+        FROM ${sessionTable} s
         LEFT JOIN project p ON p.id = s.project_id
         WHERE s.time_archived IS NULL
           AND s.parent_id IS NULL
@@ -100,7 +105,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       let processed = 0;
       let firstSessionId: string | null = null;
       for (const row of rows) {
-        const indexedSessionId = this.upsertSession(db, row);
+        const indexedSessionId = this.upsertSession(db, row, sessionTable);
         if (!indexedSessionId) {
           continue;
         }
@@ -121,10 +126,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     }
   }
 
-  private pruneChildSessions(db: Database.Database): void {
+  private pruneChildSessions(db: Database.Database, sessionTable: OpenCodeSessionTable): void {
     const childSessions = db.prepare(`
       SELECT id
-      FROM session
+      FROM ${sessionTable}
       WHERE parent_id IS NOT NULL
     `).all() as OpenCodeChildSessionRow[];
 
@@ -133,7 +138,11 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     }
   }
 
-  private upsertSession(db: Database.Database, row: OpenCodeSessionRow): string | null {
+  private upsertSession(
+    db: Database.Database,
+    row: OpenCodeSessionRow,
+    sessionTable: OpenCodeSessionTable,
+  ): string | null {
     const sessionId = readOptionalString(row.id);
     const projectPath = readOptionalString(row.directory) ?? readOptionalString(row.worktree);
     if (!sessionId || !projectPath) {
@@ -162,7 +171,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     if (existingName && existingName !== fallbackTitle) {
       nextName = existingName;
     } else {
-      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId, sessionTable);
     }
 
     // OpenCode stores every session in one shared sqlite database, so jsonl_path
@@ -180,8 +189,24 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     );
   }
 
-  private readFirstUserText(db: Database.Database, sessionId: string): string | undefined {
+  private readFirstUserText(
+    db: Database.Database,
+    sessionId: string,
+    sessionTable: OpenCodeSessionTable,
+  ): string | undefined {
     try {
+      if (sessionTable === 'session_v2') {
+        // A 2.x user message keeps its prompt in `data.text`, as `run` stored it.
+        const text = readOptionalString(db.prepare(`
+          SELECT json_extract(data, '$.text')
+          FROM session_message
+          WHERE session_id = ? AND type = 'user'
+          ORDER BY seq
+          LIMIT 1
+        `).pluck().get(sessionId));
+        return text === undefined ? undefined : unquoteOpenCodeRunMessage(text);
+      }
+
       const row = db.prepare(`
         SELECT p.data AS data
         FROM message m

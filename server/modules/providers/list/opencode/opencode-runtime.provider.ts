@@ -30,8 +30,16 @@
  * - opencodeRuntime.run(command, options, writer, context) - Run one turn
  * - opencodeRuntime.abort(sessionId) - Stop the turn running for a session
  * - opencodeRuntime.permissions - Answer or list the prompts a turn is waiting on
+ *
+ * ## OpenCode 2.x
+ *
+ * OpenCode 2.x serves a new HTTP API that this SDK cannot drive, so when the
+ * installed CLI is 2.x a turn runs through `opencode run --format json`
+ * instead (see `runOpenCodeV2Turn`), without in-chat permission prompts.
  */
 
+import { spawnSync } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import crypto from 'node:crypto';
 import fsSync from 'node:fs';
 import { readdir, readFile, readlink } from 'node:fs/promises';
@@ -39,6 +47,7 @@ import net from 'node:net';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
+import spawn from 'cross-spawn';
 import { createOpencodeClient, createOpencodeServer } from '@opencode-ai/sdk/v2';
 import type {
   Config as OpenCodeConfig,
@@ -64,13 +73,18 @@ import {
 import {
   createCompleteMessage,
   createNormalizedMessage,
+  flattenPromptForWindowsShell,
   getOpenCodeDatabasePath,
   readObjectRecord,
+  readOpenCodeCliMajorVersion,
+  readOptionalString,
+  stripAnsiSequences,
   stripJsonComments,
   stripTrailingCommas,
 } from '@/shared/utils.js';
 import type {
   AnyRecord,
+  OpenCodeSessionTable,
   ProviderModelsDefinition,
   ProviderPermissionDecision,
   ProviderRuntimeContext,
@@ -437,7 +451,8 @@ export function readQuestionAnswers(
 // Token usage
 // ---------------------------------------------------------------------------
 
-function readOpenCodeTokenUsage(sessionId: string | null) {
+/** Token totals of a session; a 2.x turn reads them from `session_v2`. */
+function readOpenCodeTokenUsage(sessionId: string | null, sessionTable: OpenCodeSessionTable = 'session') {
   const dbPath = getOpenCodeDatabasePath();
   if (!sessionId || !fsSync.existsSync(dbPath)) {
     return null;
@@ -446,7 +461,7 @@ function readOpenCodeTokenUsage(sessionId: string | null) {
   let db: Database.Database | null = null;
   try {
     db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    const columns = db.prepare('PRAGMA table_info(session)').all() as Array<{ name: string }>;
+    const columns = db.prepare(`PRAGMA table_info(${sessionTable})`).all() as Array<{ name: string }>;
     const columnNames = new Set(columns.map((column) => column.name));
     const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
     if (!requiredColumns.every((column) => columnNames.has(column))) {
@@ -460,7 +475,7 @@ function readOpenCodeTokenUsage(sessionId: string | null) {
         tokens_reasoning AS reasoningTokens,
         tokens_cache_read AS cacheReadTokens,
         tokens_cache_write AS cacheWriteTokens
-      FROM session
+      FROM ${sessionTable}
       WHERE id = ?
     `).get(sessionId) as AnyRecord | undefined;
 
@@ -1399,6 +1414,520 @@ async function abortOpenCodeSession(sessionId: string): Promise<boolean> {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// OpenCode 2.x turn
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a stopped `opencode run` gets to interrupt its session after SIGINT,
+ * and then to exit after SIGTERM and after SIGKILL.
+ */
+const RUN_INTERRUPT_GRACE_MS = 5_000;
+const RUN_KILL_GRACE_MS = 2_000;
+
+/** How much of what `opencode run` printed besides its events is kept to explain a failure. */
+const RUN_DIAGNOSTICS_LIMIT = 2_000;
+
+/**
+ * One OpenCode 2.x turn, keyed in `activeV2Turns` by the session it runs for.
+ * While the installed CLI's version is read, a placeholder without a process
+ * stands in for the turn, so a stop can already reach it.
+ */
+type OpenCodeV2Turn = {
+  key: string;
+  child: ChildProcess | null;
+  /** Settles once `child` has exited. */
+  exited: Promise<void> | null;
+  providerSessionId: string | null;
+  aborted: boolean;
+  /** Settles once a requested stop has finished. */
+  stopped: Promise<void> | null;
+};
+
+const activeV2Turns = new Map<string, OpenCodeV2Turn>();
+
+let v2ExitHookInstalled = false;
+
+/**
+ * Sends a signal to a turn's `opencode run`. On Windows, where the CLI runs
+ * behind a `.cmd` shim and signals do not exist, the whole process tree is
+ * ended instead, as the SDK stops its servers there.
+ */
+function signalRunProcess(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+
+  if (process.platform === 'win32' && child.pid) {
+    const result = spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
+    if (!result.error && result.status === 0) {
+      return;
+    }
+  }
+  try {
+    child.kill(signal);
+  } catch {
+    // Gone already.
+  }
+}
+
+/**
+ * Stops an `opencode run`, settling once it has exited. SIGINT comes first:
+ * `run` then interrupts its session like Ctrl+C does, and OpenCode records the
+ * turn as interrupted. A run ended by SIGTERM or SIGKILL leaves its session
+ * marked busy, and OpenCode's background service resumes such a session the
+ * next time it starts, so those only follow when the process does not exit.
+ */
+async function stopRunProcess(child: ChildProcess, exited: Promise<void>): Promise<void> {
+  const steps: Array<[NodeJS.Signals, number]> = [
+    ['SIGINT', RUN_INTERRUPT_GRACE_MS],
+    ['SIGTERM', RUN_KILL_GRACE_MS],
+    ['SIGKILL', RUN_KILL_GRACE_MS],
+  ];
+  for (const [signal, graceMs] of steps) {
+    signalRunProcess(child, signal);
+    const exitedInTime = await withTimeout(exited, graceMs, 'opencode run did not exit').then(() => true, () => false);
+    if (exitedInTime) {
+      return;
+    }
+  }
+}
+
+/**
+ * Interrupts the 2.x turns still running when CloudCLI exits, as the SDK
+ * turns' servers are stopped then. `run` handles SIGINT on its own, so the
+ * interrupt does not need CloudCLI to be alive.
+ */
+function installV2ExitHook(): void {
+  if (v2ExitHookInstalled) {
+    return;
+  }
+
+  v2ExitHookInstalled = true;
+  process.on('exit', () => {
+    for (const turn of activeV2Turns.values()) {
+      if (turn.child) {
+        signalRunProcess(turn.child, 'SIGINT');
+      }
+    }
+  });
+}
+
+/**
+ * Arguments of the `opencode run` that runs a 2.x turn:
+ * - `--standalone` gives the run a private server that ends with it, instead
+ *   of starting OpenCode's shared background service, which outlives it.
+ * - `--session` continues the chat's session (2.x creates one under that id
+ *   when it does not know it).
+ * - the effort rides on the model as OpenCode's `#variant`; 2.x has no
+ *   `--variant`, and no `--dir` either: the workspace is the process's cwd.
+ * - plan runs the read-only `plan` agent; bypassPermissions adds `--auto`,
+ *   which allows what the user's rules leave to `ask`.
+ * - the prompt is the last argument. `run` reads an argument that starts with
+ *   `-` as a flag and then only prints its help, so such a prompt gets a
+ *   leading space; `--` does not help, as `run` then sends the prompt twice.
+ */
+function buildOpenCodeRunArgs(turn: {
+  providerSessionId: string | null;
+  model: string | undefined;
+  variant: string | undefined;
+  permissionMode: unknown;
+  prompt: string;
+}): string[] {
+  const args = ['run', '--standalone', '--format', 'json'];
+  if (turn.providerSessionId) {
+    args.push('--session', turn.providerSessionId);
+  }
+  if (turn.model) {
+    args.push('--model', turn.variant ? `${turn.model}#${turn.variant}` : turn.model);
+  }
+  if (turn.permissionMode === 'plan') {
+    args.push('--agent', 'plan');
+  }
+  if (turn.permissionMode === 'bypassPermissions') {
+    args.push('--auto');
+  }
+
+  const prompt = turn.prompt.startsWith('-') ? ` ${turn.prompt}` : turn.prompt;
+  // opencode is a .cmd shim on Windows, so the whole argument must be
+  // newline-free or cmd.exe silently truncates it at the first newline.
+  args.push(flattenPromptForWindowsShell(prompt));
+  return args;
+}
+
+/**
+ * Environment of a 2.x turn's `opencode run`. acceptEdits allows file edits
+ * through OPENCODE_CONFIG_CONTENT, merged into the user's own inline config
+ * (2.x ignores the OPENCODE_PERMISSION variable 1.x `run` read). The rule goes
+ * last, since OpenCode applies the last rule that matches.
+ */
+function buildOpenCodeRunEnv(permissionMode: unknown): NodeJS.ProcessEnv {
+  if (permissionMode !== 'acceptEdits') {
+    return { ...process.env };
+  }
+
+  const inlineConfig = (readInlineConfig() ?? {}) as AnyRecord;
+  // A single action stands for every permission, as `{ "*": action }`.
+  const rules: AnyRecord = typeof inlineConfig.permission === 'string'
+    ? { '*': inlineConfig.permission }
+    : { ...readObjectRecord(inlineConfig.permission) };
+  delete rules.edit;
+  return {
+    ...process.env,
+    OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...inlineConfig, permission: { ...rules, edit: 'allow' } }),
+  };
+}
+
+/**
+ * Runs one turn on OpenCode 2.x through `opencode run --format json`.
+ *
+ * `run` prints each finished part of its session as one JSON line in the shape
+ * 1.x `run` printed (`{ type, timestamp, sessionID, part }`), so the lines go
+ * through the same normalizer as the SDK turns' parts. Nobody can answer `run`
+ * while it works: with stdin closed it rejects what the user's rules leave to
+ * `ask` (the tool call fails and the agent goes on) and cancels questions, as
+ * 1.x `run` did. With an inherited stdin it would wait for an answer instead.
+ *
+ * Same contract as `runOpenCodeTurn`: resolves when the turn completed, rejects
+ * when it failed, and an aborted turn resolves once its stop has finished.
+ */
+async function runOpenCodeV2Turn(
+  command: string,
+  options: AnyRecord,
+  writer: ProviderRuntimeWriter,
+  context: ProviderRuntimeContext,
+): Promise<void> {
+  const {
+    sessionId,
+    projectPath,
+    cwd,
+    model,
+    effort,
+    sessionSummary,
+    images,
+    files,
+    permissionMode,
+  } = options;
+  const appSessionId = typeof sessionId === 'string' && sessionId ? sessionId : null;
+  const resumeSessionId = context.resolveProviderSessionId(appSessionId);
+  const workingDir: string = cwd || projectPath || process.cwd();
+  const userId = writer?.userId ?? null;
+
+  const turn: OpenCodeV2Turn = {
+    key: appSessionId ?? resumeSessionId ?? `opencode-${Date.now()}`,
+    child: null,
+    exited: null,
+    providerSessionId: resumeSessionId,
+    aborted: false,
+    stopped: null,
+  };
+  activeV2Turns.set(turn.key, turn);
+  installV2ExitHook();
+
+  const turnSessionId = () => appSessionId ?? turn.providerSessionId ?? turn.key;
+  const send = (message: unknown) => writer.send(message);
+  let turnError: string | null = null;
+  const sentErrors = new Set<string>();
+  const sendError = (content: string) => {
+    turnError ??= content;
+    if (!sentErrors.has(content)) {
+      sentErrors.add(content);
+      send(createNormalizedMessage({ kind: 'error', content, sessionId: turnSessionId(), provider: PROVIDER }));
+    }
+  };
+
+  const registerProviderSession = (providerSessionId: string) => {
+    turn.providerSessionId = providerSessionId;
+    // Direct callers without an app session id find the turn by the
+    // provider-native id from now on.
+    if (!appSessionId && turn.key !== providerSessionId) {
+      if (activeV2Turns.get(turn.key) === turn) {
+        activeV2Turns.delete(turn.key);
+      }
+      turn.key = providerSessionId;
+      activeV2Turns.set(turn.key, turn);
+    }
+
+    writer.setSessionId?.(providerSessionId);
+    send(createNormalizedMessage({
+      kind: 'session_created',
+      newSessionId: providerSessionId,
+      sessionId: providerSessionId,
+      provider: PROVIDER,
+    }));
+  };
+
+  let sawEvent = false;
+  const forwardedParts = new Set<string>();
+  let diagnostics = '';
+  const keepDiagnostics = (text: string) => {
+    diagnostics = (diagnostics + text).slice(-4 * RUN_DIAGNOSTICS_LIMIT);
+  };
+
+  const handleLine = (line: string) => {
+    if (!line.trim()) {
+      return;
+    }
+
+    let event: AnyRecord | null = null;
+    try {
+      event = readObjectRecord(JSON.parse(line));
+    } catch {
+      // Not an event: kept to explain a failure.
+    }
+    if (!event) {
+      keepDiagnostics(`${line}\n`);
+      return;
+    }
+    // A stopping turn shows nothing more (`run` reports its own interrupt as an error).
+    if (turn.aborted) {
+      return;
+    }
+
+    sawEvent = true;
+    const eventSessionId = readOptionalString(event.sessionID);
+    if (eventSessionId && !turn.providerSessionId) {
+      registerProviderSession(eventSessionId);
+    }
+    if (eventSessionId && eventSessionId !== turn.providerSessionId) {
+      return;
+    }
+
+    const part = readObjectRecord(event.part);
+    const partId = readOptionalString(part?.partID) ?? readOptionalString(part?.id);
+    if (partId) {
+      const partKey = `${String(event.type)}:${partId}`;
+      if (forwardedParts.has(partKey)) {
+        return;
+      }
+      forwardedParts.add(partKey);
+    }
+
+    for (const message of context.normalizeMessage(event, turnSessionId())) {
+      const normalized = message as AnyRecord;
+      if (normalized.kind === 'error') {
+        // Shown once, and it is the turn's failure.
+        sendError(String(normalized.content ?? ''));
+        continue;
+      }
+      send(message);
+    }
+  };
+
+  let completedNormally = false;
+  try {
+    const hasAttachments =
+      normalizeAttachmentDescriptors(images).length > 0
+      || normalizeAttachmentDescriptors(files).length > 0;
+    const promptText = typeof command === 'string' ? command.trim() : '';
+    if (!promptText && !hasAttachments) {
+      throw new Error('OpenCode needs a message to run.');
+    }
+    // Attachments ride along as path lists appended to the prompt; the agent
+    // reads them with its own tools and the history reader strips the tags.
+    const promptWithAttachments = appendFilesInputTag(appendImagesInputTag(promptText, images), files);
+
+    const resolvedModel = await context.resolveResumeModel(appSessionId ?? undefined, model);
+    let effortModels: ProviderModelsDefinition | null = null;
+    try {
+      effortModels = await context.getProviderModels();
+    } catch (error) {
+      console.warn('[OpenCode] Unable to load provider models for effort validation:', error);
+    }
+    if (turn.aborted) {
+      return await finishStoppedV2Turn(turn);
+    }
+
+    const child = spawn('opencode', buildOpenCodeRunArgs({
+      providerSessionId: turn.providerSessionId,
+      model: resolvedModel,
+      variant: resolveOpenCodeEffort(resolvedModel, effort, effortModels),
+      permissionMode,
+      prompt: promptWithAttachments,
+    }), {
+      cwd: workingDir,
+      env: buildOpenCodeRunEnv(permissionMode),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    turn.child = child;
+    turn.exited = new Promise<void>((resolve) => {
+      child.once('exit', () => resolve());
+      child.once('error', () => resolve());
+    });
+
+    let stdoutBuffer = '';
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      stdoutBuffer += chunk;
+      const lines = stdoutBuffer.split(/\r?\n/);
+      stdoutBuffer = lines.pop() ?? '';
+      for (const line of lines) {
+        try {
+          handleLine(line);
+        } catch (error) {
+          // One line that cannot be handled must not end the turn.
+          console.error('[OpenCode] Failed to handle a line of opencode run:', readErrorMessage(error));
+        }
+      }
+    });
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk: string) => keepDiagnostics(chunk));
+
+    const outcome = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; error: Error | null }>((resolve) => {
+      let exitTimer: ReturnType<typeof setTimeout> | undefined;
+      const settle = (result: { code: number | null; signal: NodeJS.Signals | null; error: Error | null }) => {
+        clearTimeout(exitTimer);
+        resolve(result);
+      };
+      child.once('error', (error) => settle({ code: null, signal: null, error }));
+      child.once('close', (code, signal) => settle({ code, signal, error: null }));
+      // A process the run left behind can hold the pipes open; its exit is enough.
+      child.once('exit', (code, signal) => {
+        exitTimer = setTimeout(() => settle({ code, signal, error: null }), RUN_KILL_GRACE_MS);
+      });
+    });
+    if (stdoutBuffer.trim()) {
+      handleLine(stdoutBuffer);
+    }
+    if (turn.aborted) {
+      return await finishStoppedV2Turn(turn);
+    }
+
+    if (outcome.error) {
+      throw outcome.error;
+    }
+    completedNormally = outcome.code === 0 && sawEvent && !turnError;
+    if (!completedNormally && !turnError) {
+      const printed = stripAnsiSequences(diagnostics).trim().slice(-RUN_DIAGNOSTICS_LIMIT);
+      if (printed) {
+        console.warn('[OpenCode] opencode run failed:', printed);
+      }
+      sendError(printed || (outcome.code !== null
+        ? `OpenCode exited with code ${outcome.code}.`
+        : `OpenCode was stopped by ${outcome.signal ?? 'a signal'}.`));
+    }
+  } catch (error) {
+    if (turn.aborted) {
+      return await finishStoppedV2Turn(turn);
+    }
+    let message = readErrorMessage(error);
+    if (!turn.child?.pid && !(await context.isProviderInstalled())) {
+      message = NOT_INSTALLED_MESSAGE;
+    }
+    sendError(message);
+  } finally {
+    if (activeV2Turns.get(turn.key) === turn) {
+      activeV2Turns.delete(turn.key);
+    }
+  }
+
+  const finalSessionId = turnSessionId();
+  // OpenCode's own database is keyed by the provider-native id.
+  const tokenBudget = readOpenCodeTokenUsage(turn.providerSessionId, 'session_v2');
+  if (tokenBudget) {
+    send(createNormalizedMessage({
+      kind: 'status',
+      text: 'token_budget',
+      tokenBudget,
+      sessionId: finalSessionId,
+      provider: PROVIDER,
+    }));
+  }
+
+  send(createCompleteMessage({ provider: PROVIDER, sessionId: finalSessionId, exitCode: completedNormally ? 0 : 1 }));
+
+  if (completedNormally) {
+    reportRunStopped({
+      userId,
+      provider: PROVIDER,
+      sessionId: finalSessionId,
+      sessionName: sessionSummary,
+      stopReason: 'completed',
+    });
+    return;
+  }
+
+  reportRunFailed({
+    userId,
+    provider: PROVIDER,
+    sessionId: finalSessionId,
+    sessionName: sessionSummary,
+    error: turnError ?? 'OpenCode run failed',
+  });
+  throw new Error(turnError ?? 'OpenCode run failed');
+}
+
+/**
+ * Settles a stopped 2.x turn after its stop has finished. The abort handler
+ * sends the terminal `complete` (aborted: true) on the turn's behalf, and
+ * waiting one macrotask more keeps the chat's safety-net `complete` from
+ * arriving first.
+ */
+async function finishStoppedV2Turn(turn: OpenCodeV2Turn): Promise<void> {
+  await turn.stopped;
+  await nextMacrotask();
+}
+
+/**
+ * Stops the 2.x turn running for a session: interrupts its `opencode run`
+ * (see `stopRunProcess`) and returns once the process has exited, or at once
+ * for a turn that has not started it yet. A second stop waits for the first.
+ * The caller sends the terminal `complete` (aborted: true) once this returns.
+ */
+async function abortOpenCodeV2Turn(sessionId: string): Promise<boolean> {
+  const turn = activeV2Turns.get(sessionId);
+  if (!turn) {
+    return false;
+  }
+
+  if (!turn.aborted) {
+    // Flagged synchronously so the turn emits no `complete` of its own.
+    turn.aborted = true;
+    turn.stopped = turn.child && turn.exited ? stopRunProcess(turn.child, turn.exited) : Promise.resolve();
+  }
+  await turn.stopped;
+  return true;
+}
+
+/**
+ * Runs one OpenCode turn with the runtime the installed CLI needs: OpenCode
+ * 2.x through `opencode run`, anything else (1.x, or a CLI that did not say
+ * which it is) through the SDK. A stop that arrives while the CLI's version is
+ * still being read ends the turn before either starts.
+ */
+async function runOpenCodeTurnForInstalledCli(
+  command: string,
+  options: AnyRecord = {},
+  writer: ProviderRuntimeWriter,
+  context: ProviderRuntimeContext,
+): Promise<void> {
+  const appSessionId = typeof options.sessionId === 'string' && options.sessionId ? options.sessionId : null;
+  const key = appSessionId ?? context.resolveProviderSessionId(appSessionId);
+  const placeholder: OpenCodeV2Turn | null = key && !activeTurns.has(key) && !activeV2Turns.has(key)
+    ? { key, child: null, exited: null, providerSessionId: null, aborted: false, stopped: null }
+    : null;
+  if (placeholder) {
+    activeV2Turns.set(placeholder.key, placeholder);
+  }
+
+  let majorVersion: number | null = null;
+  try {
+    majorVersion = await readOpenCodeCliMajorVersion().catch(() => null);
+  } finally {
+    if (placeholder && activeV2Turns.get(placeholder.key) === placeholder) {
+      activeV2Turns.delete(placeholder.key);
+    }
+  }
+  if (placeholder?.aborted) {
+    return finishStoppedV2Turn(placeholder);
+  }
+
+  return majorVersion !== null && majorVersion >= 2
+    ? runOpenCodeV2Turn(command, options, writer, context)
+    : runOpenCodeTurn(command, options, writer, context);
+}
+
 /**
  * Applies the chat's answer to a pending OpenCode permission or question.
  * Called for every provider's requests, so unknown ids are ignored.
@@ -1429,7 +1958,7 @@ function getPendingOpenCodePrompts(sessionId: string) {
  * provider, which treats subagents of a running turn as still in progress.
  */
 export function isOpenCodeSessionActive(sessionId: string): boolean {
-  return activeTurns.has(sessionId);
+  return activeTurns.has(sessionId) || activeV2Turns.has(sessionId);
 }
 
 /**
@@ -1438,8 +1967,10 @@ export function isOpenCodeSessionActive(sessionId: string): boolean {
  * /api/agent runs, and routes the chat's permission answers.
  */
 export const opencodeRuntime = {
-  run: runOpenCodeTurn,
-  abort: abortOpenCodeSession,
+  run: runOpenCodeTurnForInstalledCli,
+  abort: (sessionId: string): Promise<boolean> => (activeV2Turns.has(sessionId)
+    ? abortOpenCodeV2Turn(sessionId)
+    : abortOpenCodeSession(sessionId)),
   permissions: {
     resolve: resolveOpenCodePrompt,
     listPending: getPendingOpenCodePrompts,

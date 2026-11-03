@@ -16,6 +16,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
+import type Database from 'better-sqlite3';
 import spawn from 'cross-spawn';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
@@ -26,6 +27,7 @@ import type {
   AppErrorOptions,
   CliVersionProbe,
   NormalizedMessage,
+  OpenCodeSessionTable,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderSkillSource,
@@ -1075,6 +1077,67 @@ export function unwrapJsonStringLiteral(value: string): string {
   }
 }
 
+/**
+ * Picks the table of `opencode.db` that lists the sessions the installed
+ * OpenCode is using: `session` (1.x) or `session_v2` (2.x), or null when the
+ * database has neither.
+ *
+ * OpenCode 2.x migrates a 1.x database in place: it copies every session into
+ * `session_v2` (and the messages into `session_message`) and leaves the 1.x
+ * tables behind untouched. A 1.x CLI run against that database afterwards
+ * still writes only the 1.x tables, and a later 2.x does not import what it
+ * wrote. So when both tables exist, the 1.x one is live only while it holds
+ * the most recent activity; otherwise `session_v2` is, which also lists every
+ * migrated 1.x session.
+ *
+ * Used by the OpenCode session synchronizer, sessions provider and models
+ * provider and by the providers module's token usage service, which read
+ * sessions, messages and token totals from the layout it names.
+ */
+export function readOpenCodeSessionTable(db: Database.Database): OpenCodeSessionTable | null {
+  const tables = new Set(db.prepare(`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('session', 'session_v2')
+  `).pluck().all() as string[]);
+  if (!tables.has('session_v2')) {
+    return tables.has('session') ? 'session' : null;
+  }
+  if (!tables.has('session')) {
+    return 'session_v2';
+  }
+
+  const readNewestUpdate = (table: OpenCodeSessionTable): number =>
+    Number(db.prepare(`SELECT MAX(time_updated) FROM ${table}`).pluck().get() ?? 0);
+  return readNewestUpdate('session') > readNewestUpdate('session_v2') ? 'session' : 'session_v2';
+}
+
+/**
+ * Recovers the prompt `opencode run` was given from the text it stored.
+ *
+ * `run` joins its message arguments into one prompt and wraps each argument
+ * that contains a space in double quotes, escaping the quotes inside with a
+ * backslash (and nothing else): `say "hi" now` is stored, and sent to the
+ * model, as `"say \"hi\" now"`. CloudCLI passes the whole prompt as one
+ * argument, so every OpenCode 2.x prompt it sent is stored that way. Only text
+ * that wrapping can produce is changed (outer quotes, a space inside, every
+ * inner quote escaped); anything else, such as a prompt typed in OpenCode's
+ * own interface, is returned as it is.
+ *
+ * Used by the OpenCode sessions provider (2.x history) and session
+ * synchronizer (2.x session titles), so a prompt reads as it was typed and
+ * the chat can match it with the message it already shows.
+ */
+export function unquoteOpenCodeRunMessage(text: string): string {
+  if (text.length < 2 || !text.startsWith('"') || !text.endsWith('"')) {
+    return text;
+  }
+
+  const inner = text.slice(1, -1);
+  if (!inner.includes(' ') || /(^|[^\\])"/.test(inner)) {
+    return text;
+  }
+  return inner.replace(/\\"/g, '"');
+}
+
 // ---------------------------
 //----------------- JSONC UTILITIES ------------
 /**
@@ -1450,7 +1513,8 @@ export const terminalTextStyles = {
  * Pulls the version number out of what a CLI prints for `--version`.
  *
  * Each provider CLI wraps it differently: `2.1.295 (Claude Code)`,
- * `codex-cli 0.156.1`, a bare `1.18.25` from OpenCode, and the date-based
+ * `codex-cli 0.156.1`, a bare `1.18.25` from OpenCode 1.x (`opencode v2.2.3`
+ * from 2.x), and the date-based
  * `2026.07.20-8cc9c0b` from cursor-agent. This returns the first
  * `major.minor.patch` token with any `-prerelease` or `+build` suffix, or null
  * when the text has none.
@@ -1493,6 +1557,109 @@ export function probeCliVersion(command: string, args: string[] = ['--version'])
     exitCode: result.status,
     version: result.status === 0 ? parseCliVersion(String(result.stdout ?? '')) : null,
   };
+}
+
+/** How long an `opencode --version` answer is trusted while the executable stays unchanged. */
+const OPENCODE_CLI_VERSION_TTL_MS = 5 * 60_000;
+/** An OpenCode that could not be asked (failing, too slow) is asked again sooner. */
+const OPENCODE_CLI_VERSION_RETRY_MS = 30_000;
+const OPENCODE_CLI_VERSION_TIMEOUT_MS = 5_000;
+
+const openCodeCliMajorVersions = new Map<string, { mtimeMs: number; expiresAt: number; major: Promise<number | null> }>();
+
+/** The `opencode` a spawn of the bare command runs: the first match on PATH, by PATHEXT on Windows. */
+function findOpenCodeExecutable(): { filePath: string; mtimeMs: number } | null {
+  const isWindows = process.platform === 'win32';
+  const extensions = isWindows
+    ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
+    : [''];
+  for (const directory of (process.env.PATH || '').split(path.delimiter)) {
+    if (!directory) {
+      continue;
+    }
+    for (const extension of extensions) {
+      const filePath = path.join(directory, `opencode${extension}`);
+      try {
+        const stats = fs.statSync(filePath);
+        if (stats.isFile() && (isWindows || (stats.mode & 0o111) !== 0)) {
+          return { filePath, mtimeMs: stats.mtimeMs };
+        }
+      } catch {
+        // Not in this directory.
+      }
+    }
+  }
+  return null;
+}
+
+function probeOpenCodeMajorVersion(filePath: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    let output = '';
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    const finish = (major: number | null) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(major);
+      }
+    };
+
+    const child = spawn(filePath, ['--version'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    timer = setTimeout(() => {
+      child.kill();
+      finish(null);
+    }, OPENCODE_CLI_VERSION_TIMEOUT_MS);
+    child.stdout?.on('data', (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.on('error', () => finish(null));
+    child.on('close', (code) => {
+      // `opencode v2.2.3` from 2.x, a bare `1.18.25` from 1.x; `0.0.0-…` snapshots read as 0.
+      const version = code === 0 ? parseCliVersion(output) : null;
+      finish(version ? Number.parseInt(version, 10) : null);
+    });
+  });
+}
+
+/**
+ * Major version of the `opencode` CLI on PATH, or null when there is none or
+ * it did not answer `--version`; callers then keep their OpenCode 1.x
+ * behaviour.
+ *
+ * OpenCode 2.x changed its CLI flags, its server API and its storage, so the
+ * OpenCode provider picks its code path by this. The answer is cached per
+ * executable for a few minutes and asked again as soon as the file changes,
+ * which an upgrade does; a failed answer is retried sooner. Concurrent callers
+ * share one `--version` run, which never starts OpenCode 2.x's background
+ * service.
+ *
+ * Used by the OpenCode runtime (a 2.x chat turn runs through `opencode run`)
+ * and the OpenCode models provider (2.x lists models with `--standalone`).
+ */
+export function readOpenCodeCliMajorVersion(): Promise<number | null> {
+  const executable = findOpenCodeExecutable();
+  if (!executable) {
+    return Promise.resolve(null);
+  }
+
+  const cached = openCodeCliMajorVersions.get(executable.filePath);
+  if (cached && cached.mtimeMs === executable.mtimeMs && cached.expiresAt > Date.now()) {
+    return cached.major;
+  }
+
+  const entry = {
+    mtimeMs: executable.mtimeMs,
+    expiresAt: Date.now() + OPENCODE_CLI_VERSION_TTL_MS,
+    major: probeOpenCodeMajorVersion(executable.filePath),
+  };
+  void entry.major.then((major) => {
+    if (major === null) {
+      entry.expiresAt = Math.min(entry.expiresAt, Date.now() + OPENCODE_CLI_VERSION_RETRY_MS);
+    }
+  });
+  openCodeCliMajorVersions.set(executable.filePath, entry);
+  return entry.major;
 }
 
 // ---------------------------

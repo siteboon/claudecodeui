@@ -944,6 +944,20 @@ export type CliVersionProbe = {
 };
 
 // ---------------------------
+//----------------- OPENCODE STORAGE TYPES ------------
+/**
+ * The table of OpenCode's shared `opencode.db` that lists its sessions:
+ * `session` for OpenCode 1.x (messages in `message` and `part`) or
+ * `session_v2` for 2.x (messages in `session_message` and `session_part`).
+ *
+ * Returned by `readOpenCodeSessionTable` in the shared utils. The OpenCode
+ * provider's session synchronizer, sessions provider and runtime pass it to
+ * the queries that read sessions and token totals, so each reads the layout
+ * the CLI writes.
+ */
+export type OpenCodeSessionTable = 'session' | 'session_v2';
+
+// ---------------------------
 //----------------- SHARED DATABASE CREDENTIAL TYPES ------------
 /**
  * Safe credential view returned by credential listing APIs.

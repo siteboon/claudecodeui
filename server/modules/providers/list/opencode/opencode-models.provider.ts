@@ -15,6 +15,8 @@ import {
   buildDefaultProviderCurrentActiveModel,
   getOpenCodeDatabasePath,
   readObjectRecord,
+  readOpenCodeCliMajorVersion,
+  readOpenCodeSessionTable,
   readOptionalString,
 } from '@/shared/utils.js';
 
@@ -322,7 +324,7 @@ const OPENCODE_MODEL_REFERENCE_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9
  * output is deliberately treated as untrusted: only standalone,
  * fully-qualified `<provider>/<model>` lines are accepted.
  */
-const readInstalledOpenCodeModels = async (): Promise<string[]> => new Promise((resolve) => {
+const readInstalledOpenCodeModels = async (args = ['models']): Promise<string[]> => new Promise((resolve) => {
   let settled = false;
   let output = '';
   let timeout: NodeJS.Timeout | undefined;
@@ -337,7 +339,7 @@ const readInstalledOpenCodeModels = async (): Promise<string[]> => new Promise((
     }
     resolve([...models]);
   };
-  const child = spawn('opencode', ['models'], {
+  const child = spawn('opencode', args, {
     stdio: ['ignore', 'pipe', 'ignore'],
     shell: false,
   });
@@ -370,6 +372,17 @@ const readInstalledOpenCodeModels = async (): Promise<string[]> => new Promise((
     finish();
   });
 });
+
+/**
+ * Lists models with the installed CLI. OpenCode 2.x runs every command
+ * through a shared background service that it starts when none is running
+ * and that outlives the command; `--standalone` gives the listing a private
+ * server that ends with it. 1.x has no such service and rejects the flag.
+ */
+const readModelsWithInstalledOpenCode = async (): Promise<string[]> => {
+  const majorVersion = await readOpenCodeCliMajorVersion();
+  return readInstalledOpenCodeModels(majorVersion !== null && majorVersion >= 2 ? ['models', '--standalone'] : ['models']);
+};
 
 const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, unknown> | null> => {
   try {
@@ -553,7 +566,7 @@ export class OpenCodeProviderModels implements IProviderModels {
 
   /** Used by the provider registry and focused adapter tests to read local OpenCode models. */
   constructor(
-    private readonly readModels = readInstalledOpenCodeModels,
+    private readonly readModels: () => Promise<string[]> = readModelsWithInstalledOpenCode,
     private readonly now: () => number = Date.now,
   ) {}
 
@@ -621,6 +634,8 @@ export class OpenCodeProviderModels implements IProviderModels {
       const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 
       try {
+        // OpenCode 2.x keeps the session's model (same JSON) in `session_v2`.
+        const sessionTable = readOpenCodeSessionTable(db) ?? 'session';
         const row = db.prepare(`
           SELECT
             s.id AS sessionId,
@@ -629,7 +644,7 @@ export class OpenCodeProviderModels implements IProviderModels {
             s.directory AS directory,
             s.time_updated AS timeUpdated,
             s.time_created AS timeCreated
-          FROM session s
+          FROM ${sessionTable} s
           WHERE s.id = ?
           ORDER BY COALESCE(s.time_updated, s.time_created, 0) DESC
           LIMIT 1
