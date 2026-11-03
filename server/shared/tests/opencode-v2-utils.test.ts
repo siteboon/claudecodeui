@@ -127,25 +127,32 @@ const settledValue = async <T>(promise: Promise<T>): Promise<T | 'pending'> =>
 
 /**
  * A fake `opencode` alone on PATH: `--version` prints FAKE_OPENCODE_VERSION_OUTPUT,
- * exits with FAKE_OPENCODE_VERSION_EXIT and logs each run; with
- * FAKE_OPENCODE_VERSION_HANG it never answers. Each test gets its own
+ * exits with FAKE_OPENCODE_VERSION_EXIT and logs each run and its pid; with
+ * FAKE_OPENCODE_VERSION_HANG it never answers, and with
+ * FAKE_OPENCODE_VERSION_IGNORE_TERM it ignores SIGTERM. Each test gets its own
  * executable, so the version cache never answers for another test's file.
  */
 async function withFakeOpenCode(runTest: (fake: {
   executable: string;
   answer: (output: string, exitCode?: number) => void;
   hang: (hanging: boolean) => void;
+  ignoreTerm: () => void;
   touch: () => void;
   probes: () => Promise<number>;
+  pids: () => Promise<number[]>;
   /** Waits (real time) until `count` runs have started, then a little longer, and returns how many did. */
   waitForProbes: (count: number) => Promise<number>;
 }) => Promise<void>) {
   const binDir = await mkdtemp(path.join(os.tmpdir(), 'opencode-cli-version-'));
   const executable = path.join(binDir, 'opencode');
   const probeLog = path.join(binDir, 'probes.log');
+  const pidLog = path.join(binDir, 'pids.log');
   await writeFile(executable, [
     '#!/bin/sh',
     `echo "$1" >> "${probeLog}"`,
+    `echo "$$" >> "${pidLog}"`,
+    // `exec` keeps an ignored signal ignored, so `sleep` ignores SIGTERM too.
+    `[ -n "$FAKE_OPENCODE_VERSION_IGNORE_TERM" ] && trap '' TERM`,
     // PATH holds this folder only, so `sleep` is named by its path.
     `[ -n "$FAKE_OPENCODE_VERSION_HANG" ] && exec ${fs.existsSync('/bin/sleep') ? '/bin/sleep' : '/usr/bin/sleep'} 30`,
     'printf "%s\\n" "$FAKE_OPENCODE_VERSION_OUTPUT"',
@@ -171,12 +178,16 @@ async function withFakeOpenCode(runTest: (fake: {
           delete process.env.FAKE_OPENCODE_VERSION_HANG;
         }
       },
+      ignoreTerm: () => {
+        process.env.FAKE_OPENCODE_VERSION_IGNORE_TERM = '1';
+      },
       // An upgrade replaces the file.
       touch: () => {
         stamp += 10_000;
         fs.utimesSync(executable, new Date(stamp), new Date(stamp));
       },
       probes,
+      pids: async () => (await readFile(pidLog, 'utf8').catch(() => '')).split('\n').filter(Boolean).map(Number),
       waitForProbes: async (count) => {
         // setTimeout and Date may be mocked: yield with setImmediate, measure with performance.now.
         const startedAt = performance.now();
@@ -196,6 +207,7 @@ async function withFakeOpenCode(runTest: (fake: {
     delete process.env.FAKE_OPENCODE_VERSION_OUTPUT;
     delete process.env.FAKE_OPENCODE_VERSION_EXIT;
     delete process.env.FAKE_OPENCODE_VERSION_HANG;
+    delete process.env.FAKE_OPENCODE_VERSION_IGNORE_TERM;
     await rm(binDir, { recursive: true, force: true });
   }
 }
@@ -293,6 +305,52 @@ test('a file that answered is asked again within 5 s, and its answer stands when
     mock.timers.tick(2_000);
     assert.equal(await readMajorVersion(), null);
     assert.equal(await fake.probes(), 3);
+  });
+});
+
+/** Whether a process with this id exists; a child that exited counts until Node has reaped it. */
+const isRunning = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+};
+
+/** Waits (real time, 5 s at most) until the process is gone, and says whether it is. */
+const waitUntilGone = async (pid: number) => {
+  const startedAt = performance.now();
+  while (isRunning(pid) && performance.now() - startedAt < 5_000) {
+    await yieldToEventLoop();
+  }
+  return !isRunning(pid);
+};
+
+test('a `--version` that ignores SIGTERM is killed 1 s after its try runs out of time', { skip: process.platform === 'win32' }, async () => {
+  await withFakeOpenCode(async (fake) => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
+    fake.answer('opencode v2.2.3');
+    fake.hang(true);
+    fake.ignoreTerm();
+    const stuck = readMajorVersion();
+    assert.equal(await fake.waitForProbes(1), 1);
+
+    // Out of time: SIGTERM, which it ignores; the second try does not wait for it.
+    mock.timers.tick(20_000);
+    assert.equal(await fake.waitForProbes(2), 2);
+    const [first, second] = await fake.pids();
+    mock.timers.tick(999);
+    assert.equal(isRunning(first), true);
+    mock.timers.tick(1);
+    assert.equal(await waitUntilGone(first), true);
+
+    // The second try answers at its timeout while its process still runs, which is killed 1 s later.
+    mock.timers.tick(19_000);
+    assert.equal(await stuck, null);
+    assert.equal(isRunning(second), true);
+    mock.timers.tick(1_000);
+    assert.equal(await waitUntilGone(second), true);
   });
 });
 

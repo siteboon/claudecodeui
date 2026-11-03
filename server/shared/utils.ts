@@ -1612,6 +1612,8 @@ const OPENCODE_CLI_VERSION_TIMEOUT_MS = 20_000;
  * holds a turn up for 5 s at most.
  */
 const OPENCODE_CLI_VERSION_RECHECK_TIMEOUT_MS = 5_000;
+/** How long a `--version` that ran out of time gets to exit after SIGTERM before it gets SIGKILL. */
+const OPENCODE_CLI_VERSION_KILL_GRACE_MS = 1_000;
 
 type OpenCodeCliVersionEntry = {
   /** Identifies the executable file the answer came from (see `findOpenCodeExecutable`). */
@@ -1658,7 +1660,11 @@ function findOpenCodeExecutable(): { filePath: string; fingerprint: string } | n
   return null;
 }
 
-/** The major version `opencode --version` prints, null when it did not say, and whether it ran out of time. */
+/**
+ * The major version `opencode --version` prints, null when it did not say,
+ * and whether it ran out of time. Out of time, it answers at once and the
+ * process gets SIGTERM, then SIGKILL 1 s later if it is still running.
+ */
 function probeOpenCodeMajorVersion(
   filePath: string,
   timeoutMs: number,
@@ -1667,6 +1673,7 @@ function probeOpenCodeMajorVersion(
     let output = '';
     let settled = false;
     let timer: NodeJS.Timeout | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
     const finish = (major: number | null, timedOut = false) => {
       if (!settled) {
         settled = true;
@@ -1678,13 +1685,19 @@ function probeOpenCodeMajorVersion(
     const child = spawn(filePath, ['--version'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
     timer = setTimeout(() => {
       child.kill();
+      // One that ignores SIGTERM would keep running beside the next try.
+      killTimer = setTimeout(() => child.kill('SIGKILL'), OPENCODE_CLI_VERSION_KILL_GRACE_MS);
       finish(null, true);
     }, timeoutMs);
     child.stdout?.on('data', (chunk: Buffer) => {
       output += chunk.toString();
     });
-    child.on('error', () => finish(null));
+    child.on('error', () => {
+      clearTimeout(killTimer);
+      finish(null);
+    });
     child.on('close', (code) => {
+      clearTimeout(killTimer);
       // `opencode v2.2.3` from 2.x, a bare `1.18.25` from 1.x; `0.0.0-…` snapshots read as 0.
       const version = code === 0 ? parseCliVersion(output) : null;
       finish(version ? Number.parseInt(version, 10) : null);
