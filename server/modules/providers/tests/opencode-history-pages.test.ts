@@ -275,6 +275,8 @@ test('OpenCode history pages are exactly the matching slices of the full history
     expectations.shownErrors.add('msg_deep');
     insertPart.run('prt_deep_text', 'msg_deep', 'ses_c', 1_700_000_000_701, `{"type":"text","text":"deep text","x":${deeplyNested}}`);
     expectations.partKinds.set('prt_deep_text', 'text');
+    // A message that names no role does not show its error either.
+    insertMessage.run('msg_no_role_error', 'ses_c', 1_700_000_000_800, JSON.stringify({ error: 'no role' }));
     db.prepare('INSERT INTO session (id) VALUES (?)').run('ses_empty');
   }, async (provider, dbPath) => {
     for (const providerSessionId of ['ses_a', 'ses_b', 'ses_c', 'ses_empty', 'ses_missing']) {
@@ -377,6 +379,20 @@ test('an OpenCode history page reads tool output and subagent timelines only for
     const childStepsRead = parsedInputs.filter((input) => input.includes('CHILD_STEP_')).length;
     assert.equal(toolOutputsRead, 3);
     assert.equal(childStepsRead, stepsPerSubagent);
+
+    // An older page reads only its own rows too, not the newer ones after it.
+    const olderParse = t.mock.method(JSON, 'parse');
+    const older = await provider.fetchHistory('app-session', { providerSessionId: 'ses_long', limit: 10, offset: 450 });
+    const olderInputs = olderParse.mock.calls.map((call) => String(call.arguments[0]));
+    olderParse.mock.restore();
+    assert.deepEqual(older.messages.map((message) => message.content ?? message.toolName), [
+      'Answer 146',
+      'Prompt 147', 'bash', 'Answer 147',
+      'Prompt 148', 'bash', 'Answer 148',
+      'Prompt 149', 'task', 'Answer 149',
+    ]);
+    assert.equal(olderInputs.filter((input) => input.includes('TOOL_OUTPUT_')).length, 3);
+    assert.equal(olderInputs.filter((input) => input.includes('CHILD_STEP_')).length, stepsPerSubagent);
   });
 });
 
