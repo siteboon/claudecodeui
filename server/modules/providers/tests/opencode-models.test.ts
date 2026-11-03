@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -388,6 +388,71 @@ test('OpenCode retries a failed CLI listing sooner than a successful one', async
       assert.deepEqual(recovered.OPTIONS.map((option) => option.value), ['anthropic/claude-sonnet-5']);
     },
   );
+});
+
+/**
+ * Puts an `opencode` on PATH that answers `opencode models` with `listing`
+ * only after `delayMs`, the way a first run in a fresh home answers once its
+ * database migration and models.dev download are done.
+ */
+const withSlowOpenCodeCli = async (
+  delayMs: number,
+  listing: string[],
+  run: () => Promise<void>,
+): Promise<void> => {
+  const binDir = await mkdtemp(path.join(os.tmpdir(), 'opencode-slow-cli-'));
+  const findEnvKey = (name: string) =>
+    Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
+  const pathKey = findEnvKey('PATH');
+  const pathExtKey = findEnvKey('PATHEXT');
+  const originalPath = process.env[pathKey];
+  const originalPathExt = process.env[pathExtKey];
+
+  try {
+    const script = path.join(binDir, 'opencode-models.cjs');
+    await writeFile(
+      script,
+      `setTimeout(() => process.stdout.write(${JSON.stringify(`${listing.join('\n')}\n`)}), ${delayMs});\n`,
+    );
+    if (process.platform === 'win32') {
+      await writeFile(path.join(binDir, 'opencode.cmd'), `@echo off\r\n"${process.execPath}" "${script}" %*\r\n`);
+      if (!originalPathExt?.toUpperCase().includes('.CMD')) {
+        process.env[pathExtKey] = `.COM;.EXE;.BAT;.CMD${originalPathExt ? `;${originalPathExt}` : ''}`;
+      }
+    } else {
+      const wrapper = path.join(binDir, 'opencode');
+      await writeFile(wrapper, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+      await chmod(wrapper, 0o755);
+    }
+    process.env[pathKey] = `${binDir}${path.delimiter}${originalPath ?? ''}`;
+
+    await run();
+  } finally {
+    for (const [key, value] of [[pathKey, originalPath], [pathExtKey, originalPathExt]] as const) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    await rm(binDir, { recursive: true, force: true });
+  }
+};
+
+test('OpenCode waits for a slow first CLI listing instead of offering the static catalog', async () => {
+  // A new container, or every start of one that does not keep OpenCode's data
+  // directory, is a first run, and `opencode models` took 5-8 s there on a
+  // busy machine. Cut off at 5 s, the picker fell back to the static catalog,
+  // which the page then kept: an OpenRouter user whose key CloudCLI cannot see
+  // was offered OpenCode Zen, Go and Anthropic models that their OpenCode
+  // refuses with "Model not found", and none of their own (#1695).
+  const listing = ['openrouter/qwen/qwen3-coder-flash', 'openrouter/google/gemini-3-pro-image-preview'];
+  await withSlowOpenCodeCli(6_000, listing, () => withOpenCodeHome(async () => {}, async () => {
+    // The default reader runs the `opencode` found on PATH, like production.
+    const models = await new OpenCodeProviderModels().getSupportedModels();
+    assert.deepEqual(models.OPTIONS.map((option) => option.value), listing);
+    assert.equal(models.DEFAULT, listing[0]);
+  }));
 });
 
 const writeOpenCodeSessionDatabase = async (homeDir: string, rows: Array<Record<string, unknown>>) => {

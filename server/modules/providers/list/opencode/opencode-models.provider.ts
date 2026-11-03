@@ -304,7 +304,18 @@ const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
   OPENAI_API_KEY: 'openai',
 };
 
-const OPENCODE_MODELS_TIMEOUT_MS = 5_000;
+/**
+ * How long `opencode models` may take before the static catalog stands in.
+ *
+ * OpenCode's first run in a fresh home migrates its database and fetches the
+ * models.dev catalog before it lists anything, which on a new container or a
+ * busy machine takes longer than a few seconds. A listing cut short there is
+ * not a small loss: the picker keeps the catalog it was first given until the
+ * page is reloaded, and when this install's providers cannot be read, the
+ * static catalog offers models this OpenCode refuses to run instead of the
+ * user's own.
+ */
+const OPENCODE_MODELS_TIMEOUT_MS = 30_000;
 /** How long a successful `opencode models` listing is served before it is refreshed. */
 const OPENCODE_MODELS_CACHE_TTL_MS = 5 * 60_000;
 /**
