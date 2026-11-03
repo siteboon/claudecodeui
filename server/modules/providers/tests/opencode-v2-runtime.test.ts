@@ -606,3 +606,12 @@ test('the model picker lists 2.x models with --standalone, and 1.x models withou
   const v1 = await listedWith('1.18.25');
   assert.deepEqual(v1.args, ['models']);
 });
+
+test('a 2.x model listing slower than the 1.x budget still fills the picker', async () => {
+  setInstalledVersion('opencode v2.2.3');
+  // A first `models --standalone` after an install or upgrade took 5.4-5.6 s.
+  setEnv('FAKE_OPENCODE_V2_LOG', path.join(tempRoot, `models-${++logCounter}.jsonl`));
+  setEnv('FAKE_OPENCODE_V2_SCENARIO', JSON.stringify({ models: [MODEL], modelsDelayMs: 6_000 }));
+  const catalog = await new OpenCodeProviderModels().getSupportedModels();
+  assert.deepEqual(catalog.OPTIONS.map((option) => option.value), [MODEL]);
+});

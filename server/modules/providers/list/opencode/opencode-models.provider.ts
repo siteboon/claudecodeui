@@ -324,7 +324,10 @@ const OPENCODE_MODEL_REFERENCE_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9
  * output is deliberately treated as untrusted: only standalone,
  * fully-qualified `<provider>/<model>` lines are accepted.
  */
-const readInstalledOpenCodeModels = async (args = ['models']): Promise<string[]> => new Promise((resolve) => {
+const readInstalledOpenCodeModels = async (
+  args = ['models'],
+  timeoutMs = OPENCODE_MODELS_TIMEOUT_MS,
+): Promise<string[]> => new Promise((resolve) => {
   let settled = false;
   let output = '';
   let timeout: NodeJS.Timeout | undefined;
@@ -349,7 +352,7 @@ const readInstalledOpenCodeModels = async (args = ['models']): Promise<string[]>
     models.clear();
     child.kill();
     finish();
-  }, OPENCODE_MODELS_TIMEOUT_MS);
+  }, timeoutMs);
 
   child.stdout?.on('data', (chunk: Buffer) => {
     output += chunk.toString();
@@ -374,6 +377,13 @@ const readInstalledOpenCodeModels = async (args = ['models']): Promise<string[]>
 });
 
 /**
+ * How long a 2.x listing may take. It boots a private server, and the first
+ * one after an install or upgrade also creates or migrates OpenCode's
+ * database: 5.4-5.6 s in CloudCLI (2.1.4 to 2.2.5), past the 1.x budget.
+ */
+const OPENCODE_V2_MODELS_TIMEOUT_MS = 20_000;
+
+/**
  * Lists models with the installed CLI. OpenCode 2.x runs every command
  * through a shared background service that it starts when none is running
  * and that outlives the command; `--standalone` gives the listing a private
@@ -382,7 +392,9 @@ const readInstalledOpenCodeModels = async (args = ['models']): Promise<string[]>
 const readModelsWithInstalledOpenCode = async (): Promise<string[]> => {
   const majorVersion = await readOpenCodeCliMajorVersion();
   const isOpenCodeV2 = majorVersion !== null && majorVersion >= 2;
-  return readInstalledOpenCodeModels(isOpenCodeV2 ? ['models', '--standalone'] : ['models']);
+  return isOpenCodeV2
+    ? readInstalledOpenCodeModels(['models', '--standalone'], OPENCODE_V2_MODELS_TIMEOUT_MS)
+    : readInstalledOpenCodeModels(['models']);
 };
 
 const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, unknown> | null> => {

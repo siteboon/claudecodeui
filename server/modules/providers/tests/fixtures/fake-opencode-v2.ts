@@ -32,8 +32,9 @@ type Scenario = {
   waitForSignal?: boolean;
   /** Ignores SIGINT while waiting, so only SIGTERM or SIGKILL end it. */
   ignoreSigint?: boolean;
-  /** Lines `models` prints. */
+  /** Lines `models` prints, and how long it takes to print them. */
   models?: string[];
+  modelsDelayMs?: number;
   /**
    * Records a session under this id in ~/.local/share/opencode/opencode.db
    * before anything is printed, as `run` does: in session_v2 for the PWD it
@@ -100,8 +101,10 @@ if (args[0] === '--version') {
   });
 
   if (args[0] === 'models') {
-    process.stdout.write((scenario.models ?? []).map((model) => `${model}\n`).join(''));
-    exitAfterOutput(0);
+    setTimeout(() => {
+      process.stdout.write((scenario.models ?? []).map((model) => `${model}\n`).join(''));
+      exitAfterOutput(0);
+    }, scenario.modelsDelayMs ?? 0);
   } else if (args[0] !== 'run') {
     process.stderr.write(`fake opencode 2.x: unsupported command ${args[0]}\n`);
     exitAfterOutput(1);
