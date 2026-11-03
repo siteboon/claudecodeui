@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+// The rules file alone: it has no dependencies, unlike the ajv plugin around it.
+import { fullFormats } from 'ajv-formats/dist/formats';
 
 import type { PermissionPanelProps } from '@/shared/types';
 
@@ -16,6 +18,7 @@ type ElicitationField = {
   required: boolean;
   kind: 'text' | 'number' | 'integer' | 'boolean' | 'choice' | 'multi';
   inputType: 'text' | 'email' | 'url' | 'date' | 'datetime-local';
+  format?: string;
   choices: Choice[];
   minLength?: number;
   maxLength?: number;
@@ -88,11 +91,18 @@ const readFields = (requestedSchema: ElicitationInput['requestedSchema']): Elici
               ? 'number'
               : 'text';
     const fallback = schema.default;
+    // A single choice is held as its position in `choices`, so that '' can mean
+    // "nothing chosen" even when an enum value is itself empty or blank.
+    const defaultChoice = kind === 'choice' && fallback !== undefined
+      ? (choices ?? []).findIndex((choice) => choice.value === String(fallback))
+      : -1;
     const initial = kind === 'multi'
       ? (Array.isArray(fallback) ? fallback.map(String) : [])
       : kind === 'boolean'
         ? fallback === true
-        : fallback === undefined || fallback === null ? '' : String(fallback);
+        : kind === 'choice'
+          ? (defaultChoice >= 0 ? String(defaultChoice) : '')
+          : fallback === undefined || fallback === null ? '' : String(fallback);
     return {
       key,
       label: typeof schema.title === 'string' && schema.title ? schema.title : key,
@@ -100,6 +110,7 @@ const readFields = (requestedSchema: ElicitationInput['requestedSchema']): Elici
       required: required.has(key),
       kind,
       inputType: FORMAT_INPUT_TYPES[String(schema.format)] ?? 'text',
+      format: typeof schema.format === 'string' ? schema.format : undefined,
       choices: choices ?? [],
       minLength: asNumber(schema.minLength),
       maxLength: asNumber(schema.maxLength),
@@ -110,6 +121,39 @@ const readFields = (requestedSchema: ElicitationInput['requestedSchema']): Elici
       initial,
     };
   });
+};
+
+/**
+ * The text a field sends. A `datetime-local` input gives local time without
+ * seconds or offset, which RFC 3339 `date-time` rejects, so a `date-time`
+ * answer goes out as an ISO 8601 instant in UTC. Null when it is not a date.
+ */
+const toSubmittedText = (field: ElicitationField, text: string): string | null => {
+  if (field.format !== 'date-time') return text;
+  const instant = new Date(text);
+  return Number.isNaN(instant.getTime()) ? null : instant.toISOString();
+};
+
+/**
+ * Whether a value meets its `format` by the rules the MCP SDK validates an
+ * answer with on the server (ajv-formats, full mode), so the panel does not
+ * send what the server would reject. A format those rules lack is not checked.
+ */
+const matchesFormat = (format: string, value: string): boolean => {
+  const rule: unknown = (fullFormats as Record<string, unknown>)[format];
+  const check = rule && typeof rule === 'object' && !(rule instanceof RegExp) && 'validate' in rule
+    ? (rule as { validate: unknown }).validate
+    : rule;
+  if (check instanceof RegExp) return check.test(value);
+  if (typeof check === 'function') return Boolean((check as (candidate: string) => unknown)(value));
+  return true;
+};
+
+const FORMAT_ERRORS: Record<string, { key: string; text: string }> = {
+  email: { key: 'notAnEmail', text: 'Enter an email address' },
+  uri: { key: 'notAUri', text: 'Enter a full address, such as https://example.com' },
+  date: { key: 'notADate', text: 'Enter a date' },
+  'date-time': { key: 'notADateTime', text: 'Enter a date and time' },
 };
 
 /** Only http(s) links get an Open button; anything else (`javascript:` above all) is shown as text. */
@@ -167,6 +211,11 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
       }
       return null;
     }
+    if (field.kind === 'choice') {
+      // Held as a position, so only '' is unanswered; a blank choice is an answer.
+      const answered = typeof value === 'string' && value !== '';
+      return !answered && field.required ? t('chat:mcpElicitation.required', { defaultValue: 'Required' }) : null;
+    }
     const text = typeof value === 'string' ? value.trim() : '';
     if (!text) {
       return field.required ? t('chat:mcpElicitation.required', { defaultValue: 'Required' }) : null;
@@ -185,11 +234,22 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
       }
       return null;
     }
-    if (field.minLength !== undefined && text.length < field.minLength) {
+    // JSON Schema counts characters as code points, so an emoji is one, not two.
+    const length = [...text].length;
+    if (field.minLength !== undefined && length < field.minLength) {
       return t('chat:mcpElicitation.tooShort', { count: field.minLength, defaultValue: 'At least {{count}} characters' });
     }
-    if (field.maxLength !== undefined && text.length > field.maxLength) {
+    if (field.maxLength !== undefined && length > field.maxLength) {
       return t('chat:mcpElicitation.tooLong', { count: field.maxLength, defaultValue: 'At most {{count}} characters' });
+    }
+    if (field.format) {
+      const submitted = toSubmittedText(field, text);
+      if (submitted === null || !matchesFormat(field.format, submitted)) {
+        const message = FORMAT_ERRORS[field.format];
+        return message
+          ? t(`chat:mcpElicitation.${message.key}`, { defaultValue: message.text })
+          : t('chat:mcpElicitation.notTheFormat', { format: field.format, defaultValue: 'Not a valid {{format}}' });
+      }
     }
     return null;
   }, [values, t]);
@@ -204,10 +264,16 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
       } else if (field.kind === 'multi') {
         const picked = Array.isArray(value) ? value : [];
         if (picked.length > 0) content[field.key] = picked;
+      } else if (field.kind === 'choice') {
+        // The enum value itself, untrimmed: a blank value is a real choice.
+        const choice = typeof value === 'string' && value !== '' ? field.choices[Number(value)] : undefined;
+        if (choice) content[field.key] = choice.value;
       } else {
         const text = typeof value === 'string' ? value.trim() : '';
         if (!text) continue;
-        content[field.key] = field.kind === 'number' || field.kind === 'integer' ? Number(text) : text;
+        content[field.key] = field.kind === 'number' || field.kind === 'integer'
+          ? Number(text)
+          : toSubmittedText(field, text) ?? text;
       }
     }
     return content;
@@ -339,8 +405,8 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
                           className={inputClassName}
                         >
                           <option value="">{t('chat:mcpElicitation.choose', { defaultValue: 'Choose…' })}</option>
-                          {field.choices.map((choice) => (
-                            <option key={choice.value} value={choice.value}>{choice.label}</option>
+                          {field.choices.map((choice, index) => (
+                            <option key={index} value={String(index)}>{choice.label}</option>
                           ))}
                         </select>
                       ) : (

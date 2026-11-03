@@ -66,7 +66,7 @@ test('a form request is drawn as a form, not as a tool approval', () => {
 test('a filled form is accepted with typed content, leaving out empty optional fields', () => {
   const { getByText, getByLabelText, decisions } = renderBanner(formRequest);
 
-  fireEvent.change(getByLabelText(/Target/), { target: { value: 'dev' } });
+  fireEvent.change(getByLabelText(/Target/), { target: { value: '1' } });
   fireEvent.click(getByLabelText(/Confirm/));
   fireEvent.change(getByLabelText(/Count/), { target: { value: '7' } });
   fireEvent.click(getByLabelText('Beta'));
@@ -87,7 +87,7 @@ test('a form that does not fit its schema is not sent', () => {
   assert.equal(decisions.length, 0);
   assert.equal(getAllByText('Required').length, 2);
 
-  fireEvent.change(getByLabelText(/Target/), { target: { value: 'prod' } });
+  fireEvent.change(getByLabelText(/Target/), { target: { value: '0' } });
   fireEvent.change(getByLabelText(/Count/), { target: { value: '2.5' } });
   fireEvent.click(getByText('Submit'));
   assert.equal(decisions.length, 0);
@@ -138,4 +138,69 @@ test('a URL that is not http or https gets no link to open', () => {
   assert.equal(queryByText('Open link') === null, true);
   assert.ok(getByText('Only http and https links can be opened from here.'));
   assert.ok(getByText('Decline'));
+});
+
+const singleField = (requestId: string, property: Record<string, unknown>, required = true): PendingPermissionRequest => ({
+  requestId,
+  toolName: 'McpElicitation',
+  input: {
+    serverName: 'vault',
+    message: 'One question',
+    mode: 'form',
+    requestedSchema: { type: 'object', properties: { answer: { title: 'Answer', ...property } }, required: required ? ['answer'] : [] },
+  },
+});
+
+test('an empty or blank enum value is a real choice, not the placeholder', () => {
+  const { getByText, getByLabelText, decisions } = renderBanner(
+    singleField('eli_4', { type: 'string', enum: ['', '  ', 'x'], enumNames: ['None', 'Blank', 'X'] }),
+  );
+
+  fireEvent.change(getByLabelText(/Answer/), { target: { value: '0' } });
+  fireEvent.click(getByText('Submit'));
+  fireEvent.change(getByLabelText(/Answer/), { target: { value: '1' } });
+  fireEvent.click(getByText('Submit'));
+
+  assert.deepEqual(decisions.map((entry) => entry.decision), [
+    { allow: true, updatedInput: { content: { answer: '' } } },
+    { allow: true, updatedInput: { content: { answer: '  ' } } },
+  ]);
+});
+
+test('length limits count characters, so one emoji fits maxLength 1', () => {
+  const { getByText, getByLabelText, decisions } = renderBanner(singleField('eli_5', { type: 'string', maxLength: 1 }));
+
+  fireEvent.change(getByLabelText(/Answer/), { target: { value: '\u{1F44D}' } });
+  fireEvent.click(getByText('Submit'));
+  assert.deepEqual(decisions, [{ ids: 'eli_5', decision: { allow: true, updatedInput: { content: { answer: '\u{1F44D}' } } } }]);
+});
+
+test('an email or uri that the server would reject is not sent', () => {
+  const email = renderBanner(singleField('eli_6', { type: 'string', format: 'email' }));
+  fireEvent.change(email.getByLabelText(/Answer/), { target: { value: 'not an address' } });
+  fireEvent.click(email.getByText('Submit'));
+  assert.equal(email.decisions.length, 0);
+  assert.ok(email.getByText('Enter an email address'));
+  fireEvent.change(email.getByLabelText(/Answer/), { target: { value: 'ada@example.com' } });
+  fireEvent.click(email.getByText('Submit'));
+  assert.deepEqual(email.decisions[0]?.decision, { allow: true, updatedInput: { content: { answer: 'ada@example.com' } } });
+  email.unmount();
+
+  const uri = renderBanner(singleField('eli_7', { type: 'string', format: 'uri' }));
+  fireEvent.change(uri.getByLabelText(/Answer/), { target: { value: 'example.com/page' } });
+  fireEvent.click(uri.getByText('Submit'));
+  assert.equal(uri.decisions.length, 0);
+  assert.ok(uri.getByText('Enter a full address, such as https://example.com'));
+});
+
+test('a date-time answer is sent as an RFC 3339 instant with an offset', () => {
+  const { getByText, getByLabelText, decisions } = renderBanner(singleField('eli_8', { type: 'string', format: 'date-time' }));
+
+  // What a datetime-local input gives: local time, no seconds, no offset.
+  fireEvent.change(getByLabelText(/Answer/), { target: { value: '2026-11-03T17:05' } });
+  fireEvent.click(getByText('Submit'));
+  assert.deepEqual(decisions, [{
+    ids: 'eli_8',
+    decision: { allow: true, updatedInput: { content: { answer: new Date('2026-11-03T17:05').toISOString() } } },
+  }]);
 });

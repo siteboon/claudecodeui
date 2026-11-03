@@ -110,7 +110,12 @@
     "tooShort": "At least {{count}} characters",
     "tooLong": "At most {{count}} characters",
     "tooFew": "Pick at least {{count}}",
-    "tooMany": "Pick at most {{count}}"
+    "tooMany": "Pick at most {{count}}",
+    "notAnEmail": "Enter an email address",
+    "notAUri": "Enter a full address, such as https://example.com",
+    "notADate": "Enter a date",
+    "notADateTime": "Enter a date and time",
+    "notTheFormat": "Not a valid {{format}}"
   },
   "permissions": {
     "grant": "Grant permission for {{tool}}",
