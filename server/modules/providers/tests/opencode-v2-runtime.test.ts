@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { after, before, test } from 'node:test';
+import { after, before, mock, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import Database from 'better-sqlite3';
@@ -408,6 +408,39 @@ test('a 2.x turn shows its text under the ids the history gives the stored parts
     `${messageA}_prt_${messageA.slice(4)}_text-0|Running the command.`,
     `${messageA}_prt_${messageA.slice(4)}_text-2|It ran.`,
     `${messageB}_prt_${messageB.slice(4)}_text-1|${textB.part.text}`,
+  ]);
+});
+
+test('two steps that each stream their text get the stored id of their own message\'s first text', async () => {
+  setInstalledVersion('opencode v2.2.3');
+  const sessionId = 'ses_two_step_texts';
+  const [stepStartA, toolUseA, stepFinishA, stepStartB, textB, stepFinishB] = JSON.parse(
+    JSON.stringify(toolTurn).replaceAll(TOOL_TURN_SESSION, sessionId),
+  ) as Array<Record<string, any>>;
+  const messageA = stepStartA.part.messageID as string;
+  const messageB = stepStartB.part.messageID as string;
+  const streamedText = (messageID: string, id: string, text: string) => ({
+    type: 'text',
+    timestamp: textB.timestamp,
+    sessionID: sessionId,
+    part: { ...textB.part, id, messageID, text },
+  });
+  // Text before the tool call, then the answer in the next step: both streamed, with fresh ids.
+  const lines = [
+    stepStartA,
+    streamedText(messageA, 'prt_1a2418ff1001dddddddddddddd', 'Running the command.'),
+    toolUseA,
+    stepFinishA,
+    stepStartB,
+    streamedText(messageB, 'prt_1a2419050001eeeeeeeeeeeeee', 'It ran.'),
+    stepFinishB,
+  ];
+
+  const turn = await runTurn({ appSessionId: 'app-v2-two-step-texts', scenario: { lines } });
+  assert.equal(turn.error, null);
+  assert.deepEqual(turn.frames.filter((frame) => frame.kind === 'text').map((frame) => frame.id), [
+    `${messageA}_prt_${messageA.slice(4)}_text-0`,
+    `${messageB}_prt_${messageB.slice(4)}_text-0`,
   ]);
 });
 
@@ -847,4 +880,44 @@ test('a 2.x model listing slower than the 1.x budget still fills the picker', as
   setEnv('FAKE_OPENCODE_V2_SCENARIO', JSON.stringify({ models: [MODEL], modelsDelayMs: 6_000 }));
   const catalog = await new OpenCodeProviderModels().getSupportedModels();
   assert.deepEqual(catalog.OPTIONS.map((option) => option.value), [MODEL]);
+});
+
+test('a 1.x model listing keeps its 5 s budget', async () => {
+  setInstalledVersion('1.18.25');
+  setEnv('FAKE_OPENCODE_V2_LOG', path.join(tempRoot, `models-${++logCounter}.jsonl`));
+  setEnv('FAKE_OPENCODE_V2_SCENARIO', JSON.stringify({ version: '1.18.25', models: [MODEL], modelsDelayMs: 6_000 }));
+  // Cut off at 5 s, so the curated catalog, which lacks this model, stands in.
+  const catalog = await new OpenCodeProviderModels().getSupportedModels();
+  assert.equal(catalog.OPTIONS.some((option) => option.value === MODEL), false);
+  assert.ok(catalog.OPTIONS.length > 0);
+});
+
+test('a 2.x model listing gets 20 s before the curated catalog stands in', async () => {
+  setInstalledVersion('opencode v2.2.3');
+  const logPath = path.join(tempRoot, `models-${++logCounter}.jsonl`);
+  setEnv('FAKE_OPENCODE_V2_LOG', logPath);
+  setEnv('FAKE_OPENCODE_V2_SCENARIO', JSON.stringify({ models: [MODEL] }));
+  // Read the version first, with real timers: below only the listing's own timer is mocked.
+  assert.deepEqual((await new OpenCodeProviderModels().getSupportedModels()).OPTIONS.map((option) => option.value), [MODEL]);
+
+  setEnv('FAKE_OPENCODE_V2_SCENARIO', JSON.stringify({ models: [MODEL], modelsDelayMs: 60_000 }));
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const listing = new OpenCodeProviderModels().getSupportedModels();
+    // setImmediate is not mocked: wait for the listing to start, then move the clock.
+    const startedAt = performance.now();
+    const listingsStarted = async () => (await readFile(logPath, 'utf8')).split('"command":"models"').length - 1;
+    while ((await listingsStarted()) < 2 && performance.now() - startedAt < 10_000) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.equal(await listingsStarted(), 2);
+    mock.timers.tick(19_999);
+    const pending = await Promise.race([listing, new Promise((resolve) => setImmediate(() => resolve('pending')))]);
+    assert.equal(pending, 'pending');
+    mock.timers.tick(1);
+    const catalog = await listing;
+    assert.equal(catalog.OPTIONS.some((option) => option.value === MODEL), false);
+  } finally {
+    mock.timers.reset();
+  }
 });

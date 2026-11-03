@@ -470,6 +470,8 @@ test('with both layouts each session is listed and read from its own live copy, 
     for (const id of ['ses_cc', 'ses_on_2x', 'ses_resumed', 'ses_term1', 'ses_term2']) {
       assert.ok(sessionsDb.getSessionByProviderSessionId(id), id);
     }
+    // A live copy without a title or prompt is named by the other copy's first prompt.
+    assert.equal(sessionsDb.getSessionByProviderSessionId('ses_resumed')?.custom_name, 'asked on 1.x only');
     assert.deepEqual(await readAll(), expected);
 
     // Whichever CLI writes next, no other session changes.
@@ -494,6 +496,44 @@ test('a 2.x subagent card keeps its timeline after a 1.x CLI wrote the database'
 
     const card = new OpenCodeSessionsProvider().normalizeMessage(subagentTurn[1], 'app-parent')[0] as Record<string, any>;
     assert.deepEqual(card.subagentTools?.map((step: Record<string, any>) => `${step.kind}:${step.content}`), ['text:Hello from the child.']);
+  });
+});
+
+test('a subagent card keeps its 2.x timeline when the child\'s newer 1.x copy has no messages', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_UPGRADED_SCHEMA, async ({ db, workspace }) => {
+    const parentId = subagentTurn[1].sessionID as string;
+    const childId = 'ses_e5da1e45fffeZ2WCwgpM9byvoB';
+    insertV2Session(db, { id: parentId, directory: workspace, timeUpdated: BASE_TIME + 10_000 });
+    insertV2Session(db, { id: childId, directory: workspace, timeUpdated: BASE_TIME + 9_000, parentId });
+    insertV2Message(db, childId, 1, 'msg_child_reply', 'assistant', {
+      content: [{ type: 'text', text: 'Hello from the child.' }],
+      finish: 'stop',
+    });
+    // The child's 1.x row was written later, without any message in the 1.x tables.
+    db.prepare(`
+      INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated)
+      VALUES (?, 'prj', ?, ?, ?, 'child', '1.18.25', ?, ?)
+    `).run(childId, parentId, childId, workspace, BASE_TIME + 8_000, BASE_TIME + 20_000);
+
+    const card = new OpenCodeSessionsProvider().normalizeMessage(subagentTurn[1], 'app-parent')[0] as Record<string, any>;
+    assert.deepEqual(card.subagentTools?.map((step: Record<string, any>) => `${step.kind}:${step.content}`), ['text:Hello from the child.']);
+  });
+});
+
+test('the first scan of a database with both layouts drops the app rows of child sessions from either table', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_UPGRADED_SCHEMA, async ({ db, workspace }) => {
+    insertV1Session(db, 'ses_parent', workspace, BASE_TIME + 1_000, 'parent answer', { prompt: 'parent prompt' });
+    // A child only the 1.x tables have and one only 2.x has, both indexed by an older CloudCLI.
+    insertV1Session(db, 'ses_child_1x', workspace, BASE_TIME + 2_000, 'child answer', { parentId: 'ses_parent' });
+    insertV2Session(db, { id: 'ses_child_2x', directory: workspace, timeUpdated: BASE_TIME + 3_000, parentId: 'ses_parent' });
+    for (const id of ['ses_child_1x', 'ses_child_2x']) {
+      sessionsDb.createSession(id, 'opencode', workspace, id);
+    }
+
+    assert.equal(await new OpenCodeSessionSynchronizer().synchronize(), 1);
+    assert.ok(sessionsDb.getSessionByProviderSessionId('ses_parent'));
+    assert.equal(sessionsDb.getSessionByProviderSessionId('ses_child_1x'), null);
+    assert.equal(sessionsDb.getSessionByProviderSessionId('ses_child_2x'), null);
   });
 });
 
