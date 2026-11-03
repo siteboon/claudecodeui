@@ -35,6 +35,38 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
       },
     },
     {
+      value: 'gpt-6.1-sol',
+      label: 'GPT-6.1 Sol',
+      description: 'Latest workhorse model for coding and everyday work.',
+      effort: {
+        default: 'low',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          { value: 'ultra' },
+        ],
+      },
+    },
+    {
+      value: 'gpt-6.1-terra',
+      label: 'GPT-6.1 Terra',
+      description: 'Balanced agentic coding model for everyday work.',
+      effort: {
+        default: 'low',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+          { value: 'ultra' },
+        ],
+      },
+    },
+    {
       value: 'gpt-6-sol',
       label: 'GPT-6 Sol',
       description: 'Workhorse model for coding and everyday work.',
