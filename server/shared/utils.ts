@@ -1569,17 +1569,36 @@ export function probeCliVersion(command: string, args: string[] = ['--version'])
 const OPENCODE_CLI_VERSION_TTL_MS = 5 * 60_000;
 /** An OpenCode that could not be asked (failing, too slow) is asked again sooner. */
 const OPENCODE_CLI_VERSION_RETRY_MS = 30_000;
-const OPENCODE_CLI_VERSION_TIMEOUT_MS = 5_000;
+/**
+ * How long `opencode --version` may take. It runs at most once per TTL, and
+ * the first run of a just installed or upgraded binary (252 MB for 2.2.3) can
+ * take seconds, more while a virus scanner reads it.
+ */
+const OPENCODE_CLI_VERSION_TIMEOUT_MS = 20_000;
 
-const openCodeCliMajorVersions = new Map<string, { mtimeMs: number; expiresAt: number; major: Promise<number | null> }>();
+type OpenCodeCliVersionEntry = {
+  /** Identifies the executable file the answer came from (see `findOpenCodeExecutable`). */
+  fingerprint: string;
+  expiresAt: number;
+  major: Promise<number | null>;
+};
 
-/** The `opencode` a spawn of the bare command runs: the first match on PATH, by PATHEXT on Windows. */
-function findOpenCodeExecutable(): { filePath: string; mtimeMs: number } | null {
+const openCodeCliMajorVersions = new Map<string, OpenCodeCliVersionEntry>();
+
+/**
+ * The `opencode` a spawn of the bare command runs: the first match on PATH,
+ * by PATHEXT on Windows, where a quoted PATH entry names the folder inside
+ * the quotes (as cross-spawn reads it). The fingerprint changes whenever the
+ * file is replaced, also when it keeps its mtime (release tarballs date it
+ * 1970-01-01): it holds the size and inode too.
+ */
+function findOpenCodeExecutable(): { filePath: string; fingerprint: string } | null {
   const isWindows = process.platform === 'win32';
   const extensions = isWindows
     ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)
     : [''];
-  for (const directory of (process.env.PATH || '').split(path.delimiter)) {
+  for (const entry of (process.env.PATH || '').split(path.delimiter)) {
+    const directory = isWindows ? entry.replace(/^"(.*)"$/, '$1') : entry;
     if (!directory) {
       continue;
     }
@@ -1588,7 +1607,7 @@ function findOpenCodeExecutable(): { filePath: string; mtimeMs: number } | null 
       try {
         const stats = fs.statSync(filePath);
         if (stats.isFile() && (isWindows || (stats.mode & 0o111) !== 0)) {
-          return { filePath, mtimeMs: stats.mtimeMs };
+          return { filePath, fingerprint: `${stats.mtimeMs}:${stats.size}:${stats.ino}` };
         }
       } catch {
         // Not in this directory.
@@ -1598,23 +1617,24 @@ function findOpenCodeExecutable(): { filePath: string; mtimeMs: number } | null 
   return null;
 }
 
-function probeOpenCodeMajorVersion(filePath: string): Promise<number | null> {
+/** The major version `opencode --version` prints, null when it did not say, and whether it ran out of time. */
+function probeOpenCodeMajorVersion(filePath: string): Promise<{ major: number | null; timedOut: boolean }> {
   return new Promise((resolve) => {
     let output = '';
     let settled = false;
     let timer: NodeJS.Timeout | undefined;
-    const finish = (major: number | null) => {
+    const finish = (major: number | null, timedOut = false) => {
       if (!settled) {
         settled = true;
         clearTimeout(timer);
-        resolve(major);
+        resolve({ major, timedOut });
       }
     };
 
     const child = spawn(filePath, ['--version'], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
     timer = setTimeout(() => {
       child.kill();
-      finish(null);
+      finish(null, true);
     }, OPENCODE_CLI_VERSION_TIMEOUT_MS);
     child.stdout?.on('data', (chunk: Buffer) => {
       output += chunk.toString();
@@ -1636,9 +1656,11 @@ function probeOpenCodeMajorVersion(filePath: string): Promise<number | null> {
  * OpenCode 2.x changed its CLI flags, its server API and its storage, so the
  * OpenCode provider picks its code path by this. The answer is cached per
  * executable for a few minutes and asked again as soon as the file changes,
- * which an upgrade does; a failed answer is retried sooner. Concurrent callers
- * share one `--version` run, which never starts OpenCode 2.x's background
- * service.
+ * which an upgrade does; a failed answer is retried sooner. An executable that
+ * answered before and now runs out of time keeps its last answer until that
+ * retry: read as unknown, a 2.x install would run its turns through the SDK,
+ * which cannot drive it. Concurrent callers share one `--version` run, which
+ * never starts OpenCode 2.x's background service.
  *
  * Used by the OpenCode runtime (a 2.x chat turn runs through `opencode run`)
  * and the OpenCode models provider (2.x lists models with `--standalone`).
@@ -1649,20 +1671,23 @@ export function readOpenCodeCliMajorVersion(): Promise<number | null> {
     return Promise.resolve(null);
   }
 
-  const cached = openCodeCliMajorVersions.get(executable.filePath);
-  if (cached && cached.mtimeMs === executable.mtimeMs && cached.expiresAt > Date.now()) {
-    return cached.major;
+  const previous = openCodeCliMajorVersions.get(executable.filePath);
+  if (previous && previous.fingerprint === executable.fingerprint && previous.expiresAt > Date.now()) {
+    return previous.major;
   }
 
-  const entry = {
-    mtimeMs: executable.mtimeMs,
+  const entry: OpenCodeCliVersionEntry = {
+    fingerprint: executable.fingerprint,
     expiresAt: Date.now() + OPENCODE_CLI_VERSION_TTL_MS,
-    major: probeOpenCodeMajorVersion(executable.filePath),
+    major: Promise.resolve(null),
   };
-  void entry.major.then((major) => {
-    if (major === null) {
-      entry.expiresAt = Math.min(entry.expiresAt, Date.now() + OPENCODE_CLI_VERSION_RETRY_MS);
+  entry.major = probeOpenCodeMajorVersion(executable.filePath).then(({ major, timedOut }) => {
+    if (major !== null) {
+      return major;
     }
+
+    entry.expiresAt = Math.min(entry.expiresAt, Date.now() + OPENCODE_CLI_VERSION_RETRY_MS);
+    return timedOut && previous ? previous.major : null;
   });
   openCodeCliMajorVersions.set(executable.filePath, entry);
   return entry.major;
