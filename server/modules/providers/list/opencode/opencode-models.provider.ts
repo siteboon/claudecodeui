@@ -16,7 +16,7 @@ import {
   getOpenCodeDatabasePath,
   readObjectRecord,
   readOpenCodeCliMajorVersion,
-  readOpenCodeSessionTable,
+  readOpenCodeLiveSessionTable,
   readOptionalString,
 } from '@/shared/utils.js';
 
@@ -635,8 +635,9 @@ export class OpenCodeProviderModels implements IProviderModels {
       const db = new Database(dbPath, { readonly: true, fileMustExist: true });
 
       try {
-        // OpenCode 2.x keeps the session's model (same JSON) in `session_v2`.
-        const sessionTable = readOpenCodeSessionTable(db) ?? 'session';
+        // OpenCode 2.x keeps the session's model (same JSON) in `session_v2`;
+        // read the session's live copy.
+        const sessionTable = readOpenCodeLiveSessionTable(db, providerSessionId) ?? 'session';
         const row = db.prepare(`
           SELECT
             s.id AS sessionId,

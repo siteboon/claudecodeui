@@ -7,7 +7,7 @@ import Database from 'better-sqlite3';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { AnyRecord } from '@/shared/types.js';
-import { AppError, getOpenCodeDatabasePath, readOpenCodeSessionTable } from '@/shared/utils.js';
+import { AppError, getOpenCodeDatabasePath, readOpenCodeLiveSessionTable } from '@/shared/utils.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 
@@ -334,8 +334,8 @@ function claudeEntriesHaveUsage(entries: AnyRecord[]): boolean {
 function readOpenCodeTokenUsage(databasePath: string, providerSessionId: string): TokenUsageResult {
   const database = new Database(databasePath, { readonly: true, fileMustExist: true });
   try {
-    // OpenCode 2.x keeps the same totals in `session_v2`.
-    const sessionTable = readOpenCodeSessionTable(database) ?? 'session';
+    // OpenCode 2.x keeps the same totals in `session_v2`; read the session's live copy.
+    const sessionTable = readOpenCodeLiveSessionTable(database, providerSessionId) ?? 'session';
     const columns = database.prepare(`PRAGMA table_info(${sessionTable})`).all() as Array<{ name: string }>;
     const columnNames = new Set(columns.map((column) => column.name));
     const requiredColumns = [

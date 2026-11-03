@@ -1078,36 +1078,54 @@ export function unwrapJsonStringLiteral(value: string): string {
 }
 
 /**
- * Picks the table of `opencode.db` that lists the sessions the installed
- * OpenCode is using: `session` (1.x) or `session_v2` (2.x), or null when the
- * database has neither.
+ * The session tables `opencode.db` has, 1.x first: `session` (OpenCode 1.x),
+ * `session_v2` (2.x), both, or none.
  *
- * OpenCode 2.x migrates a 1.x database in place: it copies every session into
- * `session_v2` (and the messages into `session_message`) and leaves the 1.x
- * tables behind untouched. A 1.x CLI run against that database afterwards
- * still writes only the 1.x tables, and a later 2.x does not import what it
- * wrote. So when both tables exist, the 1.x one is live only while it holds
- * the most recent activity; otherwise `session_v2` is, which also lists every
- * migrated 1.x session.
+ * OpenCode 2.x migrates a 1.x database in place, in batches over several runs
+ * (each session keeps its `time_updated`), and leaves the 1.x tables behind.
+ * A 1.x CLI run against that database afterwards still writes only the 1.x
+ * tables, and 2.x does not import what it wrote, so with both tables a
+ * session can be in either or both (see `readOpenCodeLiveSessionTable`).
  *
- * Used by the OpenCode session synchronizer, sessions provider and models
- * provider and by the providers module's token usage service, which read
- * sessions, messages and token totals from the layout it names.
+ * Used by the OpenCode session synchronizer, which lists the sessions of
+ * every table there is, and the OpenCode sessions provider, which reads a
+ * session's history from the other table when its live copy has none.
  */
-export function readOpenCodeSessionTable(db: Database.Database): OpenCodeSessionTable | null {
+export function readOpenCodeSessionTables(db: Database.Database): OpenCodeSessionTable[] {
   const tables = new Set(db.prepare(`
     SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('session', 'session_v2')
   `).pluck().all() as string[]);
-  if (!tables.has('session_v2')) {
-    return tables.has('session') ? 'session' : null;
-  }
-  if (!tables.has('session')) {
-    return 'session_v2';
+  return (['session', 'session_v2'] as const).filter((table) => tables.has(table));
+}
+
+/**
+ * The table holding the live copy of one OpenCode session: the only session
+ * table there is, or, when `opencode.db` has both (see
+ * `readOpenCodeSessionTables`), the one whose row for the session was updated
+ * last. A tie goes to `session_v2`, since 2.x copies a session with its
+ * timestamps when it migrates it; a session in neither table reads as
+ * `session_v2`. Null when the database has no session table.
+ *
+ * A database with one table costs no lookup of the session. Used by the
+ * OpenCode session synchronizer, sessions provider and models provider and
+ * by the providers module's token usage service, which read a session's
+ * first prompt, messages, model and token totals from that copy.
+ */
+export function readOpenCodeLiveSessionTable(db: Database.Database, sessionId: string): OpenCodeSessionTable | null {
+  const tables = readOpenCodeSessionTables(db);
+  if (tables.length < 2) {
+    return tables[0] ?? null;
   }
 
-  const readNewestUpdate = (table: OpenCodeSessionTable): number =>
-    Number(db.prepare(`SELECT MAX(time_updated) FROM ${table}`).pluck().get() ?? 0);
-  return readNewestUpdate('session') > readNewestUpdate('session_v2') ? 'session' : 'session_v2';
+  const readUpdatedAt = (table: OpenCodeSessionTable): number | null => {
+    const value = db.prepare(`
+      SELECT COALESCE(time_updated, time_created, 0) FROM ${table} WHERE id = ?
+    `).pluck().get(sessionId);
+    return value === undefined ? null : Number(value);
+  };
+  const v1UpdatedAt = readUpdatedAt('session');
+  const v2UpdatedAt = readUpdatedAt('session_v2');
+  return v1UpdatedAt !== null && (v2UpdatedAt === null || v1UpdatedAt > v2UpdatedAt) ? 'session' : 'session_v2';
 }
 
 // ---------------------------

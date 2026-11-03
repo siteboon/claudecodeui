@@ -7,39 +7,53 @@ import test from 'node:test';
 
 import Database from 'better-sqlite3';
 
-import { readOpenCodeCliMajorVersion, readOpenCodeSessionTable } from '@/shared/utils.js';
+import { readOpenCodeCliMajorVersion, readOpenCodeLiveSessionTable, readOpenCodeSessionTables } from '@/shared/utils.js';
 
-const createDatabase = (tables: Record<string, number[]>) => {
+/** An opencode.db with these session tables, each row as `[id, time_updated]` (null: only `time_created`, 5). */
+const createDatabase = (tables: Record<string, Array<[string, number | null]>>) => {
   const db = new Database(':memory:');
-  for (const [table, updates] of Object.entries(tables)) {
-    db.exec(`CREATE TABLE ${table} (id TEXT PRIMARY KEY, time_updated INTEGER NOT NULL)`);
-    updates.forEach((timeUpdated, index) => {
-      db.prepare(`INSERT INTO ${table} (id, time_updated) VALUES (?, ?)`).run(`ses_${index}`, timeUpdated);
-    });
+  for (const [table, rows] of Object.entries(tables)) {
+    db.exec(`CREATE TABLE ${table} (id TEXT PRIMARY KEY, time_created INTEGER NOT NULL, time_updated INTEGER)`);
+    for (const [id, timeUpdated] of rows) {
+      db.prepare(`INSERT INTO ${table} (id, time_created, time_updated) VALUES (?, 5, ?)`).run(id, timeUpdated);
+    }
   }
   return db;
 };
 
-test('the live OpenCode session table is the one the installed CLI writes', () => {
-  const cases: Array<[Record<string, number[]>, string | null]> = [
-    [{ session: [1, 2] }, 'session'],
-    [{ session_v2: [1, 2] }, 'session_v2'],
-    [{}, null],
-    // Just upgraded: 2.x copied every 1.x session.
-    [{ session: [1, 2], session_v2: [1, 2] }, 'session_v2'],
-    [{ session: [1, 2], session_v2: [1, 2, 3] }, 'session_v2'],
-    // A downgraded 1.x CLI wrote the 1.x tables after the upgrade.
-    [{ session: [1, 2, 4], session_v2: [1, 2, 3] }, 'session'],
-    [{ session: [], session_v2: [] }, 'session_v2'],
-  ];
-
-  for (const [tables, expected] of cases) {
+test('the OpenCode session tables, and the one that holds the live copy of each session', () => {
+  const read = (tables: Record<string, Array<[string, number | null]>>, sessionId: string) => {
     const db = createDatabase(tables);
     try {
-      assert.equal(readOpenCodeSessionTable(db), expected, JSON.stringify(tables));
+      return { tables: readOpenCodeSessionTables(db), live: readOpenCodeLiveSessionTable(db, sessionId) };
     } finally {
       db.close();
     }
+  };
+
+  // One layout: that table, whether or not it has the session.
+  assert.deepEqual(read({ session: [['ses_a', 2]] }, 'ses_other'), { tables: ['session'], live: 'session' });
+  assert.deepEqual(read({ session_v2: [['ses_a', 2]] }, 'ses_other'), { tables: ['session_v2'], live: 'session_v2' });
+  assert.deepEqual(read({}, 'ses_a'), { tables: [], live: null });
+
+  // Both layouts: the copy updated last, 2.x on a tie (2.x copies a session as it migrates it).
+  const cases: Array<[Record<string, Array<[string, number | null]>>, string]> = [
+    [{ session: [['ses_a', 2]], session_v2: [] }, 'session'],
+    [{ session: [], session_v2: [['ses_a', 2]] }, 'session_v2'],
+    [{ session: [['ses_a', 2]], session_v2: [['ses_a', 2]] }, 'session_v2'],
+    // Continued by a 1.x CLI after the migration.
+    [{ session: [['ses_a', 4]], session_v2: [['ses_a', 2]] }, 'session'],
+    // Continued by 2.x.
+    [{ session: [['ses_a', 2]], session_v2: [['ses_a', 4]] }, 'session_v2'],
+    // Another session written later does not matter.
+    [{ session: [['ses_a', 2], ['ses_b', 9]], session_v2: [['ses_a', 2]] }, 'session_v2'],
+    [{ session: [['ses_a', 4]], session_v2: [['ses_a', 2], ['ses_b', 9]] }, 'session'],
+    // Without time_updated, time_created counts.
+    [{ session: [['ses_a', null]], session_v2: [['ses_a', 3]] }, 'session'],
+    [{ session: [['ses_b', 2]], session_v2: [['ses_b', 2]] }, 'session_v2'],
+  ];
+  for (const [tables, expected] of cases) {
+    assert.deepEqual(read(tables, 'ses_a'), { tables: ['session', 'session_v2'], live: expected }, JSON.stringify(tables));
   }
 });
 

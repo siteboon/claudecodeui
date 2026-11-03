@@ -21,7 +21,8 @@ import {
   normalizeProviderTimestamp,
   readObjectRecord,
   readJsonRecord,
-  readOpenCodeSessionTable,
+  readOpenCodeLiveSessionTable,
+  readOpenCodeSessionTables,
   readOptionalString,
   sliceTailPage,
   truncateSubagentActivity,
@@ -308,16 +309,20 @@ const readToolResult = (state: AnyRecord): SubagentActivity['toolResult'] => {
 
 /**
  * Flattens the child session a `task` call spawned into the shared subagent
- * timeline. OpenCode keeps it in the same database as the parent.
+ * timeline. OpenCode keeps it in the same database as the parent: read from
+ * the child's live copy (see `readOpenCodeLiveSessionTable`), or from the
+ * other layout when that copy has no messages.
  */
 const readOpenCodeSubagentActivity = (
   db: Database.Database,
   childSessionId: string,
 ): SubagentActivity[] => {
-  if (readOpenCodeSessionTable(db) === 'session_v2') {
+  const sessionTables = readOpenCodeSessionTables(db);
+  const liveTable = readOpenCodeLiveSessionTable(db, childSessionId);
+  if (liveTable === 'session_v2') {
     const v2Activity = readOpenCodeV2SubagentActivity(db, childSessionId);
-    if (v2Activity) {
-      return v2Activity;
+    if (v2Activity || !sessionTables.includes('session')) {
+      return v2Activity ?? [];
     }
   }
 
@@ -331,6 +336,9 @@ const readOpenCodeSubagentActivity = (
       AND json_extract(m.data, '$.role') = 'assistant'
     ORDER BY COALESCE(m.time_created, 0), m.id, COALESCE(p.time_created, 0), p.id
   `).all(childSessionId) as { part_data: string | null; part_time_created: number | null }[];
+  if (rows.length === 0 && liveTable === 'session' && sessionTables.includes('session_v2')) {
+    return readOpenCodeV2SubagentActivity(db, childSessionId) ?? [];
+  }
 
   const activity: SubagentActivity[] = [];
   for (const row of rows) {
@@ -725,9 +733,11 @@ const normalizeOpenCodeV2History = (
 
 /**
  * Reads a history page from OpenCode 2.x storage, when that is where the
- * session lives: always on a database without the 1.x tables, and otherwise
- * when the session has 2.x messages. Returns null for a session the 1.x
- * tables have to answer for. Token usage comes from `session_v2`'s totals.
+ * session's messages are: always on a database without the 1.x tables. With
+ * both layouts, a session is read from its live copy (see
+ * `readOpenCodeLiveSessionTable`), and from the other layout when that copy
+ * has no messages. Returns null for a session the 1.x tables have to answer
+ * for. Token usage comes from `session_v2`'s totals.
  */
 const fetchOpenCodeV2HistoryPage = (
   db: Database.Database,
@@ -738,12 +748,21 @@ const fetchOpenCodeV2HistoryPage = (
   // Inside the try: a database that cannot be read gives the empty page and
   // warning the 1.x reader gives, and the caller still closes it.
   try {
-    if (readOpenCodeSessionTable(db) !== 'session_v2') {
+    const sessionTables = readOpenCodeSessionTables(db);
+    if (!sessionTables.includes('session_v2')) {
+      return null;
+    }
+
+    const hasV1Messages = () => sessionTables.includes('session')
+      && hasOpenCodeTable(db, 'message')
+      && db.prepare('SELECT 1 FROM message WHERE session_id = ? LIMIT 1').get(providerSessionId) !== undefined;
+    const liveTable = readOpenCodeLiveSessionTable(db, providerSessionId);
+    if (liveTable === 'session' && hasV1Messages()) {
       return null;
     }
 
     const normalized = normalizeOpenCodeV2History(db, providerSessionId, sessionId);
-    if (!normalized && hasOpenCodeTable(db, 'message')) {
+    if (!normalized && (liveTable === 'session' || hasV1Messages())) {
       return null;
     }
 

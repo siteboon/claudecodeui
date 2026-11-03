@@ -950,10 +950,11 @@ export type CliVersionProbe = {
  * `session` for OpenCode 1.x (messages in `message` and `part`) or
  * `session_v2` for 2.x (messages in `session_message` and `session_part`).
  *
- * Returned by `readOpenCodeSessionTable` in the shared utils. The OpenCode
- * provider's session synchronizer, sessions provider and runtime pass it to
- * the queries that read sessions and token totals, so each reads the layout
- * the CLI writes.
+ * Returned by `readOpenCodeSessionTables` and `readOpenCodeLiveSessionTable`
+ * in the shared utils. The OpenCode provider's session synchronizer, sessions
+ * provider, models provider and runtime and the token usage service pass it
+ * to the queries that read sessions and token totals, so each reads the
+ * layout that holds the session.
  */
 export type OpenCodeSessionTable = 'session' | 'session_v2';
 

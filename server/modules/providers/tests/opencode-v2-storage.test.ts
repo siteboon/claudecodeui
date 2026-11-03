@@ -98,15 +98,35 @@ const insertV2Message = (
   `).run(id, sessionId, type, seq, created, created, JSON.stringify({ time: { created }, ...data }));
 };
 
-const insertV1Session = (db: Database.Database, id: string, directory: string, timeUpdated: number, text: string) => {
+type V1Extras = {
+  /** A user prompt stored before the answer. */
+  prompt?: string;
+  model?: string;
+  tokens?: [number, number];
+  parentId?: string;
+};
+
+const insertV1Session = (
+  db: Database.Database,
+  id: string,
+  directory: string,
+  timeUpdated: number,
+  text: string,
+  extras: V1Extras = {},
+) => {
+  const [input, output] = extras.tokens ?? [0, 0];
   db.prepare(`
-    INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
-    VALUES (?, 'prj', ?, ?, 'New session - 1.x', '1.18.25', ?, ?)
-  `).run(id, id, directory, timeUpdated - 100, timeUpdated);
-  db.prepare('INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)')
-    .run(`${id}_msg`, id, timeUpdated - 50, timeUpdated - 50, JSON.stringify({ role: 'assistant', time: { created: timeUpdated - 50 } }));
-  db.prepare('INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(`${id}_prt`, `${id}_msg`, id, timeUpdated - 40, timeUpdated - 40, JSON.stringify({ type: 'text', text }));
+    INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, model, tokens_input, tokens_output, time_created, time_updated)
+    VALUES (?, 'prj', ?, ?, ?, 'New session - 1.x', '1.18.25', ?, ?, ?, ?, ?)
+  `).run(id, extras.parentId ?? null, id, directory, extras.model ?? null, input, output, timeUpdated - 100, timeUpdated);
+  const insertMessage = db.prepare('INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)');
+  const insertPart = db.prepare('INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)');
+  if (extras.prompt) {
+    insertMessage.run(`${id}_user`, id, timeUpdated - 60, timeUpdated - 60, JSON.stringify({ role: 'user', time: { created: timeUpdated - 60 } }));
+    insertPart.run(`${id}_user_prt`, `${id}_user`, id, timeUpdated - 60, timeUpdated - 60, JSON.stringify({ type: 'text', text: extras.prompt }));
+  }
+  insertMessage.run(`${id}_msg`, id, timeUpdated - 50, timeUpdated - 50, JSON.stringify({ role: 'assistant', time: { created: timeUpdated - 50 } }));
+  insertPart.run(`${id}_prt`, `${id}_msg`, id, timeUpdated - 40, timeUpdated - 40, JSON.stringify({ type: 'text', text }));
 };
 
 const shellCall = (id: string, output: string) => ({
@@ -315,7 +335,7 @@ test('a 2.x subagent call shows as the subagent card with its child session, liv
   });
 });
 
-test('an upgraded database lists each session once, and a 1.x CLI writing it again makes the 1.x tables live', { concurrency: false }, async () => {
+test('an upgraded database lists each session once, and a session only a downgraded 1.x CLI wrote is read from the 1.x tables', { concurrency: false }, async () => {
   await withOpenCodeHome(OPENCODE_UPGRADED_SCHEMA, async ({ db, workspace }) => {
     // 2.x migrated the 1.x session into session_v2 and left the 1.x rows behind.
     insertV1Session(db, 'ses_v1', workspace, 1_793_723_510_000, 'answer kept in the 1.x tables');
@@ -351,6 +371,157 @@ test('an upgraded database lists each session once, and a 1.x CLI writing it aga
       'assistant:migrated answer',
       'end',
     ]);
+  });
+});
+
+const BASE_TIME = 1_793_723_500_000;
+
+/** The token usage service, answering for one OpenCode session of the home. */
+const readServiceTokenUsage = async (homeDir: string, workspace: string, providerSessionId: string) => {
+  const service = createProviderTokenUsageService({
+    getSessionById: () => ({
+      session_id: `app-${providerSessionId}`,
+      provider: 'opencode',
+      provider_session_id: providerSessionId,
+      project_path: workspace,
+      jsonl_path: null,
+      custom_name: null,
+      model: null,
+      effort: null,
+      forked_from_session_id: null,
+      isArchived: 0,
+      created_at: '2026-11-03T00:00:00.000Z',
+      updated_at: '2026-11-03T00:00:00.000Z',
+    }) as any,
+    getOpenCodeDatabasePath: () => path.join(homeDir, '.local', 'share', 'opencode', 'opencode.db'),
+  });
+  return (await service.getSessionTokenUsage(`app-${providerSessionId}`)) as Record<string, any>;
+};
+
+test('with both layouts each session is listed and read from its own live copy, whichever CLI wrote last', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_UPGRADED_SCHEMA, async ({ db, homeDir, workspace }) => {
+    // Migrated by 2.x, then continued by a 1.x CLI (CloudCLI on 1.x): the 1.x copy is newer.
+    insertV1Session(db, 'ses_cc', workspace, BASE_TIME + 10_000, '1.x answer after the migration', {
+      prompt: 'asked on 1.x',
+      model: JSON.stringify({ id: 'm-1x', providerID: 'p1' }),
+      tokens: [11, 4],
+    });
+    insertV2Session(db, {
+      id: 'ses_cc',
+      directory: workspace,
+      timeUpdated: BASE_TIME + 5_000,
+      model: JSON.stringify({ id: 'm-2x', providerID: 'p2' }),
+      tokens: [1, 1, 0, 0, 0],
+    });
+    insertV2Message(db, 'ses_cc', 1, 'msg_cc_old', 'user', { text: 'asked before the migration' });
+    // Migrated, then continued by 2.x: the 2.x copy is newer.
+    insertV1Session(db, 'ses_on_2x', workspace, BASE_TIME + 5_000, 'answer before the migration', {
+      model: JSON.stringify({ id: 'm-old', providerID: 'p1' }),
+      tokens: [1, 1],
+    });
+    insertV2Session(db, {
+      id: 'ses_on_2x',
+      directory: workspace,
+      timeUpdated: BASE_TIME + 20_000,
+      model: JSON.stringify({ id: 'm-new', providerID: 'p3' }),
+      tokens: [30, 6, 0, 0, 0],
+    });
+    insertV2Message(db, 'ses_on_2x', 1, 'msg_on_2x_user', 'user', { text: 'asked on 2.x' });
+    insertV2Message(db, 'ses_on_2x', 2, 'msg_on_2x_reply', 'assistant', { content: [{ type: 'text', text: '2.x answer' }], finish: 'stop' });
+    // Each in one table only; the 2.x CLI wrote last.
+    insertV1Session(db, 'ses_term1', workspace, BASE_TIME + 15_000, 'a terminal 1.x session');
+    insertV2Session(db, { id: 'ses_term2', directory: workspace, timeUpdated: BASE_TIME + 30_000 });
+    insertV2Message(db, 'ses_term2', 1, 'msg_term2_user', 'user', { text: 'made on 2.x' });
+    insertV2Message(db, 'ses_term2', 2, 'msg_term2_reply', 'assistant', { content: [{ type: 'text', text: 'terminal 2.x answer' }], finish: 'stop' });
+
+    const provider = new OpenCodeSessionsProvider();
+    const models = new OpenCodeProviderModels(async () => []);
+    const readAll = async () => ({
+      histories: Object.fromEntries(await Promise.all(['ses_cc', 'ses_on_2x', 'ses_term1', 'ses_term2'].map(
+        async (id) => [id, summarize((await provider.fetchHistory(id)).messages)],
+      ))),
+      tokens: [(await readServiceTokenUsage(homeDir, workspace, 'ses_cc')).used, (await readServiceTokenUsage(homeDir, workspace, 'ses_on_2x')).used],
+      models: [(await models.getCurrentActiveModel('ses_cc')).model, (await models.getCurrentActiveModel('ses_on_2x')).model],
+    });
+    const expected = {
+      histories: {
+        ses_cc: ['user:asked on 1.x', 'assistant:1.x answer after the migration'],
+        ses_on_2x: ['user:asked on 2.x', 'assistant:2.x answer', 'end'],
+        ses_term1: ['assistant:a terminal 1.x session'],
+        ses_term2: ['user:made on 2.x', 'assistant:terminal 2.x answer', 'end'],
+      },
+      tokens: [15, 36],
+      models: ['p1/m-1x', 'p3/m-new'],
+    };
+
+    assert.equal(await new OpenCodeSessionSynchronizer().synchronize(), 4);
+    for (const id of ['ses_cc', 'ses_on_2x', 'ses_term1', 'ses_term2']) {
+      assert.ok(sessionsDb.getSessionByProviderSessionId(id), id);
+    }
+    assert.deepEqual(await readAll(), expected);
+
+    // Whichever CLI writes next, no other session changes.
+    insertV1Session(db, 'ses_later_1x', workspace, BASE_TIME + 40_000, 'written by 1.x last');
+    assert.deepEqual(await readAll(), expected);
+    insertV2Session(db, { id: 'ses_later_2x', directory: workspace, timeUpdated: BASE_TIME + 50_000 });
+    assert.deepEqual(await readAll(), expected);
+  });
+});
+
+test('a 2.x subagent card keeps its timeline after a 1.x CLI wrote the database', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_UPGRADED_SCHEMA, async ({ db, workspace }) => {
+    const parentId = subagentTurn[1].sessionID as string;
+    const childId = 'ses_e5da1e45fffeZ2WCwgpM9byvoB';
+    insertV2Session(db, { id: parentId, directory: workspace, timeUpdated: BASE_TIME + 10_000 });
+    insertV2Session(db, { id: childId, directory: workspace, timeUpdated: BASE_TIME + 9_000, parentId });
+    insertV2Message(db, childId, 1, 'msg_child_reply', 'assistant', {
+      content: [{ type: 'text', text: 'Hello from the child.' }],
+      finish: 'stop',
+    });
+    insertV1Session(db, 'ses_later_1x', workspace, BASE_TIME + 20_000, 'written by 1.x last');
+
+    const card = new OpenCodeSessionsProvider().normalizeMessage(subagentTurn[1], 'app-parent')[0] as Record<string, any>;
+    assert.deepEqual(card.subagentTools?.map((step: Record<string, any>) => `${step.kind}:${step.content}`), ['text:Hello from the child.']);
+  });
+});
+
+test('a partly migrated database lists every session once, also while 2.x migrates the rest, and scans stay incremental', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_UPGRADED_SCHEMA, async ({ db, workspace }) => {
+    // 1.x wrote six sessions; 2.x migrated two of them so far, keeping their timestamps.
+    const migrate = (index: number) => {
+      insertV2Session(db, { id: `ses_${index}`, directory: workspace, timeUpdated: BASE_TIME + index * 1000 });
+      insertV2Message(db, `ses_${index}`, 1, `msg_${index}_reply`, 'assistant', {
+        content: [{ type: 'text', text: `answer ${index}` }],
+        finish: 'stop',
+      });
+    };
+    for (let index = 0; index < 6; index += 1) {
+      insertV1Session(db, `ses_${index}`, workspace, BASE_TIME + index * 1000, `answer ${index}`);
+    }
+    migrate(4);
+    migrate(5);
+    // Hidden by their live copy: a migrated subagent session, and one archived on 2.x after the migration.
+    insertV1Session(db, 'ses_child', workspace, BASE_TIME + 500, 'child answer', { parentId: 'ses_0' });
+    insertV2Session(db, { id: 'ses_child', directory: workspace, timeUpdated: BASE_TIME + 500, parentId: 'ses_0' });
+    insertV1Session(db, 'ses_archived', workspace, BASE_TIME + 600, 'archived answer');
+    insertV2Session(db, { id: 'ses_archived', directory: workspace, timeUpdated: BASE_TIME + 700, archivedAt: BASE_TIME + 700 });
+
+    const synchronizer = new OpenCodeSessionSynchronizer();
+    assert.equal(await synchronizer.synchronize(), 6);
+    const indexed = () => sessionsDb.getAllSessions().filter((session) => session.provider === 'opencode')
+      .map((session) => session.provider_session_id ?? session.session_id).sort();
+    assert.deepEqual(indexed(), ['ses_0', 'ses_1', 'ses_2', 'ses_3', 'ses_4', 'ses_5']);
+
+    // 2.x migrates the rest with their old timestamps and starts a new session;
+    // the next scan reads from its cursor and only the new session is new.
+    const cursor = new Date(BASE_TIME + 10_000);
+    for (let index = 0; index < 4; index += 1) {
+      migrate(index);
+    }
+    insertV2Session(db, { id: 'ses_new', directory: workspace, timeUpdated: BASE_TIME + 20_000 });
+    assert.equal(await synchronizer.synchronize(cursor), 1);
+    assert.deepEqual(indexed(), ['ses_0', 'ses_1', 'ses_2', 'ses_3', 'ses_4', 'ses_5', 'ses_new']);
+    assert.deepEqual(summarize((await new OpenCodeSessionsProvider().fetchHistory('ses_0')).messages), ['assistant:answer 0', 'end']);
   });
 });
 
