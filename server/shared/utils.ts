@@ -1614,6 +1614,8 @@ const OPENCODE_CLI_VERSION_TIMEOUT_MS = 20_000;
 const OPENCODE_CLI_VERSION_RECHECK_TIMEOUT_MS = 5_000;
 /** How long a `--version` that ran out of time gets to exit after SIGTERM before it gets SIGKILL. */
 const OPENCODE_CLI_VERSION_KILL_GRACE_MS = 1_000;
+/** How many characters of `--version` output are kept: far more than its version line, never a flood. */
+const OPENCODE_CLI_VERSION_OUTPUT_LIMIT = 64 * 1024;
 
 type OpenCodeCliVersionEntry = {
   /** Identifies the executable file the answer came from (see `findOpenCodeExecutable`). */
@@ -1661,9 +1663,10 @@ function findOpenCodeExecutable(): { filePath: string; fingerprint: string } | n
 }
 
 /**
- * The major version `opencode --version` prints, null when it did not say,
- * and whether it ran out of time. Out of time, it answers at once and the
- * process gets SIGTERM, then SIGKILL 1 s later if it is still running.
+ * The major version `opencode --version` prints in its first 64 KiB of
+ * output, null when it did not say, and whether it ran out of time. Out of
+ * time, it answers at once and the process gets SIGTERM, then SIGKILL 1 s
+ * later if it is still running.
  */
 function probeOpenCodeMajorVersion(
   filePath: string,
@@ -1690,7 +1693,10 @@ function probeOpenCodeMajorVersion(
       finish(null, true);
     }, timeoutMs);
     child.stdout?.on('data', (chunk: Buffer) => {
-      output += chunk.toString();
+      // Nothing is read once the probe has answered.
+      if (!settled && output.length < OPENCODE_CLI_VERSION_OUTPUT_LIMIT) {
+        output = (output + chunk.toString()).slice(0, OPENCODE_CLI_VERSION_OUTPUT_LIMIT);
+      }
     });
     child.on('error', () => {
       clearTimeout(killTimer);

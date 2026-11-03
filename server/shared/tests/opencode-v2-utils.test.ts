@@ -128,15 +128,17 @@ const settledValue = async <T>(promise: Promise<T>): Promise<T | 'pending'> =>
 /**
  * A fake `opencode` alone on PATH: `--version` prints FAKE_OPENCODE_VERSION_OUTPUT,
  * exits with FAKE_OPENCODE_VERSION_EXIT and logs each run and its pid; with
- * FAKE_OPENCODE_VERSION_HANG it never answers, and with
- * FAKE_OPENCODE_VERSION_IGNORE_TERM it ignores SIGTERM. Each test gets its own
- * executable, so the version cache never answers for another test's file.
+ * FAKE_OPENCODE_VERSION_HANG it never answers, with
+ * FAKE_OPENCODE_VERSION_IGNORE_TERM it ignores SIGTERM, and with
+ * FAKE_OPENCODE_VERSION_FLOOD_MIB it prints that many MiB more. Each test gets
+ * its own executable, so the version cache never answers for another test's file.
  */
 async function withFakeOpenCode(runTest: (fake: {
   executable: string;
   answer: (output: string, exitCode?: number) => void;
   hang: (hanging: boolean) => void;
   ignoreTerm: () => void;
+  flood: (mebibytes: number) => void;
   touch: () => void;
   probes: () => Promise<number>;
   pids: () => Promise<number[]>;
@@ -156,6 +158,7 @@ async function withFakeOpenCode(runTest: (fake: {
     // PATH holds this folder only, so `sleep` is named by its path.
     `[ -n "$FAKE_OPENCODE_VERSION_HANG" ] && exec ${fs.existsSync('/bin/sleep') ? '/bin/sleep' : '/usr/bin/sleep'} 30`,
     'printf "%s\\n" "$FAKE_OPENCODE_VERSION_OUTPUT"',
+    `[ -n "$FAKE_OPENCODE_VERSION_FLOOD_MIB" ] && ${fs.existsSync('/bin/dd') ? '/bin/dd' : '/usr/bin/dd'} if=/dev/zero bs=1048576 count="$FAKE_OPENCODE_VERSION_FLOOD_MIB"`,
     'exit "${FAKE_OPENCODE_VERSION_EXIT:-0}"',
     '',
   ].join('\n'));
@@ -180,6 +183,13 @@ async function withFakeOpenCode(runTest: (fake: {
       },
       ignoreTerm: () => {
         process.env.FAKE_OPENCODE_VERSION_IGNORE_TERM = '1';
+      },
+      flood: (mebibytes) => {
+        if (mebibytes > 0) {
+          process.env.FAKE_OPENCODE_VERSION_FLOOD_MIB = String(mebibytes);
+        } else {
+          delete process.env.FAKE_OPENCODE_VERSION_FLOOD_MIB;
+        }
       },
       // An upgrade replaces the file.
       touch: () => {
@@ -208,6 +218,7 @@ async function withFakeOpenCode(runTest: (fake: {
     delete process.env.FAKE_OPENCODE_VERSION_EXIT;
     delete process.env.FAKE_OPENCODE_VERSION_HANG;
     delete process.env.FAKE_OPENCODE_VERSION_IGNORE_TERM;
+    delete process.env.FAKE_OPENCODE_VERSION_FLOOD_MIB;
     await rm(binDir, { recursive: true, force: true });
   }
 }
@@ -351,6 +362,25 @@ test('a `--version` that ignores SIGTERM is killed 1 s after its try runs out of
     assert.equal(isRunning(second), true);
     mock.timers.tick(1_000);
     assert.equal(await waitUntilGone(second), true);
+  });
+});
+
+test('only the first 64 KiB of `opencode --version` output are kept', { skip: process.platform === 'win32' }, async () => {
+  await withFakeOpenCode(async (fake) => {
+    // The version line, then 32 MiB more: read from that line.
+    fake.answer('opencode v2.2.3');
+    fake.flood(32);
+    assert.equal(await readMajorVersion(), 2);
+
+    // A version line that ends at 64 KiB is read; one after them is not.
+    fake.flood(0);
+    fake.touch();
+    fake.answer(`${'x'.repeat(64 * 1024 - 'opencode v2.2.3\n'.length)}opencode v2.2.3`);
+    assert.equal(await readMajorVersion(), 2);
+    fake.touch();
+    fake.answer(`${'x'.repeat(64 * 1024)}opencode v2.2.3`);
+    assert.equal(await readMajorVersion(), null);
+    assert.equal(await fake.probes(), 3);
   });
 });
 
