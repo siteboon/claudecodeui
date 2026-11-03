@@ -225,19 +225,21 @@ async function runTurn(options: TurnOptions) {
 const kinds = (frames: Frame[]) => frames.map((frame) => frame.kind);
 const realPath = (target: string) => fs.realpathSync(target);
 
-test('a 2.x turn runs `opencode run` in the workspace with stdin closed, and its lines reach the chat', async () => {
+test('a 2.x turn runs `opencode run` in the workspace with the prompt on stdin, and its lines reach the chat', async () => {
   setInstalledVersion('opencode v2.2.3');
   const turn = await runTurn({ scenario: { lines: toolTurn } });
 
   assert.equal(turn.error, null);
   assert.equal(turn.runs.length, 1);
   const [run] = turn.runs;
-  // No --dir and no --variant: 2.x refuses both.
-  assert.deepEqual(run.args, ['run', '--standalone', '--format', 'json', '--model', MODEL, 'Hi']);
+  // No --dir and no --variant: 2.x refuses both. No message argument either.
+  assert.deepEqual(run.args, ['run', '--standalone', '--format', 'json', '--model', MODEL]);
   assert.equal(realPath(run.cwd), realPath(projectDir));
+  // Written to stdin, which is then closed: `run` reads its prompt to the end
+  // (the turn would never finish otherwise) and cannot wait on stdin for an answer.
+  assert.equal(run.prompt, 'Hi');
   if (process.platform !== 'win32') {
-    // A pipe would make `run` wait for an answer to a permission it asks.
-    assert.equal(run.stdin, 'device');
+    assert.equal(run.stdin, 'pipe');
   }
   assert.equal(run.configContent, null);
 
@@ -276,7 +278,6 @@ test('a resumed 2.x turn passes --session, the effort as #variant and plan mode 
     '--session', TOOL_TURN_SESSION,
     '--model', `${MODEL}#high`,
     '--agent', 'plan',
-    'Hi',
   ]);
   // The chat already knows a resumed session.
   assert.equal(turn.frames.some((frame) => frame.kind === 'session_created'), false);
@@ -285,7 +286,7 @@ test('a resumed 2.x turn passes --session, the effort as #variant and plan mode 
 test('bypassPermissions adds --auto; acceptEdits allows edits through the inline config, keeping the user\'s own', async () => {
   setInstalledVersion('opencode v2.2.3');
   const bypass = await runTurn({ permissionMode: 'bypassPermissions', scenario: { lines: toolTurn } });
-  assert.deepEqual(bypass.runs[0].args, ['run', '--standalone', '--format', 'json', '--model', MODEL, '--auto', 'Hi']);
+  assert.deepEqual(bypass.runs[0].args, ['run', '--standalone', '--format', 'json', '--model', MODEL, '--auto']);
   assert.equal(bypass.runs[0].configContent, null);
 
   const userConfig = '{ "model": "x/y", "permission": { "edit": "ask", "shell": "deny" } }';
@@ -313,17 +314,20 @@ test('bypassPermissions adds --auto; acceptEdits allows edits through the inline
   assert.deepEqual(JSON.parse(noInlineConfig.runs[0].configContent), { permission: { edit: 'allow' } });
 });
 
-test('a prompt that starts with a dash is not read as a flag, and attachments ride along', async () => {
+test('the prompt reaches `run` exactly as typed, attachments included', async () => {
   setInstalledVersion('opencode v2.2.3');
-  const dashed = await runTurn({ command: '-v is this verbose?', scenario: { lines: toolTurn } });
-  assert.equal(dashed.runs[0].args.at(-1), ' -v is this verbose?');
+  // As an argument, `run` would quote it for the model, and read a leading dash as a flag.
+  const typed = '-v say "hi"\nthen check the second line';
+  const exact = await runTurn({ command: typed, scenario: { lines: toolTurn } });
+  assert.equal(exact.runs[0].prompt, typed);
+  assert.equal(exact.runs[0].args.includes(typed), false);
 
   const attached = await runTurn({
     command: '',
     files: [{ path: path.join(projectDir, 'brief.pdf'), name: 'brief.pdf', mimeType: 'application/pdf' }],
     scenario: { lines: toolTurn },
   });
-  assert.match(attached.runs[0].args.at(-1), /<files_input>[\s\S]*brief\.pdf/);
+  assert.match(attached.runs[0].prompt, /<files_input>[\s\S]*brief\.pdf/);
 });
 
 test('a cancelled question shows as the question card with the reason it went unanswered', async () => {

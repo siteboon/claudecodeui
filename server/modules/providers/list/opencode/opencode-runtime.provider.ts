@@ -73,7 +73,6 @@ import {
 import {
   createCompleteMessage,
   createNormalizedMessage,
-  flattenPromptForWindowsShell,
   getOpenCodeDatabasePath,
   readObjectRecord,
   readOpenCodeCliMajorVersion,
@@ -1524,16 +1523,13 @@ function installV2ExitHook(): void {
  *   `--variant`, and no `--dir` either: the workspace is the process's cwd.
  * - plan runs the read-only `plan` agent; bypassPermissions adds `--auto`,
  *   which allows what the user's rules leave to `ask`.
- * - the prompt is the last argument. `run` reads an argument that starts with
- *   `-` as a flag and then only prints its help, so such a prompt gets a
- *   leading space; `--` does not help, as `run` then sends the prompt twice.
+ * - there is no message argument: the prompt goes on stdin (see `runOpenCodeV2Turn`).
  */
 function buildOpenCodeRunArgs(turn: {
   providerSessionId: string | null;
   model: string | undefined;
   variant: string | undefined;
   permissionMode: unknown;
-  prompt: string;
 }): string[] {
   const args = ['run', '--standalone', '--format', 'json'];
   if (turn.providerSessionId) {
@@ -1548,11 +1544,6 @@ function buildOpenCodeRunArgs(turn: {
   if (turn.permissionMode === 'bypassPermissions') {
     args.push('--auto');
   }
-
-  const prompt = turn.prompt.startsWith('-') ? ` ${turn.prompt}` : turn.prompt;
-  // opencode is a .cmd shim on Windows, so the whole argument must be
-  // newline-free or cmd.exe silently truncates it at the first newline.
-  args.push(flattenPromptForWindowsShell(prompt));
   return args;
 }
 
@@ -1584,10 +1575,16 @@ function buildOpenCodeRunEnv(permissionMode: unknown): NodeJS.ProcessEnv {
  *
  * `run` prints each finished part of its session as one JSON line in the shape
  * 1.x `run` printed (`{ type, timestamp, sessionID, part }`), so the lines go
- * through the same normalizer as the SDK turns' parts. Nobody can answer `run`
- * while it works: with stdin closed it rejects what the user's rules leave to
- * `ask` (the tool call fails and the agent goes on) and cancels questions, as
- * 1.x `run` did. With an inherited stdin it would wait for an answer instead.
+ * through the same normalizer as the SDK turns' parts.
+ *
+ * The prompt is written to stdin, which is then closed. `run` reads a prompt
+ * from stdin as it is, while a message argument reaches the model wrapped in
+ * quotes with its inner quotes escaped (and twice after `--`), an argument that
+ * starts with `-` is read as a flag, and cmd.exe cuts arguments at a newline.
+ * Nobody can answer `run` while it works: once stdin has ended it rejects what
+ * the user's rules leave to `ask` (the tool call fails and the agent goes on)
+ * and cancels questions, as 1.x `run` did. A stdin left open would make it
+ * wait for an answer instead.
  *
  * Same contract as `runOpenCodeTurn`: resolves when the turn completed, rejects
  * when it failed, and an aborted turn resolves once its stop has finished.
@@ -1753,11 +1750,10 @@ async function runOpenCodeV2Turn(
       model: resolvedModel,
       variant: resolveOpenCodeEffort(resolvedModel, effort, effortModels),
       permissionMode,
-      prompt: promptWithAttachments,
     }), {
       cwd: workingDir,
       env: buildOpenCodeRunEnv(permissionMode),
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
     turn.child = child;
@@ -1765,6 +1761,10 @@ async function runOpenCodeV2Turn(
       child.once('exit', () => resolve());
       child.once('error', () => resolve());
     });
+    // A run that exits before reading its prompt (it refused its arguments)
+    // breaks the pipe; its exit explains the failure.
+    child.stdin?.on('error', () => {});
+    child.stdin?.end(promptWithAttachments);
 
     let stdoutBuffer = '';
     child.stdout?.setEncoding('utf8');

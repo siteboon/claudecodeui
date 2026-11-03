@@ -1110,34 +1110,6 @@ export function readOpenCodeSessionTable(db: Database.Database): OpenCodeSession
   return readNewestUpdate('session') > readNewestUpdate('session_v2') ? 'session' : 'session_v2';
 }
 
-/**
- * Recovers the prompt `opencode run` was given from the text it stored.
- *
- * `run` joins its message arguments into one prompt and wraps each argument
- * that contains a space in double quotes, escaping the quotes inside with a
- * backslash (and nothing else): `say "hi" now` is stored, and sent to the
- * model, as `"say \"hi\" now"`. CloudCLI passes the whole prompt as one
- * argument, so every OpenCode 2.x prompt it sent is stored that way. Only text
- * that wrapping can produce is changed (outer quotes, a space inside, every
- * inner quote escaped); anything else, such as a prompt typed in OpenCode's
- * own interface, is returned as it is.
- *
- * Used by the OpenCode sessions provider (2.x history) and session
- * synchronizer (2.x session titles), so a prompt reads as it was typed and
- * the chat can match it with the message it already shows.
- */
-export function unquoteOpenCodeRunMessage(text: string): string {
-  if (text.length < 2 || !text.startsWith('"') || !text.endsWith('"')) {
-    return text;
-  }
-
-  const inner = text.slice(1, -1);
-  if (!inner.includes(' ') || /(^|[^\\])"/.test(inner)) {
-    return text;
-  }
-  return inner.replace(/\\"/g, '"');
-}
-
 // ---------------------------
 //----------------- JSONC UTILITIES ------------
 /**

@@ -109,9 +109,6 @@ const insertV1Session = (db: Database.Database, id: string, directory: string, t
     .run(`${id}_prt`, `${id}_msg`, id, timeUpdated - 40, timeUpdated - 40, JSON.stringify({ type: 'text', text }));
 };
 
-/** What `opencode run` stores for a one-argument prompt with a space in it. */
-const asRunStoresIt = (prompt: string) => `"${prompt.replace(/"/g, '\\"')}"`;
-
 const shellCall = (id: string, output: string) => ({
   type: 'tool',
   id,
@@ -139,7 +136,7 @@ const summarize = (messages: Array<Record<string, any>>) => messages.map((messag
 test('the synchronizer indexes 2.x sessions from session_v2, without subagent or archived ones', { concurrency: false }, async () => {
   await withOpenCodeHome(OPENCODE_2_SCHEMA, async ({ db, workspace }) => {
     insertV2Session(db, { id: 'ses_top', directory: workspace, timeUpdated: 1_793_723_510_000 });
-    insertV2Message(db, 'ses_top', 1, 'msg_top_user', 'user', { text: asRunStoresIt('Build the "thing" now'), files: [] });
+    insertV2Message(db, 'ses_top', 1, 'msg_top_user', 'user', { text: 'Build the "thing" now', files: [] });
     insertV2Session(db, { id: 'ses_titled', directory: workspace, timeUpdated: 1_793_723_520_000, title: 'OpenCode title' });
     insertV2Session(db, { id: 'ses_child', directory: workspace, timeUpdated: 1_793_723_530_000, parentId: 'ses_top' });
     insertV2Session(db, { id: 'ses_archived', directory: workspace, timeUpdated: 1_793_723_540_000, archivedAt: 1_793_723_541_000 });
@@ -148,7 +145,7 @@ test('the synchronizer indexes 2.x sessions from session_v2, without subagent or
 
     assert.equal(processed, 2);
     const top = sessionsDb.getSessionByProviderSessionId('ses_top');
-    // Titled by the prompt as it was typed, not as `run` quoted it.
+    // Titled by its first prompt.
     assert.equal(top?.custom_name, 'Build the "thing" now');
     assert.equal(top?.project_path, workspace);
     assert.equal(sessionsDb.getSessionByProviderSessionId('ses_titled')?.custom_name, 'OpenCode title');
@@ -157,13 +154,13 @@ test('the synchronizer indexes 2.x sessions from session_v2, without subagent or
   });
 });
 
-test('2.x history shows prompts as typed, answers, thinking and tool cards, without bookkeeping or a stopped turn\'s error', { concurrency: false }, async () => {
+test('2.x history shows prompts, answers, thinking and tool cards, without bookkeeping or a stopped turn\'s error', { concurrency: false }, async () => {
   await withOpenCodeHome(OPENCODE_2_SCHEMA, async ({ db, workspace }) => {
     insertV2Session(db, { id: 'ses_hist', directory: workspace, timeUpdated: 1_793_723_590_000, tokens: [100, 20, 5, 30, 4] });
     const prompt = appendFilesInputTag('Look at "this" file', [{ path: `${workspace}/brief.pdf`, name: 'brief.pdf' }]);
     insertV2Message(db, 'ses_hist', 1, 'msg_switch', 'agent-switched', { agent: 'build' });
     insertV2Message(db, 'ses_hist', 2, 'msg_reminder', 'synthetic', { text: '<system-reminder>Plan mode</system-reminder>' });
-    insertV2Message(db, 'ses_hist', 3, 'msg_user', 'user', { text: asRunStoresIt(prompt), files: [] });
+    insertV2Message(db, 'ses_hist', 3, 'msg_user', 'user', { text: prompt, files: [] });
     insertV2Message(db, 'ses_hist', 4, 'msg_step_1', 'assistant', {
       agent: 'build',
       model: { id: 'gpt-5.6-terra', providerID: 'github-copilot' },
@@ -323,7 +320,7 @@ test('an upgraded database lists each session once, and a 1.x CLI writing it aga
     // 2.x migrated the 1.x session into session_v2 and left the 1.x rows behind.
     insertV1Session(db, 'ses_v1', workspace, 1_793_723_510_000, 'answer kept in the 1.x tables');
     insertV2Session(db, { id: 'ses_v1', directory: workspace, timeUpdated: 1_793_723_510_000 });
-    insertV2Message(db, 'ses_v1', 0, 'msg_v1_user', 'user', { text: asRunStoresIt('migrated prompt') });
+    insertV2Message(db, 'ses_v1', 0, 'msg_v1_user', 'user', { text: 'migrated prompt' });
     insertV2Message(db, 'ses_v1', 1, 'ses_v1_msg', 'assistant', { content: [{ type: 'text', text: 'migrated answer' }], finish: 'stop' });
     insertV2Session(db, { id: 'ses_v2', directory: workspace, timeUpdated: 1_793_723_520_000 });
 
@@ -343,6 +340,15 @@ test('an upgraded database lists each session once, and a 1.x CLI writing it aga
     await synchronizer.synchronize();
     assert.ok(sessionsDb.getSessionByProviderSessionId('ses_after_downgrade'));
     assert.deepEqual(summarize((await provider.fetchHistory('ses_after_downgrade')).messages), ['assistant:written by 1.x again']);
+
+    // Back on 2.x, that session still has only its 1.x rows, and is read from them.
+    insertV2Session(db, { id: 'ses_upgraded_again', directory: workspace, timeUpdated: 1_793_723_540_000 });
+    assert.deepEqual(summarize((await provider.fetchHistory('ses_after_downgrade')).messages), ['assistant:written by 1.x again']);
+    assert.deepEqual(summarize((await provider.fetchHistory('ses_v1')).messages), [
+      'user:migrated prompt',
+      'assistant:migrated answer',
+      'end',
+    ]);
   });
 });
 

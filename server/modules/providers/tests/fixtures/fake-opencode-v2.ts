@@ -1,8 +1,9 @@
 /**
  * A stand-in for the OpenCode 2.x CLI, used by the OpenCode 2.x runtime tests in
  * place of the real binary. `--version` answers like 2.x (`opencode v2.2.3`).
+ * `run` reads its prompt from stdin until stdin ends, as the real one does.
  * `run` and `models` record how they were started (arguments, working
- * directory, what stdin is, the inline config) as one JSON line in
+ * directory, what stdin is, the prompt, the inline config) as one JSON line in
  * FAKE_OPENCODE_V2_LOG, then play FAKE_OPENCODE_V2_SCENARIO (JSON, see
  * `Scenario`): event lines on stdout, text on stderr, an exit code.
  *
@@ -56,6 +57,17 @@ const exitAfterOutput = (code: number) => {
   process.stdout.write('', () => process.stderr.write('', () => process.exit(code)));
 };
 
+/** All of stdin, as `run` reads its prompt; never settles while stdin stays open. */
+const readStdin = () => new Promise<string>((resolve) => {
+  let text = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (chunk: string) => {
+    text += chunk;
+  });
+  process.stdin.on('end', () => resolve(text));
+  process.stdin.on('error', () => resolve(text));
+});
+
 if (args[0] === '--version') {
   log({ command: 'version' });
   setTimeout(() => {
@@ -63,12 +75,15 @@ if (args[0] === '--version') {
     exitAfterOutput(0);
   }, scenario.versionDelayMs ?? 0);
 } else {
+  const stdinKind = readStdinKind();
+  const prompt = args[0] === 'run' ? await readStdin() : null;
   log({
     command: args[0],
     args,
     cwd: process.cwd(),
     pid: process.pid,
-    stdin: readStdinKind(),
+    stdin: stdinKind,
+    prompt,
     configContent: process.env.OPENCODE_CONFIG_CONTENT ?? null,
   });
 
@@ -79,17 +94,9 @@ if (args[0] === '--version') {
     process.stderr.write(`fake opencode 2.x: unsupported command ${args[0]}\n`);
     exitAfterOutput(1);
   } else {
-    for (const line of scenario.lines ?? []) {
-      process.stdout.write(`${JSON.stringify(line)}\n`);
-    }
-    if (scenario.stdout) {
-      process.stdout.write(scenario.stdout);
-    }
-    if (scenario.stderr) {
-      process.stderr.write(scenario.stderr);
-    }
-
     if (scenario.waitForSignal) {
+      // Installed before anything is printed, as `run` does at startup: the
+      // chat may stop the turn as soon as its first line arrives.
       process.on('SIGINT', () => {
         log({ signal: 'SIGINT' });
         if (scenario.ignoreSigint) {
@@ -106,6 +113,19 @@ if (args[0] === '--version') {
         log({ signal: 'SIGTERM' });
         exitAfterOutput(143);
       });
+    }
+
+    for (const line of scenario.lines ?? []) {
+      process.stdout.write(`${JSON.stringify(line)}\n`);
+    }
+    if (scenario.stdout) {
+      process.stdout.write(scenario.stdout);
+    }
+    if (scenario.stderr) {
+      process.stderr.write(scenario.stderr);
+    }
+
+    if (scenario.waitForSignal) {
       setInterval(() => {}, 1000);
     } else {
       exitAfterOutput(scenario.exitCode ?? 0);

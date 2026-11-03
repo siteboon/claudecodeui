@@ -13,7 +13,6 @@ import {
   readJsonRecord,
   readOpenCodeSessionTable,
   readOptionalString,
-  unquoteOpenCodeRunMessage,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
@@ -196,15 +195,14 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
   ): string | undefined {
     try {
       if (sessionTable === 'session_v2') {
-        // A 2.x user message keeps its prompt in `data.text`, as `run` stored it.
-        const text = readOptionalString(db.prepare(`
+        // A 2.x user message keeps its prompt, as written, in `data.text`.
+        return readOptionalString(db.prepare(`
           SELECT json_extract(data, '$.text')
           FROM session_message
           WHERE session_id = ? AND type = 'user'
           ORDER BY seq
           LIMIT 1
         `).pluck().get(sessionId));
-        return text === undefined ? undefined : unquoteOpenCodeRunMessage(text);
       }
 
       const row = db.prepare(`

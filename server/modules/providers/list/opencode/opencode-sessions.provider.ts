@@ -25,7 +25,6 @@ import {
   readOptionalString,
   sliceTailPage,
   truncateSubagentActivity,
-  unquoteOpenCodeRunMessage,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
 
@@ -598,11 +597,12 @@ const readOpenCodeV2SubagentActivity = (
 
 /**
  * Normalizes a 2.x session's history, or returns null when it has no 2.x
- * messages. User prompts come back as they were typed (see
- * `unquoteOpenCodeRunMessage`), assistant content as text, thinking and tool
- * cards. Bookkeeping rows (idle, agent and model switches, compaction) and
- * notes OpenCode writes for the model (system, synthetic) are not shown, nor
- * is the error of a stopped turn, which 2.x stores as `aborted`.
+ * messages. User prompts come back as stored, which for a chat turn is as
+ * they were typed (the runtime hands them to `run` on stdin), assistant
+ * content as text, thinking and tool cards. Bookkeeping rows (idle, agent and
+ * model switches, compaction) and notes OpenCode writes for the model
+ * (system, synthetic) are not shown, nor is the error of a stopped turn,
+ * which 2.x stores as `aborted`.
  */
 const normalizeOpenCodeV2History = (
   db: Database.Database,
@@ -621,7 +621,7 @@ const normalizeOpenCodeV2History = (
     if (message.type === 'user') {
       // User prompts sent with attachments carry <images_input>/<files_input>
       // path lists; strip them for display and surface the paths.
-      const parsedImages = parseImagesInputTag(unquoteOpenCodeRunMessage(readOptionalString(message.data.text) ?? ''));
+      const parsedImages = parseImagesInputTag(readOptionalString(message.data.text) ?? '');
       const parsedFiles = parseFilesInputTag(parsedImages.text);
       if (parsedFiles.text.trim() || parsedImages.attachments.length > 0 || parsedFiles.attachments.length > 0) {
         normalized.push(createNormalizedMessage({

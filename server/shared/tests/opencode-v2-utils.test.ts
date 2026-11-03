@@ -7,26 +7,7 @@ import test from 'node:test';
 
 import Database from 'better-sqlite3';
 
-import {
-  readOpenCodeCliMajorVersion,
-  readOpenCodeSessionTable,
-  unquoteOpenCodeRunMessage,
-} from '@/shared/utils.js';
-
-test('a prompt is recovered from the quotes `opencode run` stored it in', () => {
-  // What `run` stores for one argument with a space: wrapped, inner quotes escaped.
-  assert.equal(unquoteOpenCodeRunMessage('"say \\"hi\\" now"'), 'say "hi" now');
-  assert.equal(unquoteOpenCodeRunMessage('"first line\nsecond line"'), 'first line\nsecond line');
-  assert.equal(unquoteOpenCodeRunMessage('"keep a \\\\" backslash"'), 'keep a \\" backslash');
-  assert.equal(unquoteOpenCodeRunMessage('" -v leading dash"'), ' -v leading dash');
-  // An argument without a space is stored as it is, quotes and all.
-  assert.equal(unquoteOpenCodeRunMessage('"hi"'), '"hi"');
-  assert.equal(unquoteOpenCodeRunMessage('hello'), 'hello');
-  // Text `run` cannot have produced is left alone.
-  assert.equal(unquoteOpenCodeRunMessage('"two" "arguments"'), '"two" "arguments"');
-  assert.equal(unquoteOpenCodeRunMessage('"unescaped " quote"'), '"unescaped " quote"');
-  assert.equal(unquoteOpenCodeRunMessage('"'), '"');
-});
+import { readOpenCodeCliMajorVersion, readOpenCodeSessionTable } from '@/shared/utils.js';
 
 const createDatabase = (tables: Record<string, number[]>) => {
   const db = new Database(':memory:');
