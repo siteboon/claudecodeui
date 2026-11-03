@@ -1580,8 +1580,8 @@ const OPENCODE_CLI_VERSION_RETRY_MS = 30_000;
 const OPENCODE_CLI_VERSION_TIMEOUT_MS = 20_000;
 /**
  * How long a file that has answered gets when it is asked again. Its answer
- * stands when it runs out of time, so a hanging `--version` holds a turn up
- * no longer than before 2.x support.
+ * stands when it runs out of time, so a `--version` that starts hanging
+ * holds a turn up for 5 s at most.
  */
 const OPENCODE_CLI_VERSION_RECHECK_TIMEOUT_MS = 5_000;
 
