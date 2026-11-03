@@ -509,35 +509,63 @@ test('a run that does not exit on SIGINT is terminated', async () => {
 
 test('a turn stopped before `run` printed a line still gets the session `run` made', async () => {
   setInstalledVersion('opencode v2.2.3');
-  // Another session made in the same workspace just now, for another prompt, is not the turn's.
-  const db = new Database(path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db'));
-  try {
-    const now = Date.now();
+  const dbPath = path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db');
+  const prompt = 'Stop me before you print';
+  const insertSession = (db: Database.Database, id: string, options: { prompt: string; created: number; parentId?: string }) => {
     db.prepare(`
-      INSERT INTO session_v2 (id, project_id, slug, directory, version, time_created, time_updated)
-      VALUES ('ses_someone_else', 'prj', 'other', ?, '2.2.3', ?, ?)
-    `).run(workspacePath, now, now);
+      INSERT INTO session_v2 (id, project_id, parent_id, slug, directory, version, time_created, time_updated)
+      VALUES (?, 'prj', ?, 'other', ?, '2.2.3', ?, ?)
+    `).run(id, options.parentId ?? null, realPath(workspacePath), options.created, options.created);
     db.prepare(`
       INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
-      VALUES ('msg_someone_else', 'ses_someone_else', 'user', 1, ?, ?, '{"text":"another prompt"}')
-    `).run(now, now);
-  } finally {
-    db.close();
-  }
+      VALUES (?, ?, 'user', 1, ?, ?, ?)
+    `).run(`msg_${id}`, id, options.created, options.created, JSON.stringify({ text: options.prompt }));
+  };
+
+  // Another chat in the same workspace runs in a session made for the same prompt.
+  let otherChatStarted: () => void = () => {};
+  const otherChatRunning = new Promise<void>((resolve) => {
+    otherChatStarted = resolve;
+  });
+  const otherChat = runTurn({
+    appSessionId: 'app-v2-other-chat',
+    command: prompt,
+    scenario: { lines: [{ ...toolTurn[0], sessionID: 'ses_other_chat' }], waitForSignal: true },
+    onFrame: (frame) => {
+      if (frame.kind === 'session_created') {
+        otherChatStarted();
+      }
+    },
+  });
+  await otherChatRunning;
 
   let abortResult: boolean | null = null;
   const turn = await runTurn({
     appSessionId: 'app-v2-stopped-early',
-    command: 'Stop me before you print',
+    command: prompt,
     scenario: { createSession: 'ses_made_before_any_line', waitForSignal: true },
     whileRunning: async (logPath) => {
       const deadline = Date.now() + 15_000;
       while (Date.now() < deadline && !(await readFile(logPath, 'utf8').catch(() => '')).includes('"created"')) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
+      // Made in the same workspace just before the turn's own session, and not
+      // the turn's: one for another prompt, a subagent session for the same
+      // prompt, and the other chat's session.
+      const db = new Database(dbPath);
+      try {
+        const created = Number(db.prepare("SELECT time_created FROM session_v2 WHERE id = 'ses_made_before_any_line'").pluck().get());
+        insertSession(db, 'ses_someone_else', { prompt: 'another prompt', created: created - 3 });
+        insertSession(db, 'ses_subagent', { prompt, created: created - 2, parentId: 'ses_someone_else' });
+        insertSession(db, 'ses_other_chat', { prompt, created: created - 1 });
+      } finally {
+        db.close();
+      }
       abortResult = await opencodeRuntime.abort('app-v2-stopped-early');
     },
   });
+  await opencodeRuntime.abort('app-v2-other-chat');
+  await otherChat;
 
   assert.equal(turn.error, null);
   assert.equal(abortResult, true);

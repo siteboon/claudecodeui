@@ -513,29 +513,49 @@ function readOpenCodeTokenUsage(sessionId: string | null, sessionTable: OpenCode
 /**
  * The session an OpenCode 2.x `run` made for a prompt, found by what it stored:
  * the workspace it ran in, a creation time after the run started, and the
- * prompt as a user message (`run` stores a prompt from stdin as it is). Null
- * when there is no such session, or no 2.x database.
+ * prompt as a user message (`run` stores a prompt from stdin as it is). Only
+ * top-level sessions count, and not the ones in `takenSessionIds` (named by
+ * other turns). Null when there is no such session, or no 2.x database.
  */
-function findOpenCodeV2RunSession(directory: string, startedAt: number, prompt: string): string | null {
+function findOpenCodeV2RunSession(
+  workingDir: string,
+  startedAt: number,
+  prompt: string,
+  takenSessionIds: Set<string>,
+): string | null {
   const dbPath = getOpenCodeDatabasePath();
   if (!fsSync.existsSync(dbPath)) {
     return null;
   }
 
+  // 2.x files a session under the workspace's resolved path (it changes into
+  // PWD and reads the directory back), so a symlinked workspace is matched by
+  // its target too; 2.0.x on Windows was reported to store forward slashes.
+  const directories = new Set([workingDir]);
+  try {
+    directories.add(fsSync.realpathSync(workingDir));
+  } catch {
+    // A workspace that cannot be resolved is matched as given.
+  }
+  if (process.platform === 'win32') {
+    [...directories].forEach((directory) => directories.add(directory.replace(/\\/g, '/')));
+  }
+
   let db: Database.Database | null = null;
   try {
     db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    const sessionId = db.prepare(`
+    const sessionIds = db.prepare(`
       SELECT s.id
       FROM session_v2 s
       INNER JOIN session_message m ON m.session_id = s.id AND m.type = 'user'
-      WHERE s.directory = ?
+      WHERE s.directory IN (${[...directories].map(() => '?').join(', ')})
         AND s.parent_id IS NULL
         AND s.time_created >= ?
         AND json_extract(m.data, '$.text') = ?
       ORDER BY s.time_created
-      LIMIT 1
-    `).pluck().get(directory, startedAt - 1000, prompt);
+      LIMIT 20
+    `).pluck().all(...directories, startedAt - 1000, prompt) as unknown[];
+    const sessionId = sessionIds.find((id) => typeof id === 'string' && !takenSessionIds.has(id));
     return typeof sessionId === 'string' ? sessionId : null;
   } catch {
     return null;
@@ -1838,7 +1858,11 @@ async function runOpenCodeV2Turn(
     // session instead of leaving the synchronizer to guess which one it was.
     child.once('exit', () => {
       if (!turn.providerSessionId) {
-        const madeSessionId = findOpenCodeV2RunSession(workingDir, spawnedAt, promptWithAttachments);
+        // A session another turn runs in (two chats sent the same prompt) is not this one's.
+        const takenSessionIds = new Set([...activeV2Turns.values()]
+          .filter((otherTurn) => otherTurn !== turn && otherTurn.providerSessionId)
+          .map((otherTurn) => otherTurn.providerSessionId as string));
+        const madeSessionId = findOpenCodeV2RunSession(workingDir, spawnedAt, promptWithAttachments, takenSessionIds);
         if (madeSessionId) {
           registerProviderSession(madeSessionId);
         }

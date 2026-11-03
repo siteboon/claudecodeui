@@ -38,7 +38,8 @@ type Scenario = {
   /**
    * Records a session under this id in ~/.local/share/opencode/opencode.db
    * before anything is printed, as `run` does: in session_v2 for the PWD it
-   * runs in, with the prompt as its user message.
+   * runs in (resolved, as `run` changes into it and reads it back), with the
+   * prompt as its user message.
    */
   createSession?: string;
 };
@@ -115,7 +116,7 @@ if (args[0] === '--version') {
       db.prepare(`
         INSERT INTO session_v2 (id, project_id, slug, directory, version, time_created, time_updated)
         VALUES (?, 'prj', 'made-by-run', ?, '2.2.3', ?, ?)
-      `).run(scenario.createSession, process.env.PWD, now, now);
+      `).run(scenario.createSession, fs.realpathSync(process.env.PWD ?? process.cwd()), now, now);
       db.prepare(`
         INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
         VALUES (?, ?, 'user', 1, ?, ?, ?)
