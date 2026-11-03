@@ -17,10 +17,11 @@ import {
 
 /** Curated Codex catalog shipped as immutable CloudCLI defaults. */
 export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
-  // Chats run the bundled `@openai/codex` CLI, which only has metadata for the
-  // models in its own bundled catalog (`codex debug models --bundled`); any
-  // other model runs on fallback metadata. So every entry must be one of that
-  // catalog's slugs, which codex-models.test.ts checks.
+  // Chats run the bundled `@openai/codex` CLI, which takes model metadata from
+  // its own bundled catalog (`codex debug models --bundled`), from a slug-prefix
+  // match against that catalog, or (signed in to ChatGPT) from OpenAI's remote
+  // catalog; anything else runs on fallback metadata. So every entry must be
+  // one of the bundled catalog's exact slugs, which codex-models.test.ts checks.
   OPTIONS: [
     {
       value: 'gpt-6.1-sol',
