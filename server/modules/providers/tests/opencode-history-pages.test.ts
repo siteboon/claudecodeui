@@ -259,6 +259,22 @@ test('OpenCode history pages are exactly the matching slices of the full history
     db.prepare('INSERT INTO part (id, message_id, session_id, time_created, data) VALUES (?, ?, ?, ?, ?)')
       .run('', 'msg_empty_part', 'ses_c', 1_700_000_000_500, JSON.stringify({ type: 'text', text: 'hidden' }));
     expectations.shownErrors.add('msg_empty_part');
+    // Rows the outline counts from its own reading of their JSON: a user
+    // message's error (never shown), a `text` and a `content` that are not
+    // strings (nothing shown), and JSON nested deeper than SQLite's json_valid
+    // accepts, which only the JavaScript parser reads.
+    const insertMessage = db.prepare('INSERT INTO message (id, session_id, time_created, data) VALUES (?, ?, ?, ?)');
+    const insertPart = db.prepare('INSERT INTO part (id, message_id, session_id, time_created, data) VALUES (?, ?, ?, ?, ?)');
+    const deeplyNested = `${'['.repeat(1001)}${']'.repeat(1001)}`;
+    insertMessage.run('msg_user_error', 'ses_c', 1_700_000_000_600, JSON.stringify({ role: 'user', error: 'not shown' }));
+    insertPart.run('prt_text_object', 'msg_user_error', 'ses_c', 1_700_000_000_601, JSON.stringify({ type: 'text', text: { value: 'x' } }));
+    expectations.partKinds.set('prt_text_object', null);
+    insertPart.run('prt_content_array', 'msg_user_error', 'ses_c', 1_700_000_000_602, JSON.stringify({ type: 'text', content: [{ type: 'text', text: 'x' }] }));
+    expectations.partKinds.set('prt_content_array', null);
+    insertMessage.run('msg_deep', 'ses_c', 1_700_000_000_700, `{"role":"assistant","error":"deep failure","x":${deeplyNested}}`);
+    expectations.shownErrors.add('msg_deep');
+    insertPart.run('prt_deep_text', 'msg_deep', 'ses_c', 1_700_000_000_701, `{"type":"text","text":"deep text","x":${deeplyNested}}`);
+    expectations.partKinds.set('prt_deep_text', 'text');
     db.prepare('INSERT INTO session (id) VALUES (?)').run('ses_empty');
   }, async (provider, dbPath) => {
     for (const providerSessionId of ['ses_a', 'ses_b', 'ses_c', 'ses_empty', 'ses_missing']) {
