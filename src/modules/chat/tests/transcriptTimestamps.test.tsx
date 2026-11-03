@@ -615,7 +615,7 @@ describe('a subagent timeline', () => {
     // it keep the note's width; a tool call's sits on its header line.
     assert.equal(note.contains(noteTime), true);
     assert.equal(classesOf(noteTime).includes('float-right'), true);
-    assert.equal(noteTime.parentElement?.firstChild, noteTime);
+    assert.equal(noteTime.parentElement?.firstChild === noteTime, true);
     assert.equal(read.contains(readTime), true);
     assert.equal(keepsTextWidth(lineOf(readTime)), true);
     assert.equal(lineOf(readTime).querySelectorAll('button[title="/repo/a.txt"]').length, 1);
@@ -885,6 +885,16 @@ describe('a workflow card', () => {
     const off = renderWorkflow(live, false);
     fireEvent.click(off.container.querySelector('button[aria-expanded]') as HTMLButtonElement);
     assert.equal(statusOf(off.container).className, 'ml-auto flex-shrink-0 text-[11px] text-muted-foreground/70');
+  });
+
+  it('keeps an agent\'s status on the right while its start time is shown', () => {
+    const { container } = renderWorkflow(live, true);
+    fireEvent.click(container.querySelector('button[aria-expanded]') as HTMLButtonElement);
+    assert.equal(timeElements(container).length, 1);
+    const status = [...container.querySelectorAll('li span')]
+      .find((span) => span.children.length === 0 && /running/i.test(span.textContent ?? ''));
+    assert.equal(status !== undefined, true, 'the status label is rendered');
+    assert.equal(classesOf(status).includes('ml-auto'), true);
   });
 
   it('stamps the steps of an opened agent\'s timeline', async () => {
