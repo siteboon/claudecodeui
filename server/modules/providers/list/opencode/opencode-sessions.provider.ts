@@ -779,10 +779,10 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
   /**
    * Loads OpenCode history from the shared SQLite session database.
    *
-   * A page costs what it shows: an outline places every row of the session
-   * from SQLite-side JSON digests, and only the rows on the requested page are
-   * read in full, normalized and given their subagent timelines. `total` and
-   * the page match slicing the fully normalized history.
+   * The outline (every row's ids, timestamps and SQLite-side JSON digest)
+   * gives `total` and the page bounds; only the rows on the requested page are
+   * then read in full, normalized and given their subagent timelines. The
+   * result is what slicing the fully normalized history would return.
    */
   async fetchHistory(
     sessionId: string,
