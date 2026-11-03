@@ -115,11 +115,15 @@ function shouldAutoOpenUrlFromOutput(value: string): boolean {
   );
 }
 
-// Terminal queries the Shell's xterm.js answers.
+// Terminal queries. The Shell's xterm.js 5.5 (with its clipboard addon) answers
+// DSR/CPR, DA1/DA2, DECRQM, DECRQSS and the OSC 4/10/11/12 colour and OSC 52
+// clipboard reads. DA3, XTVERSION, kitty keyboard flags and the XTWINOPS size
+// reports get no answer from it (no handler; XTWINOPS needs `windowOptions`,
+// which the Shell does not set) and are only stripped in case a newer one does.
 const TERMINAL_QUERY_REGEX = new RegExp(
   [
     // CSI: DSR and cursor position (also DECXCPR), DA1/DA2/DA3, XTVERSION,
-    // DECRQM, kitty keyboard flags, the XTWINOPS size reports.
+    // DECRQM (ANSI and private modes), kitty keyboard flags, XTWINOPS 14/16/18.
     /\x1b\[(?:\??\d*n|[>=]?0?c|>0?q|\??[\d;]*\$p|\?u|1[468]t)/.source,
     // OSC 4/10/11/12 colour and OSC 52 clipboard queries that set nothing.
     /\x1b\](?:4(?:;\d+;\?)+|1[0-2](?:;\?)+|52;[a-z0-9]*;\?)(?:\x07|\x1b\\)/.source,
