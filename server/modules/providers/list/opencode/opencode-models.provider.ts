@@ -309,13 +309,16 @@ const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
 /**
  * How long `opencode models` may take before the static catalog stands in.
  *
- * Listing is CPU-bound: about 3 s with cores to spare, but 5-18 s when it
- * shares a single core (a small container or VPS, a loaded host), and there
- * every listing is that slow, not only the first. A shorter budget kept
- * failing on such hosts, so the picker stayed on the static catalog, which
- * offers models this OpenCode refuses to run (instead of the user's own)
- * when the install's providers cannot be read. Only the first catalog read
- * after a start waits this long; later ones are served from the cache.
+ * Listing is CPU-bound: about 3 s with cores to spare, about 5 s on one core,
+ * and from about 10 s to over 30 s on one core that other work also uses (a
+ * small container or VPS, a loaded host). There every listing is that slow,
+ * not only the first. A 5 s budget kept failing on such hosts, so the picker
+ * stayed on the static catalog, which offers models this OpenCode refuses to
+ * run (instead of the user's own) when the install's providers cannot be
+ * read. When a listing takes longer than this, the static catalog still
+ * stands in until a later background refresh finishes in time. Only the
+ * first catalog read after a start waits this long; later ones are served
+ * from the cache.
  */
 const OPENCODE_MODELS_TIMEOUT_MS = 30_000;
 /** How long a successful `opencode models` listing is served before it is refreshed. */

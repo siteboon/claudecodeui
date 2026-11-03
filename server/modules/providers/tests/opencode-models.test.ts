@@ -587,10 +587,9 @@ test('OpenCode waits for an `opencode models` listing that takes longer than 5 s
       // Move the clock only once the CLI runs, i.e. once the timeout is armed.
       await fake.waitForStart();
 
-      // Listing is CPU-bound: about 3 s with cores to spare, 5-10 s on one core, and up to 17.7 s
-      // through a server held to one core that another process was also using. A 5 s budget fell
-      // back to the static catalog there, which offered an OpenRouter user whose key CloudCLI cannot
-      // see only models their OpenCode refuses to run (#1695).
+      // On one core that another process also used, listing took from about 10 s to over 30 s. A
+      // 5 s budget fell back to the static catalog there, which has none of the OpenRouter models of
+      // a user whose key CloudCLI cannot see (#1695).
       mock.timers.tick(29_999);
       await fake.release();
 
