@@ -544,18 +544,20 @@ function findOpenCodeV2RunSession(
   let db: Database.Database | null = null;
   try {
     db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    const sessionIds = db.prepare(`
+    // Taken sessions are left out in the query, so any number of them cannot
+    // crowd out the one this run made.
+    const sessionId = db.prepare(`
       SELECT s.id
       FROM session_v2 s
       INNER JOIN session_message m ON m.session_id = s.id AND m.type = 'user'
       WHERE s.directory IN (${[...directories].map(() => '?').join(', ')})
         AND s.parent_id IS NULL
+        AND s.id NOT IN (SELECT value FROM json_each(?))
         AND s.time_created >= ?
         AND json_extract(m.data, '$.text') = ?
       ORDER BY s.time_created
-      LIMIT 20
-    `).pluck().all(...directories, startedAt - 1000, prompt) as unknown[];
-    const sessionId = sessionIds.find((id) => typeof id === 'string' && !takenSessionIds.has(id));
+      LIMIT 1
+    `).pluck().get(...directories, JSON.stringify([...takenSessionIds]), startedAt - 1000, prompt);
     return typeof sessionId === 'string' ? sessionId : null;
   } catch {
     return null;

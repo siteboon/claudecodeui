@@ -89,7 +89,13 @@ before(async () => {
     setEnv(pathExtKey, pathExt?.toUpperCase().includes('.CMD') ? pathExt : `.COM;.EXE;.BAT;.CMD${pathExt ? `;${pathExt}` : ''}`);
   } else {
     wrapperPath = path.join(binDir, 'opencode');
-    await writeFile(wrapperPath, `#!/bin/sh\nexec "${process.execPath}" --import "${TSX_LOADER}" "${FIXTURE_PATH}" "$@"\n`);
+    await writeFile(wrapperPath, [
+      '#!/bin/sh',
+      // A run that only holds its session (FAKE_OPENCODE_V2_HOLD_LINE) prints that line and waits, without node.
+      'if [ "$1" = run ] && [ -n "$FAKE_OPENCODE_V2_HOLD_LINE" ]; then printf \'%s\\n\' "$FAKE_OPENCODE_V2_HOLD_LINE"; exec sleep 30; fi',
+      `exec "${process.execPath}" --import "${TSX_LOADER}" "${FIXTURE_PATH}" "$@"`,
+      '',
+    ].join('\n'));
     await chmod(wrapperPath, 0o755);
   }
 
@@ -616,6 +622,71 @@ test('a turn stopped before `run` printed a line still gets the session `run` ma
   assert.deepEqual(kinds(turn.frames), ['session_created']);
   assert.equal(turn.frames[0].newSessionId, 'ses_made_before_any_line');
   assert.equal(turn.writer.sessionId, 'ses_made_before_any_line');
+});
+
+test('a turn stopped before `run` printed a line gets its session also while 20 other chats run the same prompt', { skip: process.platform === 'win32' }, async () => {
+  setInstalledVersion('opencode v2.2.3');
+  const dbPath = path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db');
+  const prompt = 'Twenty chats asked this too';
+  const otherSessions = Array.from({ length: 20 }, (_, index) => `ses_taken_by_chat_${index}`);
+
+  // Each other chat runs in its own session, made for the same prompt in the same workspace.
+  const otherChats: Array<Promise<unknown>> = [];
+  for (const [index, sessionId] of otherSessions.entries()) {
+    let started: () => void = () => {};
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    setEnv('FAKE_OPENCODE_V2_HOLD_LINE', JSON.stringify({ ...toolTurn[0], sessionID: sessionId }));
+    otherChats.push(runTurn({
+      appSessionId: `app-v2-same-prompt-${index}`,
+      command: prompt,
+      scenario: {},
+      onFrame: (frame) => {
+        if (frame.kind === 'session_created') {
+          started();
+        }
+      },
+    }));
+    await running;
+  }
+  setEnv('FAKE_OPENCODE_V2_HOLD_LINE', undefined);
+
+  const turn = await runTurn({
+    appSessionId: 'app-v2-stopped-among-many',
+    command: prompt,
+    scenario: { createSession: 'ses_made_among_many', waitForSignal: true },
+    whileRunning: async (logPath) => {
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline && !(await readFile(logPath, 'utf8').catch(() => '')).includes('"created"')) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      // The other chats' sessions were stored just before this turn's own.
+      const db = new Database(dbPath);
+      try {
+        const created = Number(db.prepare("SELECT time_created FROM session_v2 WHERE id = 'ses_made_among_many'").pluck().get());
+        otherSessions.forEach((sessionId, index) => {
+          db.prepare(`
+            INSERT INTO session_v2 (id, project_id, slug, directory, version, time_created, time_updated)
+            VALUES (?, 'prj', 'other', ?, '2.2.3', ?, ?)
+          `).run(sessionId, realPath(workspacePath), created - 20 + index, created - 20 + index);
+          db.prepare(`
+            INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+            VALUES (?, ?, 'user', 1, ?, ?, ?)
+          `).run(`msg_${sessionId}`, sessionId, created, created, JSON.stringify({ text: prompt }));
+        });
+      } finally {
+        db.close();
+      }
+      await opencodeRuntime.abort('app-v2-stopped-among-many');
+    },
+  });
+  await Promise.all(otherSessions.map((_, index) => opencodeRuntime.abort(`app-v2-same-prompt-${index}`)));
+  await Promise.all(otherChats);
+
+  assert.equal(turn.error, null);
+  assert.deepEqual(kinds(turn.frames), ['session_created']);
+  assert.equal(turn.frames[0].newSessionId, 'ses_made_among_many');
 });
 
 test('Stop while the CLI version is still being read ends the turn before anything starts', async () => {
