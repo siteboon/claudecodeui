@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+
 import { createOpencodeServer } from '@opencode-ai/sdk/v2';
 
 import type { ProviderPermissionDecision, ProviderRuntimeContext } from '@/shared/types.js';
