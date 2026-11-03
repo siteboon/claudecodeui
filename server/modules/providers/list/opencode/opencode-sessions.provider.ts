@@ -505,7 +505,8 @@ const readShownReasoning = (partData: AnyRecord): string | null => {
 /**
  * How many messages a part shows in the history. These are the decisions
  * `normalizeHistoryRow` makes, taken without building anything, so keep the
- * two in step.
+ * two in step: opencode-history-pages.test.ts checks that they agree on every
+ * part type OpenCode writes.
  */
 const countShownPartMessages = (partData: AnyRecord, messageRole: string | undefined): number => {
   switch (readOptionalString(partData.type)) {

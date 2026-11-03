@@ -441,3 +441,89 @@ test('an OpenCode history page is cut from the rows its total counted while Open
     }
   });
 });
+
+// normalizeHistoryRow() is private; TypeScript's `private` has no runtime
+// effect, so the test calls it to compare its decisions with the outline's.
+type HistoryRowNormalizer = {
+  normalizeHistoryRow: (
+    row: {
+      message_id: string | null;
+      message_time_created: number | null;
+      message_data: string | null;
+      part_id: string | null;
+      part_time_created: number | null;
+      part_data: string | null;
+    },
+    placement: { showsMessageError: boolean; start: number },
+    db: Database.Database,
+    sessionId: string,
+    runIsLive: boolean,
+  ) => unknown[];
+};
+
+test('the OpenCode history outline counts every part type as the normalizer shows it', { concurrency: false }, async () => {
+  // One part of each type in OpenCode's `Part` union (@opencode-ai/sdk), the
+  // hidden forms of text and reasoning, and a type OpenCode does not write.
+  // The outline decides from a digest of a part what the normalizer decides
+  // from the whole part, so a part type handled by only one of them fails here.
+  const parts: Record<string, unknown>[] = [
+    { type: 'text', text: 'Shown text' },
+    { type: 'text', text: ' ' },
+    { type: 'text', text: appendImagesInputTag('', [{ path: '/assets/shot.png', name: 'shot.png' }]) },
+    { type: 'text', text: '<files_input>\nnothing listed\n</files_input>' },
+    { type: 'reasoning', text: 'Thinking' },
+    { type: 'reasoning', text: '' },
+    { type: 'tool', tool: 'bash', callID: 'call_bash', state: { status: 'completed', input: { command: 'ls' }, output: 'ok' } },
+    { type: 'tool', tool: 'question', callID: 'call_question', state: QUESTION_STATE },
+    { type: 'tool', tool: 'task', callID: 'call_task', state: { status: 'running', input: {}, metadata: { sessionId: 'ses_child' } } },
+    { type: 'subtask', prompt: 'Look around', description: 'Explore', agent: 'general' },
+    { type: 'file', mime: 'image/png', filename: 'shot.png', url: 'data:image/png;base64,AAAA' },
+    { type: 'step-start', snapshot: 'abc' },
+    { type: 'step-finish', reason: 'stop', cost: 0, tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } },
+    { type: 'snapshot', snapshot: 'abc' },
+    { type: 'patch', hash: 'abc', files: ['a.ts'] },
+    { type: 'agent', name: 'general' },
+    { type: 'retry', attempt: 1, error: { name: 'APIError', data: { message: 'Overloaded' } } },
+    { type: 'compaction', auto: true },
+    { type: 'a-future-part', text: 'Not shown yet' },
+  ];
+  const rows = ['user', 'assistant'].flatMap((role) => parts.map((part, index) => ({
+    role,
+    part,
+    sessionId: `ses_${role}_${index}`,
+    messageId: `msg_${role}_${index}`,
+    partId: `prt_${role}_${index}`,
+  })));
+  const time = 1_700_000_000_000;
+
+  await withOpenCodeDatabase((db) => {
+    const insertSession = db.prepare('INSERT INTO session (id) VALUES (?)');
+    const insertMessage = db.prepare('INSERT INTO message (id, session_id, time_created, data) VALUES (?, ?, ?, ?)');
+    const insertPart = db.prepare('INSERT INTO part (id, message_id, session_id, time_created, data) VALUES (?, ?, ?, ?, ?)');
+    for (const { role, part, sessionId, messageId, partId } of rows) {
+      insertSession.run(sessionId);
+      insertMessage.run(messageId, sessionId, time, JSON.stringify({ role }));
+      insertPart.run(partId, messageId, sessionId, time, JSON.stringify(part));
+    }
+  }, async (provider, dbPath) => {
+    const { normalizeHistoryRow } = provider as unknown as HistoryRowNormalizer;
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      for (const { role, part, sessionId, messageId, partId } of rows) {
+        // A page of no messages runs only the outline: its total is the part's count.
+        const { total } = await provider.fetchHistory('app-session', { providerSessionId: sessionId, limit: 0 });
+        const shown = normalizeHistoryRow.call(provider, {
+          message_id: messageId,
+          message_time_created: time,
+          message_data: JSON.stringify({ role }),
+          part_id: partId,
+          part_time_created: time,
+          part_data: JSON.stringify(part),
+        }, { showsMessageError: false, start: 0 }, db, 'app-session', false);
+        assert.equal(total, shown.length, `${role} message, part ${JSON.stringify(part)}`);
+      }
+    } finally {
+      db.close();
+    }
+  });
+});
