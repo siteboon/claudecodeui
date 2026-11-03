@@ -25,6 +25,7 @@ import {
   readOpenCodeSessionTables,
   readOptionalString,
   sliceTailPage,
+  toOpenCodeV2PartId,
   truncateSubagentActivity,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
@@ -498,14 +499,6 @@ const readOpenCodeV2ToolState = (toolName: string, state: AnyRecord): AnyRecord 
       : {}),
   };
 };
-
-/**
- * The id OpenCode 2.x gives a stored part when `run` prints it from storage
- * (`prt_<message>_text-0`, `prt_<message>_step-finish`). Parts `run` prints
- * while they stream, such as a turn's text, carry fresh ids instead.
- */
-const toOpenCodeV2PartId = (messageId: string, suffix: string): string =>
-  `prt_${messageId.replace(/^msg_/, '')}_${suffix}`;
 
 type OpenCodeV2Message = {
   id: string;

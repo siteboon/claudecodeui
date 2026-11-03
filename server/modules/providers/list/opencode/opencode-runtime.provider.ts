@@ -80,6 +80,7 @@ import {
   stripAnsiSequences,
   stripJsonComments,
   stripTrailingCommas,
+  toOpenCodeV2PartId,
 } from '@/shared/utils.js';
 import type {
   AnyRecord,
@@ -1548,6 +1549,40 @@ function installV2ExitHook(): void {
 }
 
 /**
+ * The id OpenCode 2.x stores a text or reasoning part of a turn under, which
+ * is the id the history gives its row. `run` prints a part it streams with a
+ * fresh id, and one it reads back from storage with the stored id; stored
+ * parts are numbered per message and kind, in the order `run` prints them,
+ * so `nextIndexes` counts them per message as the lines arrive. Null for a
+ * part without a message id.
+ */
+function readStoredV2PartId(
+  part: AnyRecord,
+  kind: 'text' | 'reasoning',
+  nextIndexes: Map<string, number>,
+): string | null {
+  const messageId = readOptionalString(part.messageID);
+  if (!messageId) {
+    return null;
+  }
+
+  const key = `${messageId}:${kind}`;
+  const storedPrefix = toOpenCodeV2PartId(messageId, `${kind}-`);
+  const partId = readOptionalString(part.id);
+  if (partId?.startsWith(storedPrefix)) {
+    const index = Number(partId.slice(storedPrefix.length));
+    if (Number.isInteger(index)) {
+      nextIndexes.set(key, Math.max(nextIndexes.get(key) ?? 0, index + 1));
+    }
+    return partId;
+  }
+
+  const index = nextIndexes.get(key) ?? 0;
+  nextIndexes.set(key, index + 1);
+  return toOpenCodeV2PartId(messageId, `${kind}-${index}`);
+}
+
+/**
  * Arguments of the `opencode run` that runs a 2.x turn:
  * - `--standalone` gives the run a private server that ends with it, instead
  *   of starting OpenCode's shared background service, which outlives it.
@@ -1685,6 +1720,8 @@ async function runOpenCodeV2Turn(
   let sawEvent = false;
   let processEnded = false;
   const forwardedParts = new Set<string>();
+  /** The next stored index of each message's text and reasoning parts (see `readStoredV2PartId`). */
+  const storedPartIndexes = new Map<string, number>();
   let diagnostics = '';
   const keepDiagnostics = (text: string) => {
     diagnostics = (diagnostics + text).slice(-4 * RUN_DIAGNOSTICS_LIMIT);
@@ -1729,7 +1766,17 @@ async function runOpenCodeV2Turn(
       forwardedParts.add(partKey);
     }
 
-    for (const message of context.normalizeMessage(event, turnSessionId())) {
+    // The live row gets the id of the stored part, so once the chat reloads
+    // the history it replaces the row instead of showing the reply twice.
+    let forwardedEvent = event;
+    if (part && (event.type === 'text' || event.type === 'reasoning')) {
+      const storedPartId = readStoredV2PartId(part, event.type, storedPartIndexes);
+      if (storedPartId) {
+        forwardedEvent = { ...event, part: { ...part, id: storedPartId } };
+      }
+    }
+
+    for (const message of context.normalizeMessage(forwardedEvent, turnSessionId())) {
       const normalized = message as AnyRecord;
       if (normalized.kind === 'error') {
         // Shown once, and it is the turn's failure.

@@ -329,6 +329,75 @@ test('bypassPermissions adds --auto, and no mode overrides the permission rules 
   }
 });
 
+test('a 2.x turn shows its text under the ids the history gives the stored parts, so a reload replaces it', async () => {
+  setInstalledVersion('opencode v2.2.3');
+  const sessionId = 'ses_live_text_ids';
+  const [stepStartA, toolUseA, stepFinishA, stepStartB, textB, stepFinishB] = JSON.parse(
+    JSON.stringify(toolTurn).replaceAll(TOOL_TURN_SESSION, sessionId),
+  ) as Array<Record<string, any>>;
+  const messageA = stepStartA.part.messageID as string;
+  const messageB = stepStartB.part.messageID as string;
+  const textLine = (messageID: string, id: string, text: string) => ({
+    type: 'text',
+    timestamp: textB.timestamp,
+    sessionID: sessionId,
+    part: { ...textB.part, id, messageID, text },
+  });
+  // `run` prints streamed text with fresh part ids, and text it reads back
+  // from storage with the stored id (`prt_<message>_text-<n>`).
+  const lines = [
+    stepStartA,
+    textLine(messageA, 'prt_1a2418ff1001aaaaaaaaaaaaaa', 'Running the command.'),
+    toolUseA,
+    textLine(messageA, 'prt_1a2418ff3001bbbbbbbbbbbbbb', ''),
+    textLine(messageA, 'prt_1a2418ff4001cccccccccccccc', 'It ran.'),
+    stepFinishA,
+    stepStartB,
+    textLine(messageB, `prt_${messageB.replace(/^msg_/, '')}_text-0`, textB.part.text),
+    stepFinishB,
+  ];
+
+  const turn = await runTurn({ appSessionId: 'app-v2-text-ids', scenario: { lines } });
+  assert.equal(turn.error, null);
+  const liveTexts = turn.frames.filter((frame) => frame.kind === 'text').map((frame) => `${frame.id}|${frame.content}`);
+
+  // The same turn as OpenCode stored it: an empty text still takes its place.
+  const db = new Database(path.join(tempRoot, '.local', 'share', 'opencode', 'opencode.db'));
+  try {
+    db.prepare(`
+      INSERT INTO session_v2 (id, project_id, slug, directory, version, time_created, time_updated)
+      VALUES (?, 'prj', 'text-ids', ?, '2.2.3', 1, 3)
+    `).run(sessionId, projectDir);
+    const insertMessage = db.prepare(`
+      INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data)
+      VALUES (?, ?, 'assistant', ?, 1, 1, ?)
+    `);
+    insertMessage.run(messageA, sessionId, 1, JSON.stringify({
+      content: [
+        { type: 'text', text: 'Running the command.' },
+        { type: 'tool', id: toolUseA.part.id, name: 'shell', state: { status: 'completed', input: {}, content: [] } },
+        { type: 'text', text: '' },
+        { type: 'text', text: 'It ran.' },
+      ],
+      finish: 'tool-calls',
+    }));
+    insertMessage.run(messageB, sessionId, 2, JSON.stringify({ content: [{ type: 'text', text: textB.part.text }], finish: 'stop' }));
+  } finally {
+    db.close();
+  }
+  const history = await sessionsProvider.fetchHistory(sessionId);
+  const storedTexts = history.messages
+    .filter((message) => message.kind === 'text' && message.role === 'assistant')
+    .map((message) => `${message.id}|${message.content}`);
+
+  assert.deepEqual(liveTexts, storedTexts);
+  assert.deepEqual(liveTexts, [
+    `${messageA}_prt_${messageA.slice(4)}_text-0|Running the command.`,
+    `${messageA}_prt_${messageA.slice(4)}_text-2|It ran.`,
+    `${messageB}_prt_${messageB.slice(4)}_text-0|${textB.part.text}`,
+  ]);
+});
+
 test('the prompt reaches `run` exactly as typed, attachments included', async () => {
   setInstalledVersion('opencode v2.2.3');
   // As an argument, `run` would quote it for the model, and read a leading dash as a flag.

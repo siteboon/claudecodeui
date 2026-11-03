@@ -1128,6 +1128,22 @@ export function readOpenCodeLiveSessionTable(db: Database.Database, sessionId: s
   return v1UpdatedAt !== null && (v2UpdatedAt === null || v1UpdatedAt > v2UpdatedAt) ? 'session' : 'session_v2';
 }
 
+/**
+ * The id OpenCode 2.x gives a part of a stored assistant message, built from
+ * the message id and a suffix: `text-<n>` and `reasoning-<n>` (numbered per
+ * message and kind, in order), `step-finish`. `opencode run` prints this id
+ * for the parts it reads back from storage; the parts it streams carry fresh
+ * ids instead.
+ *
+ * Used by the OpenCode sessions provider, which ids the history rows of a
+ * 2.x session with it, and the OpenCode runtime, which gives a 2.x turn's
+ * live text the same id, so the chat replaces the live row with the stored
+ * one instead of showing both.
+ */
+export function toOpenCodeV2PartId(messageId: string, suffix: string): string {
+  return `prt_${messageId.replace(/^msg_/, '')}_${suffix}`;
+}
+
 // ---------------------------
 //----------------- JSONC UTILITIES ------------
 /**
