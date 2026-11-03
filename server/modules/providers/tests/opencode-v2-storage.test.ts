@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readdir, readlink, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readlink, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test, { mock } from 'node:test';
@@ -7,12 +7,17 @@ import test, { mock } from 'node:test';
 import Database from 'better-sqlite3';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { OpenCodeProviderAuth } from '@/modules/providers/list/opencode/opencode-auth.provider.js';
 import { OpenCodeProviderModels } from '@/modules/providers/list/opencode/opencode-models.provider.js';
 import { OpenCodeSessionSynchronizer } from '@/modules/providers/list/opencode/opencode-session-synchronizer.provider.js';
 import { OpenCodeSessionsProvider } from '@/modules/providers/list/opencode/opencode-sessions.provider.js';
 import { createProviderTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { subagentTurn, toolTurn } from '@/modules/providers/tests/fixtures/opencode-v2-run-lines.js';
-import { OPENCODE_2_SCHEMA, OPENCODE_UPGRADED_SCHEMA } from '@/modules/providers/tests/fixtures/opencode-v2-schema.js';
+import {
+  OPENCODE_2_SCHEMA,
+  OPENCODE_CREDENTIAL_SCHEMA,
+  OPENCODE_UPGRADED_SCHEMA,
+} from '@/modules/providers/tests/fixtures/opencode-v2-schema.js';
 import { appendFilesInputTag } from '@/shared/image-attachments.js';
 
 /**
@@ -550,6 +555,45 @@ test('a database the history reader cannot read gives an empty page and a warnin
       warn.mock.restore();
     }
     assert.equal(await openHandles(), handlesBefore);
+  });
+});
+
+test('logins OpenCode 2.x keeps in opencode.db count for the model picker and the login status', { concurrency: false }, async () => {
+  await withOpenCodeHome(OPENCODE_2_SCHEMA + OPENCODE_CREDENTIAL_SCHEMA, async ({ db, homeDir }) => {
+    const listed = ['anthropic/claude-x', 'openai/gpt-y', 'google/gemini-z'];
+    const pickerModels = async () => (await new OpenCodeProviderModels(async () => listed).getSupportedModels())
+      .OPTIONS.map((option) => option.value);
+    const authPath = path.join(homeDir, '.local', 'share', 'opencode', 'auth.json');
+    // No `opencode` to ask for its version: only the credentials are under test.
+    const savedPath = process.env.PATH;
+    const loginStatus = async () => {
+      process.env.PATH = path.join(homeDir, 'no-bin');
+      try {
+        const { authenticated, email, method } = await new OpenCodeProviderAuth().getStatus();
+        return { authenticated, email, method };
+      } finally {
+        process.env.PATH = savedPath;
+      }
+    };
+
+    // auth.json names one provider, and the empty credential table a 1.x install has changes nothing.
+    await writeFile(authPath, JSON.stringify({ openai: { type: 'api', key: 'sk-fake' } }));
+    assert.deepEqual(await pickerModels(), ['openai/gpt-y']);
+
+    // A 2.x login is kept in the database; a row without an integration is no login for 2.x.
+    const insertCredential = db.prepare(`
+      INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES (?, ?, 'API key', ?, 1, 1)
+    `);
+    insertCredential.run('cred_anthropic', 'anthropic', JSON.stringify({ type: 'key', key: 'sk-fake-anthropic' }));
+    insertCredential.run('cred_stray', null, JSON.stringify({ type: 'key', key: 'sk-fake-stray' }));
+    assert.deepEqual(await pickerModels(), ['anthropic/claude-x', 'openai/gpt-y']);
+    assert.deepEqual(await loginStatus(), { authenticated: true, email: 'openai credentials', method: 'credentials_file' });
+
+    // A fresh 2.x install has no auth.json, and a broken one does not hide the database login.
+    await rm(authPath);
+    assert.deepEqual(await loginStatus(), { authenticated: true, email: 'anthropic credentials', method: 'credentials_db' });
+    await writeFile(authPath, '{ not json');
+    assert.deepEqual(await loginStatus(), { authenticated: true, email: 'anthropic credentials', method: 'credentials_db' });
   });
 });
 

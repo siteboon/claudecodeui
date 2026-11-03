@@ -16,6 +16,7 @@ import {
   getOpenCodeDatabasePath,
   readObjectRecord,
   readOpenCodeCliMajorVersion,
+  readOpenCodeCredentialProviderIds,
   readOpenCodeLiveSessionTable,
   readOptionalString,
 } from '@/shared/utils.js';
@@ -419,7 +420,8 @@ const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, un
  *
  * Custom config passed through `OPENCODE_CONFIG` (a file path) or
  * `OPENCODE_CONFIG_CONTENT` (inline JSON) is read too, so providers declared
- * there are not filtered out of the CLI listing.
+ * there are not filtered out of the CLI listing, and so are the logins
+ * OpenCode 2.x keeps in its database instead of `auth.json`.
  *
  * Returns null when nothing can be read. Providers declared only in a
  * project-level `opencode.json` are not visible here, so callers retain the
@@ -436,6 +438,9 @@ const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> =
     if (readObjectRecord(credential)) {
       providerIds.add(providerId);
     }
+  }
+  for (const providerId of readOpenCodeCredentialProviderIds()) {
+    providerIds.add(providerId);
   }
 
   const configs: Array<Record<string, unknown> | null> = [];

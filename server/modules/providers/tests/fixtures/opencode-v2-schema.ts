@@ -4,6 +4,8 @@
  * - OPENCODE_2_SCHEMA: a database OpenCode 2.2.3 created.
  * - OPENCODE_UPGRADED_SCHEMA: an OpenCode 1.18.25 database after 2.2.3 migrated
  *   it, which keeps the 1.x `session`, `message` and `part` tables.
+ * - OPENCODE_CREDENTIAL_SCHEMA: the `credential` table where 2.2.3 keeps logins;
+ *   1.18.25 creates the same table and leaves it empty.
  * Used by the OpenCode 2.x storage tests.
  */
 export const OPENCODE_2_SCHEMA = `
@@ -234,4 +236,18 @@ CREATE TABLE \`session_part\` (
           CONSTRAINT \`fk_session_part_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
         );
 CREATE INDEX \`session_part_session_message_idx\` ON \`session_part\` (\`session_id\`,\`message_id\`,\`ordinal\`);
+`;
+
+export const OPENCODE_CREDENTIAL_SCHEMA = `
+CREATE TABLE \`credential\` (
+          \`id\` text PRIMARY KEY,
+          \`integration_id\` text,
+          \`label\` text NOT NULL,
+          \`value\` text NOT NULL,
+          \`connector_id\` text,
+          \`method_id\` text,
+          \`active\` integer,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
 `;
