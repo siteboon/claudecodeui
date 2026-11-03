@@ -1572,17 +1572,25 @@ const OPENCODE_CLI_VERSION_TTL_MS = 5 * 60_000;
 /** An OpenCode that could not be asked (failing, too slow) is asked again sooner. */
 const OPENCODE_CLI_VERSION_RETRY_MS = 30_000;
 /**
- * How long `opencode --version` may take. It runs at most once per TTL, and
- * the first run of a just installed or upgraded binary (252 MB for 2.2.3) can
- * take seconds, more while a virus scanner reads it.
+ * How long `opencode --version` may take for an executable file that has not
+ * answered yet. The first run of a just installed or upgraded binary (252 MB
+ * for 2.2.3) can take seconds, more while a virus scanner reads it.
  */
 const OPENCODE_CLI_VERSION_TIMEOUT_MS = 20_000;
+/**
+ * How long a file that has answered gets when it is asked again. Its answer
+ * stands when it runs out of time, so a hanging `--version` holds a turn up
+ * no longer than before 2.x support.
+ */
+const OPENCODE_CLI_VERSION_RECHECK_TIMEOUT_MS = 5_000;
 
 type OpenCodeCliVersionEntry = {
   /** Identifies the executable file the answer came from (see `findOpenCodeExecutable`). */
   fingerprint: string;
   expiresAt: number;
   major: Promise<number | null>;
+  /** The major this file printed last, null until it has; kept while it is asked again. */
+  answeredMajor: number | null;
 };
 
 const openCodeCliMajorVersions = new Map<string, OpenCodeCliVersionEntry>();
@@ -1620,7 +1628,10 @@ function findOpenCodeExecutable(): { filePath: string; fingerprint: string } | n
 }
 
 /** The major version `opencode --version` prints, null when it did not say, and whether it ran out of time. */
-function probeOpenCodeMajorVersion(filePath: string): Promise<{ major: number | null; timedOut: boolean }> {
+function probeOpenCodeMajorVersion(
+  filePath: string,
+  timeoutMs: number,
+): Promise<{ major: number | null; timedOut: boolean }> {
   return new Promise((resolve) => {
     let output = '';
     let settled = false;
@@ -1637,7 +1648,7 @@ function probeOpenCodeMajorVersion(filePath: string): Promise<{ major: number | 
     timer = setTimeout(() => {
       child.kill();
       finish(null, true);
-    }, OPENCODE_CLI_VERSION_TIMEOUT_MS);
+    }, timeoutMs);
     child.stdout?.on('data', (chunk: Buffer) => {
       output += chunk.toString();
     });
@@ -1651,6 +1662,24 @@ function probeOpenCodeMajorVersion(filePath: string): Promise<{ major: number | 
 }
 
 /**
+ * Asks a file for its major version: within the short budget when it has
+ * answered before (`answeredMajor`), otherwise within the long one, and then
+ * once more when that runs out, since the slow first run of a new binary has
+ * read it in by then. Never more than twice.
+ */
+async function askOpenCodeMajorVersion(
+  filePath: string,
+  answeredMajor: number | null,
+): Promise<{ major: number | null; timedOut: boolean }> {
+  if (answeredMajor !== null) {
+    return probeOpenCodeMajorVersion(filePath, OPENCODE_CLI_VERSION_RECHECK_TIMEOUT_MS);
+  }
+
+  const first = await probeOpenCodeMajorVersion(filePath, OPENCODE_CLI_VERSION_TIMEOUT_MS);
+  return first.timedOut ? probeOpenCodeMajorVersion(filePath, OPENCODE_CLI_VERSION_TIMEOUT_MS) : first;
+}
+
+/**
  * Major version of the `opencode` CLI on PATH, or null when there is none or
  * it did not answer `--version`; callers then keep their OpenCode 1.x
  * behaviour.
@@ -1658,14 +1687,16 @@ function probeOpenCodeMajorVersion(filePath: string): Promise<{ major: number | 
  * OpenCode 2.x changed its CLI flags, its server API and its storage, so the
  * OpenCode provider picks its code path by this. The answer is cached per
  * executable for a few minutes and asked again as soon as the file changes,
- * which an upgrade does; a failed answer is retried sooner. An executable that
- * answered before and now runs out of time keeps its last answer until that
- * retry: read as unknown, a 2.x install would run its turns through the SDK,
- * which cannot drive it. Concurrent callers share one `--version` run, which
- * never starts OpenCode 2.x's background service.
+ * which an upgrade does; a failed answer is retried sooner. A file asked
+ * again after it answered gets 5 s and keeps its last answer when it runs out
+ * of time, until that retry. A file that has not answered, a replaced one
+ * included, gets 20 s and a second try: read as unknown, a 2.x install would
+ * run its turns through the SDK, which cannot drive it. Concurrent callers
+ * share one read; `--version` never starts OpenCode 2.x's background service.
  *
  * Used by the OpenCode runtime (a 2.x chat turn runs through `opencode run`)
- * and the OpenCode models provider (2.x lists models with `--standalone`).
+ * and the OpenCode models provider (2.x lists models with `--standalone`, and
+ * its logins count only for a 2.x CLI).
  */
 export function readOpenCodeCliMajorVersion(): Promise<number | null> {
   const executable = findOpenCodeExecutable();
@@ -1674,22 +1705,29 @@ export function readOpenCodeCliMajorVersion(): Promise<number | null> {
   }
 
   const previous = openCodeCliMajorVersions.get(executable.filePath);
-  if (previous && previous.fingerprint === executable.fingerprint && previous.expiresAt > Date.now()) {
+  const isSameFile = previous !== undefined && previous.fingerprint === executable.fingerprint;
+  if (previous && isSameFile && previous.expiresAt > Date.now()) {
     return previous.major;
   }
 
+  // Only this very file's earlier answer counts: a replaced file is asked as a new one.
+  const answeredMajor = previous && isSameFile ? previous.answeredMajor : null;
   const entry: OpenCodeCliVersionEntry = {
     fingerprint: executable.fingerprint,
     expiresAt: Date.now() + OPENCODE_CLI_VERSION_TTL_MS,
     major: Promise.resolve(null),
+    answeredMajor,
   };
-  entry.major = probeOpenCodeMajorVersion(executable.filePath).then(({ major, timedOut }) => {
+  entry.major = askOpenCodeMajorVersion(executable.filePath, answeredMajor).then(({ major, timedOut }) => {
     if (major !== null) {
+      entry.answeredMajor = major;
       return major;
     }
 
     entry.expiresAt = Math.min(entry.expiresAt, Date.now() + OPENCODE_CLI_VERSION_RETRY_MS);
-    return timedOut && previous ? previous.major : null;
+    // Out of time, a known file keeps its answer; an answer that is an error keeps none.
+    entry.answeredMajor = timedOut ? answeredMajor : null;
+    return entry.answeredMajor;
   });
   openCodeCliMajorVersions.set(executable.filePath, entry);
   return entry.major;

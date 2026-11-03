@@ -108,16 +108,27 @@ test('the major version of the OpenCode CLI on PATH is read once per executable 
   }
 });
 
+/** One turn of the event loop; setImmediate is never mocked here. */
+const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/** `'pending'` while `promise` has not settled after one turn of the event loop, else its value. */
+const settledValue = async <T>(promise: Promise<T>): Promise<T | 'pending'> =>
+  Promise.race([promise, yieldToEventLoop().then(() => 'pending' as const)]);
+
 /**
  * A fake `opencode` alone on PATH: `--version` prints FAKE_OPENCODE_VERSION_OUTPUT,
- * exits with FAKE_OPENCODE_VERSION_EXIT and logs each run. Each test gets its own
+ * exits with FAKE_OPENCODE_VERSION_EXIT and logs each run; with
+ * FAKE_OPENCODE_VERSION_HANG it never answers. Each test gets its own
  * executable, so the version cache never answers for another test's file.
  */
 async function withFakeOpenCode(runTest: (fake: {
   executable: string;
   answer: (output: string, exitCode?: number) => void;
+  hang: (hanging: boolean) => void;
   touch: () => void;
   probes: () => Promise<number>;
+  /** Waits (real time) until `count` runs have started, then a little longer, and returns how many did. */
+  waitForProbes: (count: number) => Promise<number>;
 }) => Promise<void>) {
   const binDir = await mkdtemp(path.join(os.tmpdir(), 'opencode-cli-version-'));
   const executable = path.join(binDir, 'opencode');
@@ -125,12 +136,15 @@ async function withFakeOpenCode(runTest: (fake: {
   await writeFile(executable, [
     '#!/bin/sh',
     `echo "$1" >> "${probeLog}"`,
+    // PATH holds this folder only, so `sleep` is named by its path.
+    `[ -n "$FAKE_OPENCODE_VERSION_HANG" ] && exec ${fs.existsSync('/bin/sleep') ? '/bin/sleep' : '/usr/bin/sleep'} 30`,
     'printf "%s\\n" "$FAKE_OPENCODE_VERSION_OUTPUT"',
     'exit "${FAKE_OPENCODE_VERSION_EXIT:-0}"',
     '',
   ].join('\n'));
   await chmod(executable, 0o755);
   let stamp = Date.now();
+  const probes = async () => (await readFile(probeLog, 'utf8').catch(() => '')).split('\n').filter(Boolean).length;
   const savedPath = process.env.PATH;
   process.env.PATH = binDir;
   try {
@@ -140,52 +154,135 @@ async function withFakeOpenCode(runTest: (fake: {
         process.env.FAKE_OPENCODE_VERSION_OUTPUT = output;
         process.env.FAKE_OPENCODE_VERSION_EXIT = String(exitCode);
       },
+      hang: (hanging) => {
+        if (hanging) {
+          process.env.FAKE_OPENCODE_VERSION_HANG = '1';
+        } else {
+          delete process.env.FAKE_OPENCODE_VERSION_HANG;
+        }
+      },
       // An upgrade replaces the file.
       touch: () => {
         stamp += 10_000;
         fs.utimesSync(executable, new Date(stamp), new Date(stamp));
       },
-      probes: async () => (await readFile(probeLog, 'utf8').catch(() => '')).split('\n').filter(Boolean).length,
+      probes,
+      waitForProbes: async (count) => {
+        // setTimeout and Date may be mocked: yield with setImmediate, measure with performance.now.
+        const startedAt = performance.now();
+        while ((await probes()) < count && performance.now() - startedAt < 5_000) {
+          await yieldToEventLoop();
+        }
+        const settledAt = performance.now();
+        while (performance.now() - settledAt < 200) {
+          await yieldToEventLoop();
+        }
+        return probes();
+      },
     });
   } finally {
     mock.timers.reset();
     process.env.PATH = savedPath;
     delete process.env.FAKE_OPENCODE_VERSION_OUTPUT;
     delete process.env.FAKE_OPENCODE_VERSION_EXIT;
+    delete process.env.FAKE_OPENCODE_VERSION_HANG;
     await rm(binDir, { recursive: true, force: true });
   }
 }
 
-test('`opencode --version` gets 20 s, and an executable that answered before keeps its answer while it times out', { skip: process.platform === 'win32' }, async () => {
+test('a file that has not answered gets 20 s for `opencode --version`, and one more try when that runs out', { skip: process.platform === 'win32' }, async () => {
   await withFakeOpenCode(async (fake) => {
-    // The clock runs ahead of the answer: 6 s pass before it arrives.
     mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
     fake.answer('opencode v2.2.3');
-    const slow = readOpenCodeCliMajorVersion();
-    mock.timers.tick(6_000);
-    assert.equal(await slow, 2);
+    fake.hang(true);
+    const first = readOpenCodeCliMajorVersion();
+    // Started, and hanging.
+    assert.equal(await fake.waitForProbes(1), 1);
+    mock.timers.tick(19_999);
+    assert.equal(await settledValue(first), 'pending');
+    // Out of time once: asked again, and this time it answers.
+    mock.timers.tick(1);
+    fake.hang(false);
+    assert.equal(await first, 2);
+    assert.equal(await fake.probes(), 2);
+  });
 
-    // Replaced (an upgrade), and the new file gives no answer within 20 s:
-    // still 2.x rather than the SDK path, and asked again after 30 s.
-    fake.touch();
+  // Out of time twice: unknown after two tries, not three, and asked again after 30 s.
+  await withFakeOpenCode(async (fake) => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
+    fake.answer('opencode v2.2.3');
+    fake.hang(true);
     const stuck = readOpenCodeCliMajorVersion();
+    assert.equal(await fake.waitForProbes(1), 1);
     mock.timers.tick(20_000);
-    assert.equal(await stuck, 2);
-    // It would answer now, but is not asked before the retry.
+    assert.equal(await fake.waitForProbes(2), 2);
+    mock.timers.tick(20_000);
+    assert.equal(await stuck, null);
+    assert.equal(await fake.waitForProbes(3), 2);
+    fake.hang(false);
+    mock.timers.tick(29_000);
+    assert.equal(await readOpenCodeCliMajorVersion(), null);
+    mock.timers.tick(2_000);
+    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+    assert.equal(await fake.probes(), 3);
+  });
+});
+
+test('a replaced `opencode` that runs out of time gets no answer from the file it replaced', { skip: process.platform === 'win32' }, async () => {
+  await withFakeOpenCode(async (fake) => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
     fake.answer('1.18.25');
+    assert.equal(await readOpenCodeCliMajorVersion(), 1);
+
+    // Upgraded to 2.x, whose first `--version` runs out of time: asked again, never answered with 1.
+    fake.touch();
+    fake.answer('opencode v2.2.3');
+    fake.hang(true);
+    const upgraded = readOpenCodeCliMajorVersion();
+    assert.equal(await fake.waitForProbes(2), 2);
+    mock.timers.tick(20_000);
+    fake.hang(false);
+    assert.equal(await upgraded, 2);
+
+    // Downgraded to a 1.x that never answers in time: unknown, not 2.
+    fake.touch();
+    fake.answer('1.18.25');
+    fake.hang(true);
+    const downgraded = readOpenCodeCliMajorVersion();
+    assert.equal(await fake.waitForProbes(4), 4);
+    mock.timers.tick(20_000);
+    assert.equal(await fake.waitForProbes(5), 5);
+    mock.timers.tick(20_000);
+    assert.equal(await downgraded, null);
+  });
+});
+
+test('a file that answered is asked again within 5 s, and its answer stands when that runs out', { skip: process.platform === 'win32' }, async () => {
+  await withFakeOpenCode(async (fake) => {
+    mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
+    fake.answer('opencode v2.2.3');
+    assert.equal(await readOpenCodeCliMajorVersion(), 2);
+
+    // Once the answer is old, the same file is asked again, and hangs: 5 s, then the answer stands.
+    mock.timers.tick(5 * 60_000);
+    fake.hang(true);
+    const again = readOpenCodeCliMajorVersion();
+    assert.equal(await fake.waitForProbes(2), 2);
+    mock.timers.tick(4_999);
+    assert.equal(await settledValue(again), 'pending');
+    mock.timers.tick(1);
+    assert.equal(await again, 2);
+    // A known file gets no second try.
+    assert.equal(await fake.waitForProbes(3), 2);
+
+    // Not asked before the retry; then asked within 5 s again, and an error answer keeps no older one.
+    fake.hang(false);
+    fake.answer('opencode v2.2.3', 1);
     mock.timers.tick(29_000);
     assert.equal(await readOpenCodeCliMajorVersion(), 2);
     mock.timers.tick(2_000);
-    assert.equal(await readOpenCodeCliMajorVersion(), 1);
-  });
-
-  // A file that never answered has no answer to keep.
-  await withFakeOpenCode(async (fake) => {
-    mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() });
-    fake.answer('opencode v2.2.3');
-    const stuck = readOpenCodeCliMajorVersion();
-    mock.timers.tick(20_000);
-    assert.equal(await stuck, null);
+    assert.equal(await readOpenCodeCliMajorVersion(), null);
+    assert.equal(await fake.probes(), 3);
   });
 });
 
