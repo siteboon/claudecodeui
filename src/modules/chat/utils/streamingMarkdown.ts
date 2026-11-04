@@ -12,10 +12,15 @@
  * Correctness rests on markdown blocks being independent across a blank line:
  * rendering `settled` and `pending` as two documents must equal rendering their
  * concatenation. That does NOT hold inside a fenced code block, a display-math
- * block, a list, a blockquote, a table, an indented code block, or across a
- * link-reference/footnote definition and its usage — the boundary search skips
- * all of them.
+ * block in either `$$` or `\[ … \]` form, a list, a blockquote, a table, an
+ * indented code block, or across a link-reference/footnote definition and its
+ * usage — the boundary search skips all of them.
  */
+
+import {
+  LATEX_DISPLAY_CLOSE_PATTERN,
+  LATEX_DISPLAY_OPEN_PATTERN,
+} from '@/modules/chat/utils/latexDelimiters';
 
 /** An opening or closing code fence, per CommonMark: up to 3 spaces of indent. */
 const FENCE_PATTERN = /^ {0,3}(`{3,}|~{3,})/;
@@ -66,6 +71,7 @@ export function splitStreamingMarkdown(content: string): StreamingMarkdownSplit 
   const lines = content.split('\n');
   let openFence: OpenFence | null = null;
   let insideMath = false;
+  let insideLatexDisplay = false;
   let boundaryLine = -1;
 
   // Offset of each line's first character, so the split is an exact slice.
@@ -90,12 +96,25 @@ export function splitStreamingMarkdown(content: string): StreamingMarkdownSplit 
       continue;
     }
 
-    if (!openFence && MATH_DELIMITER_PATTERN.test(line)) {
+    if (!openFence && !insideLatexDisplay && MATH_DELIMITER_PATTERN.test(line)) {
       // A self-contained `$$x$$` line opens and closes in one go; toggling on it
       // would leave the tracker stuck open and suppress every later boundary.
       if (countMathDelimiters(line) % 2 === 1) {
         insideMath = !insideMath;
       }
+      continue;
+    }
+
+    // `\[ … \]` becomes a `$$` fence in normalizeLatexDelimiters, so the split
+    // must treat it as one block here too. A one-line `\[x\]` closes itself.
+    if (insideLatexDisplay) {
+      if (LATEX_DISPLAY_CLOSE_PATTERN.test(line)) {
+        insideLatexDisplay = false;
+      }
+      continue;
+    }
+    if (!openFence && !insideMath && LATEX_DISPLAY_OPEN_PATTERN.test(line)) {
+      insideLatexDisplay = !LATEX_DISPLAY_CLOSE_PATTERN.test(line);
       continue;
     }
 

@@ -111,17 +111,20 @@ export const scheduledMessagesDb = {
 
   /**
    * Cancels a pending message, or dismisses a failed one so its banner goes
-   * away. Returns false when it had already fired successfully.
+   * away. Returns the session it belonged to, so that session's banner can be
+   * refreshed everywhere it is open, or null when it had already fired
+   * successfully (or is not this user's).
    */
-  cancel(userId: number, id: string): boolean {
-    const result = getConnection()
+  cancel(userId: number, id: string): string | null {
+    const row = getConnection()
       .prepare(
         `UPDATE scheduled_messages
          SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND user_id = ? AND status IN ('pending', 'failed')`
+         WHERE id = ? AND user_id = ? AND status IN ('pending', 'failed')
+         RETURNING session_id`
       )
-      .run(id, userId);
+      .get(id, userId) as { session_id: string } | undefined;
 
-    return result.changes > 0;
+    return row?.session_id ?? null;
   },
 };

@@ -180,7 +180,8 @@ carries `AbortSignal.timeout(SESSION_HISTORY_REQUEST_TIMEOUT_MS)`.
 **Which frames reach `appendRealtime`.** `useChatRealtimeHandlers` dispatches in three stages,
 and only the last one appends. Stage one handles and returns on the control frames
 (`websocket_reconnected`, `history_truncated`, `chat_subscribed`, `session_upserted`,
-`loading_progress`) and on `protocol_error`, which appends a synthetic `error` row of its own.
+`loading_progress`, `scheduled_messages_changed`) and on `protocol_error`, which appends a
+synthetic `error` row of its own.
 Stage two handles and returns on `stream_delta` and `stream_end`; `stream_delta` also appends
 the raw frame, but *only* for a session that is not the one being viewed, so switching to it
 later shows the partial reply. Stage three appends everything left except `complete`, `status`,
@@ -402,10 +403,10 @@ stateDiagram-v2
     [*] --> Placeholder: first commit, row older than the newest 30
     [*] --> Mounted: first commit, row inside the newest 30
     Placeholder: no children, fixed 100px estimate, timestamp still addressable
-    MeasuredPlaceholder: no children, fixed height equal to the last measured offsetHeight
+    MeasuredPlaceholder: no children, fixed height equal to the last measured height
     Mounted: real markdown or tool subtree, no inline height
     Placeholder --> Mounted: entered the band around the viewport
-    Mounted --> MeasuredPlaceholder: left the band, offsetHeight recorded first
+    Mounted --> MeasuredPlaceholder: left the band, height recorded first
     MeasuredPlaceholder --> Mounted: entered the band again
     note right of Mounted
       A hidden tab reports a zero sized rect for every row.
@@ -417,10 +418,14 @@ stateDiagram-v2
 Three details make this safe rather than jumpy:
 
 - **Measure on the way out, not the way in.** `handleNearViewportChange` reads
-  `elementRef.current.offsetHeight` while the content is still in the DOM, then flips to the
-  placeholder. The placeholder occupies exactly the space the content did, so scrolling back
-  through seen content changes no scroll geometry at all. A measurement of 0 is discarded, so
-  a row that unmounts while it has no box keeps whatever height it had before.
+  `elementRef.current.getBoundingClientRect().height` while the content is still in the DOM,
+  then flips to the placeholder. The placeholder occupies exactly the space the content did,
+  so scrolling back through seen content changes no scroll geometry at all. A `0×0` box is
+  discarded, so a row that unmounts while it has no box keeps whatever height it had before.
+  A rendered row that is 0px tall (a thinking row with Show thinking off) records 0, and
+  fractional heights are kept rather than rounded. A placeholder taller than its content
+  would put a row just above the band back inside it, and the row would remount and unmount
+  on every frame wherever no scroll anchoring absorbs the change (Safari, #1357).
 - **The tail starts mounted.** `initiallyNearViewport` is
   `index >= rowCount - INITIAL_MOUNTED_TAIL_ROWS`, so the initial scroll-to-bottom measures
   real heights instead of estimates.
@@ -433,11 +438,12 @@ Three details make this safe rather than jumpy:
 `LazyMessageRow` treats `lazyRows === null` as "always mounted" — the pre-existing behaviour,
 so component tests are unaffected.
 
-`src/modules/chat/tests/lazyMessageRow.test.tsx` covers exactly these four behaviours:
+`src/modules/chat/tests/lazyMessageRow.test.tsx` covers these behaviours:
 *"starts far rows as an addressable placeholder instead of mounting content"*, *"unmounts to a
 placeholder of the measured height and remounts when near again"*, *"ignores the zero-rect
 non-intersections a hidden tab reports"*, and *"keeps every row mounted where
-IntersectionObserver does not exist"*.
+IntersectionObserver does not exist"*. Three more cover the band edge: an empty row leaves
+as a 0px placeholder, and neither an empty row nor a fractional-height row flickers there.
 
 This layers on top of CSS containment, not instead of it: `.chat-message` in `src/index.css`
 carries `contain: layout style paint` and `content-visibility: auto` with

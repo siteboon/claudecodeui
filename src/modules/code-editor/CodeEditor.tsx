@@ -1,7 +1,7 @@
 import { EditorView } from '@codemirror/view';
 import { unifiedMergeView } from '@codemirror/merge';
 import type { Extension } from '@codemirror/state';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { usePaletteOps } from '@/modules/command-palette';
@@ -23,6 +23,9 @@ import CodeEditorMediaPreview from '@/modules/code-editor/CodeEditorMediaPreview
 type CodeEditorProps = {
   file: CodeEditorFile;
   onClose: () => void;
+  // Reports whether the buffer differs from the file on disk, so the owner can
+  // guard replacing this editor with another file the same way closing is.
+  onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
   projectPath?: string;
   isSidebar?: boolean;
   isExpanded?: boolean;
@@ -34,6 +37,7 @@ type CodeEditorProps = {
 export default function CodeEditor({
   file,
   onClose,
+  onUnsavedChangesChange,
   projectPath,
   isSidebar = false,
   isExpanded = false,
@@ -66,12 +70,44 @@ export default function CodeEditor({
     isBinary,
     previewKind,
     fileProjectId,
+    hasUnsavedChanges,
     handleSave,
     handleDownload,
   } = useCodeEditorDocument({
     file,
     projectPath,
   });
+
+  // Every way of closing (Escape, the header X, the binary and media views)
+  // goes through here: a dirty buffer asks first, a clean one closes at once.
+  const requestClose = useCallback(() => {
+    if (
+      hasUnsavedChanges
+      && !window.confirm(t('unsavedChanges.confirmClose', 'You have unsaved changes. Close this file and discard them?'))
+    ) {
+      return;
+    }
+    onClose();
+  }, [hasUnsavedChanges, onClose, t]);
+
+  // Cleared on unmount so a closed editor can never block the next open.
+  useEffect(() => {
+    onUnsavedChangesChange?.(hasUnsavedChanges);
+    return () => onUnsavedChangesChange?.(false);
+  }, [hasUnsavedChanges, onUnsavedChangesChange]);
+
+  // The browser only shows its leave-page prompt while a listener is attached,
+  // so one is registered for exactly as long as there is something to lose.
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Legacy trigger for browsers that ignore preventDefault() here (Chrome/Edge < 119).
+      event.returnValue = true;
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // Keyed on the file object rather than on the line number: `useEditorSidebar`
   // builds a new one per open, so clicking the same `path:line` reference again
@@ -187,7 +223,7 @@ export default function CodeEditor({
 
   useEditorKeyboardShortcuts({
     onSave: handleSave,
-    onClose,
+    onClose: requestClose,
     dependency: content,
   });
 
@@ -211,7 +247,7 @@ export default function CodeEditor({
         projectId={fileProjectId}
         isSidebar={isSidebar}
         isFullscreen={isFullscreen}
-        onClose={onClose}
+        onClose={requestClose}
         onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
         labels={{
           loading: t('filePreview.loading', 'Loading preview...'),
@@ -232,7 +268,7 @@ export default function CodeEditor({
         file={file}
         isSidebar={isSidebar}
         isFullscreen={isFullscreen}
-        onClose={onClose}
+        onClose={requestClose}
         onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
         title={t('binaryFile.title', 'Binary File')}
         message={t('binaryFile.message', 'The file "{{fileName}}" cannot be displayed in the text editor because it is a binary file.', { fileName: file.name })}
@@ -264,13 +300,14 @@ export default function CodeEditor({
             markdownPreview={markdownPreview}
             saving={saving}
             saveSuccess={saveSuccess}
+            hasUnsavedChanges={hasUnsavedChanges}
             onToggleMarkdownPreview={() => setMarkdownPreview((previous) => !previous)}
             onOpenHtmlPreview={openHtmlPreview}
             onOpenSettings={() => paletteOps.openSettings('appearance')}
             onDownload={handleDownload}
             onSave={handleSave}
             onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
-            onClose={onClose}
+            onClose={requestClose}
             labels={{
               showingChanges: t('header.showingChanges'),
               copyPath: t('actions.copyPath', 'Copy file path'),
@@ -286,6 +323,7 @@ export default function CodeEditor({
               fullscreen: t('actions.fullscreen'),
               exitFullscreen: t('actions.exitFullscreen'),
               close: t('actions.close'),
+              unsavedChanges: t('unsavedChanges.indicator', 'Unsaved changes'),
             }}
           />
 

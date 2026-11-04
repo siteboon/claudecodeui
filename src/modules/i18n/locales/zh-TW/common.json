@@ -33,7 +33,9 @@
     "failed": "失敗",
     "pending": "待處理",
     "completed": "已完成",
-    "inProgress": "進行中"
+    "inProgress": "進行中",
+    "reconnecting": "正在重新連線...",
+    "chatConnectionLost": "聊天連線已中斷，正在重新連線..."
   },
   "messages": {
     "savedSuccessfully": "儲存成功",
@@ -264,7 +266,8 @@
       "showSidebar": "顯示側邊欄",
       "settings": "設定",
       "updateAvailable": "有可用更新",
-      "closeSidebar": "關閉側邊欄"
+      "closeSidebar": "關閉側邊欄",
+      "resizeSidebar": "調整側邊欄寬度"
     }
   }
 }

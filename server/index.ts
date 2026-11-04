@@ -14,6 +14,7 @@ import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
     providerRuntimeService,
+    reapOrphanedOpenCodeServers,
 } from '@/modules/providers/index.js';
 import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
 
@@ -109,6 +110,10 @@ const agentRoutes = createAgentModule({
 });
 
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
+// A completed run stays subscribable while its session's background work
+// (agents, workflows, backgrounded commands) is still reporting through it.
+chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackgroundWork(sessionId));
+
 createWebSocketServer(server, {
     verifyClient: {
         isPlatform: IS_PLATFORM,
@@ -372,6 +377,18 @@ async function startServer() {
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
+
+            // OpenCode turn servers a killed CloudCLI process left behind keep
+            // running until stopped; this is the first chance to do so.
+            void reapOrphanedOpenCodeServers()
+                .then((count) => {
+                    if (count > 0) {
+                        console.log(`${terminalTextStyles.info('[INFO]')} Stopped ${count} OpenCode server(s) left running by an earlier CloudCLI process`);
+                    }
+                })
+                .catch((error) => {
+                    console.warn('[WARN] Could not check for leftover OpenCode servers:', getErrorMessage(error));
+                });
 
             // Start watching the projects folder for changes
             await initializeSessionsWatcher();

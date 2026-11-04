@@ -13,7 +13,7 @@ serves the app, and it decides what a connection is by looking at the pathname �
 no second server and no socket.io-style namespacing. Every path authenticates once, at the
 HTTP upgrade, before any handler runs. The path that matters is `/ws`, the chat socket: a
 browser tab opens exactly one, and every feature that needs live data subscribes to that
-one socket rather than opening its own. The protocol on it is deliberately small — five
+one socket rather than opening its own. The protocol on it is deliberately small — six
 inbound message types, every outbound frame tagged with a `kind` — so the client needs one
 switch statement and no provider-specific branching. The server trusts the client for the
 session id and the prompt text and nothing else: provider, project path and the
@@ -65,11 +65,12 @@ every open `/ws` socket in the process. A run's writer holds only the sockets wa
 | `server/modules/websocket/services/websocket-auth.service.ts` | `verifyWebSocketClient` — the upgrade-time gate for every path |
 | `server/modules/auth/auth.middleware.ts` | `authenticateWebSocket` — first DB user in platform mode, JWT verification in OSS mode |
 | `server/modules/websocket/services/websocket-state.service.ts` | `connectedClients`, the set of open `/ws` sockets, and `WS_OPEN_STATE` |
-| `server/modules/websocket/services/chat-websocket.service.ts` | The `/ws` protocol: the five inbound handlers, `protocol_error`, the attachment trust boundary, `runDetachedChatTurn` |
+| `server/modules/websocket/services/chat-websocket.service.ts` | The `/ws` protocol: the six inbound handlers, `protocol_error`, the attachment trust boundary, `runDetachedChatTurn` |
 | `server/modules/websocket/services/chat-run-registry.service.ts` | `chatRunRegistry` — one run per session, `seq` stamping, the replay buffer, the exactly-one-`complete` contract |
 | `server/modules/websocket/services/chat-session-writer.service.ts` | `ChatSessionWriter` — the object runtimes write into; swallows `session_created`, fans out to every attached socket |
 | `server/modules/websocket/services/session-upsert-broadcast.service.ts` | The only builder of `session_upserted`, and the batched broadcast helper |
 | `server/modules/projects/services/projects-with-sessions-fetch.service.ts` | `broadcastProgress` — the `loading_progress` frames |
+| `server/modules/scheduled-messages/services/scheduled-messages.service.ts` | `announceScheduledMessagesChanged` — the `scheduled_messages_changed` frames |
 | `server/modules/taskmaster/taskmaster.routes.ts` | `broadcastTaskMasterUpdate` — the `type`-keyed exception |
 | `server/modules/websocket/services/shell-websocket.service.ts` | The `/shell` protocol, the PTY registry, output buffering and reattachment |
 | `server/modules/websocket/services/plugin-websocket-proxy.service.ts` | `/plugin-ws/:name` passthrough to a plugin's own websocket |
@@ -162,34 +163,38 @@ render carrying only the later one. A listener that throws is caught individuall
 (`:63-67`) so it cannot take the others down with it.
 
 There are exactly three `useWebSocket()` call sites, and two of them immediately hand
-`subscribe` to the hook that does the real work:
+`subscribe` to the hooks that do the real work:
 
 | Call site | Handler | Frames it acts on | State it owns |
 | --- | --- | --- | --- |
 | `ChatInterface.tsx:72` | `useChatRealtimeHandlers` | every provider `kind`, `chat_subscribed`, `history_truncated`, `protocol_error`, `websocket_reconnected` | session store, processing state, pending permissions, token budget |
+| `ChatInterface.tsx` | `useScheduledMessages` | `scheduled_messages_changed` for the open session, `websocket_reconnected` | the composer's scheduled-message banner |
 | `ProjectWorkspaceRoute.tsx:32` | `useProjectsState` | `session_upserted`, `loading_progress`, `websocket_reconnected`, plus a sessionId-keyed "attention" marker for background sessions | project list, sidebar rows, session aliasing, selection |
 | `TaskMasterContext.tsx:102` | itself | `taskmaster-project-updated`, `taskmaster-tasks-updated` (`type`-keyed) | task board data |
 
-Ownership is deliberately disjoint: the chat handler returns early on `session_upserted` and
-`loading_progress` (`useChatRealtimeHandlers.ts:175-178`), and returns immediately on any
-frame with no `kind` at all (`:96-98`), which is how the Task Master frames pass it by.
+Ownership is deliberately disjoint: the chat handler returns early on `session_upserted`,
+`loading_progress` and `scheduled_messages_changed` (`useChatRealtimeHandlers.ts:175-178`),
+and returns immediately on any frame with no `kind` at all (`:96-98`), which is how the Task
+Master frames pass it by.
 
 ## The chat protocol going up
 
-**RULE: five `type` values, dispatched by one switch (`chat-websocket.service.ts:603-622`).
+**RULE: six `type` values, dispatched by one switch (`chat-websocket.service.ts:676-698`).
 Anything else is answered with `protocol_error` / `UNKNOWN_MESSAGE_TYPE`; anything that
 throws is answered with `INTERNAL_ERROR`.**
 
 | `type` | Payload | What the server does |
 | --- | --- | --- |
-| `chat.send` | `sessionId`, `content`, `options` | Resolves the session row, registers the run, dispatches to the provider runtime (`:146-158`) |
+| `chat.send` | `sessionId`, `content`, `options` | Resolves the session row, registers the run, dispatches to the provider runtime (`:146-158`). On a session whose previous turn left background work running, the new turn's CLI process supersedes the one that work runs under, so the work is stopped or finishes unheard; the composer asks the user before sending such a turn |
 | `chat.edit-send` | as above plus `anchorId` | Announces `history_truncated`, rewinds or resumes the provider transcript at the anchor, then dispatches (`:314-408`) |
 | `chat.abort` | `sessionId` | Aborts the runtime and emits the terminal `complete` on its behalf (`:415-438`) |
-| `chat.subscribe` | `sessions: [{ sessionId, lastSeq }]` | Acks with `chat_subscribed`, attaches this socket to a running run, replays what was missed (`:448-504`) |
+| `chat.stop-task` | `sessionId`, `taskId` | Stops one background task (agent, workflow or backgrounded command) through the provider runtime; the runtime reports the stop on the session's stream |
+| `chat.subscribe` | `sessions: [{ sessionId, lastSeq }]` | Acks with `chat_subscribed`, attaches this socket to a running run — or to a completed one whose session still has background work — and replays what was missed for running runs (`:448-504`) |
 | `chat.permission-response` | `requestId`, `allow`, `updatedInput?`, `message?`, `rememberEntry?` | Resolves one pending tool approval (`:511-522`) |
 
-All five are built in exactly two client files: the composer builds sends, aborts and
-permission answers (`useChatComposerState.ts:825-837`, `:1121-1124`, `:1149-1156`), and
+All six are built in exactly three client files: the composer builds sends, aborts and
+permission answers (`useChatComposerState.ts:825-837`, `:1121-1124`, `:1149-1156`),
+`chat.stop-task` is built by the background-tasks strip's ✕ (`BackgroundTasksStrip.tsx`), and
 `chat.subscribe` is built in `useChatSessionState.ts:668-674` and
 `ChatInterface.tsx:267-273`.
 
@@ -237,6 +242,8 @@ Every code that exists, with the line that emits it:
 | `ANCHOR_LOOKUP_FAILED` | `:351` | Reading the transcript threw |
 | `EDIT_REWIND_FAILED` | `:400` | The rewind itself failed; the run is ended too |
 | `NO_ACTIVE_RUN` | `:428` | `chat.abort` for a session with nothing running |
+| `TASK_ID_REQUIRED` | | `chat.stop-task` without a task id |
+| `NO_SUCH_TASK` | | `chat.stop-task` for a task the runtime is not tracking (already settled, or never this session's) |
 | `UNKNOWN_MESSAGE_TYPE` | `:620` | Unrecognised `type` |
 | `INTERNAL_ERROR` | `:626` | Anything thrown out of a handler |
 
@@ -259,7 +266,8 @@ in `server/shared/types.ts`.**
 `history_truncated`, `task_notification`.
 
 **`GatewayEventKind` (`:204-208`) — produced by the gateway, no provider involved:**
-`chat_subscribed`, `session_upserted`, `loading_progress`, `protocol_error`.
+`chat_subscribed`, `session_upserted`, `loading_progress`, `protocol_error`,
+`scheduled_messages_changed`.
 
 `ServerEventKind` (`:217`) is their union, and its doc comment claims every server-to-client
 frame carries a `kind` from it. That is true of everything the *chat gateway* sends and not
@@ -287,6 +295,7 @@ Two kinds in those unions never appear where you would look for them:
 | `protocol_error` | `chat-websocket.service.ts:127` | Error row, spinner cleared |
 | `session_upserted` | `session-upsert-broadcast.service.ts:81-105` | `useProjectsState` — sidebar rows and alias folding |
 | `loading_progress` | `projects-with-sessions-fetch.service.ts:164-175` | `useProjectsState` — project scan progress (`:720-736`) |
+| `scheduled_messages_changed` | `scheduled-messages.service.ts` (`announceScheduledMessagesChanged`), on schedule, cancel, claim and failure | `useScheduledMessages` — reads the open session's scheduled list again |
 
 ### The one exception
 
@@ -517,6 +526,7 @@ flowchart TD
     SET --> E1["loading_progress"]
     SET --> E2["session_upserted"]
     SET --> E3["taskmaster frames"]
+    SET --> E5["scheduled_messages_changed"]
   end
   subgraph PerRun["Per-run, this run's audience only"]
     W["ChatSessionWriter connections set"]
@@ -565,6 +575,14 @@ The parts worth knowing:
   close cannot detach the socket that replaced it*.
 - **Provider auth URLs are detected in the output stream** and forwarded as
   `type: 'auth_url'`, deduplicated per connection (`:459-475`).
+- **The app theme reaches the Claude CLI at launch.** `init` may carry
+  `colorScheme: 'light' | 'dark'`. The server then sets `COLORFGBG`, and in a light tab
+  it starts `claude` with `--settings <file>` (a file under `~/.cloudcli` holding the
+  light variant of the user's own dark theme) when that theme is a dark one. When the
+  CLI's colours follow the app theme, the server sends `type: 'claude_theme'` with the
+  scheme the CLI was launched in. It sends it again on reattach, so the Shell can offer
+  a restart after a theme toggle. Clients that send no `colorScheme` get the old launch
+  and no frame.
 
 The client is `useShellConnection.ts:127` via `getShellWebSocketUrl`
 (`src/modules/shell/utils/socket.ts:39-53`), which builds the URL the same way the chat one
