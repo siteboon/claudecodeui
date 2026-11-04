@@ -2,8 +2,11 @@ import { memo, useMemo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,DiffStats,Project,ToolGroupItem } from '@/shared/types';
+import { cn, toPlausibleTimestamp } from '@/shared/utils';
 import { getToolConfig } from '@/modules/chat/tools';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
+import HeaderWithTime from '@/modules/chat/transcript/HeaderWithTime';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
@@ -18,6 +21,8 @@ type ToolGroupContainerProps = {
   onGrantToolPermission?: (suggestion: ClaudePermissionSuggestion) => PermissionGrantResult | null | undefined;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  /** Stamps the collapsed row with the span from the run's first call to its last, and each expanded row with its own time. */
+  showTimestamps?: boolean;
   selectedProject?: Project | null;
   provider: LLMProvider | string;
 };
@@ -83,6 +88,7 @@ function ToolGroupContainer({
   onGrantToolPermission,
   showRawParameters,
   showThinking,
+  showTimestamps = false,
   selectedProject,
   provider,
 }: ToolGroupContainerProps) {
@@ -100,6 +106,12 @@ function ToolGroupContainer({
 
   const preview = group.preview;
   const groupDiffStats = useGroupDiffStats(group.toolName, group.messages, createDiff);
+  // The run's span, over the calls whose times the provider recorded: when
+  // it began, and when the agent last did something in it.
+  const { firstStampAt, lastStampAt } = useMemo(() => {
+    const recorded = group.messages.filter((message) => !message.timestampEstimated);
+    return { firstStampAt: recorded[0]?.timestamp, lastStampAt: recorded[recorded.length - 1]?.timestamp };
+  }, [group.messages]);
 
   // Keys only have to be unique among this group's own rows, so repeats of the
   // same key are disambiguated here by occurrence.
@@ -113,32 +125,53 @@ function ToolGroupContainer({
     });
   }, [group.messages, getMessageKey]);
 
+  // A run with no time worth showing keeps the header it has always had.
+  const hasHeaderTime = showTimestamps
+    && (toPlausibleTimestamp(firstStampAt) !== null || toPlausibleTimestamp(lastStampAt) !== null);
+
   return (
     <div className="chat-message tool px-3 sm:px-0" data-message-timestamp={group.timestamp || undefined}>
       <button
         type="button"
-        className={`group flex w-full items-center gap-2 border-l-2 ${borderClass} rounded-r-md bg-muted/25 px-3 py-2 text-left transition-colors hover:bg-muted/40 dark:bg-muted/10 dark:hover:bg-muted/20`}
+        className={cn(
+          `group flex w-full items-center gap-2 border-l-2 ${borderClass} rounded-r-md bg-muted/25 px-3 py-2 text-left transition-colors hover:bg-muted/40 dark:bg-muted/10 dark:hover:bg-muted/20`,
+          // With a span the header wraps: it sits at the right end when the
+          // preview fits beside it, and takes a line of its own under it when
+          // it would cut the preview short (see HeaderWithTime).
+          hasHeaderTime && 'flex-wrap gap-y-0.5',
+        )}
         onClick={() => setIsExpanded((current) => !current)}
         aria-expanded={isExpanded}
       >
-        <ChevronRight
-          className={`h-3.5 w-3.5 flex-shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-          aria-hidden
-        />
-        <span className={`${iconClass} flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-background/80 text-xs font-medium`}>
-          {icon}
-        </span>
-        <span className="min-w-0 flex-shrink-0 text-xs font-medium text-foreground">{label}</span>
-        <span className="flex-shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-          x{group.messages.length}
-        </span>
-        {preview && (
-          <>
-            <span className="text-[10px] text-muted-foreground/40">/</span>
-            <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{preview}</span>
-          </>
-        )}
-        {groupDiffStats && <DiffStatsBadge stats={groupDiffStats} className="ml-auto pl-2" />}
+        <HeaderWithTime
+          time={hasHeaderTime && (
+            <TranscriptTimestamp
+              value={firstStampAt}
+              endValue={lastStampAt}
+              className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground"
+            />
+          )}
+          className="gap-2"
+        >
+          <ChevronRight
+            className={`h-3.5 w-3.5 flex-shrink-0 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+            aria-hidden
+          />
+          <span className={`${iconClass} flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-background/80 text-xs font-medium`}>
+            {icon}
+          </span>
+          <span className="min-w-0 flex-shrink-0 text-xs font-medium text-foreground">{label}</span>
+          <span className="flex-shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            x{group.messages.length}
+          </span>
+          {preview && (
+            <>
+              <span className="text-[10px] text-muted-foreground/40">/</span>
+              <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{preview}</span>
+            </>
+          )}
+          {groupDiffStats && <DiffStatsBadge stats={groupDiffStats} className="ml-auto pl-2" />}
+        </HeaderWithTime>
       </button>
 
       {showChildren && (
@@ -154,6 +187,7 @@ function ToolGroupContainer({
               onGrantToolPermission={onGrantToolPermission}
               showRawParameters={showRawParameters}
               showThinking={showThinking}
+              showTimestamps={showTimestamps}
               selectedProject={selectedProject}
               provider={provider}
             />

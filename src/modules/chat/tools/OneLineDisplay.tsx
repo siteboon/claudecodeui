@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { copyTextToClipboard } from '@/shared/utils';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
+import HeaderWithTime from '@/modules/chat/transcript/HeaderWithTime';
 import type { ToolStatus } from '@/shared/types';
 
 type ActionType = 'copy' | 'open-file' | 'jump-to-results' | 'none';
@@ -28,6 +29,8 @@ type OneLineDisplayProps = {
   toolResult?: any;
   toolId?: string;
   status?: ToolStatus;
+  /** The call's time, at the end of the line or, when the line has no room left for it, under it. */
+  headerTime?: React.ReactNode;
 };
 
 /**
@@ -56,10 +59,14 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   toolResult,
   toolId,
   status,
+  headerTime,
 }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const isTerminal = style === 'terminal';
+  // With a time the line wraps, so the time can drop under the line's text
+  // rather than cut it short (see HeaderWithTime).
+  const wrapsForTime = headerTime ? ' flex-wrap gap-y-0.5' : '';
 
   const handleAction = async () => {
     if (action === 'copy' && value) {
@@ -101,14 +108,18 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <div className="flex min-w-0 flex-1 items-start gap-2">
-            <div className="min-w-0 flex-1 rounded bg-gray-900 px-2.5 py-1 dark:bg-black">
-              <code className={`font-mono text-xs text-green-400 ${wrapText ? 'whitespace-pre-wrap break-all' : 'block truncate'}`}>
-                <span className="select-none text-green-600 dark:text-green-500">$ </span>{value}
-              </code>
-            </div>
-            {status && <ToolStatusBadge status={status} className="mt-0.5" />}
-            {action === 'copy' && renderCopyButton()}
+          <div className={`flex min-w-0 flex-1 items-start gap-2${wrapsForTime}`}>
+            {/* Nudged down to the pill's first line of text. A flex box, so the
+                wrapper adds no line of its own around the time. */}
+            <HeaderWithTime time={headerTime && <span className="ml-auto mt-1 flex flex-shrink-0">{headerTime}</span>} className="items-start gap-2">
+              <div className="min-w-0 flex-1 rounded bg-gray-900 px-2.5 py-1 dark:bg-black">
+                <code className={`font-mono text-xs text-green-400 ${wrapText ? 'whitespace-pre-wrap break-all' : 'block truncate'}`}>
+                  <span className="select-none text-green-600 dark:text-green-500">$ </span>{value}
+                </code>
+              </div>
+              {status && <ToolStatusBadge status={status} className="mt-0.5" />}
+              {action === 'copy' && renderCopyButton()}
+            </HeaderWithTime>
           </div>
         </div>
         {secondary && (
@@ -126,17 +137,19 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   if (action === 'open-file') {
     const displayName = value.split('/').pop() || value;
     return (
-      <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3`}>
-        <span className="flex-shrink-0 text-xs text-muted-foreground">{label || toolName}</span>
-        <span className="text-[10px] text-muted-foreground/40">/</span>
-        <button
-          onClick={handleAction}
-          className="truncate font-mono text-xs text-primary transition-colors hover:text-primary/80 hover:underline"
-          title={value}
-        >
-          {displayName}
-        </button>
-        {status && <ToolStatusBadge status={status} className="ml-auto" />}
+      <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3${wrapsForTime}`}>
+        <HeaderWithTime time={headerTime} className="gap-1.5">
+          <span className="flex-shrink-0 text-xs text-muted-foreground">{label || toolName}</span>
+          <span className="text-[10px] text-muted-foreground/40">/</span>
+          <button
+            onClick={handleAction}
+            className="truncate font-mono text-xs text-primary transition-colors hover:text-primary/80 hover:underline"
+            title={value}
+          >
+            {displayName}
+          </button>
+          {status && <ToolStatusBadge status={status} className="ml-auto" />}
+        </HeaderWithTime>
       </div>
     );
   }
@@ -144,54 +157,58 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   // Search / jump-to-results style
   if (action === 'jump-to-results') {
     return (
-      <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3`}>
-        <span className="flex-shrink-0 text-xs text-muted-foreground">{label || toolName}</span>
-        <span className="text-[10px] text-muted-foreground/40">/</span>
-        <span className={`min-w-0 flex-1 truncate font-mono text-xs ${colorScheme.primary}`}>
-          {value}
-        </span>
-        {secondary && (
-          <span className="flex-shrink-0 text-[11px] italic text-muted-foreground/60">
-            {secondary}
+      <div className={`group flex items-center gap-1.5 border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3${wrapsForTime}`}>
+        <HeaderWithTime time={headerTime} className="gap-1.5">
+          <span className="flex-shrink-0 text-xs text-muted-foreground">{label || toolName}</span>
+          <span className="text-[10px] text-muted-foreground/40">/</span>
+          <span className={`min-w-0 flex-1 truncate font-mono text-xs ${colorScheme.primary}`}>
+            {value}
           </span>
-        )}
-        {status && <ToolStatusBadge status={status} />}
-        {toolResult && (
-          <a
-            href={`#tool-result-${toolId}`}
-            className="flex flex-shrink-0 items-center gap-0.5 text-[11px] text-primary transition-colors hover:text-primary/80"
-          >
-            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </a>
-        )}
+          {secondary && (
+            <span className="flex-shrink-0 text-[11px] italic text-muted-foreground/60">
+              {secondary}
+            </span>
+          )}
+          {status && <ToolStatusBadge status={status} />}
+          {toolResult && (
+            <a
+              href={`#tool-result-${toolId}`}
+              className="flex flex-shrink-0 items-center gap-0.5 text-[11px] text-primary transition-colors hover:text-primary/80"
+            >
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </a>
+          )}
+        </HeaderWithTime>
       </div>
     );
   }
 
   // Default one-line style
   return (
-    <div className={`group flex items-center gap-1.5 ${colorScheme.background || ''} border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3`}>
-      {icon && icon !== 'terminal' && (
-        <span className={`${colorScheme.icon} flex-shrink-0 text-xs`}>{icon}</span>
-      )}
-      {!icon && (label || toolName) && (
-        <span className="flex-shrink-0 text-xs text-muted-foreground">{label || toolName}</span>
-      )}
-      {(icon || label || toolName) && (
-        <span className="text-[10px] text-muted-foreground/40">/</span>
-      )}
-      <span className={`font-mono text-xs ${wrapText ? 'whitespace-pre-wrap break-all' : 'truncate'} min-w-0 flex-1 ${colorScheme.primary}`}>
-        {value}
-      </span>
-      {secondary && (
-        <span className={`text-[11px] ${colorScheme.secondary} flex-shrink-0 italic`}>
-          {secondary}
+    <div className={`group flex items-center gap-1.5 ${colorScheme.background || ''} border-l-2 ${colorScheme.border} my-0.5 py-0.5 pl-3${wrapsForTime}`}>
+      <HeaderWithTime time={headerTime} className="gap-1.5">
+        {icon && icon !== 'terminal' && (
+          <span className={`${colorScheme.icon} flex-shrink-0 text-xs`}>{icon}</span>
+        )}
+        {!icon && (label || toolName) && (
+          <span className="flex-shrink-0 text-xs text-muted-foreground">{label || toolName}</span>
+        )}
+        {(icon || label || toolName) && (
+          <span className="text-[10px] text-muted-foreground/40">/</span>
+        )}
+        <span className={`font-mono text-xs ${wrapText ? 'whitespace-pre-wrap break-all' : 'truncate'} min-w-0 flex-1 ${colorScheme.primary}`}>
+          {value}
         </span>
-      )}
-      {status && <ToolStatusBadge status={status} />}
-      {action === 'copy' && renderCopyButton()}
+        {secondary && (
+          <span className={`text-[11px] ${colorScheme.secondary} flex-shrink-0 italic`}>
+            {secondary}
+          </span>
+        )}
+        {status && <ToolStatusBadge status={status} />}
+        {action === 'copy' && renderCopyButton()}
+      </HeaderWithTime>
     </div>
   );
 };

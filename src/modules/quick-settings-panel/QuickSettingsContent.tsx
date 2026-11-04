@@ -1,5 +1,6 @@
 import {
   Brain,
+  Clock,
   Eye,
   Languages,
   Mic,
@@ -33,6 +34,11 @@ const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
     key: 'showThinking',
     labelKey: 'quickSettings.showThinking',
     icon: Brain,
+  },
+  {
+    key: 'showTimestamps',
+    labelKey: 'quickSettings.showTimestamps',
+    icon: Clock,
   },
 ];
 

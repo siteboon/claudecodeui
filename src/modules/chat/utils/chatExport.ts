@@ -19,6 +19,8 @@ export type TranscriptExportInput = {
   provider: LLMProvider | string;
   selectedProject?: Project | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
+  /** Stamps every row of the HTML export with its time, as the transcript on screen does with the preference on. */
+  showTimestamps?: boolean;
 };
 
 const EXTENSIONS: Record<TranscriptExportFormat, string> = {
@@ -100,6 +102,7 @@ export async function buildTranscriptExport(
     selectedProject: input.selectedProject,
     sessionTitle: input.sessionTitle,
     exportedAt,
+    showTimestamps: input.showTimestamps,
   });
 }
 

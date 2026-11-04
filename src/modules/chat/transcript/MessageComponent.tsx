@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { GitBranchIcon, PencilIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
+import { cn, toPlausibleTimestamp } from '@/shared/utils';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
+import { formatAnsweringModelLabel } from '@/modules/chat/utils/modelLabel';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
 import { LLMProviderLogo } from '@/shared/ui';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
@@ -14,6 +16,8 @@ import StreamingMarkdown from '@/modules/chat/transcript/StreamingMarkdown';
 import MessageCopyControl from '@/modules/chat/transcript/MessageCopyControl';
 import MessageModelLabel from '@/modules/chat/transcript/MessageModelLabel';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
+import HeaderWithTime from '@/modules/chat/transcript/HeaderWithTime';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 
@@ -26,6 +30,13 @@ type MessageComponentProps = {
   onGrantToolPermission?: (suggestion: ClaudePermissionSuggestion) => PermissionGrantResult | null | undefined;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  /**
+   * Stamps this row with its time whatever its kind, and hands the preference
+   * on to the agent and workflow cards and their timelines. Off, only user
+   * turns and the first row of an assistant run carry a time, as they always
+   * have.
+   */
+  showTimestamps?: boolean;
   selectedProject?: Project | null;
   provider: LLMProvider | string;
   /**
@@ -47,7 +58,7 @@ const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
  * transcript entry — user turn, assistant turn, or a tool call and its result.
  */
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, showTimestamps = false, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
@@ -85,6 +96,33 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
 
   const formattedTime = useMemo(() => new Date(message.timestamp).toLocaleTimeString(), [message.timestamp]);
+  // The time the timestamps preference shows. One the backend had to make up,
+  // because the provider recorded none, orders the row but is never shown:
+  // it would read as "just now" and change on every reload.
+  const stampValue = message.timestampEstimated ? undefined : message.timestamp;
+  const hasStamp = showTimestamps && toPlausibleTimestamp(stampValue) !== null;
+  // Where that time goes on a left-hand row: an agent or workflow card
+  // carries it in its own header, a tool call in the header line of its input
+  // (a footer line per call would add a line to every tool row), and
+  // anything else in its footer.
+  const isCardRow = Boolean((message.isToolUse && message.toolName === 'Workflow') || message.isSubagentContainer);
+  const stampsToolLine = hasStamp && !isCardRow && Boolean(message.isToolUse && message.toolInput);
+  const stampsFooter = hasStamp && !isCardRow && !stampsToolLine;
+  // The footer a left-hand row has always had: copy controls, model and, on
+  // the first row of a run, the time. With the preference on it is drawn only
+  // when something is left to show in it.
+  const hasDefaultFooter = shouldShowAssistantCopyControl || !isGrouped;
+  const showsFooter = showTimestamps
+    ? shouldShowAssistantCopyControl || (hasDefaultFooter && Boolean(formatAnsweringModelLabel(message.model))) || stampsFooter
+    : hasDefaultFooter;
+  // A compaction's or a task notification's one line carries its time at its
+  // end, under the same rule as a header's: on a line of its own when the
+  // line's text would not fit beside it (see HeaderWithTime).
+  const lineTime = hasStamp
+    ? <TranscriptTimestamp value={stampValue} className="ml-auto flex-shrink-0 text-[11px] leading-4 text-gray-400 dark:text-gray-500" />
+    : undefined;
+  const hasUserTurnControls = shouldShowUserCopyControl
+    || Boolean(message.transcriptAnchorId && (onEditMessage || onForkFromMessage));
   const shouldHideThinkingMessage = Boolean(message.isThinking && !showThinking);
 
   if (shouldHideThinkingMessage) {
@@ -120,39 +158,41 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                     {message.content}
                   </Markdown>
                 </div>
-                <div className="mt-1 flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                  {onEditMessage && message.transcriptAnchorId && (
-                    <button
-                      type="button"
-                      onClick={() => onEditMessage(message)}
-                      title={t('message.editAndResend')}
-                      aria-label={t('message.editAndResend')}
-                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
-                    >
-                      <PencilIcon className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  {onForkFromMessage && message.transcriptAnchorId && (
-                    <button
-                      type="button"
-                      onClick={() => onForkFromMessage(message)}
-                      title={t('message.forkFromHere')}
-                      aria-label={t('message.forkFromHere')}
-                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
-                    >
-                      <GitBranchIcon className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  {shouldShowUserCopyControl && (
-                    <MessageCopyControl content={userCopyContent} messageType="user" />
-                  )}
-                  <span>{formattedTime}</span>
-                </div>
+                {(!showTimestamps || hasStamp || hasUserTurnControls) && (
+                  <div className="mt-1 flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                    {onEditMessage && message.transcriptAnchorId && (
+                      <button
+                        type="button"
+                        onClick={() => onEditMessage(message)}
+                        title={t('message.editAndResend')}
+                        aria-label={t('message.editAndResend')}
+                        className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {onForkFromMessage && message.transcriptAnchorId && (
+                      <button
+                        type="button"
+                        onClick={() => onForkFromMessage(message)}
+                        title={t('message.forkFromHere')}
+                        aria-label={t('message.forkFromHere')}
+                        className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <GitBranchIcon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {shouldShowUserCopyControl && (
+                      <MessageCopyControl content={userCopyContent} messageType="user" />
+                    )}
+                    {showTimestamps ? <TranscriptTimestamp value={stampValue} /> : <span>{formattedTime}</span>}
+                  </div>
+                )}
               </div>
-            ) : (
+            ) : (!showTimestamps || hasStamp) && (
               /* Attachment-only turn: no text bubble, but the timestamp still shows */
               <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
-                <span>{formattedTime}</span>
+                {showTimestamps ? <TranscriptTimestamp value={stampValue} /> : <span>{formattedTime}</span>}
               </div>
             )}
           </div>
@@ -165,19 +205,21 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
       ) : message.compact ? (
         /* A compaction: one row, its numbers, and its summary folded into it */
         <div className="w-full">
-          <div className="flex items-center gap-2 py-0.5">
-            <span
-              className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                message.compact.phase === 'running'
-                  ? 'animate-pulse bg-amber-400 dark:bg-amber-500'
-                  : message.compact.phase === 'failed'
-                    ? 'bg-red-400 dark:bg-red-500'
-                    : 'bg-gray-400 dark:bg-gray-500'
-              }`}
-            />
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {message.content || t('chat:misc.compacted', 'Compacted')}
-            </span>
+          <div className={cn('flex items-center gap-2 py-0.5', lineTime && 'flex-wrap gap-y-0.5')}>
+            <HeaderWithTime time={lineTime} className="gap-2">
+              <span
+                className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                  message.compact.phase === 'running'
+                    ? 'animate-pulse bg-amber-400 dark:bg-amber-500'
+                    : message.compact.phase === 'failed'
+                      ? 'bg-red-400 dark:bg-red-500'
+                      : 'bg-gray-400 dark:bg-gray-500'
+                }`}
+              />
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {message.content || t('chat:misc.compacted', 'Compacted')}
+              </span>
+            </HeaderWithTime>
           </div>
           {message.compactSummary && (
             <details className="ml-3.5 mt-0.5">
@@ -195,9 +237,11 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
       ) : message.isTaskNotification ? (
         /* Compact task notification on the left */
         <div className="w-full">
-          <div className="flex items-center gap-2 py-0.5">
-            <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskNotificationStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
-            <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
+          <div className={cn('flex items-center gap-2 py-0.5', lineTime && 'flex-wrap gap-y-0.5')}>
+            <HeaderWithTime time={lineTime} className="gap-2">
+              <span className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${message.taskNotificationStatus === 'completed' ? 'bg-green-400 dark:bg-green-500' : 'bg-amber-400 dark:bg-amber-500'}`} />
+              <span className="text-xs text-gray-500 dark:text-gray-400">{message.content}</span>
+            </HeaderWithTime>
           </div>
         </div>
       ) : (
@@ -248,6 +292,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   onFileOpen={onFileOpen}
                   createDiff={createDiff}
                   selectedProject={selectedProject}
+                  showTimestamps={showTimestamps}
+                  launchedAt={showTimestamps ? stampValue : undefined}
                 />
               </div>
             ) : message.isSubagentContainer ? (
@@ -263,6 +309,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   onFileOpen={onFileOpen}
                   createDiff={createDiff}
                   selectedProject={selectedProject}
+                  showTimestamps={showTimestamps}
+                  launchedAt={showTimestamps ? stampValue : undefined}
                 />
               </div>
             ) : message.isToolUse ? (
@@ -292,6 +340,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                       showRawParameters={showRawParameters}
                       rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
                       toolStatus={message.toolStatus}
+                      // In the call's own header line, so an expanded diff or
+                      // output below it keeps the width it has without a time.
+                      headerTimestamp={stampsToolLine ? stampValue : undefined}
                     />
                   </div>
                 )}
@@ -409,7 +460,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <MemoryCitations citations={message.memoryCitations} />
             )}
 
-            {(shouldShowAssistantCopyControl || !isGrouped) && (
+            {showsFooter && (
               <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 {shouldShowAssistantCopyControl && (
                   <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
@@ -420,9 +471,14 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 {/* Which model actually answered, as the provider recorded it
                     on this row. Provenance rather than an affordance, so unlike
                     copy and speak it is not gated on the copy control, and an
-                    exported transcript keeps it wherever the footer renders. */}
-                <MessageModelLabel model={message.model} />
-                {!isGrouped && <span>{formattedTime}</span>}
+                    exported transcript keeps it wherever the footer renders.
+                    The time-only footer the timestamps preference adds to
+                    other rows leaves it out, so it is not repeated on each
+                    row of a run. */}
+                {hasDefaultFooter && <MessageModelLabel model={message.model} />}
+                {showTimestamps
+                  ? stampsFooter && <TranscriptTimestamp value={stampValue} />
+                  : !isGrouped && <span>{formattedTime}</span>}
               </div>
             )}
           </div>

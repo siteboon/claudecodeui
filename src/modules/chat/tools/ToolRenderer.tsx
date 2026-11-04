@@ -1,6 +1,7 @@
 import React, { memo, useMemo, useCallback } from 'react';
 
-import type { DiffLine, Project,ToolStatus } from '@/shared/types';
+import type { ChatMessage, DiffLine, Project,ToolStatus } from '@/shared/types';
+import { toPlausibleTimestamp } from '@/shared/utils';
 import { formatToolDisplayName, getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
 import { OneLineDisplay } from '@/modules/chat/tools/OneLineDisplay';
 import { BashCommandDisplay } from '@/modules/chat/tools/BashCommandDisplay';
@@ -17,6 +18,7 @@ import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 
 type ToolRendererProps = {
   toolName: string;
@@ -31,6 +33,12 @@ type ToolRendererProps = {
   rawToolInput?: string;
   /** Lifecycle the provider reported, when it reports one. Overrides the result-based inference. */
   toolStatus?: string;
+  /**
+   * When the call was made, given to the input render only while the
+   * timestamps preference is on. It is drawn in the call's own header line, so
+   * whatever the call expands to below that line keeps its full width.
+   */
+  headerTimestamp?: ChatMessage['timestamp'];
 };
 
 function getToolCategory(toolName: string): string {
@@ -88,6 +96,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   showRawParameters = false,
   rawToolInput,
   toolStatus: reportedStatus,
+  headerTimestamp,
 }) => {
   const config = getToolConfig(toolName);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
@@ -114,6 +123,13 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   }, [displayConfig, parsedData, onFileOpen]);
 
   if (!displayConfig) return null;
+
+  // Only a time worth showing gets drawn, so a header without one keeps its
+  // markup. Its line is as tall as the header's own `text-xs` items, so a
+  // header the time fits beside keeps its height.
+  const headerTime = toPlausibleTimestamp(headerTimestamp) !== null
+    ? <TranscriptTimestamp value={headerTimestamp} className="ml-auto flex-shrink-0 text-[11px] leading-4 text-gray-400 dark:text-gray-500" />
+    : undefined;
 
   // Bash renders as a Codex-style command row: the command on a single line with
   // a chevron that expands to show the output inline. The combined view lives on
@@ -147,6 +163,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
           // Commands stay collapsed by default — including failures; the status
           // badge marks errors and the output expands via the chevron.
           defaultOpen={false}
+          headerTime={headerTime}
         />
         <BashEditDiff
           toolUseResult={toolResult?.toolUseResult}
@@ -177,6 +194,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         colorScheme={displayConfig.colorScheme}
         resultId={mode === 'input' ? `tool-result-${toolId}` : undefined}
         status={toolStatus !== 'completed' ? toolStatus : undefined}
+        headerTime={headerTime}
       />
     );
   }
@@ -204,6 +222,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         rawContent={rawToolInput}
         toolName={toolName}
         toolId={toolId}
+        headerTime={headerTime}
       />
     );
   }
@@ -338,6 +357,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         defaultOpen={defaultOpen}
         onTitleClick={handleTitleClick}
         badge={badgeElement}
+        headerTime={headerTime}
         showRawParameters={mode === 'input' && showRawParameters}
         rawContent={rawToolInput}
         toolCategory={getToolCategory(toolName)}

@@ -12,6 +12,13 @@ type TranscriptExportDocumentProps = {
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   provider: LLMProvider | string;
   selectedProject?: Project | null;
+  /**
+   * Stamps every row with its time. Unlike thinking, which an export always
+   * includes, this follows the on-screen preference: the times are only
+   * wanted by those who asked for them, and the JSON export carries every
+   * row's timestamp regardless.
+   */
+  showTimestamps?: boolean;
 };
 
 /**
@@ -33,6 +40,7 @@ export function TranscriptExportDocument({
   createDiff,
   provider,
   selectedProject,
+  showTimestamps = false,
 }: TranscriptExportDocumentProps) {
   // Thinking blocks are included: an export is a record of what happened, and
   // the on-screen toggle is about noise in a live conversation.
@@ -57,6 +65,7 @@ export function TranscriptExportDocument({
                   getMessageKey={(message: ChatMessage) => String(message.timestamp)}
                   showRawParameters={false}
                   showThinking
+                  showTimestamps={showTimestamps}
                   selectedProject={selectedProject}
                   provider={provider}
                 />
@@ -74,6 +83,7 @@ export function TranscriptExportDocument({
                 createDiff={createDiff}
                 showRawParameters={false}
                 showThinking
+                showTimestamps={showTimestamps}
                 selectedProject={selectedProject}
                 provider={provider}
               />

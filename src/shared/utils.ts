@@ -250,3 +250,30 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
+
+// ---------------------------
+
+//----------------- TRANSCRIPT TIMESTAMPS ------------
+
+/**
+ * Anything older is a row that was never really stamped (epoch 0, or seconds
+ * read as milliseconds) rather than a conversation from 1970. Private to
+ * `toPlausibleTimestamp`.
+ */
+const EARLIEST_PLAUSIBLE_TIMESTAMP_MS = Date.UTC(2000, 0, 1);
+
+/**
+ * Reads a transcript row's time, in any shape a row carries it (an ISO string,
+ * epoch milliseconds or a Date), as a Date, or null when it has none worth
+ * showing: missing, unparsable or before 2000. Chat uses it to decide whether
+ * a row has a time to draw at all, so a row without one gets neither
+ * "Invalid Date" nor a day in 1970, nor an empty slot laid out for it.
+ */
+export const toPlausibleTimestamp = (value: string | number | Date | null | undefined): Date | null => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  return Number.isFinite(time) && time >= EARLIEST_PLAUSIBLE_TIMESTAMP_MS ? date : null;
+};

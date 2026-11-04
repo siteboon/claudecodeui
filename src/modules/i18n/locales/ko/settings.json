@@ -75,6 +75,7 @@
     "darkMode": "다크 모드",
     "showRawParameters": "Raw 파라미터 표시",
     "showThinking": "생각 과정 표시",
+    "showTimestamps": "타임스탬프 표시",
     "sendByCtrlEnter": "Ctrl+Enter로 전송",
     "voiceEnabled": "음성 (마이크 + 소리 내어 읽기)",
     "sendByCtrlEnterDescription": "활성화하면 Enter 대신 Ctrl+Enter로 메시지를 전송합니다. IME 사용자가 실수로 전송하는 것을 방지하는 데 유용합니다.",

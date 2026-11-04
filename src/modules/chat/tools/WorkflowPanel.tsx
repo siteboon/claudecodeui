@@ -4,6 +4,7 @@ import { ChevronRight, CircleAlert, CircleCheck, CircleDashed, Workflow } from '
 
 import type {
   BackgroundTaskStatus,
+  ChatMessage,
   DiffLine,
   LiveTaskStatus,
   Project,
@@ -14,12 +15,14 @@ import type {
   WorkflowInfo,
 } from '@/shared/types';
 import { api, readApiJson } from '@/shared/api';
-import { cn } from '@/shared/utils';
+import { cn, toPlausibleTimestamp } from '@/shared/utils';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
 import { SubagentTimeline } from '@/modules/chat/tools/SubagentTimeline';
 import { ToolErrorDisplay } from '@/modules/chat/tools/ToolErrorDisplay';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { useTranscriptSessionId } from '@/modules/chat/context/TranscriptSessionContext';
+import HeaderWithTime from '@/modules/chat/transcript/HeaderWithTime';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 import {
   describeWorkflowAgent,
   findCurrentWorkflowAgent,
@@ -39,6 +42,10 @@ type WorkflowPanelProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  /** Stamps each agent with the time it started, when the live stream said, and each step of an opened agent's timeline. */
+  showTimestamps?: boolean;
+  /** When the workflow was launched, given only while the timestamps preference is on; shown in the header. */
+  launchedAt?: ChatMessage['timestamp'];
 };
 
 /** What the agent-activity route answers with. */
@@ -199,6 +206,7 @@ type WorkflowAgentTimelineProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  showTimestamps: boolean;
 };
 
 /**
@@ -209,7 +217,7 @@ type WorkflowAgentTimelineProps = {
  * re-read every few seconds while the agent runs, since the transcript is
  * the only place its progress lands.
  */
-const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject }: WorkflowAgentTimelineProps) => {
+const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFileOpen, createDiff, selectedProject, showTimestamps }: WorkflowAgentTimelineProps) => {
   const { t } = useTranslation();
   // What the last read returned — the timeline, or why there is none — and
   // null until the first read lands. A later read that fails keeps the last
@@ -275,6 +283,7 @@ const WorkflowAgentTimeline = memo(({ sessionId, runId, agentId, isRunning, onFi
       onFileOpen={onFileOpen}
       createDiff={createDiff}
       selectedProject={selectedProject}
+      showTimestamps={showTimestamps}
     />
   );
 });
@@ -287,6 +296,7 @@ type WorkflowAgentRowProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  showTimestamps: boolean;
 };
 
 /**
@@ -294,7 +304,7 @@ type WorkflowAgentRowProps = {
  * runs and what it came back with when done — and, opened on demand, its
  * timeline.
  */
-const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createDiff, selectedProject }: WorkflowAgentRowProps) => {
+const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createDiff, selectedProject, showTimestamps }: WorkflowAgentRowProps) => {
   const { t } = useTranslation();
   // Opened on demand: the timeline is a fetch and, for a long run, a few
   // hundred tool renderers.
@@ -302,6 +312,16 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
   // A queued slot has no transcript yet, and outside a session there is
   // nothing to fetch one from.
   const canOpen = Boolean(timelineAddress && agent.agentId);
+  // Only the live stream says when an agent started; the journal a history
+  // load reads records no times, so a reloaded row has none to show.
+  const showStartedAt = showTimestamps && toPlausibleTimestamp(agent.startedAt) !== null;
+  const startedAt = showStartedAt
+    ? <TranscriptTimestamp value={agent.startedAt} className="ml-auto flex-shrink-0 text-[10px] text-muted-foreground/60" />
+    : undefined;
+  // With a start time the row wraps, as a card header does: the time sits at
+  // its right end when the name fits beside it, and takes a line of its own
+  // under it otherwise (see HeaderWithTime).
+  const wrapsForTime = showStartedAt && 'flex-wrap gap-y-0.5';
 
   const summary = (
     <>
@@ -323,13 +343,18 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
           type="button"
           aria-expanded={isOpen}
           onClick={() => setIsOpen((previous) => !previous)}
-          className="flex w-full items-center gap-1.5 text-left hover:text-foreground"
+          className={cn('flex w-full items-center gap-1.5 text-left hover:text-foreground', wrapsForTime)}
         >
-          <ChevronRight className={cn('h-3 w-3 flex-shrink-0 transition-transform duration-150', isOpen && 'rotate-90')} />
-          {summary}
+          {/* The chevron goes with the name: on its own it could be left alone on the row's first line. */}
+          <HeaderWithTime time={startedAt} className="gap-1.5">
+            <ChevronRight className={cn('h-3 w-3 flex-shrink-0 transition-transform duration-150', isOpen && 'rotate-90')} />
+            {summary}
+          </HeaderWithTime>
         </button>
       ) : (
-        <div className="flex items-center gap-1.5 pl-[18px]">{summary}</div>
+        <div className={cn('flex items-center gap-1.5 pl-[18px]', wrapsForTime)}>
+          <HeaderWithTime time={startedAt} className="gap-1.5">{summary}</HeaderWithTime>
+        </div>
       )}
 
       {agent.status === 'running' && (agent.lastToolName || agent.tokens !== undefined || agent.toolCalls !== undefined) && (
@@ -359,6 +384,7 @@ const WorkflowAgentRowView = memo(({ agent, timelineAddress, onFileOpen, createD
             onFileOpen={onFileOpen}
             createDiff={createDiff}
             selectedProject={selectedProject}
+            showTimestamps={showTimestamps}
           />
         </div>
       )}
@@ -376,7 +402,7 @@ WorkflowAgentRowView.displayName = 'WorkflowAgentRowView';
  * Shaped like SubagentPanel: the launch is a summary of work, and the
  * detail is only wanted on demand, so the body stays unmounted until opened.
  */
-export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus, onFileOpen, createDiff, selectedProject }: WorkflowPanelProps) => {
+export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus, onFileOpen, createDiff, selectedProject, showTimestamps = false, launchedAt }: WorkflowPanelProps) => {
   const { t } = useTranslation();
   const isExporting = useIsExportingTranscript();
   // Collapsed by default, like an agent card; the header carries the status.
@@ -435,6 +461,9 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
     () => (status !== 'running' && content.trim() && !content.startsWith(LAUNCH_ACK_PREFIX) ? formatResultText(content) : ''),
     [content, status],
   );
+  // With the timestamps preference on, the header carries the launch, when
+  // the launch has a time worth showing.
+  const headerStartAt = toPlausibleTimestamp(launchedAt) !== null ? launchedAt : undefined;
 
   return (
     <div className="my-1 border-l-2 border-l-purple-500 py-0.5 pl-3 dark:border-l-purple-400">
@@ -442,43 +471,56 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
         type="button"
         aria-expanded={isOpen}
         onClick={() => setIsOpen((previous) => !previous)}
-        className="flex w-full select-none items-center gap-1.5 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ChevronRight className={cn('h-3 w-3 flex-shrink-0 transition-transform duration-150', isOpen && 'rotate-90')} />
-        <Workflow className="h-3.5 w-3.5 flex-shrink-0 text-purple-500 dark:text-purple-400" />
-        <span className="flex-shrink-0 font-medium text-foreground">{t('workflow.title', 'Workflow')}</span>
-        {name && (
-          <>
-            <span className="flex-shrink-0 text-[10px] text-muted-foreground/40">/</span>
-            <span className="flex-shrink-0 font-medium">{name}</span>
-          </>
+        className={cn(
+          'flex w-full select-none items-center gap-1.5 py-0.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground',
+          // With a time the header wraps, as on an agent card: the launch sits
+          // at its right end when the description fits beside it, and takes a
+          // line of its own under it otherwise (see HeaderWithTime).
+          headerStartAt !== undefined && 'flex-wrap gap-y-0.5',
         )}
-        {description && <span className="min-w-0 flex-1 truncate">{description}</span>}
-        <span className={cn('ml-auto flex flex-shrink-0 items-center gap-1 text-[11px]', STATUS_STYLES[status])}>
-          {status === 'running' ? (
+      >
+        <HeaderWithTime
+          time={headerStartAt !== undefined && (
+            <TranscriptTimestamp value={headerStartAt} className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground/70" />
+          )}
+          className="gap-1.5"
+        >
+          <ChevronRight className={cn('h-3 w-3 flex-shrink-0 transition-transform duration-150', isOpen && 'rotate-90')} />
+          <Workflow className="h-3.5 w-3.5 flex-shrink-0 text-purple-500 dark:text-purple-400" />
+          <span className="flex-shrink-0 font-medium text-foreground">{t('workflow.title', 'Workflow')}</span>
+          {name && (
             <>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
-              {liveSummary || t('workflow.status.running', 'running')}
-            </>
-          ) : status === 'failed' ? (
-            <>
-              <CircleAlert className="h-3 w-3" />
-              {t('workflow.status.failed', 'failed')}
-            </>
-          ) : status === 'stopped' ? (
-            // Neither a spinner nor a check mark: the run never reported and
-            // the process it ran in is gone, so there is no outcome to draw.
-            <span title={t('workflow.stoppedHint', 'The run ended before this workflow reported back')} className="flex items-center gap-1">
-              <CircleDashed className="h-3 w-3" />
-              {t('workflow.status.stopped', 'no result')}
-            </span>
-          ) : (
-            <>
-              <CircleCheck className="h-3 w-3" />
-              {t('workflow.status.completed', 'done')}
+              <span className="flex-shrink-0 text-[10px] text-muted-foreground/40">/</span>
+              <span className="flex-shrink-0 font-medium">{name}</span>
             </>
           )}
-        </span>
+          {description && <span className="min-w-0 flex-1 truncate">{description}</span>}
+          <span className={cn('ml-auto flex flex-shrink-0 items-center gap-1 text-[11px]', STATUS_STYLES[status])}>
+            {status === 'running' ? (
+              <>
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />
+                {liveSummary || t('workflow.status.running', 'running')}
+              </>
+            ) : status === 'failed' ? (
+              <>
+                <CircleAlert className="h-3 w-3" />
+                {t('workflow.status.failed', 'failed')}
+              </>
+            ) : status === 'stopped' ? (
+              // Neither a spinner nor a check mark: the run never reported and
+              // the process it ran in is gone, so there is no outcome to draw.
+              <span title={t('workflow.stoppedHint', 'The run ended before this workflow reported back')} className="flex items-center gap-1">
+                <CircleDashed className="h-3 w-3" />
+                {t('workflow.status.stopped', 'no result')}
+              </span>
+            ) : (
+              <>
+                <CircleCheck className="h-3 w-3" />
+                {t('workflow.status.completed', 'done')}
+              </>
+            )}
+          </span>
+        </HeaderWithTime>
       </button>
 
       {showBody && (
@@ -515,6 +557,7 @@ export const WorkflowPanel = memo(({ toolInput, toolResult, workflow, taskStatus
                     onFileOpen={onFileOpen}
                     createDiff={createDiff}
                     selectedProject={selectedProject}
+                    showTimestamps={showTimestamps}
                   />
                 ))}
               </ul>

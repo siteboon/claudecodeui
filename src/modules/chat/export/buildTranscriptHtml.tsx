@@ -10,6 +10,8 @@ type BuildTranscriptHtmlInput = {
   selectedProject?: Project | null;
   sessionTitle: string;
   exportedAt: Date;
+  /** Follows the "Show timestamps" preference, so the file shows the times the reader saw on screen. */
+  showTimestamps?: boolean;
 };
 
 /**
@@ -69,6 +71,7 @@ export async function buildTranscriptHtml(input: BuildTranscriptHtmlInput): Prom
       createDiff: input.createDiff,
       provider: input.provider,
       selectedProject: input.selectedProject,
+      showTimestamps: input.showTimestamps,
     }),
   );
 

@@ -5,6 +5,7 @@ import { ChevronRight, Copy, Check } from 'lucide-react';
 import { cn,copyTextToClipboard } from '@/shared/utils';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
+import HeaderWithTime from '@/modules/chat/transcript/HeaderWithTime';
 import type { ToolStatus } from '@/shared/types';
 
 type BashCommandDisplayProps = {
@@ -15,6 +16,12 @@ type BashCommandDisplayProps = {
   isError?: boolean;
   status?: ToolStatus;
   defaultOpen?: boolean;
+  /**
+   * The call's time, drawn in the command line: at its end, or under the
+   * command when the line has no room left for it. Inside the card, so the
+   * card and its output keep their full width.
+   */
+  headerTime?: React.ReactNode;
 };
 
 /**
@@ -33,6 +40,7 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
   isError = false,
   status,
   defaultOpen = false,
+  headerTime,
 }) => {
   const { t } = useTranslation();
   const trimmedOutput = (output || '').replace(/\s+$/, '');
@@ -97,49 +105,52 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
         className={cn(
           'flex items-center gap-2 px-2.5 py-1.5 outline-none',
           hasOutput && 'cursor-pointer focus-visible:ring-1 focus-visible:ring-ring',
+          Boolean(headerTime) && 'flex-wrap gap-y-0.5',
         )}
       >
-        <ChevronRight
-          className={cn(
-            'h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/70 transition-transform duration-200',
-            open && 'rotate-90',
-            !hasOutput && 'opacity-0',
-          )}
-        />
-        <span className="flex-shrink-0 select-none font-mono text-xs font-semibold text-emerald-500 dark:text-emerald-400">
-          $
-        </span>
-        {/* Not a <code> tag: the global `.chat-message code` rule forces
-            `white-space: pre-wrap !important`, which would defeat `truncate`
-            and render collapsed multi-line commands in full. */}
-        <span
-          className={cn(
-            'min-w-0 flex-1 font-mono text-xs text-foreground',
-            open ? 'whitespace-pre-wrap break-all' : 'truncate',
-          )}
-        >
-          {command}
-        </span>
-
-        {isRunning && (
-          <span className="h-2.5 w-2.5 flex-shrink-0 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-emerald-400" />
-        )}
-        {status && status !== 'running' && <ToolStatusBadge status={status} className="flex-shrink-0" />}
-        {!open && hasOutput && !isRunning && (
-          <span className="flex-shrink-0 text-[10px] tabular-nums text-muted-foreground/70 transition-opacity group-hover/cmd:opacity-0">
-            {outputLineCount} {outputLineCount === 1 ? 'line' : 'lines'}
+        <HeaderWithTime time={headerTime} className="gap-2">
+          <ChevronRight
+            className={cn(
+              'h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/70 transition-transform duration-200',
+              open && 'rotate-90',
+              !hasOutput && 'opacity-0',
+            )}
+          />
+          <span className="flex-shrink-0 select-none font-mono text-xs font-semibold text-emerald-500 dark:text-emerald-400">
+            $
           </span>
-        )}
+          {/* Not a <code> tag: the global `.chat-message code` rule forces
+              `white-space: pre-wrap !important`, which would defeat `truncate`
+              and render collapsed multi-line commands in full. */}
+          <span
+            className={cn(
+              'min-w-0 flex-1 font-mono text-xs text-foreground',
+              open ? 'whitespace-pre-wrap break-all' : 'truncate',
+            )}
+          >
+            {command}
+          </span>
 
-        <button
-          onClick={handleCopy}
-          onKeyDown={(event) => event.stopPropagation()}
-          className="flex-shrink-0 rounded p-0.5 text-muted-foreground/60 opacity-0 transition-all hover:bg-foreground/10 hover:text-foreground focus:opacity-100 group-hover/cmd:opacity-100"
-          title={t('chat:misc.copyCommand')}
-          aria-label={t('chat:misc.copyCommand')}
-        >
-          {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
+          {isRunning && (
+            <span className="h-2.5 w-2.5 flex-shrink-0 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-emerald-400" />
+          )}
+          {status && status !== 'running' && <ToolStatusBadge status={status} className="flex-shrink-0" />}
+          {!open && hasOutput && !isRunning && (
+            <span className="flex-shrink-0 text-[10px] tabular-nums text-muted-foreground/70 transition-opacity group-hover/cmd:opacity-0">
+              {outputLineCount} {outputLineCount === 1 ? 'line' : 'lines'}
+            </span>
+          )}
+
+          <button
+            onClick={handleCopy}
+            onKeyDown={(event) => event.stopPropagation()}
+            className="flex-shrink-0 rounded p-0.5 text-muted-foreground/60 opacity-0 transition-all hover:bg-foreground/10 hover:text-foreground focus:opacity-100 group-hover/cmd:opacity-100"
+            title={t('chat:misc.copyCommand')}
+            aria-label={t('chat:misc.copyCommand')}
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        </HeaderWithTime>
       </div>
 
       {description && !open && (

@@ -5,6 +5,7 @@ import type { DiffLine, Project, SubagentActivity } from '@/shared/types';
 import { cn } from '@/shared/utils';
 import { ToolRenderer } from '@/modules/chat/tools/ToolRenderer';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
+import TranscriptTimestamp from '@/modules/chat/transcript/TranscriptTimestamp';
 
 type SubagentTimelineProps = {
   activity: SubagentActivity[];
@@ -13,6 +14,8 @@ type SubagentTimelineProps = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
+  /** Stamps each step the provider recorded a time for, in the step's own first line. */
+  showTimestamps?: boolean;
 };
 
 /**
@@ -23,7 +26,7 @@ type SubagentTimelineProps = {
 const INITIALLY_RENDERED_ACTIVITIES = 25;
 
 /** One prose or reasoning entry from the agent's own narration. */
-const SubagentNote = memo(({ activity }: { activity: SubagentActivity }) => {
+const SubagentNote = memo(({ activity, showTimestamp = false }: { activity: SubagentActivity; showTimestamp?: boolean }) => {
   const isThinking = activity.kind === 'thinking';
   const Icon = isThinking ? Brain : MessageSquareText;
 
@@ -36,6 +39,14 @@ const SubagentNote = memo(({ activity }: { activity: SubagentActivity }) => {
           isThinking ? 'italic text-muted-foreground/70' : 'text-muted-foreground',
         )}
       >
+        {showTimestamp && (
+          // Floated to the end of the note's first line: the lines below it
+          // keep the note's full width.
+          <TranscriptTimestamp
+            value={activity.timestamp}
+            className="float-right ml-2 text-[11px] not-italic text-gray-400 dark:text-gray-500"
+          />
+        )}
         {activity.content}
       </div>
     </div>
@@ -52,7 +63,7 @@ SubagentNote.displayName = 'SubagentNote';
  * Only mount it while its panel is open: a run of a hundred tools is a
  * hundred tool renderers.
  */
-export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, createDiff, selectedProject }: SubagentTimelineProps) => {
+export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, createDiff, selectedProject, showTimestamps = false }: SubagentTimelineProps) => {
   const isExporting = useIsExportingTranscript();
   // Raised by the "show more" step so a long run can be inspected in full
   // without paying for it up front.
@@ -73,7 +84,7 @@ export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, cre
             entry.kind === 'tool' ? (
               // Rendered through the same router the main thread uses, so a
               // subagent's shell command or diff looks exactly like one the
-              // top-level agent ran.
+              // top-level agent ran — its time included, in its header line.
               <ToolRenderer
                 key={entry.toolId ?? `activity-${index}`}
                 toolName={entry.toolName || 'UnknownTool'}
@@ -84,9 +95,10 @@ export const SubagentTimeline = memo(({ activity, activityCount, onFileOpen, cre
                 onFileOpen={onFileOpen}
                 createDiff={createDiff}
                 selectedProject={selectedProject}
+                headerTimestamp={showTimestamps ? entry.timestamp : undefined}
               />
             ) : (
-              <SubagentNote key={`activity-${index}`} activity={entry} />
+              <SubagentNote key={`activity-${index}`} activity={entry} showTimestamp={showTimestamps} />
             )
           ))}
         </div>

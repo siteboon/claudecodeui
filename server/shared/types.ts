@@ -326,6 +326,15 @@ export type NormalizedMessage = {
   transcriptAnchorId?: string;
   sessionId: string;
   timestamp: string;
+  /**
+   * Set when the provider recorded no time for the row behind this message, so
+   * `timestamp` is only the moment the history was read: every Cursor history
+   * row (store.db keeps none), and a Claude transcript row without its own
+   * `timestamp`. The value is still filled in because clients order rows by
+   * it; a client that displays times should show none for this message.
+   * Live events never carry it: their fallback time is when they arrived.
+   */
+  timestampEstimated?: boolean;
   provider: LLMProvider;
   kind: MessageKind;
   /**

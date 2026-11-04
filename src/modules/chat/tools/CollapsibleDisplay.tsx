@@ -12,6 +12,8 @@ type CollapsibleDisplayProps = {
   defaultOpen?: boolean;
   action?: React.ReactNode;
   badge?: React.ReactNode;
+  /** The call's time, drawn in the section's header line. */
+  headerTime?: React.ReactNode;
   onTitleClick?: () => void;
   children: React.ReactNode;
   showRawParameters?: boolean;
@@ -44,6 +46,7 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   defaultOpen = false,
   action,
   badge,
+  headerTime,
   onTitleClick,
   children,
   showRawParameters = false,
@@ -62,6 +65,7 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
         open={defaultOpen}
         action={action}
         badge={badge}
+        headerTime={headerTime}
         onTitleClick={onTitleClick}
       >
         {children}
