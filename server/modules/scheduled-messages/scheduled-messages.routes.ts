@@ -52,6 +52,7 @@ router.post(
       content: readString(body.content, 'content'),
       options: body.options,
       scheduledFor: readString(body.scheduledFor, 'scheduledFor'),
+      repeatEveryMinutes: body.repeatEveryMinutes,
     });
     res.status(201).json(createApiSuccessResponse(result));
   }),
