@@ -11,5 +11,9 @@ export { providerModelsService } from './services/provider-models.service.js';
 // by Projects to move a renamed folder's transcripts through each provider.
 export { sessionsService } from './services/sessions.service.js';
 
+// reapOrphanedOpenCodeServers: used by the server entrypoint at startup to stop
+// OpenCode turn servers a killed CloudCLI process left running.
+export { reapOrphanedOpenCodeServers } from './list/opencode/opencode-runtime.provider.js';
+
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';

@@ -14,6 +14,7 @@ import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIc
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
+import { MCP_ELICITATION_TOOL_NAME } from '@/shared/constants';
 import type { BackgroundSendChoice, BackgroundSendPrompt, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
@@ -247,9 +248,10 @@ export default function ChatComposer({
   const isRecording = voiceState === 'recording';
   const isTranscribing = voiceState === 'transcribing';
 
-  // Detect if the AskUserQuestion interactive panel is active
+  // Detect if an interactive panel that takes the person's answer is active:
+  // a question from the agent, or an MCP server's request for input.
   const hasQuestionPanel = pendingPermissionRequests.some(
-    (r) => r.toolName === 'AskUserQuestion'
+    (r) => r.toolName === 'AskUserQuestion' || r.toolName === MCP_ELICITATION_TOOL_NAME
   );
 
   // Hide the thinking/status bar while any permission request is pending
@@ -285,6 +287,7 @@ export default function ChatComposer({
         <div className="mx-auto mb-3 max-w-[54.25rem]">
           <PermissionRequestsBanner
             pendingPermissionRequests={pendingPermissionRequests}
+            providerLabel={providerLabel}
             handlePermissionDecision={handlePermissionDecision}
             handleGrantToolPermission={handleGrantToolPermission}
           />
