@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 
 import type { IProviderTranscriptRelocation } from '@/shared/interfaces.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
@@ -33,6 +33,7 @@ export class CodexTranscriptRelocationProvider implements IProviderTranscriptRel
       // The `.tmp` suffix keeps the session watcher from indexing it.
       const temporaryPath = `${session.jsonlPath}.${randomUUID()}.tmp`;
       try {
+        const before = await stat(session.jsonlPath);
         const content = await readFile(session.jsonlPath, 'utf8');
         const rewritten = rewriteJsonlCwd(
           content,
@@ -45,6 +46,11 @@ export class CodexTranscriptRelocationProvider implements IProviderTranscriptRel
           continue;
         }
         await writeFile(temporaryPath, rewritten, { flag: 'wx' });
+        // shortcut: narrows, not closes, the window for a Codex CLI appending mid-rewrite; closing it needs a Codex process registry.
+        const after = await stat(session.jsonlPath);
+        if (after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
+          throw new Error('the rollout changed while it was being rewritten');
+        }
         // Atomic: a reader sees the old rollout or the rewritten one.
         await rename(temporaryPath, session.jsonlPath);
         relocated.push(session);
