@@ -137,10 +137,7 @@ function createCodexTurnTracker() {
  */
 async function readCodexLiveTurnIds(filePath: string): Promise<string[]> {
   const turns = createCodexTurnTracker();
-  const stream = fsSync.createReadStream(filePath);
-  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
-
-  for await (const line of lines) {
+  for await (const line of readCodexRolloutLines(filePath)) {
     if (!line.trim()) {
       continue;
     }
@@ -157,6 +154,101 @@ async function readCodexLiveTurnIds(filePath: string): Promise<string[]> {
   }
 
   return turns.getLiveTurnIds();
+}
+
+/** Resolve reference-backed history without requiring the source to remain indexed. */
+async function findCodexHistorySource(filePath: string, threadId: string): Promise<string | null> {
+  const indexed = sessionsDb.getSessionByProviderSessionId(threadId);
+  if (indexed?.provider === PROVIDER && indexed.jsonl_path) {
+    try {
+      if ((await fsp.stat(indexed.jsonl_path)).isFile()) {
+        return indexed.jsonl_path;
+      }
+    } catch {
+      // The native CLI can archive a rollout without updating the app row.
+    }
+  }
+
+  let directory = path.dirname(filePath);
+  while (path.dirname(directory) !== directory) {
+    if (path.basename(directory) === 'sessions' || path.basename(directory) === 'archived_sessions') {
+      const home = path.dirname(directory);
+      for (const storage of ['sessions', 'archived_sessions']) {
+        const found = await findFileWithSuffix(path.join(home, storage), `-${threadId}.jsonl`, 3);
+        if (found) return found;
+      }
+      break;
+    }
+    directory = path.dirname(directory);
+  }
+  return null;
+}
+
+/**
+ * Codex 0.160 paginated forks keep a frozen prefix in `history_base` instead
+ * of copying it. Read each ancestor only through its recorded byte boundary,
+ * then the child's own rows. `forked_from_id` alone also appears on copied
+ * legacy rollouts and must never cause history to be included twice.
+ */
+async function* readCodexRolloutLines(
+  filePath: string,
+  endByteOffset?: number,
+  ancestors = new Set<string>(),
+): AsyncGenerator<string> {
+  const canonicalPath = await fsp.realpath(filePath);
+  if (ancestors.has(canonicalPath) || ancestors.size >= 128) {
+    throw new AppError('Codex fork history contains a cyclic or excessively deep source chain.', {
+      code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
+    });
+  }
+  if (endByteOffset !== undefined) {
+    if ((await fsp.stat(canonicalPath)).size < endByteOffset) {
+      throw new AppError('The source transcript is shorter than the Codex fork snapshot.', {
+        code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
+      });
+    }
+    if (endByteOffset === 0) return;
+  }
+  const nextAncestors = new Set(ancestors).add(canonicalPath);
+  const stream = fsSync.createReadStream(canonicalPath, {
+    ...(endByteOffset !== undefined ? { end: endByteOffset - 1 } : {}),
+  });
+  const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  let readMetadata = false;
+  try {
+    for await (const line of lines) {
+      let entry: AnyRecord | undefined;
+      if (!readMetadata) {
+        try { entry = readObjectRecord(JSON.parse(line)) ?? undefined; } catch { /* Skip malformed rows. */ }
+      }
+      if (entry?.type === 'session_meta') {
+        readMetadata = true;
+        const payload = readObjectRecord(entry.payload);
+        if (payload?.history_base != null) {
+          const base = readObjectRecord(payload.history_base);
+          const threadId = readNonEmptyString(base?.thread_id);
+          const offset = base?.end_byte_offset;
+          if (!threadId || !/^[a-zA-Z0-9-]+$/.test(threadId)
+            || typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0) {
+            throw new AppError('Codex fork history has an invalid source boundary.', {
+              code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
+            });
+          }
+          const sourcePath = await findCodexHistorySource(canonicalPath, threadId);
+          if (!sourcePath) {
+            throw new AppError('The source transcript referenced by this Codex fork is unavailable.', {
+              code: 'CODEX_HISTORY_SOURCE_UNAVAILABLE', statusCode: 502,
+            });
+          }
+          yield* readCodexRolloutLines(sourcePath, offset, nextAncestors);
+        }
+      }
+      yield line;
+    }
+  } finally {
+    lines.close();
+    stream.destroy();
+  }
 }
 
 /**
@@ -1232,9 +1324,6 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
   /** Turns whose prompt already carries the anchor, so only the first does. */
   const anchoredTurnIds = new Set<string>();
 
-  const fileStream = fsSync.createReadStream(sessionFilePath);
-  const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
   /** Emits a tool_result row unless the call already produced one. */
   const pushToolResult = (callId: string, timestamp: string, output: string, isError: boolean) => {
     if (completedExecCalls.has(callId)) {
@@ -1244,7 +1333,7 @@ async function getCodexSessionMessages(sessionId: string): Promise<CodexHistoryR
     messages.push({ type: 'tool_result', timestamp, toolCallId: callId, output, isError });
   };
 
-  for await (const line of rl) {
+  for await (const line of readCodexRolloutLines(sessionFilePath)) {
     if (!line.trim()) {
       continue;
     }
@@ -1852,6 +1941,7 @@ async function attachCodexSubagentTranscripts(
   }
 }
 
+/** The provider registry uses this reader for session history and message edits. */
 export class CodexSessionsProvider implements IProviderSessions {
   /**
    * Resolves the last turn to keep when the turn `anchorId` names is replaced.
@@ -2285,6 +2375,10 @@ export class CodexSessionsProvider implements IProviderSessions {
     try {
       result = await getCodexSessionMessages(sessionId);
     } catch (error) {
+      // A broken inherited snapshot must not masquerade as an empty thread.
+      if (error instanceof AppError && error.code.startsWith('CODEX_HISTORY_SOURCE_')) {
+        throw error;
+      }
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[CodexProvider] Failed to load session ${sessionId}:`, message);
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };

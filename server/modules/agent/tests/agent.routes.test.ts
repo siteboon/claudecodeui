@@ -221,6 +221,36 @@ test('Agent route reuses a matching checkout without cloning or deleting it', as
   assert.deepEqual(removedPaths, []);
 });
 
+test('Agent route starts opencode on the catalog default when the request names no model', async () => {
+  const opencodeCalls: { model?: string }[] = [];
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async (provider: string) => ({ OPTIONS: [], DEFAULT: `${provider}-catalog-default` }),
+    } as unknown as AgentDependencies['models'],
+    queryOpenCode: (async (_prompt: string, options: { model?: string }) => {
+      opencodeCalls.push(options);
+    }) as unknown as AgentDependencies['queryOpenCode'],
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectPath: '/home/test/project',
+        message: 'Run',
+        provider: 'opencode',
+        stream: false,
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  assert.deepEqual(opencodeCalls.map((call) => call.model), ['opencode-catalog-default']);
+});
+
 test('Agent route starts codex on the catalog default when the request names no model', async () => {
   const codexCalls: { model?: string }[] = [];
 
@@ -251,4 +281,143 @@ test('Agent route starts codex on the catalog default when the request names no 
   });
 
   assert.deepEqual(codexCalls.map((call) => call.model), ['catalog-default']);
+});
+
+/**
+ * Runs one Agent request with no `model` against stub catalogs and returns the
+ * model each provider runtime was started with, plus the catalogs read.
+ */
+async function runWithoutModel(
+  provider: 'claude' | 'cursor',
+  catalogs: Record<string, { OPTIONS: { value: string; isCustom?: boolean }[]; DEFAULT: string; CUSTOM_MODELS_ONLY?: boolean }>,
+  requestedModel?: string,
+): Promise<{ models: (string | undefined)[]; catalogReads: string[] }> {
+  const models: (string | undefined)[] = [];
+  const catalogReads: string[] = [];
+  const recordModel = (async (_prompt: string, options: { model?: string }) => {
+    models.push(options.model);
+  }) as unknown as AgentDependencies['queryClaude'];
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async (catalogProvider: string) => {
+        catalogReads.push(catalogProvider);
+        return catalogs[catalogProvider];
+      },
+    } as unknown as AgentDependencies['models'],
+    queryClaude: recordModel,
+    queryCursor: recordModel,
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectPath: '/home/test/project',
+        message: 'Run',
+        provider,
+        stream: false,
+        ...(requestedModel ? { model: requestedModel } : {}),
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  return { models, catalogReads };
+}
+
+test('Agent route starts Claude and Cursor on the first custom model while only custom models are listed', async () => {
+  // What the Providers service returns with "Use only my models" on.
+  const customOnly = (value: string) => ({
+    OPTIONS: [{ value, isCustom: true }, { value: `${value}-mini`, isCustom: true }],
+    DEFAULT: value,
+    CUSTOM_MODELS_ONLY: true,
+  });
+  const catalogs = { claude: customOnly('gateway/claude'), cursor: customOnly('gateway/cursor') };
+
+  assert.deepEqual(await runWithoutModel('claude', catalogs), {
+    models: ['gateway/claude'],
+    catalogReads: ['claude'],
+  });
+  assert.deepEqual(await runWithoutModel('cursor', catalogs), {
+    models: ['gateway/cursor'],
+    catalogReads: ['cursor'],
+  });
+  // A model named in the request still wins.
+  assert.deepEqual((await runWithoutModel('claude', catalogs, 'opus')).models, ['opus']);
+  assert.deepEqual((await runWithoutModel('cursor', catalogs, 'gpt-5')).models, ['gpt-5']);
+});
+
+test('Agent route starts Claude on its built-in default and leaves Cursor to its CLI while built-in models are listed', async () => {
+  const catalogs = {
+    claude: {
+      OPTIONS: [{ value: 'default', isCustom: false }, { value: 'gateway/claude', isCustom: true }],
+      DEFAULT: 'default',
+      CUSTOM_MODELS_ONLY: false,
+    },
+    cursor: {
+      OPTIONS: [{ value: 'auto', isCustom: false }, { value: 'gateway/cursor', isCustom: true }],
+      DEFAULT: 'auto',
+      CUSTOM_MODELS_ONLY: false,
+    },
+  };
+
+  // Claude's built-in DEFAULT is what its runtime falls back to anyway.
+  assert.deepEqual((await runWithoutModel('claude', catalogs)).models, ['default']);
+  // Cursor leaves the choice to its CLI, as before.
+  assert.deepEqual((await runWithoutModel('cursor', catalogs)).models, [undefined]);
+
+  // The flag on with no custom models lists the built-ins, so Cursor still
+  // leaves the choice to its CLI.
+  const flagWithoutCustomModels = {
+    ...catalogs,
+    cursor: { OPTIONS: [{ value: 'auto', isCustom: false }], DEFAULT: 'auto', CUSTOM_MODELS_ONLY: true },
+  };
+  assert.deepEqual((await runWithoutModel('cursor', flagWithoutCustomModels)).models, [undefined]);
+});
+
+test('Agent route reads no model catalog for a continued session of an unregistered provider', async () => {
+  // A legacy row (e.g. 'gemini', removed in #964) has no catalog: the
+  // Providers service throws "Unsupported provider" for it. Continuing such a
+  // session runs no provider runtime, as before, instead of failing on the
+  // catalog read.
+  const catalogReads: string[] = [];
+
+  await withAgentServer(createDependencies({
+    fileSystem: {
+      access: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async (catalogProvider: string) => {
+        catalogReads.push(catalogProvider);
+        throw new Error(`Unsupported provider "${catalogProvider}"`);
+      },
+    } as unknown as AgentDependencies['models'],
+    sessions: {
+      getSessionById: () => ({
+        session_id: 'legacy-session',
+        provider: 'gemini',
+        provider_session_id: null,
+        project_path: '/home/test/project',
+      }),
+      getSessionByProviderSessionId: () => null,
+      createAppSession: () => { throw new Error('a continued session must not create a row'); },
+    },
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectPath: '/home/test/project',
+        message: 'Run',
+        sessionId: 'legacy-session',
+        stream: false,
+      }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  assert.deepEqual(catalogReads, []);
 });

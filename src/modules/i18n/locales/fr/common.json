@@ -33,7 +33,9 @@
     "failed": "Échec",
     "pending": "En attente",
     "completed": "Terminé",
-    "inProgress": "En cours"
+    "inProgress": "En cours",
+    "reconnecting": "Reconnexion...",
+    "chatConnectionLost": "Connexion du chat perdue. Reconnexion..."
   },
   "messages": {
     "savedSuccessfully": "Enregistré avec succès",

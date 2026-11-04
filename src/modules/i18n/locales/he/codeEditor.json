@@ -1,0 +1,48 @@
+{
+  "toolbar": {
+    "changes": "שינויים",
+    "previousChange": "השינוי הקודם",
+    "nextChange": "השינוי הבא",
+    "hideDiff": "הסתרת הדגשת ה-diff",
+    "showDiff": "הצגת הדגשת ה-diff",
+    "settings": "הגדרות העורך",
+    "collapse": "כיווץ העורך",
+    "expand": "הרחבת העורך לרוחב מלא"
+  },
+  "loading": "טוען את {{fileName}}…",
+  "header": {
+    "showingChanges": "מוצגים שינויים"
+  },
+  "actions": {
+    "copyPath": "העתקת נתיב הקובץ",
+    "pathCopied": "נתיב הקובץ הועתק",
+    "download": "הורדת הקובץ",
+    "save": "שמירה",
+    "saving": "שומר…",
+    "saved": "נשמר!",
+    "exitFullscreen": "יציאה ממסך מלא",
+    "fullscreen": "מסך מלא",
+    "close": "סגירה",
+    "previewMarkdown": "תצוגה מקדימה של Markdown",
+    "editMarkdown": "עריכת Markdown",
+    "previewHtml": "פתיחת תצוגה מקדימה של HTML בלשונית חדשה"
+  },
+  "footer": {
+    "lines": "שורות:",
+    "characters": "תווים:",
+    "shortcuts": "Ctrl+S לשמירה • Esc לסגירה"
+  },
+  "binaryFile": {
+    "title": "קובץ בינארי",
+    "message": "אי אפשר להציג את הקובץ \"{{fileName}}\" בעורך הטקסט כי הוא קובץ בינארי."
+  },
+  "filePreview": {
+    "loading": "טוען תצוגה מקדימה…",
+    "error": "לא ניתן להציג את הקובץ הזה.",
+    "openInNewTab": "פתיחה בלשונית חדשה"
+  },
+  "unsavedChanges": {
+    "confirmClose": "יש שינויים שלא נשמרו. לסגור את הקובץ ולבטל אותם?",
+    "indicator": "שינויים שלא נשמרו"
+  }
+}

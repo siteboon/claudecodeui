@@ -5,6 +5,10 @@ import os from 'os';
 
 import { spawn } from 'cross-spawn';
 
+import {
+  createPluginGitError, createPluginGitSpawnError, getPluginGitSpawnOptions, stopPluginGitOnServerExit,
+} from './plugin-git.service.js';
+
 const PLUGINS_DIR = path.join(os.homedir(), '.claude-code-ui', 'plugins');
 const PLUGINS_CONFIG_PATH = path.join(os.homedir(), '.claude-code-ui', 'plugins.json');
 
@@ -297,15 +301,22 @@ export function installPluginFromGit(url) {
 
     const gitProcess = spawn('git', ['clone', '--depth', '1', '--', url, tempDir], {
       stdio: ['ignore', 'pipe', 'pipe'],
+      ...getPluginGitSpawnOptions(),
     });
+    stopPluginGitOnServerExit(gitProcess);
 
     let stderr = '';
+    // Node still emits 'close' after a failed spawn; the 'error' handler has answered by then.
+    let gitDidNotStart = false;
     gitProcess.stderr.on('data', (data) => { stderr += data.toString(); });
 
     gitProcess.on('close', (code) => {
+      if (gitDidNotStart) return;
       if (code !== 0) {
         cleanupTemp();
-        return reject(new Error(`git clone failed (exit code ${code}): ${stderr.trim()}`));
+        const error = createPluginGitError('install', code, stderr);
+        console.error(`[Plugins] git clone failed (exit code ${code}, ${error.code}):\n${error.details.gitOutput}`);
+        return reject(error);
       }
 
       // Validate manifest exists
@@ -363,8 +374,10 @@ export function installPluginFromGit(url) {
     });
 
     gitProcess.on('error', (err) => {
+      gitDidNotStart = true;
       cleanupTemp();
-      reject(new Error(`Failed to spawn git: ${err.message}`));
+      console.error('[Plugins] Failed to spawn git clone:', err.message);
+      reject(createPluginGitSpawnError('install', err));
     });
   });
 }
@@ -380,14 +393,21 @@ export function updatePluginFromGit(name) {
     const gitProcess = spawn('git', ['pull', '--ff-only', '--'], {
       cwd: pluginDir,
       stdio: ['ignore', 'pipe', 'pipe'],
+      ...getPluginGitSpawnOptions(),
     });
+    stopPluginGitOnServerExit(gitProcess);
 
     let stderr = '';
+    // Node still emits 'close' after a failed spawn; the 'error' handler has answered by then.
+    let gitDidNotStart = false;
     gitProcess.stderr.on('data', (data) => { stderr += data.toString(); });
 
     gitProcess.on('close', (code) => {
+      if (gitDidNotStart) return;
       if (code !== 0) {
-        return reject(new Error(`git pull failed (exit code ${code}): ${stderr.trim()}`));
+        const error = createPluginGitError('update', code, stderr);
+        console.error(`[Plugins] git pull failed (exit code ${code}, ${error.code}):\n${error.details.gitOutput}`);
+        return reject(error);
       }
 
       // Re-validate manifest after update
@@ -424,7 +444,9 @@ export function updatePluginFromGit(name) {
     });
 
     gitProcess.on('error', (err) => {
-      reject(new Error(`Failed to spawn git: ${err.message}`));
+      gitDidNotStart = true;
+      console.error('[Plugins] Failed to spawn git pull:', err.message);
+      reject(createPluginGitSpawnError('update', err));
     });
   });
 }

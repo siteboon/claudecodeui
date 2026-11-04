@@ -52,6 +52,22 @@
     "viewFullOutput": "Lihat output lengkap ({{count}} karakter)",
     "contentDisplayed": "Isi file ditampilkan pada tampilan diff di atas"
   },
+  "bashEditDiff": {
+    "created": "Dibuat",
+    "updated": "Diperbarui",
+    "deleted": "Dihapus",
+    "emptyFile": "File kosong",
+    "moreLines_other": "… {{count}} baris lagi",
+    "moreFiles_other": "… {{count}} file lain berubah",
+    "filesNotShown_other": "{{count}} file berubah (biner, hanya mode, atau terlalu besar untuk ditampilkan)",
+    "filesUnavailable_other": "{{count}} file berubah (diff tidak tersedia)",
+    "filesChanged_other": "{{count}} file berubah",
+    "morePaths_other": "+{{count}} lagi",
+    "diffUnavailable": "(diff file tidak tersedia untuk perintah ini)",
+    "partUnavailable": "(sebagian diff tidak tersedia)",
+    "skipped": "(diff file dilewati untuk perintah git ini)",
+    "shared": "(perintah lain berjalan di repositori ini pada saat yang sama; perubahan oleh salah satunya dapat muncul di hasil mana pun)"
+  },
   "interactive": {
     "title": "Prompt Interaktif",
     "waiting": "Menunggu respons di CLI",
@@ -65,6 +81,12 @@
   },
   "json": {
     "response": "Respons JSON"
+  },
+  "agentPrompts": {
+    "needsInput": "{{agent}} membutuhkan masukan Anda",
+    "dismiss": "Tolak",
+    "alwaysAllow": "Selalu izinkan",
+    "alwaysAllowCovers": "\"Selalu izinkan\" mencakup"
   },
   "permissions": {
     "grant": "Berikan izin untuk {{tool}}",
@@ -123,7 +145,7 @@
       "ctrlEnter": "Ctrl+Enter untuk mengirim • Shift+Enter untuk baris baru • Tab untuk mengganti mode • / untuk slash command",
       "enter": "Enter untuk mengirim • Shift+Enter untuk baris baru • Tab untuk mengganti mode • / untuk slash command",
       "queue": "Enter untuk mengantrekan pesan berikutnya",
-      "updateQueued": "Enter untuk memperbarui pesan yang diantrekan"
+      "appendQueued": "Enter untuk menambahkan ke pesan yang diantrekan"
     },
     "clickToChangeMode": "Klik untuk mengganti mode izin (atau tekan Tab di input)",
     "showAllCommands": "Tampilkan semua perintah",
@@ -131,7 +153,8 @@
     "scrollToBottom": "Gulir ke bawah",
     "queue": {
       "sendNext": "Antrekan pesan berikutnya",
-      "update": "Perbarui pesan antrean",
+      "append": "Tambahkan ke pesan antrean",
+      "notCombinable": "Gagal mengantrekan pesan: slash command dijalankan tersendiri, jadi tidak dapat digabungkan dengan pesan antrean. Kirim setelah pesan antrean terkirim.",
       "label": "Diantrekan",
       "willSend": "Akan dikirim setelah proses ini selesai",
       "edit": "Edit pesan antrean",
@@ -145,6 +168,8 @@
     "loadingModels": "Memuat model…",
     "modelMenu": "Pilih model dan tingkat penalaran",
     "permissionHeading": "Bagaimana tindakan {{provider}} harus disetujui?",
+    "permissionCycleHint": "Tekan Tab di kolom input untuk mengganti mode",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Mengganti pesan sebelumnya",
       "filesNotReverted": "file yang sudah diubah agen tidak dikembalikan",
@@ -171,6 +196,7 @@
     "pressToSearch": "Tekan <kbd>{{shortcut}}</kbd> untuk mencari sesi, file, dan commit",
     "chooseModel": "Pilih model",
     "chooseModelDescription": "Model bawaan dan kustom dalam satu daftar",
+    "chooseModelDescriptionCustomOnly": "Hanya model Anda yang ditampilkan untuk {{providers, list}}",
     "addModel": "Tambah model",
     "searchModels": "Cari model...",
     "manageModels": "Kelola model",
@@ -206,7 +232,8 @@
     "status": {
       "newSession": "Sesi Baru",
       "initializing": "Menginisialisasi...",
-      "restarting": "Memulai ulang..."
+      "restarting": "Memulai ulang...",
+      "themeRestartHint": "Mulai ulang untuk menerapkan tema baru ke Claude Code"
     },
     "actions": {
       "disconnect": "Putuskan",
@@ -354,5 +381,14 @@
     "tokensLabel_other": "token",
     "escClosesModal": "Esc menutup modal.",
     "close": "Tutup"
+  },
+  "modelLibrary": {
+    "effortLevels": "Tingkat penalaran",
+    "effortLevelsHint": "Pilih tingkat upaya penalaran yang diterima model ini. Jika tidak ada yang dipilih, tidak ada tingkat yang bisa dipilih untuk model ini di composer.",
+    "effortSummary": "Penalaran: {{levels}}",
+    "customModelsOnly": "Gunakan hanya model saya",
+    "customModelsOnlyHint": "Sembunyikan model bawaan {{provider}} dari semua pemilih model dan jadikan model pertama Anda sebagai default. Model bawaan tetap ditampilkan sampai Anda menambahkan model.",
+    "builtInModelsHidden": "Disembunyikan dari pemilih model selama “Gunakan hanya model saya” aktif.",
+    "customModelsOnlyFailed": "Pengaturan ini tidak dapat diubah."
   }
 }

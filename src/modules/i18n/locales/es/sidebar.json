@@ -38,7 +38,8 @@
     "selectAllLoaded": "Seleccionar las cargadas",
     "clearSelection": "Quitar selección",
     "deleteSelected_one": "Eliminar {{count}} sesión",
-    "deleteSelected_other": "Eliminar {{count}} sesiones"
+    "deleteSelected_other": "Eliminar {{count}} sesiones",
+    "deleteSelected_many": "Eliminar {{count}} sesiones"
   },
   "tooltips": {
     "viewEnvironments": "Ver entornos",
@@ -56,7 +57,9 @@
     "cancel": "Cancelar",
     "clearSearch": "Limpiar búsqueda",
     "openCommandPalette": "Abrir paleta de comandos",
-    "attentionRequiredIndicator": "La sesión requiere atención"
+    "attentionRequiredIndicator": "La sesión requiere atención",
+    "backgroundWorkIndicator": "Trabajo en segundo plano en curso",
+    "processingSessionIndicator": "Procesando sesión"
   },
   "navigation": {
     "chat": "Chat",
@@ -95,8 +98,14 @@
     "minutesAgo": "hace {{count}} min",
     "oneHourAgo": "hace 1 hora",
     "hoursAgo": "hace {{count}} horas",
+    "hoursAgo_one": "hace {{count}} hora",
+    "hoursAgo_other": "hace {{count}} horas",
+    "hoursAgo_many": "hace {{count}} horas",
     "oneDayAgo": "hace 1 día",
-    "daysAgo": "hace {{count}} días"
+    "daysAgo": "hace {{count}} días",
+    "daysAgo_one": "hace {{count}} día",
+    "daysAgo_other": "hace {{count}} días",
+    "daysAgo_many": "hace {{count}} días"
   },
   "messages": {
     "deleteConfirm": "¿Seguro que quieres eliminar esto?",
@@ -122,7 +131,8 @@
     "restoreSessionError": "Error al restaurar la sesión. Inténtalo de nuevo.",
     "forkSessionError": "No se pudo bifurcar esta sesión. Inténtalo de nuevo.",
     "deleteSessionsPartialFailure_one": "No se pudo eliminar {{count}} sesión de {{total}}. Inténtalo de nuevo.",
-    "deleteSessionsPartialFailure_other": "No se pudieron eliminar {{count}} de {{total}} sesiones. Inténtalo de nuevo."
+    "deleteSessionsPartialFailure_other": "No se pudieron eliminar {{count}} de {{total}} sesiones. Inténtalo de nuevo.",
+    "deleteSessionsPartialFailure_many": "No se pudieron eliminar {{count}} de {{total}} sesiones. Inténtalo de nuevo."
   },
   "version": {
     "updateAvailable": "Actualización disponible",
@@ -132,7 +142,11 @@
     "modeProjects": "Proyectos",
     "modeConversations": "Conversaciones",
     "modeMore": "Más",
+    "runningTooltip": "Sesiones en ejecución",
+    "archiveOnlyTooltip": "Solo archivados",
     "conversationsPlaceholder": "Buscar en conversaciones...",
+    "runningPlaceholder": "Buscar sesiones en ejecución...",
+    "archivedPlaceholder": "Buscar sesiones archivadas...",
     "searching": "Buscando...",
     "sessionTitles": "Títulos de sesiones",
     "conversationContents": "Contenido de conversaciones",
@@ -140,8 +154,38 @@
     "tryDifferentQuery": "Prueba con otra búsqueda",
     "matches_one": "{{count}} coincidencia",
     "matches_other": "{{count}} coincidencias",
+    "matches_many": "{{count}} coincidencias",
     "projectsScanned_one": "{{count}} proyecto examinado",
-    "projectsScanned_other": "{{count}} proyectos examinados"
+    "projectsScanned_other": "{{count}} proyectos examinados",
+    "projectsScanned_many": "{{count}} proyectos examinados"
+  },
+  "recent": {
+    "title": "Conversaciones recientes",
+    "emptyTitle": "Aún no hay conversaciones",
+    "emptyDescription": "Aquí aparecerán tus conversaciones más recientes.",
+    "loadFailed": "No se pudieron cargar las conversaciones recientes",
+    "loadMore": "Cargar conversaciones anteriores",
+    "loadingMore": "Cargando más..."
+  },
+  "running": {
+    "title": "En ejecución",
+    "emptyTitle": "No hay sesiones en ejecución",
+    "emptyDescription": "El trabajo activo aparecerá aquí mientras un proveedor lo esté procesando.",
+    "noMatchingSessions": "Ninguna sesión en ejecución coincide con esta búsqueda."
+  },
+  "archived": {
+    "title": "Archivados",
+    "restoreHint": "Restaura elementos cuando los necesites",
+    "loadingTitle": "Cargando archivados...",
+    "loadingDescription": "Obteniendo los proyectos y sesiones ocultos que puedes restaurar más tarde.",
+    "emptyTitle": "No hay elementos archivados",
+    "emptyDescription": "Los proyectos y sesiones archivados aparecerán aquí cuando los ocultes de la lista activa.",
+    "noMatchingSessions": "No hay elementos archivados que coincidan",
+    "tryDifferentSearch": "Prueba con otro término de búsqueda.",
+    "restoreAction": "Restaurar",
+    "restoreProject": "Restaurar proyecto",
+    "restore": "Restaurar sesión",
+    "deletePermanently": "Eliminar permanentemente"
   },
   "deleteConfirmation": {
     "deleteProject": "Quitar proyecto",
@@ -149,6 +193,7 @@
     "confirmDelete": "¿Qué quieres hacer con",
     "sessionCount_one": "Este proyecto contiene {{count}} conversación.",
     "sessionCount_other": "Este proyecto contiene {{count}} conversaciones.",
+    "sessionCount_many": "Este proyecto contiene {{count}} conversaciones.",
     "removeFromSidebar": "Solo quitar de la barra lateral",
     "archiveProject": "Archivar proyecto",
     "archiveSession": "Archivar sesión",
@@ -161,11 +206,15 @@
     "confirmDeleteSessions": "¿Qué quieres hacer con",
     "deleteSessions_one": "Eliminar {{count}} sesión",
     "deleteSessions_other": "Eliminar {{count}} sesiones",
+    "deleteSessions_many": "Eliminar {{count}} sesiones",
     "selectedSessions_one": "{{count}} sesión seleccionada",
     "selectedSessions_other": "{{count}} sesiones seleccionadas",
+    "selectedSessions_many": "{{count}} sesiones seleccionadas",
     "archiveSessions_one": "Archivar {{count}} sesión",
     "archiveSessions_other": "Archivar {{count}} sesiones",
+    "archiveSessions_many": "Archivar {{count}} sesiones",
     "archiveSessionsNotice_one": "Archivar mantiene la sesión fuera de la lista activa y conserva su historial.",
-    "archiveSessionsNotice_other": "Archivar mantiene las sesiones fuera de la lista activa y conserva su historial."
+    "archiveSessionsNotice_other": "Archivar mantiene las sesiones fuera de la lista activa y conserva su historial.",
+    "archiveSessionsNotice_many": "Archivar mantiene las sesiones fuera de la lista activa y conserva su historial."
   }
 }

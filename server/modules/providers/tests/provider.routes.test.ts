@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import providerRouter from '@/modules/providers/provider.routes.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { BackgroundTaskSummary, WorkflowAgentActivity } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, IS_PLATFORM } from '@/shared/utils.js';
 
 async function withProviderServer(
   run: (baseUrl: string, workspacePath: string) => Promise<void>,
@@ -246,6 +246,172 @@ test('model routes expose immutable defaults and full custom model CRUD', async 
   });
 });
 
+test('the custom-only route restricts a provider catalog to its custom models', async () => {
+  await withProviderServer(async (baseUrl) => {
+    type Catalog = {
+      OPTIONS: Array<{ value: string; isCustom: boolean }>;
+      DEFAULT: string;
+      CUSTOM_MODELS_ONLY?: boolean;
+    };
+    const readCatalog = async (provider: string): Promise<Catalog> => {
+      const response = await fetch(`${baseUrl}/api/providers/${provider}/models`);
+      return (await response.json() as { data: { models: Catalog } }).data.models;
+    };
+    const putCustomOnly = async (provider: string, body: unknown) => {
+      const response = await fetch(`${baseUrl}/api/providers/${provider}/models/custom-only`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return {
+        status: response.status,
+        payload: await response.json() as {
+          data?: { provider: string; models: Catalog };
+          error?: { code: string };
+        },
+      };
+    };
+
+    const builtIn = await readCatalog('codex');
+    assert.equal(builtIn.CUSTOM_MODELS_ONLY, false);
+    assert.ok(builtIn.OPTIONS.length > 0);
+
+    for (const [model, id] of [['Gateway One', 'gateway/one'], ['Gateway Two', 'gateway/two']]) {
+      const created = await fetch(`${baseUrl}/api/providers/codex/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model, id }),
+      });
+      assert.equal(created.status, 201);
+    }
+
+    const enabled = await putCustomOnly('codex', { enabled: true });
+    assert.equal(enabled.status, 200);
+    assert.equal(enabled.payload.data?.provider, 'codex');
+    assert.deepEqual(
+      enabled.payload.data?.models.OPTIONS.map((option) => option.value),
+      ['gateway/one', 'gateway/two'],
+    );
+    assert.equal(enabled.payload.data?.models.DEFAULT, 'gateway/one');
+    assert.equal(enabled.payload.data?.models.CUSTOM_MODELS_ONLY, true);
+    // Persisted, and scoped to the one provider.
+    assert.deepEqual(await readCatalog('codex'), enabled.payload.data?.models);
+    assert.equal((await readCatalog('cursor')).CUSTOM_MODELS_ONLY, false);
+
+    for (const invalid of [{}, { enabled: 'true' }, { enabled: 1 }, []]) {
+      const rejected = await putCustomOnly('codex', invalid);
+      assert.equal(rejected.status, 400, JSON.stringify(invalid));
+      assert.equal(rejected.payload.error?.code, 'INVALID_CUSTOM_MODELS_ONLY');
+    }
+    assert.equal((await readCatalog('codex')).CUSTOM_MODELS_ONLY, true);
+
+    const disabled = await putCustomOnly('codex', { enabled: false });
+    assert.equal(disabled.status, 200);
+    assert.equal(disabled.payload.data?.models.DEFAULT, builtIn.DEFAULT);
+    assert.equal(
+      disabled.payload.data?.models.OPTIONS.length,
+      builtIn.OPTIONS.length + 2,
+    );
+  });
+});
+
+test('custom model routes accept, validate, and return reasoning-effort levels', async () => {
+  await withProviderServer(async (baseUrl) => {
+    const postModel = async (provider: string, body: unknown) => {
+      const response = await fetch(`${baseUrl}/api/providers/${provider}/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return {
+        status: response.status,
+        payload: await response.json() as {
+          data?: {
+            model: { recordId: number; effort?: unknown };
+            models: { OPTIONS: Array<{ value: string; effort?: unknown }> };
+          };
+          error?: { code: string; message?: string };
+        },
+      };
+    };
+
+    const created = await postModel('claude', {
+      model: 'My Custom Model',
+      id: 'my-custom-model',
+      effort: { values: [' low ', 'high'], default: 'high' },
+    });
+    const expectedEffort = { default: 'high', values: [{ value: 'low' }, { value: 'high' }] };
+    assert.equal(created.status, 201);
+    assert.deepEqual(created.payload.data?.model.effort, expectedEffort);
+
+    const catalogResponse = await fetch(`${baseUrl}/api/providers/claude/models`);
+    const catalogPayload = await catalogResponse.json() as {
+      data: { models: { OPTIONS: Array<{ value: string; effort?: unknown }>; EFFORT_LEVELS?: string[] } };
+    };
+    assert.deepEqual(
+      catalogPayload.data.models.OPTIONS.find((option) => option.value === 'my-custom-model')?.effort,
+      expectedEffort,
+    );
+    // The model library's toggles come from here, not from the built-in models.
+    assert.deepEqual(
+      catalogPayload.data.models.EFFORT_LEVELS,
+      ['low', 'medium', 'high', 'xhigh', 'max', 'ultracode'],
+    );
+
+    // OpenCode's allowed levels do not depend on which upstream providers the
+    // machine running the tests has connected.
+    const openCodeModel = await postModel('opencode', {
+      model: 'Router model',
+      id: 'openrouter/router-model',
+      effort: { values: ['none', 'high'] },
+    });
+    assert.equal(openCodeModel.status, 201, JSON.stringify(openCodeModel.payload));
+    assert.deepEqual(openCodeModel.payload.data?.model.effort, { values: [{ value: 'none' }, { value: 'high' }] });
+
+    // A PATCH from a client that predates effort metadata keeps the levels.
+    const renameResponse = await fetch(
+      `${baseUrl}/api/providers/claude/models/${created.payload.data?.model.recordId}`,
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'Renamed', id: 'my-custom-model' }),
+      },
+    );
+    const renamePayload = await renameResponse.json() as { data: { model: { effort?: unknown } } };
+    assert.equal(renameResponse.status, 200);
+    assert.deepEqual(renamePayload.data.model.effort, expectedEffort);
+
+    const invalidPayloads: Array<{ provider: string; effort: unknown; code: string }> = [
+      { provider: 'claude', effort: { values: ['low', 'low'] }, code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'claude', effort: { values: ['low', ''] }, code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'claude', effort: { values: ['low'], default: 'high' }, code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'claude', effort: { values: ['turbo'] }, code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'claude', effort: 'high', code: 'INVALID_MODEL_EFFORT' },
+      { provider: 'cursor', effort: { values: ['low'] }, code: 'MODEL_EFFORT_NOT_SUPPORTED' },
+    ];
+    for (const [index, invalid] of invalidPayloads.entries()) {
+      const rejected = await postModel(invalid.provider, {
+        model: `Invalid ${index}`,
+        id: `invalid-${index}`,
+        effort: invalid.effort,
+      });
+      assert.equal(rejected.status, 400, JSON.stringify(invalid));
+      assert.equal(rejected.payload.error?.code, invalid.code, JSON.stringify(invalid));
+    }
+
+    // An oversized list is refused by its length, before any entry is walked:
+    // the JSON parser accepts bodies of up to 50 MB.
+    const oversized = await postModel('claude', {
+      model: 'Oversized',
+      id: 'oversized',
+      effort: { values: Array.from({ length: 33 }, (_, index) => `level-${index}`) },
+    });
+    assert.equal(oversized.status, 400);
+    assert.equal(oversized.payload.error?.code, 'INVALID_MODEL_EFFORT');
+    assert.match(oversized.payload.error?.message ?? '', /at most 32 effort levels/);
+  });
+});
+
 test('the running-sessions route reports a session held open for background work', async () => {
   // The client polls this route to keep every tab's activity map in step, so
   // a session whose turn ended but whose agent is still running has to be in
@@ -281,6 +447,62 @@ test('the running-sessions route reports a session held open for background work
     });
   } finally {
     providerRegistry.listProviders = realListProviders;
+  }
+});
+
+test('the CLI update route refuses while that provider is busy in a session', {
+  skip: IS_PLATFORM ? 'platform mode refuses every CLI update before the busy check' : false,
+}, async () => {
+  // A session held open for background work counts as busy, like a running
+  // chat: replacing the CLI under it could break the work it is still doing.
+  const realListProviders = providerRegistry.listProviders;
+  providerRegistry.listProviders = () => [{
+    id: 'claude',
+    runtime: { listBackgroundWork: () => [{ sessionId: 'held-session', tasks: [] }] },
+  } as unknown as IProvider];
+
+  // The route runs the real service, so the CLI it would update is a stub that
+  // only logs its calls: if the busy guard ever broke, this test must not run
+  // `claude update` on the developer's own install.
+  const cliDirectory = await mkdtemp(path.join(os.tmpdir(), 'provider-routes-cli-'));
+  const callLog = path.join(cliDirectory, 'calls.log');
+  const stubPath = path.join(cliDirectory, process.platform === 'win32' ? 'claude.cmd' : 'claude');
+  await writeFile(callLog, '');
+  await writeFile(
+    stubPath,
+    process.platform === 'win32'
+      ? `@echo off\r\necho %* >> "${callLog}"\r\necho 2.1.200 (Claude Code)\r\n`
+      : `#!/bin/sh\necho "$*" >> "${callLog}"\necho "2.1.200 (Claude Code)"\n`,
+  );
+  await chmod(stubPath, 0o755);
+  const previousCliPath = process.env.CLAUDE_CLI_PATH;
+  process.env.CLAUDE_CLI_PATH = stubPath;
+
+  try {
+    await withProviderServer(async (baseUrl) => {
+      const busy = await fetch(`${baseUrl}/api/providers/claude/cli/update`, { method: 'POST' });
+      const busyPayload = await busy.json() as { error: { code: string } };
+      assert.equal(busy.status, 409);
+      assert.equal(busyPayload.error.code, 'PROVIDER_CLI_BUSY');
+      assert.equal(await readFile(callLog, 'utf8'), '', 'a refused update never runs the CLI');
+
+      // Codex ships with CloudCLI: nothing to update, and the status says why.
+      const codex = await fetch(`${baseUrl}/api/providers/codex/cli/update`, { method: 'POST' });
+      assert.equal(codex.status, 400);
+      const codexStatus = await fetch(`${baseUrl}/api/providers/codex/cli`);
+      const codexPayload = await codexStatus.json() as { data: { updateUnavailableReason: string; updateCommand: null } };
+      assert.equal(codexStatus.status, 200);
+      assert.equal(codexPayload.data.updateUnavailableReason, 'bundled');
+      assert.equal(codexPayload.data.updateCommand, null);
+    });
+  } finally {
+    providerRegistry.listProviders = realListProviders;
+    if (previousCliPath === undefined) {
+      delete process.env.CLAUDE_CLI_PATH;
+    } else {
+      process.env.CLAUDE_CLI_PATH = previousCliPath;
+    }
+    await rm(cliDirectory, { recursive: true, force: true });
   }
 });
 

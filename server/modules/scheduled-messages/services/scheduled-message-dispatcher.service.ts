@@ -1,7 +1,9 @@
 import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
 import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
+import { announceScheduledMessagesChanged } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
+import { readQueuedChatMessage } from '@/shared/utils.js';
 
 /**
  * How often due messages are looked for.
@@ -15,12 +17,6 @@ const POLL_INTERVAL_MS = 30_000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dispatchInFlight = false;
 
-type StoredQueuedMessage = {
-  content: string;
-  options: Record<string, unknown>;
-  attachments: unknown[];
-};
-
 function readOptions(raw: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -32,31 +28,11 @@ function readOptions(raw: string): Record<string, unknown> {
   }
 }
 
-function readQueuedMessage(value: unknown): StoredQueuedMessage | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-  const record = value as Record<string, unknown>;
-  const content = typeof record.content === 'string' ? record.content : '';
-  const attachments = Array.isArray(record.attachments)
-    ? record.attachments
-    : Array.isArray(record.images)
-      ? record.images
-      : [];
-  if (!content.trim() && attachments.length === 0) {
-    return null;
-  }
-  const options = record.options && typeof record.options === 'object' && !Array.isArray(record.options)
-    ? record.options as Record<string, unknown>
-    : {};
-  return { content, options, attachments };
-}
-
 async function sendClaimedQueuedMessage(
   candidate: QueuedSessionMessageRecord,
   runtime: ProviderRuntimeGateway,
 ): Promise<void> {
-  const message = readQueuedMessage(candidate.queuedMessage);
+  const message = readQueuedChatMessage(candidate.queuedMessage);
   if (!message) {
     sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
     return;
@@ -81,13 +57,26 @@ async function sendClaimedQueuedMessage(
   sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
 }
 
+/**
+ * Whether a queued turn has to keep waiting for the session.
+ *
+ * A turn that ends with background work still going (a backgrounded command,
+ * agent or workflow) is marked completed, but its CLI process stays open so
+ * that work can report back. A new turn replaces that process and stops the
+ * work, which is why the composer asks before an interactive send. A queued
+ * turn was promised to go "when this finishes", so it waits for that work too.
+ */
+function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
+  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
+}
+
 /** Sends every persisted queued turn whose session is currently idle. */
 export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
   const candidates = sessionDraftsDb.listQueuedMessages();
   let claimed = 0;
 
   await Promise.all(candidates.map(async (candidate) => {
-    if (chatRunRegistry.isProcessing(candidate.sessionId)) {
+    if (isSessionBusy(candidate.sessionId, runtime)) {
       return;
     }
     if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
@@ -98,6 +87,12 @@ export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): P
   }));
 
   return claimed;
+}
+
+/** Records why a claimed message did not go, and shows it on its session's banner. */
+function recordFailure(row: ScheduledMessageRow, reason: string): void {
+  scheduledMessagesDb.markFailed(row.id, reason);
+  announceScheduledMessagesChanged(row.session_id);
 }
 
 async function sendClaimedMessage(
@@ -124,11 +119,11 @@ async function sendClaimedMessage(
     // Silently dropping a message the user scheduled is worse than telling
     // them it did not go.
     if (!result.started || result.error) {
-      scheduledMessagesDb.markFailed(row.id, result.error ?? 'The session was unavailable when this was due.');
+      recordFailure(row, result.error ?? 'The session was unavailable when this was due.');
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    scheduledMessagesDb.markFailed(row.id, message);
+    recordFailure(row, message);
   }
 }
 
@@ -146,6 +141,12 @@ export async function dispatchDueScheduledMessages(
   const due = scheduledMessagesDb.claimDue(now);
   if (due.length === 0) {
     return 0;
+  }
+
+  // The claim already recorded them as sent, so their banners come down now,
+  // as the turns start, rather than once the last turn has finished.
+  for (const sessionId of new Set(due.map((row) => row.session_id))) {
+    announceScheduledMessagesChanged(sessionId);
   }
 
   // Sequentially: a session can only have one run at a time, and two due

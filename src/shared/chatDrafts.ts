@@ -1,4 +1,4 @@
-import { api } from '@/shared/api';
+import { api, ApiRequestError, readApiErrorMessage } from '@/shared/api';
 import type { QueuedSendOptions } from '@/shared/types';
 
 /**
@@ -14,6 +14,13 @@ import type { QueuedSendOptions } from '@/shared/types';
  * A scope is a session id, or `project:<projectId>` for a chat that has not
  * been sent yet and so has no session. Drafts used to be keyed by project
  * alone, which meant every session in a project shared one draft.
+ *
+ * The text and the queued message travel separately. Text is saved on a
+ * debounce and never carries the queue. The queued message is owned by the
+ * server: queueing appends to it there, editing or deleting it clears it
+ * there, and the server's dispatcher sends it. The copy kept here is only
+ * what this page last heard, which can already be out of date (sent, or added
+ * to from another tab), so it is never written back.
  */
 
 /** A queued message as it is stored: text plus the send options it was composed under. */
@@ -53,6 +60,16 @@ const listeners = new Set<() => void>();
 let drafts = new Map<string, DraftRecord>();
 const pendingScopes = new Set<string>();
 let serverWriteTimer: ReturnType<typeof setTimeout> | null = null;
+// Counts this page's changes to each scope's queued message, so a hydrate that
+// was already in flight when one happened does not put back the older copy.
+const queueRevisions = new Map<string, number>();
+// The last queue request (append or clear) made for each scope, settled once
+// the server has answered it. The next one waits for it, so the server applies
+// them in the order they were made: an Edit's clear that reached the server
+// after the message re-queued from it would otherwise delete that message.
+const queueRequests = new Map<string, Promise<void>>();
+// The last clear made for each scope, resolving to whether the server applied it.
+const queueClears = new Map<string, Promise<boolean>>();
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -116,23 +133,17 @@ function flushServerWrites(): void {
   pendingScopes.clear();
 
   for (const scope of scopes) {
-    const draft = drafts.get(scope);
+    // Text only: the server keeps the scope's queued message as it is, and
+    // drops the row itself once neither text nor a queued message is left.
+    // Deleting the row from here would also delete a message queued from
+    // another tab that this page has not heard about yet.
+    const text = drafts.get(scope)?.text ?? '';
 
     // A save that fails must never surface as an unhandled rejection out of a
     // timer callback: the mirror already holds the draft, and the next
     // keystroke re-sends it.
     try {
-      if (!draft || isEmptyDraft(draft)) {
-        void api.user.deleteDraft(scope).catch((error: unknown) => {
-          console.error('Failed to delete chat draft:', error);
-        });
-        continue;
-      }
-
-      void api.user.saveDraft(scope, {
-        text: draft.text,
-        queuedMessage: draft.queuedMessage,
-      }).catch((error: unknown) => {
+      void api.user.saveDraft(scope, { text }).catch((error: unknown) => {
         console.error('Failed to save chat draft:', error);
       });
     } catch (error) {
@@ -150,20 +161,13 @@ function queueServerWrite(scope: string): void {
   serverWriteTimer = setTimeout(flushServerWrites, SERVER_WRITE_DEBOUNCE_MS);
 }
 
-function flushServerWritesNow(): void {
-  if (serverWriteTimer !== null) {
-    clearTimeout(serverWriteTimer);
-    serverWriteTimer = null;
-  }
-  flushServerWrites();
-}
-
-function updateDraft(scope: string, update: Partial<DraftRecord>): void {
+/** Applies a change to this page's copy of a draft; returns whether anything changed. */
+function setLocalDraft(scope: string, update: Partial<DraftRecord>): boolean {
   const current = drafts.get(scope) ?? EMPTY_DRAFT;
   const next: DraftRecord = { ...current, ...update };
 
   if (next.text === current.text && next.queuedMessage === current.queuedMessage) {
-    return;
+    return false;
   }
 
   const nextDrafts = new Map(drafts);
@@ -175,22 +179,43 @@ function updateDraft(scope: string, update: Partial<DraftRecord>): void {
   drafts = nextDrafts;
 
   writeMirror();
-  queueServerWrite(scope);
   notifyListeners();
+  return true;
 }
 
-/** Reads one scope's composer text, synchronously, for the first render. */
-export function readDraftText(scope: string): string {
-  return drafts.get(scope)?.text ?? '';
+function noteQueueChanged(scope: string): void {
+  queueRevisions.set(scope, (queueRevisions.get(scope) ?? 0) + 1);
 }
 
-export function writeDraftText(scope: string, text: string): void {
-  updateDraft(scope, { text });
+/**
+ * Sends a scope's queue request once the previous one has been answered, or at
+ * once when none is outstanding (a clear must still beat the dispatcher's poll).
+ */
+function sendQueueRequest<T>(scope: string, send: () => Promise<T>): Promise<T> {
+  const previous = queueRequests.get(scope);
+  let request: Promise<T>;
+  if (previous) {
+    request = previous.then(send);
+  } else {
+    try {
+      request = send();
+    } catch (error) {
+      request = Promise.reject(error);
+    }
+  }
+  const settled = request.then(() => undefined, () => undefined);
+  queueRequests.set(scope, settled);
+  void settled.then(() => {
+    if (queueRequests.get(scope) === settled) {
+      queueRequests.delete(scope);
+    }
+  });
+  return request;
 }
 
-export function readQueuedMessage(scope: string): StoredQueuedMessage | null {
-  const queued = drafts.get(scope)?.queuedMessage ?? null;
-  if (!queued) {
+/** A stored queued message in the shape the composer sends, or null when it has nothing to send. */
+function normalizeQueuedMessage(queued: StoredQueuedMessage | null): StoredQueuedMessage | null {
+  if (!queued || typeof queued.content !== 'string') {
     return null;
   }
 
@@ -206,16 +231,93 @@ export function readQueuedMessage(scope: string): StoredQueuedMessage | null {
     : null;
 }
 
-export function writeQueuedMessage(scope: string, message: StoredQueuedMessage): void {
-  updateDraft(scope, { queuedMessage: message });
-  // Queueing is a send-like action, so persist it before the tab can close.
-  flushServerWritesNow();
+/** Reads one scope's composer text, synchronously, for the first render. */
+export function readDraftText(scope: string): string {
+  return drafts.get(scope)?.text ?? '';
 }
 
+export function writeDraftText(scope: string, text: string): void {
+  if (setLocalDraft(scope, { text })) {
+    queueServerWrite(scope);
+  }
+}
+
+export function readQueuedMessage(scope: string): StoredQueuedMessage | null {
+  return normalizeQueuedMessage(drafts.get(scope)?.queuedMessage ?? null);
+}
+
+/**
+ * Queues a message to send when the session is next idle, after anything
+ * already queued for it, and resolves with the message that is now queued.
+ *
+ * The append happens on the server, against the stored message rather than
+ * this page's copy of it: if the dispatcher has already taken the earlier
+ * message to send, the new one is queued on its own, so nothing is sent twice
+ * and nothing is lost. A clear made on this page goes to the server in order
+ * with the appends around it. Rejects when the server did not accept the
+ * message, so the composer can keep it instead of showing a card that will
+ * never be sent; the ApiRequestError carries the server's error code, if any.
+ */
+export async function appendQueuedMessage(
+  scope: string,
+  message: StoredQueuedMessage,
+): Promise<{ queuedMessage: StoredQueuedMessage; appended: boolean }> {
+  for (;;) {
+    const result = await sendQueueRequest(scope, async () => {
+      const revisionAtRequest = queueRevisions.get(scope) ?? 0;
+      const response = await api.user.appendQueuedMessage(scope, message);
+      const payload = (await response.json().catch(() => null)) as {
+        queuedMessage?: unknown;
+        appended?: unknown;
+        error?: unknown;
+      } | null;
+      if (!response.ok) {
+        const errorCode = isRecord(payload?.error) ? payload.error.code : undefined;
+        throw new ApiRequestError(readApiErrorMessage(payload) ?? `HTTP ${response.status}`, {
+          code: typeof errorCode === 'string' ? errorCode : undefined,
+          status: response.status,
+        });
+      }
+
+      const queuedMessage = normalizeQueuedMessage(
+        isRecord(payload?.queuedMessage) ? (payload?.queuedMessage as StoredQueuedMessage) : null,
+      );
+      if (!queuedMessage) {
+        throw new Error('The server returned no queued message');
+      }
+      return {
+        queuedMessage,
+        appended: payload?.appended === true,
+        clearedMeanwhile: (queueRevisions.get(scope) ?? 0) !== revisionAtRequest,
+      };
+    });
+
+    // The queued message was edited or deleted on this page while the append
+    // was in flight. That clear reaches the server after the append, so it
+    // removes this message too: queue it again, behind the clear.
+    if (result.clearedMeanwhile && await queueClears.get(scope)) {
+      continue;
+    }
+
+    noteQueueChanged(scope);
+    setLocalDraft(scope, { queuedMessage: result.queuedMessage });
+    return { queuedMessage: result.queuedMessage, appended: result.appended };
+  }
+}
+
+/** Removes a scope's queued message (edited back into the composer or deleted). */
 export function clearQueuedMessage(scope: string): void {
-  updateDraft(scope, { queuedMessage: null });
-  // Editing or cancelling must beat the server's next dispatcher poll.
-  flushServerWritesNow();
+  noteQueueChanged(scope);
+  setLocalDraft(scope, { queuedMessage: null });
+  // Sent at once unless an append is still being answered: editing or
+  // cancelling must beat the server's next dispatcher poll.
+  queueClears.set(scope, sendQueueRequest(scope, async () => {
+    const response = await api.user.clearQueuedMessage(scope);
+    return response.ok;
+  }).catch((error: unknown) => {
+    console.error('Failed to clear queued chat message:', error);
+    return false;
+  }));
 }
 
 /** Subscribes to any draft change; returns the unsubscribe function. */
@@ -235,6 +337,7 @@ export function subscribeToChatDrafts(listener: () => void): () => void {
  */
 export async function hydrateChatDrafts(): Promise<void> {
   let serverDrafts: Array<{ scope?: unknown; text?: unknown; queuedMessage?: unknown }> = [];
+  const queueRevisionsAtRequest = new Map(queueRevisions);
 
   try {
     const response = await api.user.drafts();
@@ -256,7 +359,7 @@ export async function hydrateChatDrafts(): Promise<void> {
   const merged = new Map<string, DraftRecord>();
   for (const draft of serverDrafts) {
     const scope = typeof draft.scope === 'string' ? draft.scope : '';
-    if (!scope || pendingScopes.has(scope)) {
+    if (!scope) {
       continue;
     }
 
@@ -268,13 +371,30 @@ export async function hydrateChatDrafts(): Promise<void> {
     });
   }
 
-  // Local edits whose debounced write has not left the browser yet win over
-  // the server snapshot. Every other missing scope was deleted remotely and
-  // must also disappear from the mirror.
-  for (const scope of pendingScopes) {
-    const pending = drafts.get(scope);
-    if (pending) {
-      merged.set(scope, pending);
+  // Local changes the snapshot cannot contain yet win over it, field by field:
+  // text whose debounced write has not left the browser, and a queued message
+  // this page changed while the request was in flight. Otherwise the server's
+  // queued message wins even for a scope being typed into, which is how this
+  // page learns the dispatcher has sent it. Every other missing scope was
+  // deleted remotely and must also disappear from the mirror.
+  const queueChangedDuringRequest = (scope: string) => (
+    (queueRevisions.get(scope) ?? 0) !== (queueRevisionsAtRequest.get(scope) ?? 0)
+  );
+  const locallyChangedScopes = new Set([
+    ...pendingScopes,
+    ...[...queueRevisions.keys()].filter(queueChangedDuringRequest),
+  ]);
+  for (const scope of locallyChangedScopes) {
+    const local = drafts.get(scope) ?? EMPTY_DRAFT;
+    const server = merged.get(scope) ?? EMPTY_DRAFT;
+    const next: DraftRecord = {
+      text: pendingScopes.has(scope) ? local.text : server.text,
+      queuedMessage: queueChangedDuringRequest(scope) ? local.queuedMessage : server.queuedMessage,
+    };
+    if (isEmptyDraft(next)) {
+      merged.delete(scope);
+    } else {
+      merged.set(scope, next);
     }
   }
 
@@ -287,6 +407,9 @@ export async function hydrateChatDrafts(): Promise<void> {
 export function resetChatDrafts(): void {
   drafts = new Map();
   pendingScopes.clear();
+  queueRevisions.clear();
+  queueRequests.clear();
+  queueClears.clear();
   if (serverWriteTimer !== null) {
     clearTimeout(serverWriteTimer);
     serverWriteTimer = null;
