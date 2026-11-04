@@ -16,6 +16,7 @@ const POLL_INTERVAL_MS = 30_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dispatchInFlight = false;
+let queuedDispatchInFlight = false;
 
 function readOptions(raw: string): Record<string, unknown> {
   try {
@@ -28,33 +29,53 @@ function readOptions(raw: string): Record<string, unknown> {
   }
 }
 
-async function sendClaimedQueuedMessage(
+/**
+ * Starts a claimed queued turn. `started` settles once the turn has started (or
+ * failed to start); `finished` once it is over and the queue row is tidied up.
+ */
+function sendClaimedQueuedMessage(
   candidate: QueuedSessionMessageRecord,
   runtime: ProviderRuntimeGateway,
-): Promise<void> {
+): { started: Promise<void>; finished: Promise<void> } {
   const message = readQueuedChatMessage(candidate.queuedMessage);
   if (!message) {
     sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
-    return;
+    return { started: Promise.resolve(), finished: Promise.resolve() };
   }
 
-  const result = await runDetachedChatTurn(
+  let markStarted: () => void = () => {};
+  const started = new Promise<void>((resolve) => { markStarted = resolve; });
+  const finished = runDetachedChatTurn(
     {
       sessionId: candidate.sessionId,
       userId: candidate.userId,
       content: message.content,
       options: { ...message.options, attachments: message.attachments },
+      onRunStarted: () => markStarted(),
     },
     { runtime },
-  );
-
-  // The registry check and run reservation are separate operations. If a run
-  // wins that tiny race, put the turn back so the next poll tries again.
-  if (!result.started && result.error === 'A run was already in progress for this session.') {
-    sessionDraftsDb.restoreQueuedMessage(candidate);
-    return;
-  }
-  sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
+  )
+    .then((result) => {
+      if (!result.started) {
+        // Never sent: another run won the race between the busy check and the
+        // reservation, or the provider is unavailable right now. Put it back so
+        // the card stays and a later pass tries again. Only a deleted session
+        // drops it, as there is nothing left to send it to.
+        if (result.reason === 'session-missing') {
+          sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
+        } else {
+          sessionDraftsDb.restoreQueuedMessage(candidate);
+        }
+        return;
+      }
+      sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
+    })
+    .catch((error: unknown) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error('[ScheduledMessages] Queued turn failed', { sessionId: candidate.sessionId, error: reason });
+    })
+    .finally(() => markStarted());
+  return { started, finished };
 }
 
 /**
@@ -70,8 +91,17 @@ function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): bool
   return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
 }
 
-/** Sends every persisted queued turn whose session is currently idle. */
-export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
+/**
+ * Sends every persisted queued turn whose session is currently idle.
+ *
+ * Resolves when those turns have finished, unless `waitForTurns` is false: then
+ * it resolves as soon as they have started. The timer passes false, so one long
+ * queued turn cannot hold back every other session's queued message.
+ */
+export async function dispatchQueuedMessages(
+  runtime: ProviderRuntimeGateway,
+  { waitForTurns = true }: { waitForTurns?: boolean } = {},
+): Promise<number> {
   const candidates = sessionDraftsDb.listQueuedMessages();
   let claimed = 0;
 
@@ -83,7 +113,8 @@ export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): P
       return;
     }
     claimed += 1;
-    await sendClaimedQueuedMessage(candidate, runtime);
+    const turn = sendClaimedQueuedMessage(candidate, runtime);
+    await (waitForTurns ? turn.finished : turn.started);
   }));
 
   return claimed;
@@ -170,22 +201,32 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
     return;
   }
 
+  const logFailure = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[ScheduledMessages] Dispatch pass failed', { error: message });
+  };
+
   const poll = () => {
     // A pass that overruns the interval must not be started again underneath
-    // itself; the claim is transactional but the runs are not.
-    if (dispatchInFlight) {
-      return;
+    // itself; the claim is transactional but the runs are not. Scheduled and
+    // queued messages keep separate passes: a scheduled pass waits for each of
+    // its turns to finish, and that must not hold queued turns back.
+    if (!dispatchInFlight) {
+      dispatchInFlight = true;
+      void dispatchDueScheduledMessages(runtime)
+        .catch(logFailure)
+        .finally(() => {
+          dispatchInFlight = false;
+        });
     }
-    dispatchInFlight = true;
-    void dispatchDueScheduledMessages(runtime)
-      .then(() => dispatchQueuedMessages(runtime))
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error('[ScheduledMessages] Dispatch pass failed', { error: message });
-      })
-      .finally(() => {
-        dispatchInFlight = false;
-      });
+    if (!queuedDispatchInFlight) {
+      queuedDispatchInFlight = true;
+      void dispatchQueuedMessages(runtime, { waitForTurns: false })
+        .catch(logFailure)
+        .finally(() => {
+          queuedDispatchInFlight = false;
+        });
+    }
   };
 
   pollTimer = setInterval(poll, POLL_INTERVAL_MS);

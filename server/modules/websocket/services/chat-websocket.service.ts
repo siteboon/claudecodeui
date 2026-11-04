@@ -899,9 +899,10 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * subscribes and replays it from the start, and the session shows as busy
  * everywhere in the meantime.
  *
- * Resolves when the provider run settles. Returns false when the session has
- * gone away or is busy without `interruptActiveRun`, which the caller reports
- * on the schedule.
+ * Resolves when the provider run settles (`onRunStarted` fires as soon as it
+ * has started). `started` is false when the session has gone away
+ * (`reason: 'session-missing'`), its provider is unavailable, or it is busy
+ * without `interruptActiveRun`; the caller reports that on the schedule.
  */
 export async function runDetachedChatTurn(
   input: {
@@ -915,12 +916,17 @@ export async function runDetachedChatTurn(
      * land mid-run, so the timer outranks whatever is running.
      */
     interruptActiveRun?: boolean;
+    /**
+     * Called once the session is reserved for this turn, before the provider
+     * runs it. Lets a caller go on without waiting for the whole turn.
+     */
+    onRunStarted?: () => void;
   },
   dependencies: ChatWebSocketDependencies,
-): Promise<{ started: boolean; error: string | null }> {
+): Promise<{ started: boolean; error: string | null; reason?: 'session-missing' }> {
   const session = sessionsDb.getSessionById(input.sessionId);
   if (!session) {
-    return { started: false, error: 'The session no longer exists.' };
+    return { started: false, error: 'The session no longer exists.', reason: 'session-missing' };
   }
 
   const provider = session.provider as LLMProvider;
@@ -948,6 +954,8 @@ export async function runDetachedChatTurn(
     session,
     { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
     dependencies,
+    {},
+    input.onRunStarted ? () => { input.onRunStarted?.(); } : undefined,
   );
 }
 

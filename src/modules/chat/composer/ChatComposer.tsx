@@ -360,6 +360,7 @@ export default function ChatComposer({
           onDelete={onDeleteQueuedDraft}
           onSendNow={onSendQueuedDraft}
           canSteer={canSteer}
+          waitingOnBackgroundWork={Boolean(activity?.background)}
         />
       )}
 

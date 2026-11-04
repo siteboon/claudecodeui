@@ -191,6 +191,7 @@
       "notCombinable": "Failed to queue message: A slash command runs as a turn of its own, so it cannot be combined with the queued message. Send it after the queued message has gone.",
       "label": "Queued",
       "willSend": "Will send when this finishes",
+      "waitingOnBackground": "Will send when the background work finishes",
       "edit": "Edit queued message",
       "delete": "Delete queued message"
     },

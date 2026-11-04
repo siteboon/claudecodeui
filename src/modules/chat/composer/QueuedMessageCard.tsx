@@ -10,6 +10,8 @@ type QueuedMessageCardProps = {
   onSendNow?: (mode: 'steer' | 'interrupt') => void;
   /** Whether the active provider supports `steer` (see providerCanSteer); when false, the steer action is hidden but "Now" (interrupt) stays available. */
   canSteer: boolean;
+  /** The turn has ended but background work it started is still running; the message waits for that too. */
+  waitingOnBackgroundWork?: boolean;
 };
 
 /**
@@ -25,6 +27,7 @@ export default function QueuedMessageCard({
   onDelete,
   onSendNow,
   canSteer,
+  waitingOnBackgroundWork = false,
 }: QueuedMessageCardProps) {
   const { t } = useTranslation('chat');
 
@@ -37,7 +40,9 @@ export default function QueuedMessageCard({
           <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-primary/70">
             <span>{t('input.queue.label', { defaultValue: 'Queued' })}</span>
             <span className="normal-case text-muted-foreground/60">
-              · {t('input.queue.willSend', { defaultValue: 'Will send when this finishes' })}
+              · {waitingOnBackgroundWork
+                ? t('input.queue.waitingOnBackground', { defaultValue: 'Will send when the background work finishes' })
+                : t('input.queue.willSend', { defaultValue: 'Will send when this finishes' })}
             </span>
           </div>
           {/* Follow-ups queued while one waits are joined into this message, so
