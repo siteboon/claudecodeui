@@ -28,6 +28,7 @@ import {
 } from '@/shared/context/SessionProtectionContext';
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
+import ReadOnlySessionNotice from '@/modules/chat/composer/ReadOnlySessionNotice';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
 type ChatInterfaceProps = {
@@ -372,6 +373,23 @@ function ChatInterface({
     }
   }, [onNavigateToSession, selectedSession?.id]);
 
+  /**
+   * Starts a new chat continuing a read-only session (a Cursor IDE chat) and
+   * opens it. The read-only session itself is left as it was.
+   */
+  const handleContinueReadOnlySession = useCallback(async () => {
+    const sourceSessionId = selectedSession?.id;
+    if (!sourceSessionId) return;
+
+    const response = await api.continueSession(sourceSessionId);
+    const payload = await response.json();
+    const newSessionId = payload?.data?.sessionId;
+    if (!response.ok || typeof newSessionId !== 'string') {
+      throw new Error(payload?.message || `HTTP ${response.status}`);
+    }
+    onNavigateToSession?.(newSessionId);
+  }, [onNavigateToSession, selectedSession?.id]);
+
   const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
     useScheduledMessages(currentSessionId || selectedSession?.id || null, subscribe);
 
@@ -533,6 +551,9 @@ function ChatInterface({
             </div>
           )}
 
+          {selectedSession?.readOnly ? (
+            <ReadOnlySessionNotice onContinue={handleContinueReadOnlySession} />
+          ) : (
           <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
@@ -606,6 +627,7 @@ function ChatInterface({
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
         />
+          )}
         </div>
       </div>
 

@@ -981,6 +981,17 @@ router.post(
   }),
 );
 
+// Starts a new chat continuing a read-only session (a Cursor IDE chat). The
+// source is left untouched; the new chat reads its transcript on its first turn.
+router.post(
+  '/sessions/:sessionId/continue',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.continueReadOnlySession(sessionId);
+    res.status(201).json(createApiSuccessResponse(result));
+  }),
+);
+
 router.put(
   '/sessions/:sessionId',
   asyncHandler(async (req: Request, res: Response) => {

@@ -431,6 +431,19 @@ const addForkedFromSessionIdColumn = (db: Database): void => {
 };
 
 /**
+ * Adds the `read_only` column marking sessions that can be read but not
+ * continued (Cursor IDE chats).
+ *
+ * Existing rows default to 0. The Cursor synchronizer sets the flag on every
+ * IDE chat it indexes, and its next full scan removes older Cursor transcript
+ * rows it cannot account for, so nothing needs backfilling here.
+ */
+const addSessionReadOnlyColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'read_only', 'BOOLEAN DEFAULT 0');
+};
+
+/**
  * Adds the `model` column that records which model each session runs with.
  *
  * Left NULL for pre-existing rows on purpose: the model resolver falls back to
@@ -533,6 +546,7 @@ export const runMigrations = (db: Database) => {
     addSessionModelColumn(db);
     addSessionEffortColumn(db);
     addForkedFromSessionIdColumn(db);
+    addSessionReadOnlyColumn(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
 
