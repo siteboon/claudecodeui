@@ -457,12 +457,13 @@ export type PendingPermissionRequest = {
   receivedAt?: Date;
 };
 
-/** One question asked by the AskUserQuestion tool, with its answer options and whether more than one option may be selected. */
+/** One question asked by the AskUserQuestion tool, with its answer options, whether more than one option may be selected, and whether a typed answer is offered (`custom: false` hides it; OpenCode's questions can set it). */
 export type Question = {
   question: string;
   header?: string;
   options: QuestionOption[];
   multiSelect?: boolean;
+  custom?: boolean;
 };
 
 /** Options for a programmatic session navigation, currently only whether the route change should replace the current history entry instead of pushing a new one. */
@@ -929,9 +930,10 @@ export type TodoItem = {
 /** Display state of a tool call — 'running', 'completed', 'error' or 'denied' — used to choose the status badge and styling shown beside it in the transcript. */
 export type ToolStatus = 'running' | 'completed' | 'error' | 'denied';
 
-/** Props contract that every interactive permission panel implements, giving the panel the pending request and the callback it calls to allow or deny that request; use it when registering a panel in the permission panel registry. */
+/** Props contract that every interactive permission panel implements, giving the panel the pending request, the name of the agent asking (for its header) and the callback it calls to allow or deny that request; use it when registering a panel in the permission panel registry. */
 export type PermissionPanelProps = {
   request: PendingPermissionRequest;
+  agentLabel?: string;
   onDecision: (
     requestIds: string | string[],
     decision: { allow?: boolean; message?: string; updatedInput?: unknown },
@@ -1547,6 +1549,43 @@ export type GithubCredentialItem = {
   description?: string | null;
   created_at: string;
   is_active: boolean;
+};
+
+// ---------------------------
+
+//----------------- SETTINGS NOTIFICATION WEBHOOK ------------
+
+/** Why a webhook delivery failed, exactly as the server stores it; the webhook card maps each value to a localized reason. */
+export type NotificationWebhookDeliveryError =
+  | 'invalidUrl'
+  | 'insecureUrl'
+  | 'blockedAddress'
+  | 'timeout'
+  | 'redirect'
+  | 'httpStatus'
+  | 'network'
+  | 'tls'
+  | 'dropped';
+
+/** The outcome of the most recent webhook event after its last attempt, as the server records it; `status` is the HTTP status when the receiver answered, `type` the event type (e.g. run.completed, webhook.test). */
+export type NotificationWebhookDelivery = {
+  eventId: string;
+  type: string;
+  ok: boolean;
+  status: number | null;
+  error: NotificationWebhookDeliveryError | null;
+  attempts: number;
+  at: string;
+};
+
+/** The saved webhook destination as the notifications API returns it. The signing secret is never part of it, only whether one is set; `configured` is false until a URL has been saved. */
+export type NotificationWebhookState = {
+  configured: boolean;
+  enabled: boolean;
+  url: string;
+  allowHttp: boolean;
+  hasSecret: boolean;
+  lastDelivery: NotificationWebhookDelivery | null;
 };
 
 // ---------------------------

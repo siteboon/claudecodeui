@@ -80,6 +80,12 @@
   "json": {
     "response": "JSON-Antwort"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} braucht Ihre Eingabe",
+    "dismiss": "Ablehnen",
+    "alwaysAllow": "Immer erlauben",
+    "alwaysAllowCovers": "„Immer erlauben“ gilt für"
+  },
   "permissions": {
     "grant": "Berechtigung für {{tool}} erteilen",
     "added": "Berechtigung hinzugefügt",

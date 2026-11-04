@@ -577,6 +577,18 @@ export const api = {
         post('/api/settings/push/subscribe', subscription),
       unsubscribe: (endpoint: string) => post('/api/settings/push/unsubscribe', { endpoint }),
     },
+
+    // Outbound webhook for run lifecycle events. `createSecret` is the only
+    // response that ever carries the signing secret.
+    notificationWebhook: {
+      get: () => get('/api/notifications/webhook'),
+      save: (config: { url: string; allowHttp: boolean; enabled: boolean }) =>
+        put('/api/notifications/webhook', config),
+      remove: () => del('/api/notifications/webhook'),
+      createSecret: () => post('/api/notifications/webhook/secret'),
+      removeSecret: () => del('/api/notifications/webhook/secret'),
+      sendTest: () => post('/api/notifications/webhook/test'),
+    },
   },
 
   plugins: {
@@ -608,6 +620,7 @@ export const api = {
     sessions: () => get('/api/browser-use/sessions'),
     stopSession: (sessionId: string) => post(`/api/browser-use/sessions/${sessionId}/stop`),
     deleteSession: (sessionId: string) => del(`/api/browser-use/sessions/${sessionId}`),
+    sendInput: (sessionId: string, input: unknown) => post(`/api/browser-use/sessions/${sessionId}/input`, input),
     installRuntime: () => post('/api/browser-use/runtime/install'),
   },
 
