@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -111,7 +111,7 @@ for (const [oldProjectPath, newProjectPath] of [['/home/u/alpha', '/home/u/beta'
       );
       await chmod(transcriptPath, 0o660);
 
-      // The dev default umask 002 would keep 0660 even without the chmod after
+      // A 002 umask, common on dev and CI machines, would keep 0660 without the chmod after
       // each write; 077 makes writeFile's mode alone drop the group bits.
       const previousUmask = process.umask(0o077);
       try {
@@ -121,6 +121,9 @@ for (const [oldProjectPath, newProjectPath] of [['/home/u/alpha', '/home/u/beta'
           newProjectPath,
         });
         assert.equal(moved.jsonlPath, path.join(root, encodeClaudeProjectDirName(newProjectPath), 'session-a.jsonl'));
+        // Proves the rewrite happened: the untouched original would also be 0660.
+        assert.equal(JSON.parse(await readFile(moved.jsonlPath, 'utf8')).cwd, newProjectPath);
+        assert.deepEqual(await readdir(path.dirname(moved.jsonlPath)), ['session-a.jsonl']);
         assert.equal((await stat(moved.jsonlPath)).mode & 0o777, 0o660);
       } finally {
         process.umask(previousUmask);
