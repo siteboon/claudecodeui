@@ -165,6 +165,7 @@ CloudCLI 配备插件系统，允许你添加带自定义前端 UI 和可选 Nod
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | 根据模型价格和 token 用量计算 API 成本，并支持模型价格预设 |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | 用于查看、筛选和启动代理任务的任务队列仪表板 |
 | **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | 用于 GitHub Issues 的看板，支持 TaskMaster 双向同步和 /github-task CLI 技能自动安装 |
+| **[ccx](https://github.com/AaronWong1999/cloudcli-plugin-ccx)** | 显示 Claude 和 Codex 的用量，并将当前打开的会话连同对话历史交给另一个代理继续（macOS，需要 ccx） |
 
 ### 自行构建
 
