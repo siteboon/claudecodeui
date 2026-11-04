@@ -280,7 +280,7 @@ test('scheduled and queued messages stay pending during drain without aborting t
   });
 });
 
-test('drain waits for an accepted interrupt and restores the schedules waiting behind it', async () => {
+test('drain waits for a started interrupt and restores the schedules waiting behind it', async () => {
   await withIsolatedDatabase(async (userId) => {
     for (const [index, content] of ['accepted before drain', 'retry after restart'].entries()) {
       scheduledMessagesService.schedule({
@@ -304,19 +304,17 @@ test('drain waits for an accepted interrupt and restores the schedules waiting b
       run: async (_provider, command) => { runs.push(command); await runPending; },
     };
     const dispatch = dispatchDueScheduledMessages(runtime);
+    releaseAbort();
+    await new Promise((resolve) => { setImmediate(resolve); });
     closeScheduledMessageDispatcher();
     let drained = false;
     const drain = chatRunRegistry.drain(1_000).then((result) => { drained = result; return result; });
     try {
-      // The old run may emit its terminal event before abort's promise settles.
-      chatRunRegistry.completeRunIfCurrent(activeRun, { exitCode: 0, aborted: true });
       await Promise.resolve();
-      assert.equal(drained, false, 'the accepted replacement still owns admission');
+      assert.equal(drained, false, 'the registered replacement still owns the run');
       const waiting = scheduledMessagesDb.listForSession(userId, SESSION_ID)[1];
       assert.equal(waiting.status, 'pending', 'unstarted claims are durable before drain can finish');
       assert.equal(waiting.failure_reason, null);
-      releaseAbort();
-      await new Promise((resolve) => { setImmediate(resolve); });
       assert.deepEqual(runs, ['accepted before drain']);
       assert.equal(drained, false, 'shutdown still waits for the replacement runtime');
       releaseRun();
@@ -337,6 +335,118 @@ test('drain waits for an accepted interrupt and restores the schedules waiting b
     assert.equal(await dispatchDueScheduledMessages(createRuntime(restartedRuns)), 1);
     assert.equal(restartedRuns[0].command, 'retry after restart');
     assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[1].status, 'sent');
+  });
+});
+
+for (const outcome of ['complete', 'reject'] as const) {
+  test(`shutdown cancels an unstarted interrupt and ignores its late ${outcome} after another dispatcher reclaims it`, async () => {
+    await withIsolatedDatabase(async (userId) => {
+      for (const content of ['waiting for abort', 'waiting behind it']) {
+        scheduledMessagesService.schedule({
+          userId, sessionId: SESSION_ID, content,
+          scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+        });
+      }
+      const activeRun = chatRunRegistry.startRun({
+        appSessionId: SESSION_ID, provider: 'claude', providerSessionId: null,
+        connection: null, userId,
+      });
+      assert.ok(activeRun);
+      let finishAbort = (_value: boolean) => {};
+      let failAbort = (_error: Error) => {};
+      const abort = new Promise<boolean>((resolve, reject) => { finishAbort = resolve; failAbort = reject; });
+      const runs: RunCall[] = [];
+      const dispatch = dispatchDueScheduledMessages({ ...createRuntime(runs), abort: () => abort });
+      try {
+        closeScheduledMessageDispatcher();
+        const restored = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+        assert.deepEqual(restored.map((row) => row.status), ['pending', 'pending']);
+        // Simulate a restarted/overlapping server owning both rows. The old
+        // pass must neither start them nor overwrite the new owner's status.
+        assert.equal(scheduledMessagesDb.claimDue(new Date()).length, 2);
+        chatRunRegistry.completeRunIfCurrent(activeRun, { exitCode: 0 });
+        assert.equal(await chatRunRegistry.drain(1_000), true, 'cancelled admission no longer holds shutdown');
+        if (outcome === 'complete') {
+          finishAbort(true);
+        } else {
+          failAbort(new Error('late abort failure'));
+        }
+        await dispatch;
+        assert.deepEqual(runs, [], 'a released claim cannot start even with pre-drain admission');
+        const reclaimed = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+        assert.deepEqual(reclaimed.map((row) => row.status), ['sent', 'sent']);
+        assert.ok(reclaimed.every((row) => row.failure_reason === null));
+      } finally {
+        finishAbort(true);
+        await dispatch;
+      }
+    });
+  });
+}
+
+test('one claim-release failure does not stop shutdown from releasing the other claims or draining', async (t) => {
+  await withIsolatedDatabase(async (userId) => {
+    for (const [index, content] of ['running', 'release fails', 'release succeeds'].entries()) {
+      scheduledMessagesService.schedule({
+        userId, sessionId: SESSION_ID, content,
+        scheduledFor: new Date(Date.now() - 3_000 + index * 1_000).toISOString(),
+      });
+    }
+    let release = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const runtime = { ...createRuntime([]), run: async () => { await held; } };
+    const dispatch = dispatchDueScheduledMessages(runtime);
+    const rows = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+    const originalRelease = scheduledMessagesDb.releaseClaim;
+    const failedRow = rows.find((row) => row.content === 'release fails')!;
+    const log = t.mock.method(console, 'error', () => {});
+    t.mock.method(scheduledMessagesDb, 'releaseClaim', (id: string) => {
+      if (id === failedRow.id) {
+        throw new Error('database unavailable for this claim');
+      }
+      originalRelease(id);
+    });
+    try {
+      assert.doesNotThrow(closeScheduledMessageDispatcher);
+      assert.equal(log.mock.callCount(), 1);
+      assert.equal(log.mock.calls[0].arguments[1].id, failedRow.id);
+      const afterClose = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+      assert.equal(afterClose.find((row) => row.content === 'release succeeds')?.status, 'pending');
+      const drain = chatRunRegistry.drain(1_000);
+      release();
+      await dispatch;
+      assert.equal(await drain, true);
+    } finally {
+      release();
+      await dispatch;
+      t.mock.restoreAll();
+    }
+  });
+});
+
+test('an unsuccessful interrupt keeps the active provider counted and the schedule retryable', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId, sessionId: SESSION_ID, content: 'try again',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const activeRun = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID, provider: 'claude', providerSessionId: null,
+      connection: null, userId,
+    });
+    assert.ok(activeRun);
+    const runs: RunCall[] = [];
+    await dispatchDueScheduledMessages({ ...createRuntime(runs), abort: async () => false });
+    assert.deepEqual(runs, []);
+    assert.equal(chatRunRegistry.isProcessing(SESSION_ID), true);
+    assert.equal(activeRun.events.some((event) => event.kind === 'complete'), false);
+    assert.equal(scheduledMessagesDb.listForSession(userId, SESSION_ID)[0].status, 'pending');
+    let drained = false;
+    const drain = chatRunRegistry.drain(1_000).then((result) => { drained = true; return result; });
+    await Promise.resolve();
+    assert.equal(drained, false);
+    chatRunRegistry.completeRunIfCurrent(activeRun, { exitCode: 0 });
+    assert.equal(await drain, true);
   });
 });
 

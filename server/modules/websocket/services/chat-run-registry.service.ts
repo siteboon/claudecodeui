@@ -68,11 +68,13 @@ const runs = new Map<string, ChatRun>();
 // An accepted interrupt must keep shutdown waiting while its old run is
 // stopping, even if that run completes before its replacement is registered.
 const pendingAdmissions = new Map<symbol, string>();
+// Agent requests also own setup and GitHub work outside their provider turn.
+const pendingRequestWork = new Set<symbol>();
 let isDraining = false;
 const drainWaiters = new Set<DrainWaiter>();
 
 function hasRunningRuns(): boolean {
-  return pendingAdmissions.size > 0
+  return pendingRequestWork.size > 0 || pendingAdmissions.size > 0
     || Array.from(runs.values()).some((run) => run.status === 'running');
 }
 
@@ -213,6 +215,23 @@ function recordProviderSessionId(run: ChatRun, providerSessionId: string): void 
  * Consumed by the websocket gateway, scheduled dispatcher, and agent API.
  */
 export const chatRunRegistry = {
+  /**
+   * Keeps the agent API's admitted request in the bounded drain through setup,
+   * provider completion, and branch/PR creation. The caller releases it in
+   * finally; holding it does not permit a new provider run during shutdown.
+   */
+  reserveDrainWork(): (() => void) | null {
+    if (isDraining) {
+      return null;
+    }
+    const work = Symbol('request');
+    pendingRequestWork.add(work);
+    return () => {
+      pendingRequestWork.delete(work);
+      resolveDrainWaitersIfIdle();
+    };
+  },
+
   /** Reserves an interrupting turn for the websocket gateway before its asynchronous abort. */
   reserveRunAdmission(appSessionId: string): symbol | null {
     if (isDraining) {
@@ -311,7 +330,7 @@ export const chatRunRegistry = {
 
   /**
    * Permanently closes run admission for this process and waits until every
-   * active run and previously accepted interrupt reaches its terminal event.
+   * active run, previously accepted interrupt, and agent request finishes.
    * The boolean distinguishes a clean drain from the bounded timeout used by
    * server shutdown.
    */
@@ -429,6 +448,7 @@ export const chatRunRegistry = {
   clearAll(): void {
     runs.clear();
     pendingAdmissions.clear();
+    pendingRequestWork.clear();
     isDraining = false;
     resolveDrainWaitersIfIdle();
   },

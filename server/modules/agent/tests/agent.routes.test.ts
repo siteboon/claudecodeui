@@ -47,6 +47,7 @@ function createDependencies(
       completeRunIfCurrent: () => undefined,
       isProcessing: () => false,
       isDraining: () => false,
+      reserveDrainWork: () => () => undefined,
     },
     queryClaude: unexpectedProviderCall as AgentDependencies['queryClaude'],
     queryCursor: unexpectedProviderCall as AgentDependencies['queryCursor'],

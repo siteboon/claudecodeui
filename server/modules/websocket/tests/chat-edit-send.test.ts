@@ -79,6 +79,7 @@ async function withGateway(
     runs: RunCall[];
   }) => Promise<void>,
   rows: unknown[] = TRANSCRIPT_ROWS,
+  abort: () => Promise<boolean> = async () => true,
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'chat-edit-send-'));
@@ -102,6 +103,7 @@ async function withGateway(
       {
         runtime: {
           hasRuntime: () => true,
+          abort,
           run: async (runProvider: string, command: string, options: Record<string, unknown>) => {
             runs.push({ provider: runProvider, command, options });
             if (holdRun) {
@@ -213,6 +215,26 @@ test('new turns are refused with a clear protocol error while the server drains'
     assert.equal(runs.length, 0);
     assert.equal(socket.frames.at(-1)?.code, 'SERVER_DRAINING');
   });
+});
+
+test('an unsuccessful interactive abort leaves the provider counted until its dispatch settles', async () => {
+  await withGateway('claude', async ({ socket, runs }) => {
+    holdTheNextRun();
+    socket.emit('message', JSON.stringify({ type: 'chat.send', sessionId: SESSION_ID, content: 'keep working' }));
+    await settle();
+    assert.equal(runs.length, 1);
+    socket.emit('message', JSON.stringify({ type: 'chat.abort', sessionId: SESSION_ID }));
+    await settle();
+    assert.equal(socket.frames.at(-1)?.code, 'ABORT_FAILED');
+    assert.equal(chatRunRegistry.isProcessing(SESSION_ID), true);
+    let drained = false;
+    const drain = chatRunRegistry.drain(1_000).then((result) => { drained = true; return result; });
+    await Promise.resolve();
+    assert.equal(drained, false);
+    releaseHeldRun?.();
+    assert.equal(await drain, true);
+    assert.equal(chatRunRegistry.isProcessing(SESSION_ID), false);
+  }, TRANSCRIPT_ROWS, async () => false);
 });
 
 test('an anchor the transcript does not hold is refused', async () => {

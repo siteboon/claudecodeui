@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import * as nodeCrypto from 'node:crypto';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import test from 'node:test';
 
 import express from 'express';
@@ -201,16 +202,132 @@ test('an API request overtaken by drain reports shutdown instead of a busy sessi
   await withIsolatedDatabase(async () => {
     const runtime = createHeldRuntime();
     const dependencies = createDependencies(runtime.queryClaude);
+    let pathEntered = () => {};
+    const entered = new Promise<void>((resolve) => { pathEntered = resolve; });
+    let releasePath = () => {};
+    const heldPath = new Promise<void>((resolve) => { releasePath = resolve; });
+    let sessionsCreated = 0;
+    const createSession = dependencies.sessions.createAppSession;
+    dependencies.sessions.createAppSession = (...args) => { sessionsCreated += 1; return createSession(...args); };
     dependencies.fileSystem = {
-      access: async () => { await chatRunRegistry.drain(1_000); },
+      access: async () => { pathEntered(); await heldPath; },
     } as unknown as AgentDependencies['fileSystem'];
     await withAgentServer(dependencies, async (baseUrl) => {
-      const response = await post(baseUrl, {
+      const request = post(baseUrl, {
         projectPath: '/home/test/project', message: 'Wait until restart', stream: false,
       });
+      await entered;
+      let drained = false;
+      const drain = chatRunRegistry.drain(1_000).then((result) => { drained = true; return result; });
+      try {
+        await Promise.resolve();
+        assert.equal(drained, false, 'pre-run setup is included in the drain');
+      } finally {
+        releasePath();
+      }
+      const response = await request;
       assert.equal(response.status, 503);
       assert.equal((await response.json() as { code: string }).code, 'SERVER_DRAINING');
       assert.equal(runtime.seen.length, 0);
+      assert.equal(sessionsCreated, 0, 'a rejected request must not leave a visible empty session');
+      assert.equal(await drain, true);
+    });
+  });
+});
+
+test('shutdown waits for an in-flight clone and rejects it before session creation', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    const dependencies = createDependencies(runtime.queryClaude);
+    dependencies.fileSystem = {
+      access: async () => { throw new Error('not present'); }, mkdir: async () => undefined,
+    } as unknown as AgentDependencies['fileSystem'];
+    const clone = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+    let cloneStarted = () => {};
+    const started = new Promise<void>((resolve) => { cloneStarted = resolve; });
+    dependencies.spawnProcess = ((_command: string, args?: readonly string[]) => {
+      assert.equal(args?.[0], 'clone');
+      cloneStarted();
+      return clone;
+    }) as unknown as AgentDependencies['spawnProcess'];
+    let sessionsCreated = 0;
+    dependencies.sessions.createAppSession = () => { sessionsCreated += 1; return { sessionId: 'should-not-exist' }; };
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const request = post(baseUrl, {
+        githubUrl: 'https://github.com/owner/repo.git', projectPath: '/home/test/project',
+        message: 'Run after cloning', stream: false, cleanup: false,
+      });
+      await started;
+      let drained = false;
+      const drain = chatRunRegistry.drain(1_000).then((result) => { drained = true; return result; });
+      try {
+        await Promise.resolve();
+        assert.equal(drained, false, 'shutdown cannot exit while the admitted clone is running');
+      } finally {
+        clone.emit('close', 0);
+      }
+      const response = await request;
+      assert.equal(response.status, 503);
+      assert.equal((await response.json() as { code: string }).code, 'SERVER_DRAINING');
+      assert.equal(sessionsCreated, 0);
+      assert.equal(runtime.seen.length, 0);
+      assert.equal(await drain, true);
+    });
+  });
+});
+
+test('shutdown waits for agent branch, push, and PR creation after the provider completes', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    runtime.release();
+    const dependencies = createDependencies(runtime.queryClaude);
+    dependencies.githubTokens.getActiveGithubToken = () => 'test-token';
+    const gitCalls: string[] = [];
+    dependencies.spawnProcess = ((_command: string, args?: readonly string[]) => {
+      const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+      gitCalls.push(String(args?.[0]));
+      queueMicrotask(() => {
+        if (args?.[0] === 'config') {
+          child.stdout.write('https://github.com/owner/repo.git\n');
+        } else if (args?.[0] === 'log') {
+          child.stdout.write('Agent changes\n');
+        }
+        child.emit('close', 0);
+      });
+      return child;
+    }) as unknown as AgentDependencies['spawnProcess'];
+    let prStarted = () => {};
+    const started = new Promise<void>((resolve) => { prStarted = resolve; });
+    let finishPR = () => {};
+    const pendingPR = new Promise<void>((resolve) => { finishPR = resolve; });
+    dependencies.GithubClient = class {
+      pulls = { create: async () => {
+        prStarted();
+        await pendingPR;
+        return { data: { number: 1, html_url: 'https://github.com/owner/repo/pull/1' } };
+      } };
+    } as unknown as AgentDependencies['GithubClient'];
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const request = post(baseUrl, {
+        projectPath: '/home/test/project', message: 'Make changes', stream: false,
+        branchName: 'agent-test', createPR: true,
+      });
+      await started;
+      assert.deepEqual(chatRunRegistry.listRunningRuns(), [], 'the provider has emitted complete');
+      assert.deepEqual(gitCalls, ['config', 'checkout', 'push', 'log']);
+      let drained = false;
+      const drain = chatRunRegistry.drain(1_000).then((result) => { drained = true; return result; });
+      try {
+        await Promise.resolve();
+        assert.equal(drained, false, 'the pending PR still belongs to the agent request');
+      } finally {
+        finishPR();
+      }
+      const response = await request;
+      assert.equal(response.status, 200);
+      const body = await response.json() as { pullRequest: { number: number } };
+      assert.equal(body.pullRequest.number, 1);
+      assert.equal(await drain, true);
     });
   });
 });

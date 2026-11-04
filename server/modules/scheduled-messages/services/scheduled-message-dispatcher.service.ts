@@ -16,9 +16,10 @@ const POLL_INTERVAL_MS = 30_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dispatchInFlight = false;
-// Claims waiting behind an active turn must be persisted again before shutdown
-// can finish draining that turn and exit.
-const waitingClaims = new Map<string, ScheduledMessageRow>();
+// Claims waiting for run registration, including an interrupt's pending abort,
+// must be persisted again before shutdown can finish draining and exit.
+type WaitingClaim = { row: ScheduledMessageRow; controller: AbortController };
+const waitingClaims = new Map<string, WaitingClaim>();
 
 function readOptions(raw: string): Record<string, unknown> {
   try {
@@ -102,9 +103,10 @@ function recordFailure(row: ScheduledMessageRow, reason: string): void {
 }
 
 async function sendClaimedMessage(
-  row: ScheduledMessageRow,
+  claim: WaitingClaim,
   runtime: ProviderRuntimeGateway,
 ): Promise<void> {
+  const { row, controller } = claim;
   try {
     const result = await runDetachedChatTurn(
       {
@@ -116,9 +118,20 @@ async function sendClaimedMessage(
         // is aborted so the scheduled message lands when it was due, instead
         // of being recorded as "not sent — session was busy".
         interruptActiveRun: true,
+        signal: controller.signal,
+        // Registration and this ownership transfer are synchronous. Shutdown
+        // may restore only claims whose provider turn has not been registered.
+        onStarted: () => { waitingClaims.delete(row.id); },
       },
       { runtime },
     );
+
+    // Close already restored this row. A new process may now own it: neither
+    // a late abort result nor a rejection may release/fail that process's claim.
+    if (controller.signal.aborted) {
+      return;
+    }
+    waitingClaims.delete(row.id);
 
     // Shutdown is temporary, so an unstarted turn remains pending. Permanent
     // admission failures and errors after a run started remain visible failures:
@@ -130,6 +143,10 @@ async function sendClaimedMessage(
       recordFailure(row, result.error ?? 'The session was unavailable when this was due.');
     }
   } catch (error) {
+    if (controller.signal.aborted) {
+      return;
+    }
+    waitingClaims.delete(row.id);
     const message = error instanceof Error ? error.message : String(error);
     recordFailure(row, message);
   }
@@ -154,7 +171,7 @@ export async function dispatchDueScheduledMessages(
     return 0;
   }
   for (const row of due) {
-    waitingClaims.set(row.id, row);
+    waitingClaims.set(row.id, { row, controller: new AbortController() });
   }
 
   // The claim already recorded them as sent, so their banners come down now,
@@ -166,8 +183,11 @@ export async function dispatchDueScheduledMessages(
   // Sequentially: a session can only have one run at a time, and two due
   // messages for the same session must not race each other into it.
   for (const row of due) {
-    waitingClaims.delete(row.id);
-    await sendClaimedMessage(row, runtime);
+    const claim = waitingClaims.get(row.id);
+    if (claim?.row !== row) {
+      continue;
+    }
+    await sendClaimedMessage(claim, runtime);
   }
 
   return due.length;
@@ -217,9 +237,19 @@ export function closeScheduledMessageDispatcher(): void {
     clearInterval(pollTimer);
     pollTimer = null;
   }
-  for (const row of waitingClaims.values()) {
-    scheduledMessagesDb.releaseClaim(row.id);
-    announceScheduledMessagesChanged(row.session_id);
+  for (const [id, claim] of waitingClaims) {
+    waitingClaims.delete(id);
+    try {
+      scheduledMessagesDb.releaseClaim(id);
+      announceScheduledMessagesChanged(claim.row.session_id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[ScheduledMessages] Failed to release claim during shutdown', { id, error: message });
+    } finally {
+      // Also revoke any interrupt admission still awaiting its abort, so it
+      // cannot start after the row has become available to a restarted server.
+      claim.controller.abort();
+    }
   }
   waitingClaims.clear();
 }

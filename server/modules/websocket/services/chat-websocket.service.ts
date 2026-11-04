@@ -458,10 +458,11 @@ async function handleChatAbort(
 
   // Scoped to the run that was stopped: a stop can take a round trip, and a
   // new run of the session may have started by the time it returns.
-  chatRunRegistry.completeRunIfCurrent(run, {
-    exitCode: success ? 0 : 1,
-    aborted: true,
-  });
+  if (success) {
+    chatRunRegistry.completeRunIfCurrent(run, { exitCode: 0, aborted: true });
+  } else {
+    sendProtocolError(ws, 'ABORT_FAILED', 'The active run could not be interrupted.', sessionId);
+  }
 }
 
 /**
@@ -627,7 +628,8 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * Resolves when the provider run settles. Returns false when the session has
  * gone away or is busy without `interruptActiveRun`, which the caller reports
  * on the schedule. Shutdown rejections are retryable only if the turn never
- * started; an interrupt admitted before shutdown remains part of its drain.
+ * started; an interrupt admitted before shutdown remains part of its drain
+ * unless the caller cancels it before the replacement is registered.
  */
 export async function runDetachedChatTurn(
   input: {
@@ -641,10 +643,14 @@ export async function runDetachedChatTurn(
      * land mid-run, so the timer outranks whatever is running.
      */
     interruptActiveRun?: boolean;
+    /** Scheduled messages cancel an unstarted claim when the dispatcher closes. */
+    signal?: AbortSignal;
+    /** Synchronous handoff to the dispatcher once the registry owns the run. */
+    onStarted?: () => void;
   },
   dependencies: ChatWebSocketDependencies,
 ): Promise<ChatTurnDispatchResult> {
-  if (chatRunRegistry.isDraining()) {
+  if (chatRunRegistry.isDraining() || input.signal?.aborted) {
     return { started: false, error: 'The server is shutting down.', retryable: true };
   }
 
@@ -660,6 +666,11 @@ export async function runDetachedChatTurn(
 
   const activeRun = chatRunRegistry.getRun(input.sessionId);
   let admission: symbol | null = null;
+  const cancelAdmission = () => {
+    if (admission) {
+      chatRunRegistry.releaseRunAdmission(admission);
+    }
+  };
   try {
     if (activeRun && activeRun.status === 'running') {
       if (!input.interruptActiveRun) {
@@ -669,6 +680,7 @@ export async function runDetachedChatTurn(
       if (!admission) {
         return { started: false, error: 'The server is shutting down.', retryable: true };
       }
+      input.signal?.addEventListener('abort', cancelAdmission, { once: true });
       // The turn is accepted before the abort yields. Drain includes this
       // reservation and permits only this replacement to cross its boundary.
       // Same shape as `chat.abort`: cancel the provider run and emit the
@@ -677,10 +689,19 @@ export async function runDetachedChatTurn(
       // run's own dispatch settles later through completeRunIfCurrent, which is
       // scoped to that run and cannot touch the one started here.
       const aborted = await dependencies.runtime.abort(activeRun.provider, input.sessionId);
-      chatRunRegistry.completeRunIfCurrent(activeRun, {
-        exitCode: aborted ? 0 : 1,
-        aborted: true,
-      });
+      if (aborted) {
+        chatRunRegistry.completeRunIfCurrent(activeRun, { exitCode: 0, aborted: true });
+      } else if (activeRun.status === 'running') {
+        // A failed abort does not stop the provider. Keep its run counted and
+        // leave this unstarted scheduled turn eligible for a later attempt.
+        return { started: false, error: 'The active run could not be interrupted.', retryable: true };
+      }
+    }
+
+    // No await separates cancellation, registration, and onStarted. Once close
+    // restores an unstarted claim, this continuation can never dispatch it.
+    if (input.signal?.aborted) {
+      return { started: false, error: 'The scheduled turn was cancelled before starting.', retryable: true };
     }
 
     return await dispatchRun(
@@ -691,10 +712,11 @@ export async function runDetachedChatTurn(
       { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
       dependencies,
       {},
-      undefined,
+      input.onStarted,
       admission ?? undefined,
     );
   } finally {
+    input.signal?.removeEventListener('abort', cancelAdmission);
     if (admission) {
       chatRunRegistry.releaseRunAdmission(admission);
     }

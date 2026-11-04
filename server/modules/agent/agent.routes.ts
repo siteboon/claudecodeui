@@ -36,7 +36,7 @@ type AgentRouterDependencies = {
     createAppSession(provider: string, projectPath: string, initialMessage: string): { sessionId: string };
   };
   /** The live-run registry the chat socket uses; registering here is what puts an API run on the running-sessions list. */
-  runs: Pick<typeof import('@/modules/websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent' | 'isProcessing' | 'isDraining'>;
+  runs: Pick<typeof import('@/modules/websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent' | 'isProcessing' | 'isDraining' | 'reserveDrainWork'>;
   queryClaude: ProviderRunFunction;
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
@@ -936,6 +936,13 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     // list, subscribable from any tab, and completed on every exit path.
     let run = null;
 
+    // Include clone/setup and post-provider GitHub work in the same bounded
+    // shutdown window, even before a run exists or after its terminal event.
+    const finishRequest = runRegistry.reserveDrainWork();
+    if (!finishRequest) {
+      return res.status(503).json({ code: 'SERVER_DRAINING', error: 'The server is shutting down and cannot start a new run.' });
+    }
+
     try {
       // Determine the final project path
       if (githubUrl) {
@@ -972,6 +979,15 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // request that resolved to another directory is not that session.
       if (sessionRow && sessionRow.project_path && normalizeProjectPath(sessionRow.project_path) !== finalProjectPath) {
         throw new Error(`Session "${sessionRow.session_id}" belongs to project ${sessionRow.project_path}, not ${finalProjectPath}`);
+      }
+
+      // Setup can yield across shutdown. Refuse before allocating an empty
+      // session; no await separates this check from session/run registration.
+      if (runRegistry.isDraining()) {
+        if (cleanup && githubUrl && clonedProjectCreated) {
+          await cleanupProject(finalProjectPath, null);
+        }
+        return res.status(503).json({ code: 'SERVER_DRAINING', error: 'The server is shutting down and cannot start a new run.' });
       }
 
       // Register project path in DB (or reuse existing active registration)
@@ -1361,8 +1377,12 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // without its terminal `complete` would leave the session listed as
       // running in every tab. Scoped to this run, so a run the session
       // started meanwhile is left alone.
-      if (run) {
-        runRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+      try {
+        if (run) {
+          runRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+        }
+      } finally {
+        finishRequest();
       }
     }
   });
