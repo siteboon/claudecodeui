@@ -71,11 +71,22 @@ function ComposerModelMenu({
   const effortLabel = effort === DEFAULT_EFFORT_VALUE ? defaultEffortLabel : effort;
 
   const defaultSpeedLabel = t('composer.speedDefault', { defaultValue: 'Standard' });
-  const resolvedSpeedOptions = useMemo<SpeedOption[]>(
-    () => (speedOptions.length > 0 ? [{ value: DEFAULT_EFFORT_VALUE, label: defaultSpeedLabel }, ...speedOptions] : []),
-    [defaultSpeedLabel, speedOptions],
+  // A tier the options do not list can only be one the composer still sends while the
+  // provider's catalog is loading or failed to load. It is shown by its value, and the
+  // section stays, so a paid tier never applies unseen and can be switched off.
+  const knownSpeedOptions = useMemo<SpeedOption[]>(
+    () => (speed !== DEFAULT_EFFORT_VALUE && !speedOptions.some((option) => option.value === speed)
+      ? [...speedOptions, { value: speed }]
+      : speedOptions),
+    [speed, speedOptions],
   );
-  const selectedSpeedOption = speedOptions.find((option) => option.value === speed) ?? null;
+  const resolvedSpeedOptions = useMemo<SpeedOption[]>(
+    () => (knownSpeedOptions.length > 0
+      ? [{ value: DEFAULT_EFFORT_VALUE, label: defaultSpeedLabel }, ...knownSpeedOptions]
+      : []),
+    [defaultSpeedLabel, knownSpeedOptions],
+  );
+  const selectedSpeedOption = knownSpeedOptions.find((option) => option.value === speed) ?? null;
   const selectedSpeedLabel = selectedSpeedOption ? selectedSpeedOption.label || selectedSpeedOption.value : null;
   const hasSpeedSection = resolvedSpeedOptions.length > 0;
 
@@ -87,7 +98,7 @@ function ComposerModelMenu({
 
   const hasEffortSection = resolvedEffortOptions.length > 0;
   const hasModelSection = modelOptions.length > 0 || modelsLoading;
-  if (!hasEffortSection && !hasModelSection) {
+  if (!hasEffortSection && !hasModelSection && !hasSpeedSection) {
     return null;
   }
 
@@ -127,7 +138,7 @@ function ComposerModelMenu({
         {selectedSpeedLabel && (
           <>
             <Zap aria-hidden="true" className="h-3 w-3 shrink-0 text-muted-foreground sm:hidden" />
-            <span className="hidden shrink-0 text-muted-foreground sm:inline">· {selectedSpeedLabel}</span>
+            <span className="hidden shrink-0 capitalize text-muted-foreground sm:inline">· {selectedSpeedLabel}</span>
           </>
         )}
       </button>
@@ -171,6 +182,7 @@ function ComposerModelMenu({
                     onSelectSpeed(option.value);
                     setIsOpen(false);
                   }}
+                  className={option.label ? undefined : 'capitalize'}
                 />
               ))}
             </>

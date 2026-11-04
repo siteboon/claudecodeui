@@ -63,3 +63,18 @@ test('shows the chosen tier on the trigger and hides the section for models with
   fireEvent.click(screen.getByRole('button', { name: 'Select model and reasoning effort' }));
   assert.equal(screen.queryByText('Speed'), null);
 });
+
+test('shows a stored tier while the model catalog is unavailable and lets it be switched off', () => {
+  // The composer still sends a stored tier before the catalog arrives, or when its
+  // request failed, so the tier stays visible even though no option describes it.
+  const onSelectSpeed = vi.fn();
+  renderMenu('fast', [], onSelectSpeed);
+
+  const trigger = screen.getByRole('button', { name: 'Select model and reasoning effort (speed: fast)' });
+  assert.ok(screen.getByText('· fast'));
+
+  fireEvent.click(trigger);
+  assert.ok(screen.getByText('Speed'));
+  fireEvent.click(screen.getByText('Standard'));
+  assert.deepEqual(onSelectSpeed.mock.calls, [['default']]);
+});
