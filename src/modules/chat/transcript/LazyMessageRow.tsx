@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { ChatMessage } from '@/shared/types';
@@ -17,8 +17,10 @@ import type { LazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
  *
  * The placeholder reuses the row's last measured height, so scrolling back
  * through previously seen content changes no scroll geometry at all; rows
- * never yet measured use an estimate and rely on browser scroll anchoring
- * while they settle.
+ * never yet measured use an estimate. Where the browser has scroll anchoring,
+ * placeholders take no width, which keeps them out of its anchor selection, so
+ * it holds the view still on real content instead; where it has none, the
+ * shared observer does (trackMountedRow).
  */
 
 /** Placeholder height for rows that have never been measured. */
@@ -55,7 +57,7 @@ export default function LazyMessageRow({
       // a pixel, which offsetHeight would round: a placeholder taller than the
       // content, on a row just past the band's top edge, reaches back into the
       // band, remounts the content, drops out again, and repeats forever where
-      // no scroll anchoring absorbs the shift (Safari).
+      // no scroll anchoring absorbs the shift (Safari before 27).
       const rect = elementRef.current?.getBoundingClientRect();
       // A 0x0 box means the row is not rendered at all (hidden tab), which
       // says nothing about its height, so the last measurement is kept.
@@ -74,9 +76,29 @@ export default function LazyMessageRow({
 
   const isMounted = lazyRows === null || isNearViewport;
 
+  // Whether the last commit showed the placeholder, so the commit that swaps
+  // the real content in can have the observer keep the view still.
+  const showedPlaceholderRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!isMounted) {
+      showedPlaceholderRef.current = true;
+      return undefined;
+    }
+    const replacedPlaceholder = showedPlaceholderRef.current;
+    showedPlaceholderRef.current = false;
+    if (!lazyRows || !elementRef.current) return undefined;
+    return lazyRows.trackMountedRow(elementRef.current, replacedPlaceholder);
+  }, [isMounted, lazyRows]);
+
+  // `data-lazy-row` is how useLazyRowObserver finds the rows' column (its
+  // LAZY_ROW_SELECTOR); `data-lazy-placeholder` is what index.css gives no
+  // width where the browser anchors, keeping placeholders out of its anchor
+  // selection, and what holds a search highlight back until the row mounts.
   return (
     <div
       ref={elementRef}
+      data-lazy-row=""
+      data-lazy-placeholder={isMounted ? undefined : ''}
       data-message-timestamp={timestamp || undefined}
       style={isMounted ? undefined : { height: measuredHeight ?? ESTIMATED_ROW_HEIGHT_PX }}
     >

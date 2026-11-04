@@ -31,7 +31,7 @@ const project: Project = {
 const session: ProjectSession = { id: 'session-a', summary: 'A', lastActivity: '2026-01-01T00:00:00.000Z', messageCount: 1 } as ProjectSession;
 
 const store = {
-  fetchFromServer: vi.fn(async () => ({ fetchedAt: 1, status: 'idle' as const, total: 0, hasMore: false, offset: 0 })),
+  fetchFromServer: vi.fn(async () => ({ slot: { fetchedAt: 1, status: 'idle' as const, total: 0, hasMore: false, offset: 0 }, ok: true })),
   fetchMore: vi.fn(),
   appendRealtime: vi.fn(),
   refreshLatestFromServer: vi.fn(),

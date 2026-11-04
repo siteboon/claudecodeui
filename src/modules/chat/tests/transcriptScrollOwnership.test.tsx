@@ -75,7 +75,7 @@ function createStore(messagesBySession: Map<string, NormalizedMessage[]>) {
   });
 
   return {
-    fetchFromServer: vi.fn(async (sessionId: string) => slotFor(sessionId)),
+    fetchFromServer: vi.fn(async (sessionId: string) => ({ slot: slotFor(sessionId), ok: true })),
     fetchMore: vi.fn(async (sessionId: string) => ({ slot: slotFor(sessionId), prependedCount: 0 })),
     appendRealtime: vi.fn(),
     refreshLatestFromServer: vi.fn(async (sessionId: string) => ({
@@ -222,13 +222,17 @@ describe('search jump ownership', () => {
     // The row session B renders. The jump requested against session A resolves
     // by timestamp, and on its last retry it accepts the nearest row it can
     // find — which, after the switch, is this one.
+    // It sits 2000px into the content, so centring it in the 500px view
+    // writes scrollTop 1800.
     const sessionBRow = document.createElement('div');
     sessionBRow.setAttribute('data-message-timestamp', '2026-01-01T00:00:05.000Z');
+    sessionBRow.getBoundingClientRect = () => {
+      const top = 2000 - container.element.scrollTop;
+      return { top, bottom: top + 100, height: 100, width: 800 } as DOMRect;
+    };
     container.element.appendChild(sessionBRow);
 
     (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
 
     // Let the jump arm and start retrying.
     await act(async () => {
@@ -246,8 +250,8 @@ describe('search jump ownership', () => {
     });
 
     assert.equal(
-      scrollIntoView.mock.calls.length,
-      0,
+      container.writes.includes(1800),
+      false,
       'a jump requested in the previous session must not scroll the new one',
     );
     assert.equal(
