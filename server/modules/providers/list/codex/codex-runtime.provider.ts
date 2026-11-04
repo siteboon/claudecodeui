@@ -269,6 +269,7 @@ async function queryCodex(
     projectPath,
     model,
     effort,
+    speed,
     images,
     files,
     permissionMode = 'default'
@@ -288,6 +289,10 @@ async function queryCodex(
   const resolvedEffort = typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
     ? effort as ModelReasoningEffort
     : undefined;
+  // A service tier (Fast, Ultrafast, ...) the selected model lists; without one the
+  // `service_tier` from the user's Codex config applies.
+  const allowedSpeeds = selectedModel?.speed?.values?.map((value) => value.value) || [];
+  const resolvedSpeed = typeof speed === 'string' && allowedSpeeds.includes(speed) ? speed : undefined;
 
   let codex: Codex;
   let thread: Thread;
@@ -308,7 +313,7 @@ async function queryCodex(
   const sessionKey = () => sessionId || capturedSessionId || null;
 
   try {
-    codex = new Codex();
+    codex = new Codex(resolvedSpeed ? { config: { service_tier: resolvedSpeed } } : {});
 
     const threadOptions: ThreadOptions = {
       workingDirectory,

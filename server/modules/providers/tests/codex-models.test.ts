@@ -35,3 +35,9 @@ test('bundles a Codex CLI new enough to know the GPT-6 Sol and Luna models', () 
   const [major, minor] = version.split('.').map(Number);
   assert.ok(major > 0 || minor >= 155, `bundled @openai/codex ${version} predates 0.155.0`);
 });
+
+test('lists the service tiers the bundled Codex CLI offers for each model', () => {
+  assert.deepEqual(findCodexModel('gpt-5.6-sol')?.speed?.values.map((tier) => tier.value), ['priority', 'ultrafast']);
+  assert.deepEqual(findCodexModel('gpt-6-astra')?.speed?.values.map((tier) => tier.value), ['priority']);
+  assert.equal(findCodexModel('gpt-5.4-mini')?.speed, undefined);
+});

@@ -250,3 +250,46 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
+
+const normalizeModelKey = (value: string): string => value
+  .trim()
+  .toLowerCase()
+  .replace(/\[[^\]]*\]$/, '')
+  .replace(/^claude-/, '')
+  .replace(/-\d{8}$/, '')
+  .replace(/[\s._]+/g, '-');
+
+/**
+ * Finds the catalog entry a model id refers to.
+ *
+ * An exact value match wins. Otherwise the id is compared by name, because a
+ * session reports the concrete model it ran (`claude-opus-5-5`) while the
+ * catalog lists it under an alias (`opus`, labelled "Opus 5.5"): the
+ * `claude-` prefix, a date suffix and a `[1m]` context tag are ignored, and
+ * spaces and dots compare as dashes. Failing that, the id falls back to its
+ * model family alias (`opus`, or `opus[1m]` for a `[1m]` id).
+ */
+export const findProviderModelOption = <T extends { value: string; label?: string }>(
+  options: readonly T[],
+  model: string | null | undefined,
+): T | null => {
+  if (!model) {
+    return null;
+  }
+  const exact = options.find((option) => option.value === model);
+  if (exact) {
+    return exact;
+  }
+  const key = normalizeModelKey(model);
+  const byName = options.find((option) => (
+    normalizeModelKey(option.value) === key || normalizeModelKey(option.label ?? '') === key
+  ));
+  if (byName) {
+    return byName;
+  }
+  const family = key.split('-')[0];
+  const contextTag = /\[[^\]]*\]$/.exec(model.trim().toLowerCase())?.[0] ?? '';
+  return options.find((option) => option.value === `${family}${contextTag}`)
+    ?? options.find((option) => option.value === family)
+    ?? null;
+};
