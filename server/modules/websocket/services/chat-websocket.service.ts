@@ -85,6 +85,13 @@ type ChatWebSocketDependencies = {
   runtime: ProviderRuntimeGateway;
 };
 
+type ChatTurnDispatchResult = {
+  started: boolean;
+  error: string | null;
+  /** Only a turn that never started may be restored for a later dispatch. */
+  retryable?: boolean;
+};
+
 /**
  * Extracts the authenticated request user id in the formats currently produced
  * by platform and OSS auth code paths.
@@ -219,20 +226,9 @@ async function dispatchRun(
   dependencies: ChatWebSocketDependencies,
   extraRuntimeOptions: AnyRecord = {},
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
-): Promise<{ started: boolean; error: string | null }> {
+  admission?: symbol,
+): Promise<ChatTurnDispatchResult> {
   const provider = session.provider as LLMProvider;
-
-  if (chatRunRegistry.isDraining()) {
-    if (ws) {
-      sendProtocolError(
-        ws,
-        'SERVER_DRAINING',
-        'The server is shutting down and cannot start a new run.',
-        sessionId,
-      );
-    }
-    return { started: false, error: 'The server is shutting down.' };
-  }
 
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,
@@ -240,9 +236,21 @@ async function dispatchRun(
     providerSessionId: session.provider_session_id,
     connection: ws,
     userId,
+    admission,
   });
 
   if (!run) {
+    if (chatRunRegistry.isDraining()) {
+      if (ws) {
+        sendProtocolError(
+          ws,
+          'SERVER_DRAINING',
+          'The server is shutting down and cannot start a new run.',
+          sessionId,
+        );
+      }
+      return { started: false, error: 'The server is shutting down.', retryable: true };
+    }
     if (ws) {
       sendProtocolError(
         ws,
@@ -618,7 +626,8 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *
  * Resolves when the provider run settles. Returns false when the session has
  * gone away or is busy without `interruptActiveRun`, which the caller reports
- * on the schedule.
+ * on the schedule. Shutdown rejections are retryable only if the turn never
+ * started; an interrupt admitted before shutdown remains part of its drain.
  */
 export async function runDetachedChatTurn(
   input: {
@@ -634,9 +643,9 @@ export async function runDetachedChatTurn(
     interruptActiveRun?: boolean;
   },
   dependencies: ChatWebSocketDependencies,
-): Promise<{ started: boolean; error: string | null }> {
+): Promise<ChatTurnDispatchResult> {
   if (chatRunRegistry.isDraining()) {
-    return { started: false, error: 'The server is shutting down.' };
+    return { started: false, error: 'The server is shutting down.', retryable: true };
   }
 
   const session = sessionsDb.getSessionById(input.sessionId);
@@ -650,30 +659,46 @@ export async function runDetachedChatTurn(
   }
 
   const activeRun = chatRunRegistry.getRun(input.sessionId);
-  if (activeRun && activeRun.status === 'running') {
-    if (!input.interruptActiveRun) {
-      return { started: false, error: 'A run was already in progress for this session.' };
+  let admission: symbol | null = null;
+  try {
+    if (activeRun && activeRun.status === 'running') {
+      if (!input.interruptActiveRun) {
+        return { started: false, error: 'A run was already in progress for this session.' };
+      }
+      admission = chatRunRegistry.reserveRunAdmission(input.sessionId);
+      if (!admission) {
+        return { started: false, error: 'The server is shutting down.', retryable: true };
+      }
+      // The turn is accepted before the abort yields. Drain includes this
+      // reservation and permits only this replacement to cross its boundary.
+      // Same shape as `chat.abort`: cancel the provider run and emit the
+      // terminal `complete` on its behalf, so every watching client sees the
+      // interrupted run end before this turn's stream begins. The interrupted
+      // run's own dispatch settles later through completeRunIfCurrent, which is
+      // scoped to that run and cannot touch the one started here.
+      const aborted = await dependencies.runtime.abort(activeRun.provider, input.sessionId);
+      chatRunRegistry.completeRunIfCurrent(activeRun, {
+        exitCode: aborted ? 0 : 1,
+        aborted: true,
+      });
     }
-    // Same shape as `chat.abort`: cancel the provider run and emit the
-    // terminal `complete` on its behalf, so every watching client sees the
-    // interrupted run end before this turn's stream begins. The interrupted
-    // run's own dispatch settles later through completeRunIfCurrent, which is
-    // scoped to that run and cannot touch the one started here.
-    const aborted = await dependencies.runtime.abort(activeRun.provider, input.sessionId);
-    chatRunRegistry.completeRunIfCurrent(activeRun, {
-      exitCode: aborted ? 0 : 1,
-      aborted: true,
-    });
-  }
 
-  return dispatchRun(
-    null,
-    input.userId,
-    input.sessionId,
-    session,
-    { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
-    dependencies,
-  );
+    return await dispatchRun(
+      null,
+      input.userId,
+      input.sessionId,
+      session,
+      { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
+      dependencies,
+      {},
+      undefined,
+      admission ?? undefined,
+    );
+  } finally {
+    if (admission) {
+      chatRunRegistry.releaseRunAdmission(admission);
+    }
+  }
 }
 
 export function handleChatConnection(

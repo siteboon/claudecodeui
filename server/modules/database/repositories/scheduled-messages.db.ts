@@ -20,6 +20,7 @@ export type ScheduledMessageRow = {
 const COLUMNS =
   'id, user_id, session_id, content, options, scheduled_for, status, failure_reason, created_at, updated_at';
 
+/** Used by the scheduled-messages module to persist schedules, claims, and dispatch outcomes. */
 export const scheduledMessagesDb = {
   create(input: {
     userId: number;
@@ -107,6 +108,17 @@ export const scheduledMessagesDb = {
          WHERE id = ?`
       )
       .run(reason.slice(0, 500), id);
+  },
+
+  /** Restores a dispatcher claim that shutdown rejected before the provider ran. */
+  releaseClaim(id: string): void {
+    getConnection()
+      .prepare(
+        `UPDATE scheduled_messages
+         SET status = 'pending', failure_reason = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'sent'`
+      )
+      .run(id);
   },
 
   /**

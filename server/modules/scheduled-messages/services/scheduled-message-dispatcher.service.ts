@@ -16,6 +16,9 @@ const POLL_INTERVAL_MS = 30_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dispatchInFlight = false;
+// Claims waiting behind an active turn must be persisted again before shutdown
+// can finish draining that turn and exit.
+const waitingClaims = new Map<string, ScheduledMessageRow>();
 
 function readOptions(raw: string): Record<string, unknown> {
   try {
@@ -50,7 +53,7 @@ async function sendClaimedQueuedMessage(
 
   // The registry check and run reservation are separate operations. If a run
   // wins that tiny race, put the turn back so the next poll tries again.
-  if (!result.started && result.error === 'A run was already in progress for this session.') {
+  if (!result.started && (result.retryable || result.error === 'A run was already in progress for this session.')) {
     sessionDraftsDb.restoreQueuedMessage(candidate);
     return;
   }
@@ -72,6 +75,9 @@ function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): bool
 
 /** Sends every persisted queued turn whose session is currently idle. */
 export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
+  if (chatRunRegistry.isDraining()) {
+    return 0;
+  }
   const candidates = sessionDraftsDb.listQueuedMessages();
   let claimed = 0;
 
@@ -114,11 +120,13 @@ async function sendClaimedMessage(
       { runtime },
     );
 
-    // Recorded rather than retried, and recorded whether the run never started
-    // (deleted session, unavailable provider) or started and then failed.
-    // Silently dropping a message the user scheduled is worse than telling
-    // them it did not go.
-    if (!result.started || result.error) {
+    // Shutdown is temporary, so an unstarted turn remains pending. Permanent
+    // admission failures and errors after a run started remain visible failures:
+    // retrying a turn that already ran could repeat its side effects.
+    if (!result.started && result.retryable) {
+      scheduledMessagesDb.releaseClaim(row.id);
+      announceScheduledMessagesChanged(row.session_id);
+    } else if (!result.started || result.error) {
       recordFailure(row, result.error ?? 'The session was unavailable when this was due.');
     }
   } catch (error) {
@@ -136,11 +144,17 @@ export async function dispatchDueScheduledMessages(
   runtime: ProviderRuntimeGateway,
   now: Date = new Date(),
 ): Promise<number> {
+  if (chatRunRegistry.isDraining()) {
+    return 0;
+  }
   // Claimed before any of them runs, so a long turn cannot let the next poll
   // pick the same message up again.
   const due = scheduledMessagesDb.claimDue(now);
   if (due.length === 0) {
     return 0;
+  }
+  for (const row of due) {
+    waitingClaims.set(row.id, row);
   }
 
   // The claim already recorded them as sent, so their banners come down now,
@@ -152,6 +166,7 @@ export async function dispatchDueScheduledMessages(
   // Sequentially: a session can only have one run at a time, and two due
   // messages for the same session must not race each other into it.
   for (const row of due) {
+    waitingClaims.delete(row.id);
     await sendClaimedMessage(row, runtime);
   }
 
@@ -196,9 +211,15 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   poll();
 }
 
+/** Used by server shutdown to stop polling and restore claims that have not started. */
 export function closeScheduledMessageDispatcher(): void {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  for (const row of waitingClaims.values()) {
+    scheduledMessagesDb.releaseClaim(row.id);
+    announceScheduledMessagesChanged(row.session_id);
+  }
+  waitingClaims.clear();
 }

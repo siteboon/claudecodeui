@@ -177,6 +177,44 @@ test('a second API request on a session mid-run is refused with 409, as the chat
   });
 });
 
+test('draining API requests return 503 before cloning or starting a provider', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    const dependencies = createDependencies(runtime.queryClaude);
+    let clones = 0;
+    dependencies.spawnProcess = (() => { clones += 1; throw new Error('no clone expected'); }) as AgentDependencies['spawnProcess'];
+    await chatRunRegistry.drain(1_000);
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const response = await post(baseUrl, {
+        githubUrl: 'https://github.com/owner/repo.git',
+        projectPath: '/home/test/project', message: 'Wait until restart', stream: false,
+      });
+      assert.equal(response.status, 503);
+      assert.equal((await response.json() as { code: string }).code, 'SERVER_DRAINING');
+      assert.equal(runtime.seen.length, 0);
+      assert.equal(clones, 0);
+    });
+  });
+});
+
+test('an API request overtaken by drain reports shutdown instead of a busy session', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    const dependencies = createDependencies(runtime.queryClaude);
+    dependencies.fileSystem = {
+      access: async () => { await chatRunRegistry.drain(1_000); },
+    } as unknown as AgentDependencies['fileSystem'];
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const response = await post(baseUrl, {
+        projectPath: '/home/test/project', message: 'Wait until restart', stream: false,
+      });
+      assert.equal(response.status, 503);
+      assert.equal((await response.json() as { code: string }).code, 'SERVER_DRAINING');
+      assert.equal(runtime.seen.length, 0);
+    });
+  });
+});
+
 test('a non-streaming API run answers with the app session id and is off the list once done', async () => {
   await withIsolatedDatabase(async () => {
     const runtime = createHeldRuntime();

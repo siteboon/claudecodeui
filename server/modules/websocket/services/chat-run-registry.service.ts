@@ -54,6 +54,8 @@ const COMPLETED_RUN_RETENTION_MS = 5 * 60 * 1000;
  * REST history refresh, which is always the authoritative source.
  */
 const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
+// Larger delays overflow Node's timer and become a 1ms timeout.
+const MAX_DRAIN_TIMEOUT_MS = 2_147_483_647;
 
 /**
  * Active and recently-completed runs keyed by app session id.
@@ -63,11 +65,15 @@ const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
  * path all consult it instead of asking each provider runtime individually.
  */
 const runs = new Map<string, ChatRun>();
+// An accepted interrupt must keep shutdown waiting while its old run is
+// stopping, even if that run completes before its replacement is registered.
+const pendingAdmissions = new Map<symbol, string>();
 let isDraining = false;
 const drainWaiters = new Set<DrainWaiter>();
 
 function hasRunningRuns(): boolean {
-  return Array.from(runs.values()).some((run) => run.status === 'running');
+  return pendingAdmissions.size > 0
+    || Array.from(runs.values()).some((run) => run.status === 'running');
 }
 
 function resolveDrainWaitersIfIdle(): void {
@@ -204,8 +210,25 @@ function recordProviderSessionId(run: ChatRun, providerSessionId: string): void 
  * every run gets a `ChatSessionWriter` that remaps provider-native session
  * ids to the app id, assigns `seq` numbers, and buffers events for replay —
  * regardless of which provider runtime produced them.
+ * Consumed by the websocket gateway, scheduled dispatcher, and agent API.
  */
 export const chatRunRegistry = {
+  /** Reserves an interrupting turn for the websocket gateway before its asynchronous abort. */
+  reserveRunAdmission(appSessionId: string): symbol | null {
+    if (isDraining) {
+      return null;
+    }
+    const admission = Symbol(appSessionId);
+    pendingAdmissions.set(admission, appSessionId);
+    return admission;
+  },
+
+  /** Releases a gateway reservation when its interrupt fails or its replacement settles. */
+  releaseRunAdmission(admission: symbol): void {
+    pendingAdmissions.delete(admission);
+    resolveDrainWaitersIfIdle();
+  },
+
   /** Installs the check that keeps a completed run registered while its session still has background work. */
   setRetentionGuard(guard: (appSessionId: string) => boolean): void {
     retainCompletedRun = guard;
@@ -214,7 +237,8 @@ export const chatRunRegistry = {
   /**
    * Starts tracking a run and returns it, or `null` when a run is already in
    * progress for the session or shutdown draining has begun (callers must
-   * reject the send).
+   * reject the send). A turn reserved before its interrupt may finish that
+   * handoff during drain; its one-use token cannot admit another session.
    */
   startRun(input: {
     appSessionId: string;
@@ -228,13 +252,18 @@ export const chatRunRegistry = {
      */
     connection: RealtimeClientConnection | null;
     userId: string | number | null;
+    /** A one-use reservation for this session, acquired before shutdown began. */
+    admission?: symbol;
   }): ChatRun | null {
-    if (isDraining) {
+    const hasAdmission = input.admission !== undefined
+      && pendingAdmissions.get(input.admission) === input.appSessionId;
+    if (isDraining && !hasAdmission) {
       return null;
     }
 
     const existing = runs.get(input.appSessionId);
-    if (existing && existing.status === 'running') {
+    if ((existing && existing.status === 'running')
+      || (!hasAdmission && Array.from(pendingAdmissions.values()).includes(input.appSessionId))) {
       return null;
     }
 
@@ -262,6 +291,9 @@ export const chatRunRegistry = {
     });
 
     runs.set(input.appSessionId, run);
+    if (hasAdmission && input.admission !== undefined) {
+      pendingAdmissions.delete(input.admission);
+    }
     return run;
   },
 
@@ -279,8 +311,9 @@ export const chatRunRegistry = {
 
   /**
    * Permanently closes run admission for this process and waits until every
-   * active run reaches its terminal event. The boolean distinguishes a clean
-   * drain from the bounded timeout used by server shutdown.
+   * active run and previously accepted interrupt reaches its terminal event.
+   * The boolean distinguishes a clean drain from the bounded timeout used by
+   * server shutdown.
    */
   drain(timeoutMs: number): Promise<boolean> {
     isDraining = true;
@@ -289,7 +322,7 @@ export const chatRunRegistry = {
       return Promise.resolve(true);
     }
 
-    const boundedTimeoutMs = Math.max(0, timeoutMs);
+    const boundedTimeoutMs = Math.min(MAX_DRAIN_TIMEOUT_MS, Math.max(0, timeoutMs));
     if (boundedTimeoutMs === 0) {
       return Promise.resolve(false);
     }
@@ -395,6 +428,7 @@ export const chatRunRegistry = {
    */
   clearAll(): void {
     runs.clear();
+    pendingAdmissions.clear();
     isDraining = false;
     resolveDrainWaitersIfIdle();
   },

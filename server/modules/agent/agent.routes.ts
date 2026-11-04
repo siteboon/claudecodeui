@@ -36,7 +36,7 @@ type AgentRouterDependencies = {
     createAppSession(provider: string, projectPath: string, initialMessage: string): { sessionId: string };
   };
   /** The live-run registry the chat socket uses; registering here is what puts an API run on the running-sessions list. */
-  runs: Pick<typeof import('../websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent' | 'isProcessing'>;
+  runs: Pick<typeof import('@/modules/websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent' | 'isProcessing' | 'isDraining'>;
   queryClaude: ProviderRunFunction;
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
@@ -903,6 +903,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       return res.status(400).json({ error: 'createBranch and createPR require either githubUrl or projectPath with a GitHub remote' });
     }
 
+    if (runRegistry.isDraining()) {
+      return res.status(503).json({ code: 'SERVER_DRAINING', error: 'The server is shutting down and cannot start a new run.' });
+    }
+
     // A run continues a session the caller names, by its app id or — for a
     // caller that stored what an earlier response called `sessionId` — the
     // provider-native one, which the row is also keyed by once indexed. The
@@ -1000,6 +1004,9 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       if (!run) {
         if (cleanup && githubUrl && clonedProjectCreated) {
           cleanupProject(finalProjectPath, null);
+        }
+        if (runRegistry.isDraining()) {
+          return res.status(503).json({ code: 'SERVER_DRAINING', error: 'The server is shutting down and cannot start a new run.' });
         }
         return res.status(409).json({ error: `Session "${appSessionId}" already has a run in progress` });
       }
