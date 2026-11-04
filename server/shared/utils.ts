@@ -1347,11 +1347,15 @@ const LAST_TIMESTAMP_MAX_SCAN_BYTES = 16 * 1024 * 1024;
  * Returns the `timestamp` of the last JSONL row that carries one, as an ISO string.
  *
  * The file is read backwards in chunks, so even a transcript of hundreds of
- * megabytes costs one or two reads. Rows without a valid timestamp and lines
- * that do not parse are skipped. Returns undefined when no such row is found
- * within the last `LAST_TIMESTAMP_MAX_SCAN_BYTES` or the file cannot be read.
+ * megabytes costs one or two reads. Rows without a valid timestamp, rows that
+ * `accept` rejects and lines that do not parse are skipped. Returns undefined
+ * when no such row is found within the last `LAST_TIMESTAMP_MAX_SCAN_BYTES` or
+ * the file cannot be read.
  */
-export async function readLastJsonlTimestamp(filePath: string): Promise<string | undefined> {
+export async function readLastJsonlTimestamp(
+  filePath: string,
+  accept: (row: Record<string, unknown>) => boolean = () => true,
+): Promise<string | undefined> {
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     handle = await open(filePath, 'r');
@@ -1385,8 +1389,8 @@ export async function readLastJsonlTimestamp(filePath: string): Promise<string |
           continue;
         }
         try {
-          const row = JSON.parse(line) as { timestamp?: unknown };
-          if (typeof row.timestamp === 'string' && !Number.isNaN(Date.parse(row.timestamp))) {
+          const row = JSON.parse(line) as Record<string, unknown>;
+          if (typeof row.timestamp === 'string' && !Number.isNaN(Date.parse(row.timestamp)) && accept(row)) {
             return new Date(row.timestamp).toISOString();
           }
         } catch {

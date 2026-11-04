@@ -113,16 +113,21 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   /**
    * Returns the file's creation time and the session's last activity.
    *
-   * Claude Desktop appends untimestamped metadata rows (`custom-title`,
-   * `last-prompt`, `cost-state`, ...) to transcripts that have not been used in
-   * weeks, for example when it starts. The file's mtime then moves although the
-   * conversation did not, and those sessions jump to the top of the recent
-   * list. The last row that carries a `timestamp` is the real last activity;
-   * the mtime remains the fallback.
+   * Claude Desktop appends metadata rows (`custom-title`, `last-prompt`,
+   * `cost-state`, ...) to transcripts that have not been used in weeks, for
+   * example when it starts, and timestamped bookkeeping rows too: a
+   * `queue-operation` that queues a notification such as "Stopped watching
+   * Artifact" for the session's next turn, or a `frame-link`. The file's mtime
+   * then moves although the conversation did not, and those sessions jump to
+   * the top of the recent list. The last user or assistant turn is the real
+   * last activity; the mtime remains the fallback.
    */
   private async readSessionTimestamps(filePath: string): Promise<{ createdAt?: string; updatedAt?: string }> {
     const timestamps = await readFileTimestamps(filePath);
-    const lastActivity = await readLastJsonlTimestamp(filePath);
+    const lastActivity = await readLastJsonlTimestamp(
+      filePath,
+      (row) => row.type === 'user' || row.type === 'assistant',
+    );
     return lastActivity ? { ...timestamps, updatedAt: lastActivity } : timestamps;
   }
 

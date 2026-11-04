@@ -2287,7 +2287,7 @@ test('extractFirstValidJsonlData closes the file stream on the no-match path', {
   }
 });
 
-test('synchronizeFile dates a session by its last timestamped row, not by metadata appended later', { concurrency: false }, async () => {
+test('synchronizeFile dates a session by its last turn, not by metadata appended later', { concurrency: false }, async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-activity-'));
   const workspacePath = path.join(tmp, 'workspace');
   await mkdir(workspacePath, { recursive: true });
@@ -2299,7 +2299,8 @@ test('synchronizeFile dates a session by its last timestamped row, not by metada
     await writeFile(path.join(claudeHome, 'history.jsonl'), '', 'utf8');
 
     // The conversation ended in August; Claude Desktop later appended
-    // untimestamped metadata rows, which moved the file's mtime to today.
+    // untimestamped metadata rows, which moved the file's mtime to today, and
+    // queued a notification for the session's next turn, which is stamped today.
     const filePath = await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
       JSON.stringify({
         type: 'assistant', uuid: 'msg-2', parentUuid: 'msg-1', sessionId: 'test-session-1',
@@ -2308,6 +2309,12 @@ test('synchronizeFile dates a session by its last timestamped row, not by metada
       }),
       JSON.stringify({ type: 'custom-title', customTitle: 'old session', sessionId: 'test-session-1' }),
       JSON.stringify({ type: 'last-prompt', lastPrompt: 'redacted', leafUuid: 'msg-2', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'frame-link', timestamp: '2026-11-03T03:17:59.233Z', sessionId: 'test-session-1' }),
+      JSON.stringify({
+        type: 'queue-operation', operation: 'enqueue', timestamp: '2026-11-04T16:54:38.924Z',
+        sessionId: 'test-session-1',
+        content: '<task-notification>Stopped watching Artifact (connection lost)</task-notification>',
+      }),
     ]);
     const now = new Date();
     await utimes(filePath, now, now);
@@ -2344,6 +2351,11 @@ test('readLastJsonlTimestamp finds the last timestamp across chunk boundaries an
     ].join('\n'), 'utf8');
 
     assert.equal(await readLastJsonlTimestamp(filePath), '2026-08-05T06:28:52.716Z');
+    assert.equal(
+      await readLastJsonlTimestamp(filePath, (row) => row.type === 'user'),
+      '2026-01-01T00:00:00.000Z',
+      'rows the filter rejects are skipped',
+    );
 
     const noTimestamps = path.join(tempRoot, 'metadata-only.jsonl');
     await writeFile(noTimestamps, filler.slice(0, 5).join('\n'), 'utf8');
