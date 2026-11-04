@@ -30,7 +30,7 @@ import {
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
 import { commandsRoutes } from './modules/commands/index.js';
 import { settingsRoutes } from './modules/settings/index.js';
-import { createSystemModule } from './modules/system/index.js';
+import { createSystemModule, recordServerStart } from './modules/system/index.js';
 import { createAgentModule } from './modules/agent/index.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
@@ -79,6 +79,7 @@ const systemRoutes = createSystemModule({
     appRoot: APP_ROOT,
     installMode,
     isPlatform: IS_PLATFORM,
+    runningVersion: RUNNING_VERSION,
 });
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
@@ -357,6 +358,8 @@ async function startServer() {
             await writeLocalServerMarker().catch((error) => {
                 console.warn('[WARN] Could not write local server marker:', error.message);
             });
+            // Lets `cloudcli status` name the last version that actually started.
+            recordServerStart({ version: RUNNING_VERSION, appRoot: APP_ROOT, installMode });
 
             console.log('');
             console.log(terminalTextStyles.dim('═'.repeat(63)));

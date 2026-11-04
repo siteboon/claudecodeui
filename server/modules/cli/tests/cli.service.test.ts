@@ -37,7 +37,15 @@ function createHarness() {
       },
     },
     getLatestPackageVersion: async () => '1.2.3',
-    updateGlobalPackage: () => undefined,
+    updateGlobalPackage: async () => {
+      throw new Error('update is covered by cli-update-history.test.ts');
+    },
+    readUpdateHistory: async () => ({
+      lastStart: null,
+      lastUpdate: null,
+      lastStartPath: '/home/user/.cloudcli/last-start.json',
+      lastUpdatePath: '/home/user/.cloudcli/last-update.json',
+    }),
     startServer: async () => {
       serverStarts += 1;
     },
