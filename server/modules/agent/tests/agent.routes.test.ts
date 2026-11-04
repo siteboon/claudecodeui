@@ -328,6 +328,29 @@ async function runWithoutModel(
   return { models, catalogReads };
 }
 
+test('Agent route marks a Claude run unattended, as no person can answer an MCP server there', async () => {
+  const runOptions: { unattended?: boolean }[] = [];
+  await withAgentServer(createDependencies({
+    fileSystem: { access: async () => undefined } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async () => ({ OPTIONS: [{ value: 'sonnet' }], DEFAULT: 'sonnet' }),
+    } as unknown as AgentDependencies['models'],
+    queryClaude: (async (_prompt: string, options: { unattended?: boolean }) => {
+      runOptions.push(options);
+    }) as unknown as AgentDependencies['queryClaude'],
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ projectPath: '/home/test/project', message: 'Run', provider: 'claude', stream: false }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  assert.equal(runOptions.length, 1);
+  assert.equal(runOptions[0].unattended, true);
+});
+
 test('Agent route starts Claude and Cursor on the first custom model while only custom models are listed', async () => {
   // What the Providers service returns with "Use only my models" on.
   const customOnly = (value: string) => ({
