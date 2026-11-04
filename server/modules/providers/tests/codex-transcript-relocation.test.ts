@@ -13,16 +13,21 @@ test('a relocated rollout records the new cwd and keeps its permissions', {
   try {
     const rolloutPath = path.join(root, 'rollout.jsonl');
     await writeFile(rolloutPath, `${JSON.stringify({ type: 'session_meta', payload: { cwd: '/home/u/alpha' } })}\n`);
-    // 0o660 also proves the umask is undone: a 022 or 077 umask would strip a group bit.
     await chmod(rolloutPath, 0o660);
 
-    const relocated = await new CodexTranscriptRelocationProvider().relocateTranscripts({
-      sessions: [{ sessionId: 's1', jsonlPath: rolloutPath }],
-      oldProjectPath: '/home/u/alpha',
-      newProjectPath: '/home/u/beta',
-    });
+    // Under a 077 umask, writeFile's mode alone would drop the group bits.
+    const previousUmask = process.umask(0o077);
+    try {
+      const relocated = await new CodexTranscriptRelocationProvider().relocateTranscripts({
+        sessions: [{ sessionId: 's1', jsonlPath: rolloutPath }],
+        oldProjectPath: '/home/u/alpha',
+        newProjectPath: '/home/u/beta',
+      });
+      assert.deepEqual(relocated, [{ sessionId: 's1', jsonlPath: rolloutPath }]);
+    } finally {
+      process.umask(previousUmask);
+    }
 
-    assert.deepEqual(relocated, [{ sessionId: 's1', jsonlPath: rolloutPath }]);
     assert.match(await readFile(rolloutPath, 'utf8'), /"cwd":"\/home\/u\/beta"/);
     assert.equal((await stat(rolloutPath)).mode & 0o777, 0o660);
   } finally {

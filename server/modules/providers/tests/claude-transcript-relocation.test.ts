@@ -108,14 +108,20 @@ test('a moved transcript keeps its permissions', {
       'session-a',
       oldProjectPath,
     );
-    // 0o660 also proves the umask is undone: a 022 or 077 umask would strip a group bit.
     await chmod(transcriptPath, 0o660);
 
-    const [moved] = await new ClaudeTranscriptRelocationProvider().relocateTranscripts({
-      sessions: [{ sessionId: 'a', jsonlPath: transcriptPath }],
-      oldProjectPath,
-      newProjectPath,
-    });
+    // Under a 077 umask, writeFile's mode alone would drop the group bits.
+    const previousUmask = process.umask(0o077);
+    let moved;
+    try {
+      [moved] = await new ClaudeTranscriptRelocationProvider().relocateTranscripts({
+        sessions: [{ sessionId: 'a', jsonlPath: transcriptPath }],
+        oldProjectPath,
+        newProjectPath,
+      });
+    } finally {
+      process.umask(previousUmask);
+    }
 
     assert.equal(moved.jsonlPath, path.join(root, encodeClaudeProjectDirName(newProjectPath), 'session-a.jsonl'));
     assert.equal((await stat(moved.jsonlPath)).mode & 0o777, 0o660);
