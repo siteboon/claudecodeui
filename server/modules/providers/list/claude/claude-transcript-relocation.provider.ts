@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 
 import type { IProviderTranscriptRelocation } from '@/shared/interfaces.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
@@ -131,7 +131,8 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
           encodedNewDirName,
           path.basename(session.jsonlPath),
         );
-        // Keep the transcript's permissions: Claude writes it private (0600).
+        // Keep the transcript's permissions: Claude writes it private (0600). The
+        // chmod after each write undoes the umask, which `mode` alone goes through.
         const { mode } = await stat(session.jsonlPath);
         const content = await readFile(session.jsonlPath, 'utf8');
         const rewrittenContent = rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath);
@@ -143,6 +144,7 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
           const temporaryPath = `${session.jsonlPath}.${randomUUID()}.tmp`;
           await writeFile(temporaryPath, rewrittenContent, { flag: 'wx', mode });
           writtenPaths.push(temporaryPath);
+          await chmod(temporaryPath, mode);
           inPlaceRewrites.push({ temporaryPath, jsonlPath: session.jsonlPath });
           moved.push({ sessionId: session.sessionId, jsonlPath: session.jsonlPath });
           continue;
@@ -153,6 +155,7 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
         // transcript the new folder legitimately owns.
         await writeFile(targetPath, rewrittenContent, { flag: 'wx', mode });
         writtenPaths.push(targetPath);
+        await chmod(targetPath, mode);
 
         // Both folders share a parent, so this is a single atomic rename.
         const sessionDirectoryName = path.basename(session.jsonlPath, '.jsonl');

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -95,4 +95,29 @@ test('on macOS a decomposed accent encodes the way the SDK does', async () => {
   } finally {
     Object.defineProperty(process, 'platform', platform as PropertyDescriptor);
   }
+});
+
+test('a moved transcript keeps its permissions', {
+  skip: process.platform === 'win32' && 'Windows has no POSIX permission bits',
+}, async () => {
+  await withClaudeProjectsRoot(async (root) => {
+    const oldProjectPath = '/home/u/alpha';
+    const newProjectPath = '/home/u/beta';
+    const transcriptPath = await writeTranscript(
+      path.join(root, encodeClaudeProjectDirName(oldProjectPath)),
+      'session-a',
+      oldProjectPath,
+    );
+    // 0o660 also proves the umask is undone: a 022 or 077 umask would strip a group bit.
+    await chmod(transcriptPath, 0o660);
+
+    const [moved] = await new ClaudeTranscriptRelocationProvider().relocateTranscripts({
+      sessions: [{ sessionId: 'a', jsonlPath: transcriptPath }],
+      oldProjectPath,
+      newProjectPath,
+    });
+
+    assert.equal(moved.jsonlPath, path.join(root, encodeClaudeProjectDirName(newProjectPath), 'session-a.jsonl'));
+    assert.equal((await stat(moved.jsonlPath)).mode & 0o777, 0o660);
+  });
 });

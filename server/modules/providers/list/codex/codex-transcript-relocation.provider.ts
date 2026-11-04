@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { chmod, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 
 import type { IProviderTranscriptRelocation } from '@/shared/interfaces.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
@@ -45,8 +45,9 @@ export class CodexTranscriptRelocationProvider implements IProviderTranscriptRel
         if (rewritten === content) {
           continue;
         }
-        // Keep the rollout's permissions: Codex writes it private.
+        // Keep the rollout's permissions: Codex writes it private. The chmod undoes the umask.
         await writeFile(temporaryPath, rewritten, { flag: 'wx', mode: before.mode });
+        await chmod(temporaryPath, before.mode);
         // shortcut: narrows, not closes, the window for a Codex CLI appending mid-rewrite; closing it needs a Codex process registry.
         const after = await stat(session.jsonlPath);
         if (after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
