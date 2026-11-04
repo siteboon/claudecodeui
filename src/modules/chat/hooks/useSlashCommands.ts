@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
+import { flushSync } from 'react-dom';
 
 import { safeLocalStorage } from '@/modules/chat/utils/chatStorage';
 import { useProjectSlashCommands } from '@/shared/hooks/useProjectSlashCommands';
@@ -60,7 +61,15 @@ const filterSlashCommands = (
   // Namespaced commands should behave like path completion. Once a provider
   // namespace is typed, only exact command-prefix matches should stay visible.
   if (normalizedQuery.includes(':') || namePrefixMatches.length > 0) {
-    return namePrefixMatches;
+    // A fully typed name means that command, as it does when the text is sent:
+    // list it first, ahead of more-used longer names, since Enter and Tab act
+    // on the first entry while nothing is highlighted. Like the prefix match it
+    // ignores case, while sending matches the name exactly.
+    const isExactName = (command: SlashCommand) => command.name.toLowerCase() === commandPrefix;
+    return [
+      ...namePrefixMatches.filter(isExactName),
+      ...namePrefixMatches.filter((command) => !isExactName(command)),
+    ];
   }
 
   const nameSubstringMatches = commands.filter((command) =>
@@ -84,19 +93,22 @@ export function useSlashCommands({
   onExecuteCommand,
 }: UseSlashCommandsOptions) {
   const { commands: projectCommands } = useProjectSlashCommands(selectedProject, provider);
-  const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([]);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
   const [slashPosition, setSlashPosition] = useState(-1);
 
   const commandQueryTimerRef = useRef<number | null>(null);
+  // The query typed but not yet committed by the debounce timer, or null when
+  // none is waiting. Keys that pick or move through entries commit it early.
+  const pendingCommandQueryRef = useRef<string | null>(null);
 
   const clearCommandQueryTimer = useCallback(() => {
     if (commandQueryTimerRef.current !== null) {
       window.clearTimeout(commandQueryTimerRef.current);
       commandQueryTimerRef.current = null;
     }
+    pendingCommandQueryRef.current = null;
   }, []);
 
   const resetCommandMenuState = useCallback(() => {
@@ -128,9 +140,13 @@ export function useSlashCommands({
     }
   }, [showCommandMenu]);
 
-  useEffect(() => {
-    setFilteredCommands(filterSlashCommands(slashCommands, commandQuery));
-  }, [commandQuery, slashCommands]);
+  // Derived during render rather than copied into state by an effect: the
+  // render right after a query is committed must already hold its list, or a
+  // key handled before the effect's follow-up render acts on the old list.
+  const filteredCommands = useMemo(
+    () => filterSlashCommands(slashCommands, commandQuery),
+    [slashCommands, commandQuery],
+  );
 
   const frequentCommands = useMemo(() => {
     if (!selectedProject || slashCommands.length === 0) {
@@ -248,13 +264,12 @@ export function useSlashCommands({
     setShowCommandMenu(isOpening);
     setCommandQuery('');
     setSelectedCommandIndex(-1);
-
-    if (isOpening) {
-      setFilteredCommands(slashCommands);
-    }
+    // The toggle shows the full list; a query still waiting for the debounce
+    // must not replace it a moment later.
+    clearCommandQueryTimer();
 
     textareaRef.current?.focus();
-  }, [showCommandMenu, slashCommands, textareaRef]);
+  }, [clearCommandQueryTimer, showCommandMenu, textareaRef]);
 
   const handleCommandInputChange = useCallback(
     (newValue: string, cursorPos: number) => {
@@ -290,12 +305,42 @@ export function useSlashCommands({
       setSelectedCommandIndex(-1);
 
       clearCommandQueryTimer();
+      pendingCommandQueryRef.current = query;
       commandQueryTimerRef.current = window.setTimeout(() => {
-        setCommandQuery(query);
+        commandQueryTimerRef.current = null;
+        pendingCommandQueryRef.current = null;
+        // Rendered before the timer returns. An ordinary update renders in a
+        // later task, and a key handled in between would reach the previous
+        // render's handler, find nothing waiting and act on the old list.
+        flushSync(() => {
+          setCommandQuery(query);
+          // As in the early commit below: a highlight made meanwhile (mouse
+          // hover) indexes the previous list.
+          setSelectedCommandIndex(-1);
+        });
       }, COMMAND_QUERY_DEBOUNCE_MS);
     },
     [resetCommandMenuState, clearCommandQueryTimer],
   );
+
+  // The debounce only spares re-filtering on every keystroke. A key pressed
+  // before it fires must still act on the text in the input, not on the list
+  // for the previous query (for a fresh "/" that is every command, most-used
+  // first), so this commits the waiting query now and returns its list, or
+  // null when nothing is waiting. The next render derives the same list, so a
+  // key that follows at once acts on it too.
+  const flushPendingCommandQuery = useCallback((): SlashCommand[] | null => {
+    const pendingQuery = pendingCommandQueryRef.current;
+    if (pendingQuery === null) {
+      return null;
+    }
+
+    clearCommandQueryTimer();
+    setCommandQuery(pendingQuery);
+    // A highlight made meanwhile (mouse hover) indexes the previous list.
+    setSelectedCommandIndex(-1);
+    return filterSlashCommands(slashCommands, pendingQuery);
+  }, [clearCommandQueryTimer, slashCommands]);
 
   const handleCommandMenuKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
@@ -303,7 +348,17 @@ export function useSlashCommands({
         return false;
       }
 
-      if (!filteredCommands.length) {
+      // Only keys that pick or move through entries commit early; flushing on
+      // every typed character would undo the debounce.
+      const isSelectionKey = event.key === 'ArrowDown'
+        || event.key === 'ArrowUp'
+        || event.key === 'Tab'
+        || event.key === 'Enter';
+      const flushedCommands = isSelectionKey ? flushPendingCommandQuery() : null;
+      const menuCommands = flushedCommands ?? filteredCommands;
+      const highlightedIndex = flushedCommands ? -1 : selectedCommandIndex;
+
+      if (!menuCommands.length) {
         if (event.key === 'Escape') {
           event.preventDefault();
           resetCommandMenuState();
@@ -315,7 +370,7 @@ export function useSlashCommands({
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         setSelectedCommandIndex((previousIndex) =>
-          previousIndex < filteredCommands.length - 1 ? previousIndex + 1 : 0,
+          previousIndex < menuCommands.length - 1 ? previousIndex + 1 : 0,
         );
         return true;
       }
@@ -323,7 +378,7 @@ export function useSlashCommands({
       if (event.key === 'ArrowUp') {
         event.preventDefault();
         setSelectedCommandIndex((previousIndex) =>
-          previousIndex > 0 ? previousIndex - 1 : filteredCommands.length - 1,
+          previousIndex > 0 ? previousIndex - 1 : menuCommands.length - 1,
         );
         return true;
       }
@@ -332,7 +387,9 @@ export function useSlashCommands({
         event.preventDefault();
         // Until the user arrows through the menu nothing is highlighted, so both
         // keys act on the first match — the entry the menu renders at the top.
-        const targetCommand = filteredCommands[selectedCommandIndex >= 0 ? selectedCommandIndex : 0];
+        // Inside the debounce window that is the top of the typed text's list,
+        // which the menu shows once the flush above re-renders it.
+        const targetCommand = menuCommands[highlightedIndex >= 0 ? highlightedIndex : 0];
         if (!targetCommand) {
           return true;
         }
@@ -359,6 +416,7 @@ export function useSlashCommands({
     [
       showCommandMenu,
       filteredCommands,
+      flushPendingCommandQuery,
       insertCommandIntoInput,
       resetCommandMenuState,
       selectCommandFromKeyboard,
