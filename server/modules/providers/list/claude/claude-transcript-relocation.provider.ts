@@ -131,6 +131,8 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
           encodedNewDirName,
           path.basename(session.jsonlPath),
         );
+        // Keep the transcript's permissions: Claude writes it private (0600).
+        const { mode } = await stat(session.jsonlPath);
         const content = await readFile(session.jsonlPath, 'utf8');
         const rewrittenContent = rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath);
 
@@ -139,7 +141,7 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
           // transcript is in place, so a failure leaves this one untouched. The
           // `.tmp` suffix keeps the session watcher from indexing it.
           const temporaryPath = `${session.jsonlPath}.${randomUUID()}.tmp`;
-          await writeFile(temporaryPath, rewrittenContent, { flag: 'wx' });
+          await writeFile(temporaryPath, rewrittenContent, { flag: 'wx', mode });
           writtenPaths.push(temporaryPath);
           inPlaceRewrites.push({ temporaryPath, jsonlPath: session.jsonlPath });
           moved.push({ sessionId: session.sessionId, jsonlPath: session.jsonlPath });
@@ -149,7 +151,7 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
         await mkdir(path.dirname(targetPath), { recursive: true });
         // `wx` rather than an overwrite: anything already at the destination is a
         // transcript the new folder legitimately owns.
-        await writeFile(targetPath, rewrittenContent, { flag: 'wx' });
+        await writeFile(targetPath, rewrittenContent, { flag: 'wx', mode });
         writtenPaths.push(targetPath);
 
         // Both folders share a parent, so this is a single atomic rename.

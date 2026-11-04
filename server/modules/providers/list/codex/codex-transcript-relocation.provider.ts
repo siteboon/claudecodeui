@@ -45,7 +45,8 @@ export class CodexTranscriptRelocationProvider implements IProviderTranscriptRel
         if (rewritten === content) {
           continue;
         }
-        await writeFile(temporaryPath, rewritten, { flag: 'wx' });
+        // Keep the rollout's permissions: Codex writes it private.
+        await writeFile(temporaryPath, rewritten, { flag: 'wx', mode: before.mode });
         // shortcut: narrows, not closes, the window for a Codex CLI appending mid-rewrite; closing it needs a Codex process registry.
         const after = await stat(session.jsonlPath);
         if (after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
