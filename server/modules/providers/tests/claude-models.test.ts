@@ -91,23 +91,28 @@ test('falls back to the message model when every content hit is a placeholder', 
   );
 });
 
-test('offers fast mode on the catalog entries that run the current Opus', () => {
+test('offers fast mode only on the Opus alias, not on Default', () => {
+  // Default resolves to Sonnet on some accounts, and fast mode runs only on Opus.
   const withFast = CLAUDE_PREDEFINED_MODELS.OPTIONS
     .filter((option) => option.speed?.values.some((speed) => speed.value === 'fast'))
     .map((option) => option.value);
-  assert.deepEqual(withFast, ['default', 'opus']);
+  assert.deepEqual(withFast, ['opus']);
 });
 
 test('turns on fast mode only when it is asked for and the model offers it', () => {
-  const fast: Record<string, any> = { model: 'default', settings: { ultracode: true } };
+  const fast: Record<string, any> = { model: 'opus', settings: { ultracode: true } };
   applyClaudeSpeed(fast, 'fast', CLAUDE_PREDEFINED_MODELS);
   assert.deepEqual(fast.settings, { ultracode: true, fastMode: true });
+
+  const defaultAlias: Record<string, any> = { model: 'default' };
+  applyClaudeSpeed(defaultAlias, 'fast', CLAUDE_PREDEFINED_MODELS);
+  assert.equal(defaultAlias.settings, undefined, 'Default may resolve to a model without fast mode');
 
   const unsupported: Record<string, any> = { model: 'sonnet' };
   applyClaudeSpeed(unsupported, 'fast', CLAUDE_PREDEFINED_MODELS);
   assert.equal(unsupported.settings, undefined);
 
-  const standard: Record<string, any> = { model: 'default' };
+  const standard: Record<string, any> = { model: 'opus' };
   applyClaudeSpeed(standard, 'default', CLAUDE_PREDEFINED_MODELS);
   assert.equal(standard.settings, undefined, "Default leaves the user's own fast-mode setting alone");
 
@@ -136,4 +141,20 @@ test('matches the concrete model a session reports to the catalog entry that lis
   assert.equal(findProviderModelOption(builtIn, 'claude-opus-5-5')?.value, 'opus');
   assert.equal(findProviderModelOption(builtIn, 'claude-opus-5-5[1m]')?.value, 'opus[1m]');
   assert.equal(findProviderModelOption(builtIn, 'claude-sonnet-5-5')?.value, 'sonnet');
+});
+
+test('matches a [1m] model id only to an entry with the same context tag', () => {
+  const live = [
+    { value: 'claude-opus-4-6', label: 'Opus 4.6' },
+    { value: 'claude-opus-4-6[1m]', label: 'Opus 4.6 (1M context)' },
+    { value: 'opus', label: 'Opus 5.5' },
+  ];
+  assert.equal(findProviderModelOption(live, 'claude-opus-4-6-20260115[1m]')?.value, 'claude-opus-4-6[1m]');
+  assert.equal(findProviderModelOption(live, 'claude-opus-4-6-20260115')?.value, 'claude-opus-4-6');
+  // A [1m] id never takes the plain entry's name match; it still reaches its family.
+  assert.equal(findProviderModelOption(live, 'claude-opus-5-5[1m]')?.value, 'opus');
+  assert.equal(
+    findProviderModelOption([...live, { value: 'opus[1m]', label: 'Opus 5.5 (1M context)' }], 'claude-opus-5-5[1m]')?.value,
+    'opus[1m]',
+  );
 });

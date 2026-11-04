@@ -251,13 +251,20 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
 
+const MODEL_CONTEXT_TAG = /\[[^\]]*\]$/;
+
 const normalizeModelKey = (value: string): string => value
   .trim()
   .toLowerCase()
-  .replace(/\[[^\]]*\]$/, '')
+  .replace(MODEL_CONTEXT_TAG, '')
   .replace(/^claude-/, '')
   .replace(/-\d{8}$/, '')
   .replace(/[\s._]+/g, '-');
+
+/** The context-window tag a model id ends with (`[1m]`), or '' when it has none. */
+const readModelContextTag = (value: string): string => (
+  value.trim().toLowerCase().match(MODEL_CONTEXT_TAG)?.[0] ?? ''
+);
 
 /**
  * Finds the catalog entry a model id refers to.
@@ -265,9 +272,11 @@ const normalizeModelKey = (value: string): string => value
  * An exact value match wins. Otherwise the id is compared by name, because a
  * session reports the concrete model it ran (`claude-opus-5-5`) while the
  * catalog lists it under an alias (`opus`, labelled "Opus 5.5"): the
- * `claude-` prefix, a date suffix and a `[1m]` context tag are ignored, and
- * spaces and dots compare as dashes. Failing that, the id falls back to its
- * model family alias (`opus`, or `opus[1m]` for a `[1m]` id).
+ * `claude-` prefix and a date suffix are ignored, and spaces and dots compare
+ * as dashes. Only entries with the same context tag compare, so a `[1m]` id
+ * never takes the effort levels of the plain entry of the same model. Failing
+ * that, the id falls back to its model family alias (`opus`, or `opus[1m]` for
+ * a `[1m]` id).
  */
 export const findProviderModelOption = <T extends { value: string; label?: string }>(
   options: readonly T[],
@@ -281,14 +290,15 @@ export const findProviderModelOption = <T extends { value: string; label?: strin
     return exact;
   }
   const key = normalizeModelKey(model);
+  const contextTag = readModelContextTag(model);
   const byName = options.find((option) => (
-    normalizeModelKey(option.value) === key || normalizeModelKey(option.label ?? '') === key
+    readModelContextTag(option.value) === contextTag
+    && (normalizeModelKey(option.value) === key || normalizeModelKey(option.label ?? '') === key)
   ));
   if (byName) {
     return byName;
   }
   const family = key.split('-')[0];
-  const contextTag = /\[[^\]]*\]$/.exec(model.trim().toLowerCase())?.[0] ?? '';
   return options.find((option) => option.value === `${family}${contextTag}`)
     ?? options.find((option) => option.value === family)
     ?? null;

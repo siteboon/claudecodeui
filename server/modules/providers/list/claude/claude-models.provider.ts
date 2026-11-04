@@ -31,8 +31,10 @@ export const CLAUDE_FAST_SPEED = 'fast';
 
 /**
  * Fast mode is a CLI setting the Agent SDK only turns on when asked
- * (`fast_mode_disabled_reason: 'sdk_opt_in_required'` otherwise). It is offered
- * on the models whose current Opus supports it.
+ * (`fast_mode_disabled_reason: 'sdk_opt_in_required'` otherwise). It runs only
+ * on Opus, so it is offered on the `opus` alias and not on `default`, which
+ * resolves to Sonnet on some accounts: there fast mode would switch the session
+ * to Opus or be ignored.
  */
 const FAST_SPEED_OPTION = {
   value: CLAUDE_FAST_SPEED,
@@ -55,7 +57,6 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'max' },
         ],
       },
-      speed: { values: [FAST_SPEED_OPTION] },
     },
     {
       value: 'best',

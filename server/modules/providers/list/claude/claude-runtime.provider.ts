@@ -170,6 +170,13 @@ function toElicitationResult(decision: ToolApprovalDecision, mode: ElicitationRe
 // selection is translated back into the two options the SDK actually understands here.
 const ULTRACODE_SDK_EFFORT = 'xhigh';
 
+/**
+ * Returns the effort to send when the selected model's catalog entry lists it. A
+ * concrete id the catalog does not list (an older `claude-opus-4-6`) is checked
+ * against its family alias's levels; the CLI then silently downgrades a level the
+ * model it runs does not support (the SDK's `effort` status reports the level "after
+ * any silent downgrade for the selected model"), so the turn runs rather than fails.
+ */
 function resolveClaudeEffort(
   model: string,
   effort: unknown,

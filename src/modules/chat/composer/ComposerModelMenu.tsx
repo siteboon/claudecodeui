@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Zap } from 'lucide-react';
 
 import type { ProviderModelOption } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
@@ -76,6 +76,7 @@ function ComposerModelMenu({
     [defaultSpeedLabel, speedOptions],
   );
   const selectedSpeedOption = speedOptions.find((option) => option.value === speed) ?? null;
+  const selectedSpeedLabel = selectedSpeedOption ? selectedSpeedOption.label || selectedSpeedOption.value : null;
   const hasSpeedSection = resolvedSpeedOptions.length > 0;
 
   const selectedModelOption = useMemo(
@@ -94,6 +95,15 @@ function ComposerModelMenu({
   const ariaLabel = t('composer.modelMenu', {
     defaultValue: 'Select model and reasoning effort',
   });
+  // A paid speed tier stays announced and visible: the trigger's name carries it,
+  // and narrow screens, which drop the "· Fast" text, show an icon instead.
+  const triggerAriaLabel = selectedSpeedLabel
+    ? t('composer.modelMenuWithSpeed', {
+      defaultValue: '{{label}} (speed: {{speed}})',
+      label: ariaLabel,
+      speed: selectedSpeedLabel,
+    })
+    : ariaLabel;
 
   return (
     <>
@@ -107,15 +117,18 @@ function ComposerModelMenu({
         className="flex h-8 max-w-20 shrink-0 items-center gap-1 rounded-lg border border-border/60 bg-muted/40 px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:max-w-56"
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        aria-label={ariaLabel}
-        title={ariaLabel}
+        aria-label={triggerAriaLabel}
+        title={triggerAriaLabel}
       >
         <span className="truncate">{triggerLabel}</span>
         {hasModelSection && hasEffortSection && effort !== DEFAULT_EFFORT_VALUE && (
           <span className="hidden shrink-0 capitalize text-muted-foreground sm:inline">· {effortLabel}</span>
         )}
-        {selectedSpeedOption && (
-          <span className="hidden shrink-0 text-muted-foreground sm:inline">· {selectedSpeedOption.label || selectedSpeedOption.value}</span>
+        {selectedSpeedLabel && (
+          <>
+            <Zap aria-hidden="true" className="h-3 w-3 shrink-0 text-muted-foreground sm:hidden" />
+            <span className="hidden shrink-0 text-muted-foreground sm:inline">· {selectedSpeedLabel}</span>
+          </>
         )}
       </button>
 

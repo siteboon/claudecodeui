@@ -51,8 +51,12 @@ test('lists the speed tiers the model offers next to Standard and reports the pi
 });
 
 test('shows the chosen tier on the trigger and hides the section for models without tiers', () => {
-  const { unmount } = renderMenu('priority');
+  const { container, unmount } = renderMenu('priority');
+  // Named for assistive technology, written out from `sm` up, and an icon below it.
+  const trigger = screen.getByRole('button', { name: 'Select model and reasoning effort (speed: Fast)' });
+  assert.equal(trigger.getAttribute('title'), 'Select model and reasoning effort (speed: Fast)');
   assert.ok(screen.getByText('· Fast'));
+  assert.ok(container.querySelector('svg.sm\\:hidden'));
   unmount();
 
   renderMenu('default', []);

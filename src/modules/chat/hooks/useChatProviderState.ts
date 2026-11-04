@@ -722,13 +722,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   );
   // A tier the current model does not offer falls back to Default without
   // forgetting the stored choice, so switching back to a model that has it
-  // restores it.
+  // restores it. Until the provider's catalog has loaded (or when it failed to)
+  // the model's tiers are unknown, so the stored tier is sent as is: the server
+  // applies a tier only when the model's catalog entry lists it.
+  const hasProviderCatalog = Boolean(providerModelCatalog[provider]);
   const currentProviderSpeed = useMemo(() => {
     const stored = providerSpeeds[provider] ?? DEFAULT_EFFORT_VALUE;
+    if (!hasProviderCatalog) {
+      return stored;
+    }
     return currentProviderSpeedOptions.some((option) => option.value === stored)
       ? stored
       : DEFAULT_EFFORT_VALUE;
-  }, [currentProviderSpeedOptions, provider, providerSpeeds]);
+  }, [currentProviderSpeedOptions, hasProviderCatalog, provider, providerSpeeds]);
 
   const applyProviderCatalog = useCallback((
     targetProvider: LLMProvider,
