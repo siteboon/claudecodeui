@@ -284,7 +284,9 @@ function buildShellCommand(
   }
 
   if (provider === 'codex') {
-    const codexTuiCommand = 'codex --disable daemon_auto_start';
+    // Disabling auto-start still permits attachment to an existing daemon,
+    // which can retain a writer after this PTY exits.
+    const codexTuiCommand = 'codex --no-daemon --disable daemon_auto_start';
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
         return otherProgram(`& ${codexTuiCommand} resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { & ${codexTuiCommand} }`);

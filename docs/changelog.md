@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.37.7
+
+### 2026-11-04
+
+- Add `--no-daemon` to Codex Shell launches: disabling daemon auto-start alone still permits attachment to an existing managed daemon and can strand its writer after PTY exit. Cover Linux and Windows start/resume paths and Windows resume fallback. Both configured CLI 0.166.0 and bundled CLI 0.156.1 expose this flag.
+
 ## 1.37.3
 
 ### 2026-10-12

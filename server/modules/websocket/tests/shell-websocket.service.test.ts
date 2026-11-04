@@ -10,6 +10,36 @@ import { WebSocket } from 'ws';
 
 import { handleShellConnection, releaseCodexShellSession } from '@/modules/websocket/services/shell-websocket.service.js';
 
+for (const platform of ['linux', 'win32'] as const) {
+  for (const resumed of [false, true]) {
+    test(`Codex ${platform} ${resumed ? 'resume and fallback' : 'start'} never attaches to a shared daemon`, t => {
+      t.mock.method(os, 'platform', () => platform);
+      const terminal = createFakePty();
+      const socket = createFakeSocket();
+      let command = '';
+      handleShellConnection(socket as never, {
+        resolveProviderSessionId: () => 'provider-thread',
+        spawnPty: (_shell, args) => {
+          command = Array.isArray(args) ? args[args.length - 1] : args;
+          return terminal as never;
+        },
+      });
+      try {
+        socket.emit('message', JSON.stringify({
+          type: 'init', projectPath: process.cwd(), provider: 'codex',
+          sessionId: `daemon-isolation-${platform}-${resumed}`, hasSession: resumed,
+        }));
+        const tui = 'codex --no-daemon --disable daemon_auto_start';
+        assert.equal(command, platform === 'win32'
+          ? (resumed ? `& ${tui} resume "provider-thread"; if ($LASTEXITCODE -ne 0) { & ${tui} }` : `& ${tui}`)
+          : (resumed ? `${tui} resume "provider-thread"` : tui));
+      } finally {
+        terminal.emitExit();
+      }
+    });
+  }
+}
+
 test('Chat waits for the retained Codex terminal writer to exit', async () => {
   const terminal = createFakePty();
   const socket = createFakeSocket();
@@ -20,7 +50,7 @@ test('Chat waits for the retained Codex terminal writer to exit', async () => {
       const command = Array.isArray(args) ? args[args.length - 1] : args;
       assert.match(
         command,
-        /^codex --disable daemon_auto_start resume "provider-thread"$/,
+        /^codex --no-daemon --disable daemon_auto_start resume "provider-thread"$/,
       );
       assert.doesNotMatch(command, /\|\| codex/);
       return terminal as never;
@@ -826,7 +856,7 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
 
     assert.deepEqual(
       calls.map((call) => call.command),
-      ['npx task-master init', loginCommand, 'codex --disable daemon_auto_start', 'codex --disable daemon_auto_start']
+      ['npx task-master init', loginCommand, 'codex --no-daemon --disable daemon_auto_start', 'codex --no-daemon --disable daemon_auto_start']
     );
     assert.deepEqual(
       calls.map((call) => call.env.COLORFGBG),
