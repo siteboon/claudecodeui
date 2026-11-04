@@ -92,12 +92,15 @@ async function withRun(
     createQuery,
   };
 
+  const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
   try {
-    const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
     await runTest({ script, sent, done });
+  } finally {
+    // End the stream even when an assertion failed: every test here runs the
+    // same session id, and a run left alive would be what the next test's
+    // turn hands off from (and waits on) before it can spawn.
     script.end();
     await done;
-  } finally {
     await rm(cwd, { recursive: true, force: true });
   }
 }
