@@ -52,6 +52,12 @@ export interface IProviderRuntime {
    * settled, or the id was never one of its own.
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
+  /**
+   * Whether this runtime holds a live process for the session. Such a process
+   * can be working with no chat run on record: a turn the CLI started on its
+   * own after background work reported back.
+   */
+  hasLiveSession?(sessionId: string): boolean;
 }
 
 /**

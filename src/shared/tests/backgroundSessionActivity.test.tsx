@@ -131,3 +131,24 @@ test('a poll that changes what it says about a listed task is not dropped as a r
   assert.equal(listed?.nested, true);
   assert.equal(listed?.description, 'Audit the whole frontend');
 });
+
+test('a turn the poll reports after background work can be interrupted', () => {
+  const { result } = renderHook(() => useSessionProtection());
+  const listed = task({ startedAt: Date.now() - 120_000 });
+
+  act(() => {
+    result.current.syncProcessingSessions([
+      { sessionId: 'session-1', startedAt: listed.startedAt, canInterrupt: false, background: true, tasks: [listed] },
+    ]);
+  });
+  // A queued message starts a turn while no client is attached; the next poll
+  // lists it as a chat run, which carries no `canInterrupt`.
+  act(() => {
+    result.current.syncProcessingSessions([{ sessionId: 'session-1', startedAt: Date.now() }]);
+  });
+
+  const activity = result.current.getSessionActivity('session-1');
+  assert.equal(activity?.background, undefined);
+  assert.equal(activity?.canInterrupt, true, 'Stop must reach the turn');
+  assert.equal(result.current.isSessionProcessing('session-1'), true);
+});
