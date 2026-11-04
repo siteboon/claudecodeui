@@ -31,6 +31,30 @@
     <meta name="theme-color" content="#ffffff" />
     <meta name="msapplication-TileColor" content="#ffffff" />
     
+    <!-- Non-Secure HTTP Context & iOS WebKit Compatibility Polyfill -->
+    <script>
+      (function () {
+        try {
+          if (typeof window !== 'undefined' && window.crypto && typeof window.crypto.randomUUID !== 'function') {
+            window.crypto.randomUUID = function () {
+              var bytes = new Uint8Array(16);
+              window.crypto.getRandomValues(bytes);
+              bytes[6] = (bytes[6] & 0x0f) | 0x40;
+              bytes[8] = (bytes[8] & 0x3f) | 0x80;
+              var hex = Array.from(bytes, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+              return (
+                hex.slice(0, 8) + '-' +
+                hex.slice(8, 12) + '-' +
+                hex.slice(12, 16) + '-' +
+                hex.slice(16, 20) + '-' +
+                hex.slice(20, 32)
+              );
+            };
+          }
+        } catch (e) {}
+      })();
+    </script>
+
     <!-- Prevent zoom on iOS -->
     <meta name="format-detection" content="telephone=no" />
   </head>
@@ -40,7 +64,7 @@
     
     <!-- Service Worker Registration -->
     <script>
-      if ('serviceWorker' in navigator) {
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker && typeof navigator.serviceWorker.register === 'function') {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then(registration => {
