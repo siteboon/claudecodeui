@@ -262,6 +262,70 @@ test('a local time skipped by a DST change is refused, not moved an hour', () =>
   }
 });
 
+const inputValue = (element: HTMLElement) => (element as HTMLInputElement).value;
+
+test('a date-time default is shown in the picker and sends the same instant', () => {
+  const { getByText, getByLabelText, decisions } = renderBanner(
+    singleField('eli_12', { type: 'string', format: 'date-time', default: '2026-12-01T10:00:00Z' }),
+  );
+
+  // Shown, not blanked by the input while the state still holds it.
+  assert.notEqual(inputValue(getByLabelText(/Answer/)), '');
+  fireEvent.click(getByText('Submit'));
+  assert.deepEqual(decisions, [{
+    ids: 'eli_12',
+    decision: { allow: true, updatedInput: { content: { answer: '2026-12-01T10:00:00.000Z' } } },
+  }]);
+});
+
+test('a date-time default keeps its seconds through the picker', () => {
+  const { getByText, getByLabelText, decisions } = renderBanner(
+    singleField('eli_13', { type: 'string', format: 'date-time', default: '2026-12-01T10:00:30.250+00:00' }),
+  );
+
+  assert.notEqual(inputValue(getByLabelText(/Answer/)), '');
+  fireEvent.click(getByText('Submit'));
+  assert.deepEqual(decisions.map((entry) => entry.decision), [
+    { allow: true, updatedInput: { content: { answer: '2026-12-01T10:00:30.250Z' } } },
+  ]);
+});
+
+test('a default its date input cannot show starts empty and is not sent', () => {
+  for (const [requestId, property] of [
+    ['eli_14', { type: 'string', format: 'date', default: '2026-12-01T10:00:00Z' }],
+    ['eli_15', { type: 'string', format: 'date-time', default: 'next tuesday' }],
+    ['eli_16', { type: 'string', format: 'date-time', default: '2026-13-45T10:00:00Z' }],
+  ] as const) {
+    const required = renderBanner(singleField(requestId, property));
+    assert.equal(inputValue(required.getByLabelText(/Answer/)), '');
+    fireEvent.click(required.getByText('Submit'));
+    assert.equal(required.decisions.length, 0);
+    assert.ok(required.getByText('Required'));
+    required.unmount();
+
+    const optional = renderBanner(singleField(`${requestId}_optional`, property, false));
+    fireEvent.click(optional.getByText('Submit'));
+    assert.deepEqual(optional.decisions.map((entry) => entry.decision), [
+      { allow: true, updatedInput: { content: {} } },
+    ]);
+    optional.unmount();
+  }
+});
+
+test('a multi-select default that is not among the choices is neither ticked nor sent', () => {
+  const { getByText, getByLabelText, decisions } = renderBanner(singleField('eli_17', {
+    type: 'array',
+    items: { enum: ['a', 'b'] },
+    default: ['b', 'gone'],
+  }));
+
+  assert.equal((getByLabelText('b') as HTMLInputElement).checked, true);
+  fireEvent.click(getByText('Submit'));
+  assert.deepEqual(decisions.map((entry) => entry.decision), [
+    { allow: true, updatedInput: { content: { answer: ['b'] } } },
+  ]);
+});
+
 test('a long form scrolls its fields and keeps its buttons outside the scrolling part', () => {
   const { getByText, getByLabelText } = renderBanner(singleField('eli_18', { type: 'string' }));
 

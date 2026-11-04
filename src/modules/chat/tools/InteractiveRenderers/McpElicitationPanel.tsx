@@ -97,12 +97,13 @@ const readFields = (requestedSchema: ElicitationInput['requestedSchema']): Elici
       ? (choices ?? []).findIndex((choice) => choice.value === String(fallback))
       : -1;
     const initial = kind === 'multi'
-      ? (Array.isArray(fallback) ? fallback.map(String) : [])
+      // Only what a box can show as ticked, so nothing is sent that was not on screen.
+      ? (Array.isArray(fallback) ? (choices ?? []).map((choice) => choice.value).filter((value) => fallback.map(String).includes(value)) : [])
       : kind === 'boolean'
         ? fallback === true
         : kind === 'choice'
           ? (defaultChoice >= 0 ? String(defaultChoice) : '')
-          : fallback === undefined || fallback === null ? '' : String(fallback);
+          : toInitialText(schema.format, fallback);
     return {
       key,
       label: typeof schema.title === 'string' && schema.title ? schema.title : key,
@@ -133,6 +134,31 @@ const readFields = (requestedSchema: ElicitationInput['requestedSchema']): Elici
 // and the same with an explicit offset. Any other shape is not guessed at.
 const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/;
 const OFFSET_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/** An instant as a datetime-local input shows it: local wall time, seconds only when it has them. */
+const toPickerValue = (instant: Date): string => {
+  const pad = (value: number, width = 2) => String(value).padStart(width, '0');
+  const minutes = `${pad(instant.getFullYear(), 4)}-${pad(instant.getMonth() + 1)}-${pad(instant.getDate())}T${pad(instant.getHours())}:${pad(instant.getMinutes())}`;
+  const milliseconds = instant.getMilliseconds();
+  if (!instant.getSeconds() && !milliseconds) return minutes;
+  return `${minutes}:${pad(instant.getSeconds())}${milliseconds ? `.${pad(milliseconds, 3)}` : ''}`;
+};
+
+/**
+ * A schema default as its input can show it. Date inputs blank any value not in
+ * their own shape, while the state behind them keeps it, which would submit a
+ * value nobody saw. So a date-time default becomes local wall time, and a default
+ * these inputs cannot show starts the field empty.
+ */
+const toInitialText = (format: unknown, fallback: unknown): string => {
+  if (fallback === undefined || fallback === null) return '';
+  const text = String(fallback);
+  if (format === 'date') return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+  if (format !== 'date-time') return text;
+  if (!LOCAL_DATE_TIME.test(text) && !OFFSET_DATE_TIME.test(text)) return '';
+  const instant = new Date(text);
+  return Number.isNaN(instant.getTime()) ? '' : toPickerValue(instant);
+};
 
 const toSubmittedText = (field: ElicitationField, text: string): string | null => {
   if (field.format !== 'date-time') return text;
