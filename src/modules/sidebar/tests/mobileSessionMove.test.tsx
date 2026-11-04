@@ -14,7 +14,7 @@ import type { Project, SessionWithProvider, SidebarProjectListProps } from '@/sh
 vi.mock('@/modules/sidebar/hooks/useCompactSidebar', () => ({ useCompactSidebar: () => true }));
 vi.mock('@/shared/hooks/useProviderCapabilities', () => ({
   useSessionMovingProviders: () => new Set(['claude']),
-  useSessionForkingProviders: () => new Set(),
+  useSessionForkingProviders: () => new Set(['claude']),
 }));
 
 const { default: SidebarSessionItem } = await import('@/modules/sidebar/SidebarSessionItem');
@@ -83,4 +83,18 @@ test('the mobile sheet withholds a move while the session is busy or cannot move
     assert.equal(screen.queryByRole('button', { name: 'actions.moveSession' }), null, reason);
     unmount();
   }
+});
+
+test('the mobile sheet offers fork and move together, in the desktop menu order', () => {
+  renderRow({ onMoveSession: vi.fn(), onForkSession: vi.fn() });
+
+  act(() => {
+    fireEvent.click(screen.getByRole('button', { name: 'Session options for session one' }));
+  });
+
+  const labels = screen.getAllByRole('button').map((button) => button.textContent ?? '');
+  const forkIndex = labels.findIndex((label) => label.startsWith('Fork session'));
+  const moveIndex = labels.indexOf('actions.moveSession');
+  assert.ok(forkIndex >= 0 && moveIndex >= 0, 'both actions are offered');
+  assert.ok(forkIndex < moveIndex, 'fork comes before move, as in SessionOptions');
 });

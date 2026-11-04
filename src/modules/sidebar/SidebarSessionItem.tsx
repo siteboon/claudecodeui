@@ -43,7 +43,7 @@ type SidebarSessionItemProps = {
   t: TFunction;
 };
 
-/** Rendered by SidebarProjectSessions for one session row, including its rename, copy, fork and delete controls. */
+/** Rendered by SidebarProjectSessions for one session row, including its rename, copy, fork, move and delete controls. */
 function SidebarSessionItem({
   project,
   session,
@@ -358,20 +358,6 @@ function SidebarSessionItem({
                   </span>
                 </button>
 
-                {canMove && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileOptionsOpen(false);
-                      onMoveSession?.(session);
-                    }}
-                    className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
-                  >
-                    <FolderInput className="h-5 w-5 flex-shrink-0" />
-                    <span className="text-sm font-medium">{t('actions.moveSession')}</span>
-                  </button>
-                )}
-
                 {canFork && (
                   <button
                     type="button"
@@ -388,6 +374,20 @@ function SidebarSessionItem({
                         Continue from a copy, leaving this one untouched.
                       </span>
                     </span>
+                  </button>
+                )}
+
+                {canMove && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileOptionsOpen(false);
+                      onMoveSession?.(session);
+                    }}
+                    className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
+                  >
+                    <FolderInput className="h-5 w-5 flex-shrink-0" />
+                    <span className="text-sm font-medium">{t('actions.moveSession')}</span>
                   </button>
                 )}
 
