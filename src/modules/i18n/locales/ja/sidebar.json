@@ -149,5 +149,8 @@
     "selectedSessions": "選択した{{count}}件のセッション",
     "archiveSessions": "{{count}}件のセッションをアーカイブ",
     "archiveSessionsNotice": "アーカイブすると、セッションはアクティブな一覧から外れますが、履歴は保持されます。"
+  },
+  "projectGroup": {
+    "locations_other": "{{count}} 件のパス"
   }
 }
