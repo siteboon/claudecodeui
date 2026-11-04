@@ -57,6 +57,7 @@ async function renderWith(processingSessions: SessionActivityMap) {
         resetStreamingState,
         statusCheckSentAtRef: { current: new Map() },
         lastSeqRef: { current: new Map() },
+        watchedRunSessionsRef: { current: new Map() },
         sessionStore: store as never,
         processingSessions,
       }),

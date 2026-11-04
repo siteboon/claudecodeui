@@ -226,6 +226,49 @@ test('replayEvents returns only events after the requested seq', async () => {
   });
 });
 
+test('replay from a position in an earlier run returns the current run from its start', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('app-run-9', 'claude', '/workspace/demo');
+    const connection = new FakeConnection();
+    const first = chatRunRegistry.startRun({
+      appSessionId: 'app-run-9',
+      provider: 'claude',
+      providerSessionId: null,
+      connection,
+      userId: null,
+    });
+    assert.ok(first);
+    for (const content of ['a', 'b', 'c', 'd']) {
+      first.writer.send({ kind: 'stream_delta', provider: 'claude', sessionId: 'x', content });
+    }
+    first.writer.send({ kind: 'complete', provider: 'claude', sessionId: 'x', exitCode: 0 });
+    const firstRunId = connection.frames.at(-1)?.runId as string | undefined;
+    assert.equal(typeof firstRunId, 'string', 'every sequenced event names its run');
+
+    // The next run — a queued message the server sent — starts again at seq 1.
+    const second = chatRunRegistry.startRun({
+      appSessionId: 'app-run-9',
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId: null,
+    });
+    assert.ok(second);
+    for (const content of ['q2', 'r1', 'r2']) {
+      second.writer.send({ kind: 'stream_delta', provider: 'claude', sessionId: 'x', content });
+    }
+    const secondRunId = chatRunRegistry.replayEvents('app-run-9', 0)[0]?.runId;
+    assert.notEqual(secondRunId, firstRunId);
+
+    // A client that last saw seq 2 of the first run has seen none of this one.
+    assert.deepEqual(chatRunRegistry.replayEvents('app-run-9', 2, firstRunId).map((event) => event.seq), [1, 2, 3]);
+    // Without the run id, a position past this run's end can only be an older run's.
+    assert.deepEqual(chatRunRegistry.replayEvents('app-run-9', 5).map((event) => event.seq), [1, 2, 3]);
+    // A position in this run still replays only what came after it.
+    assert.deepEqual(chatRunRegistry.replayEvents('app-run-9', 2, secondRunId).map((event) => event.seq), [3]);
+  });
+});
+
 test('attachConnection adds a socket without cutting off the ones already watching', async () => {
   await withIsolatedDatabase(() => {
     sessionsDb.createAppSession('app-run-5', 'opencode', '/workspace/demo');

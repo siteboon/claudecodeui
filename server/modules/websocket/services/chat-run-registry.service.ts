@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { sessionsDb } from '@/modules/database/index.js';
 import { ChatSessionWriter } from '@/modules/websocket/services/chat-session-writer.service.js';
 import { broadcastSessionUpserted } from '@/modules/websocket/services/session-upsert-broadcast.service.js';
@@ -22,8 +24,12 @@ type ChatRunStatus = 'running' | 'completed';
  * - `lastSeq` / `events`: the per-run event log. Every live event gets a
  *   monotonically increasing `seq` and is buffered so a reconnecting client
  *   can replay exactly the events it missed via `chat.subscribe`.
+ * - `runId`: which run a `seq` counts in. Every run of a session starts again
+ *   at seq 1, so a position a client remembers from an earlier run would
+ *   otherwise skip the start of the current one on replay.
  */
 type ChatRun = {
+  runId: string;
   appSessionId: string;
   provider: LLMProvider;
   providerSessionId: string | null;
@@ -115,6 +121,7 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
     ...message,
     sessionId: run.appSessionId,
     seq: run.lastSeq,
+    runId: run.runId,
   };
 
   if (message.kind === 'complete') {
@@ -207,6 +214,7 @@ export const chatRunRegistry = {
     }
 
     const run: ChatRun = {
+      runId: randomUUID(),
       appSessionId: input.appSessionId,
       provider: input.provider,
       providerSessionId: input.providerSessionId,
@@ -282,17 +290,23 @@ export const chatRunRegistry = {
 
   /**
    * Returns buffered events with `seq` greater than `afterSeq` for replay.
+   * `afterRunId` names the run `afterSeq` was counted in; when it is another
+   * run, the whole current run is returned.
    *
    * An empty array with `run.lastSeq > afterSeq` not covered by the buffer
    * means the buffer was truncated; the client should refresh over REST.
    */
-  replayEvents(appSessionId: string, afterSeq: number): NormalizedMessage[] {
+  replayEvents(appSessionId: string, afterSeq: number, afterRunId?: string | null): NormalizedMessage[] {
     const run = runs.get(appSessionId);
     if (!run) {
       return [];
     }
 
-    return run.events.filter((event) => typeof event.seq === 'number' && event.seq > afterSeq);
+    // A position from another run — or past the end of this one, which only
+    // an earlier run can have reached — says nothing about what the client
+    // has seen of this run, so it gets the whole run.
+    const fromSeq = (afterRunId && afterRunId !== run.runId) || afterSeq > run.lastSeq ? 0 : afterSeq;
+    return run.events.filter((event) => typeof event.seq === 'number' && event.seq > fromSeq);
   },
 
   /**
