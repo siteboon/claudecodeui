@@ -324,6 +324,17 @@ function ChatInterface({
 
   usePaletteOpsRegister({ insertComposerText });
 
+  // The server stops the work and ends the process; the stopped tasks may
+  // never report back, so the session is shown idle right away.
+  const handleStopBackgroundWork = useCallback(() => {
+    const targetSessionId = selectedSession?.id || currentSessionId || null;
+    if (!targetSessionId || !sessionActivity?.background) {
+      return;
+    }
+    sendMessage({ type: 'chat.abort', sessionId: targetSessionId });
+    onSessionBackground(targetSessionId, []);
+  }, [currentSessionId, onSessionBackground, selectedSession?.id, sendMessage, sessionActivity?.background]);
+
   useEffect(() => {
     if (!canAbortSession) {
       return;
@@ -540,6 +551,7 @@ function ChatInterface({
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
+          onStopBackgroundWork={handleStopBackgroundWork}
           permissionMode={permissionMode}
           availablePermissionModes={availablePermissionModes}
           onSelectPermissionMode={selectPermissionMode}

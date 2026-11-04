@@ -126,3 +126,67 @@ test('a stop for a session that does not exist is refused', async () => {
     assert.equal(socket.frames.at(-1)?.code, 'SESSION_NOT_FOUND');
   });
 });
+
+/** A gateway whose runtime reports background work for SESSION_ID, with no run in progress. */
+async function withHeldSession(
+  hasBackgroundWork: boolean,
+  runTest: (context: { socket: ReturnType<typeof createFakeSocket>; aborts: Array<{ provider: string; sessionId: string }> }) => Promise<void>,
+): Promise<void> {
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'chat-stop-task-'));
+
+  closeConnection();
+  process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
+  await initializeDatabase();
+
+  const aborts: Array<{ provider: string; sessionId: string }> = [];
+  const socket = createFakeSocket();
+
+  try {
+    sessionsDb.createAppSession(SESSION_ID, 'claude', tempDirectory);
+    handleChatConnection(
+      socket as never,
+      { user: { id: 1 } } as never,
+      {
+        runtime: {
+          hasBackgroundWork: (sessionId: string) => hasBackgroundWork && sessionId === SESSION_ID,
+          abort: async (provider: string, sessionId: string) => {
+            aborts.push({ provider, sessionId });
+            return true;
+          },
+        } as never,
+      },
+    );
+    await runTest({ socket, aborts });
+  } finally {
+    connectedClients.clear();
+    chatRunRegistry.clearAll();
+    closeConnection();
+    if (previousDatabasePath === undefined) {
+      delete process.env.DATABASE_PATH;
+    } else {
+      process.env.DATABASE_PATH = previousDatabasePath;
+    }
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+}
+
+test('chat.abort on a session holding only background work stops it through its provider', async () => {
+  await withHeldSession(true, async ({ socket, aborts }) => {
+    socket.emit('message', JSON.stringify({ type: 'chat.abort', sessionId: SESSION_ID }));
+    await settle();
+
+    assert.deepEqual(aborts, [{ provider: 'claude', sessionId: SESSION_ID }]);
+    assert.deepEqual(socket.frames, [], 'the turn already sent its complete');
+  });
+});
+
+test('chat.abort on an idle session is still refused with NO_ACTIVE_RUN', async () => {
+  await withHeldSession(false, async ({ socket, aborts }) => {
+    socket.emit('message', JSON.stringify({ type: 'chat.abort', sessionId: SESSION_ID }));
+    await settle();
+
+    assert.equal(aborts.length, 0);
+    assert.equal(socket.frames.at(-1)?.code, 'NO_ACTIVE_RUN');
+  });
+});
