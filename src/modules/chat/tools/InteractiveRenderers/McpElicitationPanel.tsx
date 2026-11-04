@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 // The rules file alone: it has no dependencies, unlike the ajv plugin around it.
 import { fullFormats } from 'ajv-formats/dist/formats';
@@ -235,6 +235,9 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
   // empty form does not open covered in "Required".
   const [attempted, setAttempted] = useState(false);
 
+  // The part of the form that scrolls, so a failed Submit can bring its first error into view.
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
   const setValue = useCallback((key: string, value: string | boolean | string[]) => {
     setValues((previous) => ({ ...previous, [key]: value }));
   }, []);
@@ -320,7 +323,15 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
   const handleSubmit = useCallback((event?: React.FormEvent) => {
     event?.preventDefault();
     setAttempted(true);
-    if (fields.some((field) => errorFor(field) !== null)) return;
+    if (fields.some((field) => errorFor(field) !== null)) {
+      // After the render that draws the errors. The buttons stay pinned while the
+      // fields scroll, so the error may be out of sight.
+      requestAnimationFrame(() => {
+        const alert = scrollAreaRef.current?.querySelector('[role="alert"]');
+        alert?.parentElement?.scrollIntoView?.({ block: 'nearest' });
+      });
+      return;
+    }
     onDecision(request.requestId, { allow: true, updatedInput: { content: buildContent() } });
   }, [fields, errorFor, onDecision, request.requestId, buildContent]);
 
@@ -340,132 +351,135 @@ export const McpElicitationPanel: React.FC<PermissionPanelProps> = ({ request, o
       <div className="relative overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-lg dark:border-gray-700/50 dark:bg-gray-800/90 dark:shadow-2xl">
         <div className="absolute left-0 right-0 top-0 h-[2px] bg-gradient-to-r from-blue-500 via-cyan-400 to-teal-400" />
 
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="px-4 pb-2 pt-3.5">
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                {t('chat:mcpElicitation.asks', { server: serverLabel, defaultValue: '{{server}} asks for your input' })}
-              </span>
+        <form onSubmit={handleSubmit} noValidate className="flex max-h-[70dvh] flex-col">
+          {/* Only this part scrolls: a long form must not push its buttons out of reach, with the composer hidden. */}
+          <div ref={scrollAreaRef} className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+            <div className="px-4 pb-2 pt-3.5">
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  {t('chat:mcpElicitation.asks', { server: serverLabel, defaultValue: '{{server}} asks for your input' })}
+                </span>
+              </div>
+              {input.title && (
+                <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">{input.title}</p>
+              )}
+              <p className="whitespace-pre-wrap text-[14px] font-medium leading-snug text-gray-900 dark:text-gray-100">
+                {input.message}
+              </p>
+              {input.description && (
+                <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{input.description}</p>
+              )}
             </div>
-            {input.title && (
-              <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-300">{input.title}</p>
-            )}
-            <p className="whitespace-pre-wrap text-[14px] font-medium leading-snug text-gray-900 dark:text-gray-100">
-              {input.message}
-            </p>
-            {input.description && (
-              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{input.description}</p>
+
+            {isUrlMode ? (
+              <div className="px-4 pb-2">
+                <code className="block break-all rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-gray-900/60 dark:text-gray-300">{input.url}</code>
+                {!canOpenUrl && (
+                  <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                    {t('chat:mcpElicitation.unsafeUrl', { defaultValue: 'Only http and https links can be opened from here.' })}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3 px-4 pb-3">
+                {fields.map((field) => {
+                  const id = `${request.requestId}-${field.key}`;
+                  const error = attempted ? errorFor(field) : null;
+                  const value = values[field.key];
+                  // A checkbox always answers (unticked is false), so it is never marked optional.
+                  const labelText = (
+                    <span>
+                      {field.label}
+                      {!field.required && field.kind !== 'boolean' && (
+                        <span className="ml-1 font-normal text-gray-400 dark:text-gray-500">
+                          ({t('chat:mcpElicitation.optional', { defaultValue: 'optional' })})
+                        </span>
+                      )}
+                    </span>
+                  );
+
+                  if (field.kind === 'boolean') {
+                    return (
+                      <div key={field.key}>
+                        <label htmlFor={id} className="flex items-center gap-2 text-[13px] font-medium text-gray-800 dark:text-gray-200">
+                          <input
+                            id={id}
+                            type="checkbox"
+                            checked={value === true}
+                            onChange={(event) => setValue(field.key, event.target.checked)}
+                          />
+                          {labelText}
+                        </label>
+                        {field.description && <p className="ml-6 text-[11px] text-gray-500 dark:text-gray-400">{field.description}</p>}
+                      </div>
+                    );
+                  }
+
+                  if (field.kind === 'multi') {
+                    const picked = Array.isArray(value) ? value : [];
+                    return (
+                      <fieldset key={field.key}>
+                        <legend className="text-[13px] font-medium text-gray-800 dark:text-gray-200">{labelText}</legend>
+                        {field.description && <p className="text-[11px] text-gray-500 dark:text-gray-400">{field.description}</p>}
+                        <div className="mt-1 space-y-1">
+                          {field.choices.map((choice) => (
+                            <label key={choice.value} className="flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-300">
+                              <input
+                                type="checkbox"
+                                checked={picked.includes(choice.value)}
+                                onChange={(event) => setValue(
+                                  field.key,
+                                  event.target.checked
+                                    ? field.choices.map((c) => c.value).filter((v) => v === choice.value || picked.includes(v))
+                                    : picked.filter((v) => v !== choice.value),
+                                )}
+                              />
+                              {choice.label}
+                            </label>
+                          ))}
+                        </div>
+                        {error && <p role="alert" className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{error}</p>}
+                      </fieldset>
+                    );
+                  }
+
+                  return (
+                    <div key={field.key}>
+                      <label htmlFor={id} className="block text-[13px] font-medium text-gray-800 dark:text-gray-200">{labelText}</label>
+                      {field.description && <p className="text-[11px] text-gray-500 dark:text-gray-400">{field.description}</p>}
+                      <div className="mt-1">
+                        {field.kind === 'choice' ? (
+                          <select
+                            id={id}
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(event) => setValue(field.key, event.target.value)}
+                            className={inputClassName}
+                          >
+                            <option value="">{t('chat:mcpElicitation.choose', { defaultValue: 'Choose…' })}</option>
+                            {field.choices.map((choice, index) => (
+                              <option key={index} value={String(index)}>{choice.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            id={id}
+                            type={field.kind === 'text' ? field.inputType : 'text'}
+                            inputMode={field.kind === 'integer' ? 'numeric' : field.kind === 'number' ? 'decimal' : undefined}
+                            value={typeof value === 'string' ? value : ''}
+                            onChange={(event) => setValue(field.key, event.target.value)}
+                            className={inputClassName}
+                          />
+                        )}
+                      </div>
+                      {error && <p role="alert" className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{error}</p>}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 
-          {isUrlMode ? (
-            <div className="px-4 pb-2">
-              <code className="block break-all rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-gray-900/60 dark:text-gray-300">{input.url}</code>
-              {!canOpenUrl && (
-                <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
-                  {t('chat:mcpElicitation.unsafeUrl', { defaultValue: 'Only http and https links can be opened from here.' })}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3 px-4 pb-3">
-              {fields.map((field) => {
-                const id = `${request.requestId}-${field.key}`;
-                const error = attempted ? errorFor(field) : null;
-                const value = values[field.key];
-                // A checkbox always answers (unticked is false), so it is never marked optional.
-                const labelText = (
-                  <span>
-                    {field.label}
-                    {!field.required && field.kind !== 'boolean' && (
-                      <span className="ml-1 font-normal text-gray-400 dark:text-gray-500">
-                        ({t('chat:mcpElicitation.optional', { defaultValue: 'optional' })})
-                      </span>
-                    )}
-                  </span>
-                );
-
-                if (field.kind === 'boolean') {
-                  return (
-                    <div key={field.key}>
-                      <label htmlFor={id} className="flex items-center gap-2 text-[13px] font-medium text-gray-800 dark:text-gray-200">
-                        <input
-                          id={id}
-                          type="checkbox"
-                          checked={value === true}
-                          onChange={(event) => setValue(field.key, event.target.checked)}
-                        />
-                        {labelText}
-                      </label>
-                      {field.description && <p className="ml-6 text-[11px] text-gray-500 dark:text-gray-400">{field.description}</p>}
-                    </div>
-                  );
-                }
-
-                if (field.kind === 'multi') {
-                  const picked = Array.isArray(value) ? value : [];
-                  return (
-                    <fieldset key={field.key}>
-                      <legend className="text-[13px] font-medium text-gray-800 dark:text-gray-200">{labelText}</legend>
-                      {field.description && <p className="text-[11px] text-gray-500 dark:text-gray-400">{field.description}</p>}
-                      <div className="mt-1 space-y-1">
-                        {field.choices.map((choice) => (
-                          <label key={choice.value} className="flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-300">
-                            <input
-                              type="checkbox"
-                              checked={picked.includes(choice.value)}
-                              onChange={(event) => setValue(
-                                field.key,
-                                event.target.checked
-                                  ? field.choices.map((c) => c.value).filter((v) => v === choice.value || picked.includes(v))
-                                  : picked.filter((v) => v !== choice.value),
-                              )}
-                            />
-                            {choice.label}
-                          </label>
-                        ))}
-                      </div>
-                      {error && <p role="alert" className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{error}</p>}
-                    </fieldset>
-                  );
-                }
-
-                return (
-                  <div key={field.key}>
-                    <label htmlFor={id} className="block text-[13px] font-medium text-gray-800 dark:text-gray-200">{labelText}</label>
-                    {field.description && <p className="text-[11px] text-gray-500 dark:text-gray-400">{field.description}</p>}
-                    <div className="mt-1">
-                      {field.kind === 'choice' ? (
-                        <select
-                          id={id}
-                          value={typeof value === 'string' ? value : ''}
-                          onChange={(event) => setValue(field.key, event.target.value)}
-                          className={inputClassName}
-                        >
-                          <option value="">{t('chat:mcpElicitation.choose', { defaultValue: 'Choose…' })}</option>
-                          {field.choices.map((choice, index) => (
-                            <option key={index} value={String(index)}>{choice.label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          id={id}
-                          type={field.kind === 'text' ? field.inputType : 'text'}
-                          inputMode={field.kind === 'integer' ? 'numeric' : field.kind === 'number' ? 'decimal' : undefined}
-                          value={typeof value === 'string' ? value : ''}
-                          onChange={(event) => setValue(field.key, event.target.value)}
-                          className={inputClassName}
-                        />
-                      )}
-                    </div>
-                    {error && <p role="alert" className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{error}</p>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="flex items-center justify-end gap-1.5 border-t border-gray-100 bg-gray-50/50 px-4 py-2 dark:border-gray-700/50 dark:bg-gray-800/50">
+          <div className="flex shrink-0 items-center justify-end gap-1.5 border-t border-gray-100 bg-gray-50/50 px-4 py-2 dark:border-gray-700/50 dark:bg-gray-800/50">
             <button
               type="button"
               onClick={handleDecline}

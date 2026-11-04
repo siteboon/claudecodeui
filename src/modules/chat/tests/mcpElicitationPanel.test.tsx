@@ -261,3 +261,14 @@ test('a local time skipped by a DST change is refused, not moved an hour', () =>
     else process.env.TZ = previous;
   }
 });
+
+test('a long form scrolls its fields and keeps its buttons outside the scrolling part', () => {
+  const { getByText, getByLabelText } = renderBanner(singleField('eli_18', { type: 'string' }));
+
+  // jsdom has no layout, so this pins the structure the browser check measured.
+  const scrollArea = getByLabelText(/Answer/).closest('.overflow-y-auto');
+  assert.equal(scrollArea === null, false);
+  assert.equal(scrollArea?.contains(getByText('Submit')), false);
+  assert.equal(scrollArea?.contains(getByText('Decline')), false);
+  assert.equal(scrollArea?.parentElement?.classList.contains('max-h-[70dvh]'), true);
+});
