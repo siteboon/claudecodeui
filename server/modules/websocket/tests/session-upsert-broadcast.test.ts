@@ -136,3 +136,49 @@ test('a closed socket is skipped', async () => {
     assert.deepEqual(closing.frames, []);
   });
 });
+
+test('archiving, restoring and deleting a session tell every other client', async () => {
+  await withIsolatedDatabase(async () => {
+    const { sessionsService } = await import('@/modules/providers/index.js');
+    sessionsDb.createAppSession('app-archive', 'claude', '/workspace/demo');
+
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+
+    await sessionsService.deleteOrArchiveSessionById('app-archive');
+    assert.deepEqual(
+      connection.frames.map((frame) => [frame.kind, frame.sessionId, frame.state]),
+      [['session_archive_changed', 'app-archive', 'archived']],
+    );
+
+    connection.frames = [];
+    sessionsService.restoreSessionById('app-archive');
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
+    assert.deepEqual(
+      connection.frames.map((frame) => [frame.kind, frame.sessionId, frame.state]),
+      [['session_archive_changed', 'app-archive', 'restored'], ['session_upserted', 'app-archive', undefined]],
+      'a restore also carries the row, so other clients can show it again',
+    );
+
+    connection.frames = [];
+    await sessionsService.deleteOrArchiveSessionById('app-archive', { force: true });
+    assert.deepEqual(
+      connection.frames.map((frame) => [frame.kind, frame.sessionId, frame.state]),
+      [['session_archive_changed', 'app-archive', 'deleted']],
+    );
+  });
+});
+
+test('a session in an archived project is not announced to the active sidebar', async () => {
+  await withIsolatedDatabase(async () => {
+    const { projectsDb } = await import('@/modules/database/index.js');
+    projectsDb.createProjectPath('/workspace/archived');
+    sessionsDb.createAppSession('app-in-archived', 'claude', '/workspace/archived');
+    projectsDb.updateProjectIsArchived('/workspace/archived', true);
+
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+    await broadcastSessionUpserted('app-in-archived');
+    assert.deepEqual(connection.frames, []);
+  });
+});

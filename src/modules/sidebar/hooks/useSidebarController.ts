@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 
 import { api } from '@/shared/api';
+import { SESSION_ARCHIVE_CHANGED_EVENT } from '@/shared/constants';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
@@ -183,6 +184,7 @@ export function useSidebarController({
   const projectIdsLoadingMoreSessionsRef = useRef<Set<string>>(new Set());
   const searchSeqRef = useRef(0);
   const recentConversationsSeqRef = useRef(0);
+  const archivedSessionsSeqRef = useRef(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const starToggleSequenceByProjectRef = useRef<Map<string, number>>(new Map());
   const migrationStartedRef = useRef(false);
@@ -256,6 +258,9 @@ export function useSidebarController({
   }, [onRefresh]);
 
   const fetchArchivedSessions = useCallback(async () => {
+    // Archive changes from other devices can trigger several loads at once;
+    // only the newest one may write the lists.
+    const requestSequence = ++archivedSessionsSeqRef.current;
     setIsArchivedSessionsLoading(true);
 
     try {
@@ -280,12 +285,17 @@ export function useSidebarController({
         ? archivedSessionsPayload.data.sessions.filter((session) => !session.projectId || !archivedProjectIds.has(session.projectId))
         : [];
 
+      if (requestSequence !== archivedSessionsSeqRef.current) {
+        return;
+      }
       setArchivedProjects(nextProjects);
       setArchivedSessions(nextStandaloneSessions);
     } catch (error) {
       console.error('[Sidebar] Failed to load archived sessions:', error);
     } finally {
-      setIsArchivedSessionsLoading(false);
+      if (requestSequence === archivedSessionsSeqRef.current) {
+        setIsArchivedSessionsLoading(false);
+      }
     }
   }, []);
 
@@ -428,6 +438,19 @@ export function useSidebarController({
     });
     return changed ? next : recentConversations;
   }, [projects, recentConversations]);
+
+  // Another tab or device archived, restored or deleted a session: the archive
+  // and the Conversations list are fetched on demand, so fetch them again.
+  useEffect(() => {
+    const handleArchiveChanged = () => {
+      void fetchArchivedSessions();
+      if (searchMode === 'conversations') {
+        reloadRecentConversations();
+      }
+    };
+    window.addEventListener(SESSION_ARCHIVE_CHANGED_EVENT, handleArchiveChanged);
+    return () => window.removeEventListener(SESSION_ARCHIVE_CHANGED_EVENT, handleArchiveChanged);
+  }, [fetchArchivedSessions, reloadRecentConversations, searchMode]);
 
   useEffect(() => {
     if (searchMode !== 'archived') {

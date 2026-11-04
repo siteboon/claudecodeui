@@ -276,6 +276,17 @@ export type SessionUpsertedProject = {
  * showing has been merged into its canonical app-session row, so it is always
  * present — `null` only while the provider has not reported an id yet.
  */
+/**
+ * A session left or came back to the active lists from another tab or device.
+ * A restore is followed by a `session_upserted` carrying the row itself.
+ */
+export type SessionArchiveChangedEvent = {
+  kind: 'session_archive_changed';
+  sessionId: string;
+  state: 'archived' | 'restored' | 'deleted';
+  timestamp: string;
+};
+
 export type SessionUpsertedEvent = {
   kind: 'session_upserted';
   sessionId: string;

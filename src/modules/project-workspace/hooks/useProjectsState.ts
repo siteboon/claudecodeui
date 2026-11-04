@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 import { api } from '@/shared/api';
+import { SESSION_ARCHIVE_CHANGED_EVENT } from '@/shared/constants';
 import type { ServerEvent,
   AppTab,
   LLMProvider,
@@ -763,6 +764,7 @@ export function useProjectsState({
         && event.kind !== 'session_upserted'
         // A change to the session's scheduled messages is not new activity in it.
         && event.kind !== 'scheduled_messages_changed'
+        && event.kind !== 'session_archive_changed'
         && event.kind !== 'status'
         && event.kind !== 'stream_end'
         && event.kind !== 'permission_resolved'
@@ -770,6 +772,19 @@ export function useProjectsState({
         && event.kind !== 'websocket_reconnected'
       ) {
         markSessionAttention(eventSessionId);
+      }
+
+      // Archived, restored or deleted on another tab or device. A restore is
+      // followed by its own `session_upserted`, which puts the row back.
+      if (event.kind === 'session_archive_changed') {
+        if (eventSessionId && event.state !== 'restored') {
+          clearSessionAttention(eventSessionId);
+          setProjects((prevProjects) =>
+            prevProjects.map((project) => removeSessionFromProject(project, eventSessionId)),
+          );
+        }
+        window.dispatchEvent(new CustomEvent(SESSION_ARCHIVE_CHANGED_EVENT));
+        return;
       }
 
       if (event.kind !== 'session_upserted') {
@@ -876,7 +891,7 @@ export function useProjectsState({
     };
 
     return subscribe(handleEvent);
-  }, [isSessionProcessing, markSessionAttention, navigate, refreshProjectsSilently, sessionId, subscribe]);
+  }, [clearSessionAttention, isSessionProcessing, markSessionAttention, navigate, refreshProjectsSilently, sessionId, subscribe]);
 
   useEffect(() => {
     return () => {
