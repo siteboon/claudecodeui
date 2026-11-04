@@ -275,3 +275,9 @@ CloudCLI UI - (https://cloudcli.ai).
 <div align="center">
  <strong>Made with care for the Claude Code, Cursor and Codex community.</strong>
 </div>
+
+## Claude Bypass Permissions on Root Hosts
+
+When CloudCLI runs as root, Claude Chat handles Bypass Permissions and Skip Permissions through the SDK approval callback instead of passing native bypass mode, which Claude Code refuses as root. Ordinary tool approval requests are allowed automatically; interactive questions and plan-exit requests still reach the UI. Plan mode and non-root native bypass behavior are preserved. This uses the SDK default permission mode, not `auto` or `dontAsk`; Claude Code policies and explicit deny rules still apply.
+
+Build with `npm ci && npm run build` and restart the existing CloudCLI service to deploy. See [feature details](features.md) and [manual change records](docs/changelog.md).
