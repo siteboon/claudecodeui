@@ -15,7 +15,8 @@ test('a relocated rollout records the new cwd and keeps its permissions', {
     await writeFile(rolloutPath, `${JSON.stringify({ type: 'session_meta', payload: { cwd: '/home/u/alpha' } })}\n`);
     await chmod(rolloutPath, 0o660);
 
-    // Under a 077 umask, writeFile's mode alone would drop the group bits.
+    // The dev default umask 002 would keep 0660 even without the chmod after
+    // the write; 077 makes writeFile's mode alone drop the group bits.
     const previousUmask = process.umask(0o077);
     try {
       const relocated = await new CodexTranscriptRelocationProvider().relocateTranscripts({

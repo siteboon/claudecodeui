@@ -97,33 +97,34 @@ test('on macOS a decomposed accent encodes the way the SDK does', async () => {
   }
 });
 
-test('a moved transcript keeps its permissions', {
-  skip: process.platform === 'win32' && 'Windows has no POSIX permission bits',
-}, async () => {
-  await withClaudeProjectsRoot(async (root) => {
-    const oldProjectPath = '/home/u/alpha';
-    const newProjectPath = '/home/u/beta';
-    const transcriptPath = await writeTranscript(
-      path.join(root, encodeClaudeProjectDirName(oldProjectPath)),
-      'session-a',
-      oldProjectPath,
-    );
-    await chmod(transcriptPath, 0o660);
-
-    // Under a 077 umask, writeFile's mode alone would drop the group bits.
-    const previousUmask = process.umask(0o077);
-    let moved;
-    try {
-      [moved] = await new ClaudeTranscriptRelocationProvider().relocateTranscripts({
-        sessions: [{ sessionId: 'a', jsonlPath: transcriptPath }],
+// 'my project' and 'my_project' encode to the same folder, so that pair takes
+// the in-place rewrite branch instead of the move to a new folder.
+for (const [oldProjectPath, newProjectPath] of [['/home/u/alpha', '/home/u/beta'], ['/home/u/my project', '/home/u/my_project']]) {
+  test(`a transcript relocated from ${oldProjectPath} to ${newProjectPath} keeps its permissions`, {
+    skip: process.platform === 'win32' && 'Windows has no POSIX permission bits',
+  }, async () => {
+    await withClaudeProjectsRoot(async (root) => {
+      const transcriptPath = await writeTranscript(
+        path.join(root, encodeClaudeProjectDirName(oldProjectPath)),
+        'session-a',
         oldProjectPath,
-        newProjectPath,
-      });
-    } finally {
-      process.umask(previousUmask);
-    }
+      );
+      await chmod(transcriptPath, 0o660);
 
-    assert.equal(moved.jsonlPath, path.join(root, encodeClaudeProjectDirName(newProjectPath), 'session-a.jsonl'));
-    assert.equal((await stat(moved.jsonlPath)).mode & 0o777, 0o660);
+      // The dev default umask 002 would keep 0660 even without the chmod after
+      // each write; 077 makes writeFile's mode alone drop the group bits.
+      const previousUmask = process.umask(0o077);
+      try {
+        const [moved] = await new ClaudeTranscriptRelocationProvider().relocateTranscripts({
+          sessions: [{ sessionId: 'a', jsonlPath: transcriptPath }],
+          oldProjectPath,
+          newProjectPath,
+        });
+        assert.equal(moved.jsonlPath, path.join(root, encodeClaudeProjectDirName(newProjectPath), 'session-a.jsonl'));
+        assert.equal((await stat(moved.jsonlPath)).mode & 0o777, 0o660);
+      } finally {
+        process.umask(previousUmask);
+      }
+    });
   });
-});
+}
