@@ -1313,6 +1313,15 @@ async function runOpenCodeTurn(
     // safety-net `complete` from arriving first.
     await turn.abortFinished;
     await nextMacrotask();
+    // A stopped turn is a cancellation, reported the way Claude reports one,
+    // not as a failure or a completion.
+    reportRunStopped({
+      userId,
+      provider: PROVIDER,
+      sessionId: finalSessionId,
+      sessionName: sessionSummary,
+      stopReason: 'aborted',
+    });
     return;
   }
 

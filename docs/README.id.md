@@ -181,6 +181,7 @@ CloudCLI memiliki sistem plugin yang memungkinkan Anda menambahkan tab kustom de
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Menghitung biaya API dari harga model dan penggunaan token, dengan dukungan preset harga model |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Dashboard antrean tugas untuk melihat, memfilter, dan menjalankan tugas agent |
 | **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | Papan Kanban untuk GitHub Issues dengan sinkronisasi TaskMaster dua arah dan instalasi otomatis skill CLI /github-task |
+| **[ccx](https://github.com/AaronWong1999/cloudcli-plugin-ccx)** | Menampilkan penggunaan Claude dan Codex serta menyerahkan session yang sedang terbuka ke agent lainnya beserta riwayat percakapannya (macOS, memerlukan ccx) |
 
 ### Buat Plugin Anda Sendiri
 
