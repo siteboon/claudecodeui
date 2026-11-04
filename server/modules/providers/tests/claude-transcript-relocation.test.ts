@@ -111,8 +111,8 @@ for (const [oldProjectPath, newProjectPath] of [['/home/u/alpha', '/home/u/beta'
       );
       await chmod(transcriptPath, 0o660);
 
-      // A 002 umask, common on dev and CI machines, would keep 0660 without the chmod after
-      // each write; 077 makes writeFile's mode alone drop the group bits.
+      // A 002 umask (user-private-group setups) would keep 0660 without the chmod
+      // after each write; 077 makes writeFile's mode alone drop the group bits.
       const previousUmask = process.umask(0o077);
       try {
         const [moved] = await new ClaudeTranscriptRelocationProvider().relocateTranscripts({
@@ -121,9 +121,12 @@ for (const [oldProjectPath, newProjectPath] of [['/home/u/alpha', '/home/u/beta'
           newProjectPath,
         });
         assert.equal(moved.jsonlPath, path.join(root, encodeClaudeProjectDirName(newProjectPath), 'session-a.jsonl'));
-        // Proves the rewrite happened: the untouched original would also be 0660.
+        // In place, a swallowed rename would leave the 0660 original behind, so check it was rewritten.
         assert.equal(JSON.parse(await readFile(moved.jsonlPath, 'utf8')).cwd, newProjectPath);
-        assert.deepEqual(await readdir(path.dirname(moved.jsonlPath)), ['session-a.jsonl']);
+        // No temporary file left over, and a move leaves nothing in the old folder.
+        // `.jsonl` also matches a leftover `.jsonl.<uuid>.tmp`; the emptied old folder may stay.
+        const transcripts = (await readdir(root, { recursive: true })).filter((entry) => entry.includes('.jsonl'));
+        assert.deepEqual(transcripts, [path.relative(root, moved.jsonlPath)]);
         assert.equal((await stat(moved.jsonlPath)).mode & 0o777, 0o660);
       } finally {
         process.umask(previousUmask);
