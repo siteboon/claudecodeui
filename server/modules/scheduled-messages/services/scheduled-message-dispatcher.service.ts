@@ -98,8 +98,19 @@ export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): P
 
 /** Records why a claimed message did not go, and shows it on its session's banner. */
 function recordFailure(row: ScheduledMessageRow, reason: string): void {
-  scheduledMessagesDb.markFailed(row.id, reason);
+  scheduledMessagesDb.markFailed(row.id, reason, row.dispatch_token);
   announceScheduledMessagesChanged(row.session_id);
+}
+
+/** Failed restoration retains its durable token for recovery at the next startup. */
+function restoreUnstartedClaim(row: ScheduledMessageRow): void {
+  try {
+    scheduledMessagesDb.releaseClaim(row.id, row.dispatch_token);
+    announceScheduledMessagesChanged(row.session_id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[ScheduledMessages] Failed to release claim; retained for startup recovery', { id: row.id, error: message });
+  }
 }
 
 async function sendClaimedMessage(
@@ -121,7 +132,15 @@ async function sendClaimedMessage(
         signal: controller.signal,
         // Registration and this ownership transfer are synchronous. Shutdown
         // may restore only claims whose provider turn has not been registered.
-        onStarted: () => { waitingClaims.delete(row.id); },
+        onStarted: () => {
+          if (!scheduledMessagesDb.startClaim(row.id, row.dispatch_token)) {
+            waitingClaims.delete(row.id);
+            controller.abort();
+            throw new Error('The scheduled claim is no longer owned by this dispatcher.');
+          }
+          row.dispatch_token = null;
+          waitingClaims.delete(row.id);
+        },
       },
       { runtime },
     );
@@ -136,9 +155,10 @@ async function sendClaimedMessage(
     // Shutdown is temporary, so an unstarted turn remains pending. Permanent
     // admission failures and errors after a run started remain visible failures:
     // retrying a turn that already ran could repeat its side effects.
-    if (!result.started && result.retryable) {
-      scheduledMessagesDb.releaseClaim(row.id);
-      announceScheduledMessagesChanged(row.session_id);
+    if ((!result.started && result.retryable) || (result.started && row.dispatch_token !== null)) {
+      // A failed durable handoff also means the provider never ran. Preserve
+      // recovery even though the registry briefly registered that turn.
+      restoreUnstartedClaim(row);
     } else if (!result.started || result.error) {
       recordFailure(row, result.error ?? 'The session was unavailable when this was due.');
     }
@@ -204,6 +224,7 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   if (pollTimer) {
     return;
   }
+  scheduledMessagesDb.recoverUnstartedClaims();
 
   const poll = () => {
     // A pass that overruns the interval must not be started again underneath
@@ -239,17 +260,10 @@ export function closeScheduledMessageDispatcher(): void {
   }
   for (const [id, claim] of waitingClaims) {
     waitingClaims.delete(id);
-    try {
-      scheduledMessagesDb.releaseClaim(id);
-      announceScheduledMessagesChanged(claim.row.session_id);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error('[ScheduledMessages] Failed to release claim during shutdown', { id, error: message });
-    } finally {
-      // Also revoke any interrupt admission still awaiting its abort, so it
-      // cannot start after the row has become available to a restarted server.
-      claim.controller.abort();
-    }
+    // Revoke the admission before touching persistence. A failed write leaves
+    // the token available for startup recovery without permitting a late send.
+    claim.controller.abort();
+    restoreUnstartedClaim(claim.row);
   }
   waitingClaims.clear();
 }

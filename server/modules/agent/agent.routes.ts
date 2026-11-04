@@ -666,7 +666,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *                           Default: true
    *                           Behavior:
    *                           - Only applies when cloning via githubUrl (not for existing projectPath)
-   *                           - Deletes cloned repository after 5 seconds
+   *                           - Deletes newly cloned repositories under ~/.claude/external-projects after 5 seconds
+   *                           - Caller-specified destinations outside that root are retained, including during shutdown
    *                           - Also deletes associated Claude session directory
    *                           - Remote branch and PR remain on GitHub if created
    *
@@ -1019,7 +1020,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       });
       if (!run) {
         if (cleanup && githubUrl && clonedProjectCreated) {
-          cleanupProject(finalProjectPath, null);
+          await cleanupProject(finalProjectPath, null);
         }
         if (runRegistry.isDraining()) {
           return res.status(503).json({ code: 'SERVER_DRAINING', error: 'The server is shutting down and cannot start a new run.' });
@@ -1333,9 +1334,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       if (cleanup && githubUrl && clonedProjectCreated) {
         // Only cleanup if we cloned a repo (not for existing project paths)
         const sessionIdForCleanup = run.writer.getSessionId();
-        setTimeout(() => {
-          cleanupProject(finalProjectPath, sessionIdForCleanup);
-        }, 5000);
+        // Keep the request's drain reservation through the delay and cleanup,
+        // even though its HTTP response and provider run have already ended.
+        await new Promise((resolve) => { setTimeout(resolve, 5000); });
+        await cleanupProject(finalProjectPath, sessionIdForCleanup);
       }
 
     } catch (error) {
@@ -1344,7 +1346,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // Clean up on error
       if (finalProjectPath && cleanup && githubUrl && clonedProjectCreated) {
         const sessionIdForCleanup = run ? run.writer.getSessionId() : null;
-        cleanupProject(finalProjectPath, sessionIdForCleanup);
+        await cleanupProject(finalProjectPath, sessionIdForCleanup);
       }
 
       if (stream) {

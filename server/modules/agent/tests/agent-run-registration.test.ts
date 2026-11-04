@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import * as nodeCrypto from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import * as fileSystem from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -29,14 +29,14 @@ import { createAgentRouter } from '../agent.routes.js';
 type AgentDependencies = Parameters<typeof createAgentRouter>[0];
 type RunFunction = AgentDependencies['queryClaude'];
 
-async function withIsolatedDatabase(run: () => Promise<void>): Promise<void> {
+async function withIsolatedDatabase(run: (tempDirectory: string) => Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'agent-run-registration-'));
+  const tempDirectory = await fileSystem.mkdtemp(path.join(tmpdir(), 'agent-run-registration-'));
   closeConnection();
   process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
   await initializeDatabase();
   try {
-    await run();
+    await run(tempDirectory);
   } finally {
     connectedClients.clear();
     chatRunRegistry.clearAll();
@@ -46,7 +46,7 @@ async function withIsolatedDatabase(run: () => Promise<void>): Promise<void> {
     } else {
       process.env.DATABASE_PATH = previousDatabasePath;
     }
-    await rm(tempDirectory, { recursive: true, force: true });
+    await fileSystem.rm(tempDirectory, { recursive: true, force: true });
   }
 }
 
@@ -235,13 +235,13 @@ test('an API request overtaken by drain reports shutdown instead of a busy sessi
   });
 });
 
-test('shutdown waits for an in-flight clone and rejects it before session creation', async () => {
-  await withIsolatedDatabase(async () => {
+test('shutdown waits for an in-flight clone, removes it, and rejects it before session creation', async () => {
+  await withIsolatedDatabase(async (tempDirectory) => {
     const runtime = createHeldRuntime();
     const dependencies = createDependencies(runtime.queryClaude);
-    dependencies.fileSystem = {
-      access: async () => { throw new Error('not present'); }, mkdir: async () => undefined,
-    } as unknown as AgentDependencies['fileSystem'];
+    dependencies.homeDirectory = () => tempDirectory;
+    dependencies.fileSystem = fileSystem;
+    const target = path.join(tempDirectory, '.claude', 'external-projects', 'clone');
     const clone = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
     let cloneStarted = () => {};
     const started = new Promise<void>((resolve) => { cloneStarted = resolve; });
@@ -254,10 +254,11 @@ test('shutdown waits for an in-flight clone and rejects it before session creati
     dependencies.sessions.createAppSession = () => { sessionsCreated += 1; return { sessionId: 'should-not-exist' }; };
     await withAgentServer(dependencies, async (baseUrl) => {
       const request = post(baseUrl, {
-        githubUrl: 'https://github.com/owner/repo.git', projectPath: '/home/test/project',
-        message: 'Run after cloning', stream: false, cleanup: false,
+        githubUrl: 'https://github.com/owner/repo.git', projectPath: target,
+        message: 'Run after cloning', stream: false,
       });
       await started;
+      await fileSystem.mkdir(target);
       let drained = false;
       const drain = chatRunRegistry.drain(1_000).then((result) => { drained = true; return result; });
       try {
@@ -271,10 +272,83 @@ test('shutdown waits for an in-flight clone and rejects it before session creati
       assert.equal((await response.json() as { code: string }).code, 'SERVER_DRAINING');
       assert.equal(sessionsCreated, 0);
       assert.equal(runtime.seen.length, 0);
+      await assert.rejects(fileSystem.access(target), { code: 'ENOENT' });
       assert.equal(await drain, true);
     });
   });
 });
+
+for (const cleanupFails of [false, true]) {
+  test(`drain includes delayed cloned-project cleanup when cleanup ${cleanupFails ? 'fails' : 'succeeds'}`, async (t) => {
+    await withIsolatedDatabase(async (tempDirectory) => {
+      const runtime = createHeldRuntime('cleanup-session');
+      runtime.release();
+      const dependencies = createDependencies(runtime.queryClaude);
+      dependencies.homeDirectory = () => tempDirectory;
+      const target = path.join(tempDirectory, '.claude', 'external-projects', 'clone');
+      const sessionDirectory = path.join(tempDirectory, '.claude', 'sessions', 'cleanup-session');
+      await fileSystem.mkdir(sessionDirectory, { recursive: true });
+      let cleanupEntered = () => {};
+      const entered = new Promise<void>((resolve) => { cleanupEntered = resolve; });
+      let releaseCleanup = () => {};
+      const held = new Promise<void>((resolve) => { releaseCleanup = resolve; });
+      dependencies.fileSystem = {
+        ...fileSystem,
+        rm: async (location, options) => {
+          if (location === target) {
+            cleanupEntered();
+            await held;
+            if (cleanupFails) { throw new Error('cleanup failed'); }
+          }
+          return fileSystem.rm(location, options);
+        },
+      };
+      dependencies.spawnProcess = (() => {
+        const clone = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+        void fileSystem.mkdir(target).then(() => { clone.emit('close', 0); });
+        return clone;
+      }) as unknown as AgentDependencies['spawnProcess'];
+      let beginCleanup = () => {};
+      const originalTimeout = globalThis.setTimeout;
+      t.mock.method(globalThis, 'setTimeout', ((callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => {
+        if (delay === 5_000) {
+          beginCleanup = () => callback(...args);
+          return originalTimeout(() => {}, 0);
+        }
+        return originalTimeout(callback, delay, ...args);
+      }) as typeof setTimeout);
+      if (cleanupFails) { t.mock.method(console, 'error', () => {}); }
+      await withAgentServer(dependencies, async (baseUrl) => {
+        let drain: Promise<boolean> | undefined;
+        try {
+          const response = await post(baseUrl, {
+            githubUrl: 'https://github.com/owner/repo.git', projectPath: target,
+            message: 'Run and clean up', stream: false,
+          });
+          assert.equal(response.status, 200);
+          assert.equal(chatRunRegistry.listRunningRuns().length, 0);
+          let drained = false;
+          drain = chatRunRegistry.drain(30_000).then((result) => { drained = true; return result; });
+          await Promise.resolve();
+          assert.equal(drained, false, 'the five-second delay keeps the request in drain');
+          beginCleanup();
+          await entered;
+          assert.equal(drained, false, 'cleanup completion remains part of drain');
+          releaseCleanup();
+          assert.equal(await drain, true, 'cleanup success or failure releases the reservation');
+          if (!cleanupFails) {
+            await assert.rejects(fileSystem.access(target), { code: 'ENOENT' });
+            await assert.rejects(fileSystem.access(sessionDirectory), { code: 'ENOENT' });
+          }
+        } finally {
+          beginCleanup();
+          releaseCleanup();
+          await drain;
+        }
+      });
+    });
+  });
+}
 
 test('shutdown waits for agent branch, push, and PR creation after the provider completes', async () => {
   await withIsolatedDatabase(async () => {

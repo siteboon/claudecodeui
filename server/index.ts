@@ -418,13 +418,15 @@ async function startServer() {
                     + `for up to ${shutdownDrainTimeoutMs}ms.`,
                 );
 
-                closeScheduledMessageDispatcher();
                 const drainPromise = chatRunRegistry.drain(shutdownDrainTimeoutMs);
                 server.close((error) => {
                     if (error) {
                         console.error('[Shutdown] Error closing HTTP server:', getErrorMessage(error));
                     }
                 });
+                // Close admission and start the timeout before synchronous claim
+                // restoration, then stop the dispatcher before awaiting drain.
+                closeScheduledMessageDispatcher();
 
                 const drained = await drainPromise;
                 if (!drained) {

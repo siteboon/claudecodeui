@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionDraftsDb, sessionsDb, userDb } from '@/modules/database/index.js';
-import { closeScheduledMessageDispatcher, dispatchDueScheduledMessages, dispatchQueuedMessages } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
+import { closeConnection, getConnection, initializeDatabase, scheduledMessagesDb, sessionDraftsDb, sessionsDb, userDb } from '@/modules/database/index.js';
+import { closeScheduledMessageDispatcher, dispatchDueScheduledMessages, dispatchQueuedMessages, initializeScheduledMessageDispatcher } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
 import { scheduledMessagesService } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry, connectedClients, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
@@ -25,6 +25,7 @@ async function withIsolatedDatabase(runTest: (userId: number) => void | Promise<
     sessionsDb.createAppSession(SESSION_ID, 'claude', tempDirectory, 'Scheduled session');
     await runTest(Number(user.id));
   } finally {
+    closeScheduledMessageDispatcher();
     chatRunRegistry.clearAll();
     connectedClients.clear();
     closeConnection();
@@ -400,11 +401,11 @@ test('one claim-release failure does not stop shutdown from releasing the other 
     const originalRelease = scheduledMessagesDb.releaseClaim;
     const failedRow = rows.find((row) => row.content === 'release fails')!;
     const log = t.mock.method(console, 'error', () => {});
-    t.mock.method(scheduledMessagesDb, 'releaseClaim', (id: string) => {
+    t.mock.method(scheduledMessagesDb, 'releaseClaim', (id: string, token: string | null) => {
       if (id === failedRow.id) {
         throw new Error('database unavailable for this claim');
       }
-      originalRelease(id);
+      originalRelease(id, token);
     });
     try {
       assert.doesNotThrow(closeScheduledMessageDispatcher);
@@ -412,6 +413,7 @@ test('one claim-release failure does not stop shutdown from releasing the other 
       assert.equal(log.mock.calls[0].arguments[1].id, failedRow.id);
       const afterClose = scheduledMessagesDb.listForSession(userId, SESSION_ID);
       assert.equal(afterClose.find((row) => row.content === 'release succeeds')?.status, 'pending');
+      assert.ok(afterClose.find((row) => row.id === failedRow.id)?.dispatch_token, 'failed release retains durable recovery ownership');
       const drain = chatRunRegistry.drain(1_000);
       release();
       await dispatch;
@@ -421,6 +423,153 @@ test('one claim-release failure does not stop shutdown from releasing the other 
       await dispatch;
       t.mock.restoreAll();
     }
+    closeConnection();
+    await initializeDatabase();
+    chatRunRegistry.clearAll();
+    const restartedRuns: RunCall[] = [];
+    initializeScheduledMessageDispatcher(createRuntime(restartedRuns));
+    // Startup polling is asynchronous; the first provider is entered before
+    // its first await, and one event-loop turn lets the complete pass settle.
+    await new Promise((resolve) => { setImmediate(resolve); });
+    closeScheduledMessageDispatcher();
+    assert.deepEqual(restartedRuns.map((run) => run.command), ['release fails', 'release succeeds']);
+    assert.ok(scheduledMessagesDb.listForSession(userId, SESSION_ID).every((row) => row.status === 'sent' && row.dispatch_token === null));
+  });
+});
+
+test('a release error after retryable rejection stays recoverable instead of becoming failed', async (t) => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId, sessionId: SESSION_ID, content: 'retry after restart',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const active = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID, provider: 'claude', providerSessionId: null, connection: null, userId,
+    });
+    assert.ok(active);
+    const runs: RunCall[] = [];
+    const log = t.mock.method(console, 'error', () => {});
+    t.mock.method(scheduledMessagesDb, 'releaseClaim', () => { throw new Error('temporary write failure'); });
+    try {
+      await dispatchDueScheduledMessages({ ...createRuntime(runs), abort: async () => false });
+      const row = scheduledMessagesDb.listForSession(userId, SESSION_ID)[0];
+      assert.equal(row.status, 'sent');
+      assert.equal(row.failure_reason, null, 'restoration failures must not become permanent dispatch failures');
+      assert.ok(row.dispatch_token);
+      assert.equal(runs.length, 0);
+      assert.equal(log.mock.callCount(), 1);
+    } finally {
+      t.mock.restoreAll();
+    }
+    closeConnection();
+    await initializeDatabase();
+    chatRunRegistry.clearAll();
+    initializeScheduledMessageDispatcher(createRuntime(runs));
+    await new Promise((resolve) => { setImmediate(resolve); });
+    closeScheduledMessageDispatcher();
+    assert.deepEqual(runs.map((run) => run.command), ['retry after restart']);
+    assert.equal(await dispatchDueScheduledMessages(createRuntime(runs)), 0, 'the recovered message is sent once');
+  });
+});
+
+test('startup recovery fences obsolete owners without replaying started or legacy sent messages', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    for (const content of ['waiting', 'started', 'legacy']) {
+      scheduledMessagesService.schedule({
+        userId, sessionId: SESSION_ID, content,
+        scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+      });
+    }
+    const claims = scheduledMessagesDb.claimDue(new Date());
+    const waiting = claims.find((row) => row.content === 'waiting')!;
+    const started = claims.find((row) => row.content === 'started')!;
+    const legacy = claims.find((row) => row.content === 'legacy')!;
+    assert.equal(scheduledMessagesDb.startClaim(started.id, started.dispatch_token), true);
+    getConnection().prepare('UPDATE scheduled_messages SET dispatch_token = NULL WHERE id = ?').run(legacy.id);
+    scheduledMessagesDb.recoverUnstartedClaims();
+    const [replacement] = scheduledMessagesDb.claimDue(new Date());
+    assert.equal(replacement.id, waiting.id);
+    assert.notEqual(replacement.dispatch_token, waiting.dispatch_token);
+    assert.equal(scheduledMessagesDb.startClaim(waiting.id, waiting.dispatch_token), false);
+    scheduledMessagesDb.releaseClaim(waiting.id, waiting.dispatch_token);
+    scheduledMessagesDb.markFailed(waiting.id, 'obsolete failure', waiting.dispatch_token);
+    const current = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+    assert.ok(current.every((row) => row.status === 'sent'));
+    assert.equal(current.find((row) => row.id === replacement.id)?.dispatch_token, replacement.dispatch_token);
+    assert.equal(scheduledMessagesDb.startClaim(replacement.id, replacement.dispatch_token), true);
+  });
+});
+
+test('upgrading an existing schedule table preserves historical sent rows', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId, sessionId: SESSION_ID, content: 'already sent before upgrade',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    await dispatchDueScheduledMessages(createRuntime([]));
+    getConnection().exec('ALTER TABLE scheduled_messages DROP COLUMN dispatch_token');
+    closeConnection();
+    await initializeDatabase();
+    await initializeDatabase();
+    scheduledMessagesDb.recoverUnstartedClaims();
+    const [row] = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+    assert.equal(row.status, 'sent');
+    assert.equal(row.dispatch_token, null);
+    assert.deepEqual(scheduledMessagesDb.claimDue(new Date()), []);
+  });
+});
+
+test('a failed provider handoff never executes the turn and can recover on restart', async (t) => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId, sessionId: SESSION_ID, content: 'retry durable handoff',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const runs: RunCall[] = [];
+    t.mock.method(scheduledMessagesDb, 'startClaim', () => { throw new Error('cannot persist start'); });
+    t.mock.method(scheduledMessagesDb, 'releaseClaim', () => { throw new Error('cannot persist release'); });
+    t.mock.method(console, 'error', () => {});
+    try {
+      await dispatchDueScheduledMessages(createRuntime(runs));
+      assert.equal(runs.length, 0);
+      const [row] = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+      assert.equal(row.failure_reason, null);
+      assert.ok(row.dispatch_token);
+      assert.equal(chatRunRegistry.isProcessing(SESSION_ID), false);
+    } finally {
+      t.mock.restoreAll();
+    }
+    chatRunRegistry.clearAll();
+    initializeScheduledMessageDispatcher(createRuntime(runs));
+    await new Promise((resolve) => { setImmediate(resolve); });
+    closeScheduledMessageDispatcher();
+    assert.deepEqual(runs.map((run) => run.command), ['retry durable handoff']);
+  });
+});
+
+test('an interrupt revoked by startup recovery cannot send or overwrite the new claim', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesService.schedule({
+      userId, sessionId: SESSION_ID, content: 'belongs to replacement',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const active = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID, provider: 'claude', providerSessionId: null, connection: null, userId,
+    });
+    assert.ok(active);
+    let finishAbort = () => {};
+    const abort = new Promise<boolean>((resolve) => { finishAbort = () => resolve(true); });
+    const runs: RunCall[] = [];
+    const dispatch = dispatchDueScheduledMessages({ ...createRuntime(runs), abort: () => abort });
+    scheduledMessagesDb.recoverUnstartedClaims();
+    const [replacement] = scheduledMessagesDb.claimDue(new Date());
+    finishAbort();
+    await dispatch;
+    assert.deepEqual(runs, []);
+    const [current] = scheduledMessagesDb.listForSession(userId, SESSION_ID);
+    assert.equal(current.status, 'sent');
+    assert.equal(current.dispatch_token, replacement.dispatch_token);
+    assert.equal(current.failure_reason, null);
   });
 });
 
