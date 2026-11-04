@@ -166,3 +166,35 @@ test('a URL request is accepted without content', async () => {
     assert.deepEqual(result, { action: 'accept' });
   });
 });
+
+test('an unattended run sets no callback, so the SDK declines at once instead of waiting on nobody', async () => {
+  const startedWith = async (runOptions: Record<string, unknown>) => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-elicitation-'));
+    const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+    let passed: Record<string, unknown> | null = null;
+    const context: ProviderRuntimeContext = {
+      resolveProviderSessionId: () => null,
+      resolveResumeModel: async () => undefined,
+      getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
+      normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
+      isProviderInstalled: async () => true,
+      createQuery: ({ options }) => {
+        passed = options as Record<string, unknown>;
+        return Object.assign((async function* () {
+          yield* [] as Record<string, unknown>[];
+        })(), { interrupt: async () => {}, stopTask: async () => {} });
+      },
+    };
+    try {
+      const writer = { send: () => {}, userId: null };
+      await queryClaudeSDK('hello', { sessionId: `${SESSION_ID}-${String(runOptions.unattended)}`, cwd, ...runOptions }, writer as never, context);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+    assert.ok(passed, 'queryClaudeSDK did not start the SDK');
+    return passed as Record<string, unknown>;
+  };
+
+  assert.equal((await startedWith({ unattended: true })).onElicitation, undefined);
+  assert.equal(typeof (await startedWith({})).onElicitation, 'function');
+});

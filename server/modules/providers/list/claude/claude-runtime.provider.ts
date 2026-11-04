@@ -1183,51 +1183,56 @@ async function queryClaudeSDK(
     // request takes the permission round trip so it reaches every attached tab,
     // survives a refresh and raises a notification. There is no timeout here:
     // the server keeps its own, and an abort arrives through the signal.
-    sdkOptions.onElicitation = async (request: ElicitationRequest, elicitationOptions: { signal: AbortSignal }) => {
-      const requestId = createRequestId();
-      const input = {
-        serverName: request.serverName,
-        message: request.message,
-        mode: request.mode ?? 'form',
-        requestedSchema: request.requestedSchema,
-        url: request.url,
-        elicitationId: request.elicitationId,
-        title: request.title,
-        displayName: request.displayName,
-        description: request.description,
-      };
-      const serverLabel = request.displayName || request.serverName;
-      ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName: MCP_ELICITATION_TOOL_NAME, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
-      emitNotification(notificationEvent({
-        provider: 'claude',
-        sessionId: sessionId || capturedSessionId || null,
-        kind: 'action_required',
-        code: 'agent.notification',
-        meta: { message: `${serverLabel} asks: ${request.message}`, sessionName: sessionSummary },
-        severity: 'warning',
-        requiresUserAction: true,
-        dedupeKey: `claude:elicitation:${sessionId || capturedSessionId || 'none'}:${requestId}`
-      }));
+    // An unattended run (the agent API, commit-message generation) has nobody to
+    // show the form to, so it leaves the callback unset: the SDK then declines
+    // at once, rather than the run waiting on an answer that cannot come.
+    if (!options.unattended) {
+      sdkOptions.onElicitation = async (request: ElicitationRequest, elicitationOptions: { signal: AbortSignal }) => {
+        const requestId = createRequestId();
+        const input = {
+          serverName: request.serverName,
+          message: request.message,
+          mode: request.mode ?? 'form',
+          requestedSchema: request.requestedSchema,
+          url: request.url,
+          elicitationId: request.elicitationId,
+          title: request.title,
+          displayName: request.displayName,
+          description: request.description,
+        };
+        const serverLabel = request.displayName || request.serverName;
+        ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName: MCP_ELICITATION_TOOL_NAME, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        emitNotification(notificationEvent({
+          provider: 'claude',
+          sessionId: sessionId || capturedSessionId || null,
+          kind: 'action_required',
+          code: 'agent.notification',
+          meta: { message: `${serverLabel} asks: ${request.message}`, sessionName: sessionSummary },
+          severity: 'warning',
+          requiresUserAction: true,
+          dedupeKey: `claude:elicitation:${sessionId || capturedSessionId || 'none'}:${requestId}`
+        }));
 
-      const decision = await waitForToolApproval(requestId, {
-        timeoutMs: 0,
-        signal: elicitationOptions?.signal,
-        metadata: {
-          _sessionId: sessionId || capturedSessionId || null,
-          _toolName: MCP_ELICITATION_TOOL_NAME,
-          _input: input,
-          _receivedAt: new Date(),
-        },
-        onCancel: (reason: string) => {
-          ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        const decision = await waitForToolApproval(requestId, {
+          timeoutMs: 0,
+          signal: elicitationOptions?.signal,
+          metadata: {
+            _sessionId: sessionId || capturedSessionId || null,
+            _toolName: MCP_ELICITATION_TOOL_NAME,
+            _input: input,
+            _receivedAt: new Date(),
+          },
+          onCancel: (reason: string) => {
+            ws.send(createNormalizedMessage({ kind: 'permission_cancelled', requestId, reason, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          }
+        });
+        if (decision && !decision.cancelled) {
+          // Same as canUseTool: retract the answered prompt on every attached tab.
+          ws.send(createNormalizedMessage({ kind: 'permission_resolved', requestId, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
-      });
-      if (decision && !decision.cancelled) {
-        // Same as canUseTool: retract the answered prompt on every attached tab.
-        ws.send(createNormalizedMessage({ kind: 'permission_resolved', requestId, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
-      }
-      return toElicitationResult(decision, request.mode);
-    };
+        return toElicitationResult(decision, request.mode);
+      };
+    }
 
     // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
     // at the permission-mode step and skips this callback, so interactive tools
