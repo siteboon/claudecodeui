@@ -311,7 +311,8 @@
     "pending": "Wird nebenbei beantwortet",
     "failed": "Die Nebenfrage ist fehlgeschlagen.",
     "dismiss": "Entfernen",
-    "unsupported": "Dieser Anbieter kann keine Nebenfragen beantworten."
+    "unsupported": "Dieser Anbieter kann keine Nebenfragen beantworten.",
+    "noSession": "Nebenfragen brauchen einen bestehenden Chat; dieser hat noch nicht begonnen."
   },
   "sendMenu": {
     "trigger": "Sendeoptionen",

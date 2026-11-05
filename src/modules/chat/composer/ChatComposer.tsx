@@ -325,6 +325,7 @@ export default function ChatComposer({
       <BackgroundSendDialog
         prompt={backgroundSendPrompt}
         supportsSideQuestions={supportsSideQuestions}
+        hasText={Boolean(input.trim())}
         onResolve={onResolveBackgroundSendPrompt}
       />
 

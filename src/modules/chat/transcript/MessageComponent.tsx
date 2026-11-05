@@ -78,7 +78,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
     if (!message.sideQuestion) {
       return;
     }
-    void dismissSideQuestion(message.sideQuestion.sessionId, message.sideQuestion.sideQuestionId);
+    dismissSideQuestion(message.sideQuestion.sessionId, message.sideQuestion.sideQuestionId).catch((error: unknown) => {
+      console.error('Failed to dismiss side question:', error);
+    });
   }, [dismissSideQuestion, message.sideQuestion]);
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(

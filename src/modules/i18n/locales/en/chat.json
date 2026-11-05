@@ -258,7 +258,8 @@
     "pending": "Answering on the side",
     "failed": "The side question failed.",
     "dismiss": "Dismiss",
-    "unsupported": "This provider cannot answer side questions."
+    "unsupported": "This provider cannot answer side questions.",
+    "noSession": "Side questions need an existing chat; this one has not started yet."
   },
   "sendMenu": {
     "trigger": "Send options",

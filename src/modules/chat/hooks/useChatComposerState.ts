@@ -944,11 +944,23 @@ export function useChatComposerState({
 
       // `/btw <question>` never becomes a turn: checked before the in-flight
       // queue below, since that branch runs before slash-command
-      // interception ever would. Works in every state that has a session;
-      // a queued re-dispatch never carries this prefix, so it is skipped.
-      if (!queuedSubmission && !submitOptions?.skipCommandInterception && sessionKey) {
+      // interception ever would. Recognised in every state, including a
+      // brand-new chat that has no session yet — there is nothing to ask it
+      // on the side of, so it is refused with an error instead of falling
+      // through to the normal send path below, which would otherwise
+      // allocate a session and send the raw `/btw ...` text as a turn. A
+      // queued re-dispatch never carries this prefix, so it is skipped.
+      if (!queuedSubmission && !submitOptions?.skipCommandInterception) {
         const btwMatch = currentInput.trim().match(/^\/btw(?:\s+([\s\S]*))?$/i);
         if (btwMatch) {
+          if (!sessionKey) {
+            addMessage({
+              type: 'error',
+              content: t('sideQuestion.noSession'),
+              timestamp: Date.now(),
+            });
+            return;
+          }
           askSideQuestionAndClear(sessionKey, btwMatch[1] ?? '');
           return;
         }
