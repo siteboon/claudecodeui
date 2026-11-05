@@ -106,7 +106,7 @@ sbx exec -d my-project cloudcli start --port 3001
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SERVER_PORT` | `3001` | Web UI port |
-| `HOST` | `0.0.0.0` | Bind address (must be `0.0.0.0` for `sbx ports`) |
+| `HOST` | unset (all IPv4 and IPv6 interfaces) | Bind address (`sbx ports` needs all interfaces: leave it unset or use `0.0.0.0`) |
 | `DATABASE_PATH` | `~/.cloudcli/auth.db` | SQLite database location |
 
 ## Advanced usage
