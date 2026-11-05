@@ -91,3 +91,65 @@ test('/btw <question> in a brand-new chat (no session yet) is refused, keeps the
   assert.equal(errors.length, 1, 'one error row');
   assert.equal(errors[0]?.content, NO_SESSION);
 });
+
+// CodeRabbit: Option/Alt+Enter calls `askSideQuestionAndClear` directly from
+// `handleKeyDown`, bypassing the `/btw` branch above that refuses with
+// `NO_SESSION` when there is no session yet. `useAskSideQuestion` already
+// refuses a null `sessionId` on its own (returns `false`, asks nothing), so
+// the keypress just did nothing — no error, no explanation, input untouched.
+// It must refuse the same way `/btw` does in the same state.
+test('Option/Alt+Enter in a brand-new chat (no session yet) is refused, keeps the input, and never allocates a session', async () => {
+  const sent: Frame[] = [];
+  const added: AddedRow[] = [];
+  const createSessionCalls: unknown[] = [];
+  const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (String(url).includes('/api/providers/sessions') && init?.method === 'POST') {
+      createSessionCalls.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ data: { sessionId: 'new-session' } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const view = renderHook(() => useChatComposerState({
+    selectedProject: PROJECT,
+    selectedSession: null,
+    currentSessionId: null,
+    provider: 'claude',
+    permissionMode: 'default',
+    cyclePermissionMode: () => undefined,
+    resolvePermissionModeForProvider: () => 'default' as PermissionMode,
+    currentProviderModel: 'test-model',
+    currentProviderEffort: 'medium',
+    isLoading: false,
+    processingSessions: new Map() as SessionActivityMap,
+    canAbortSession: false,
+    tokenBudget: null,
+    supportsSideQuestions: true,
+    sendMessage: (message) => { sent.push(message as Frame); },
+    scrollToBottom: () => undefined,
+    addMessage: (message) => { added.push(message as AddedRow); },
+    setIsUserScrolledUp: () => undefined,
+    setPendingPermissionRequests: () => undefined,
+  }));
+
+  await act(async () => { view.result.current.setInput('what does this flag do?'); });
+  await act(async () => {
+    view.result.current.handleKeyDown({
+      key: 'Enter',
+      altKey: true,
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      preventDefault: () => undefined,
+      nativeEvent: { isComposing: false },
+    } as unknown as Parameters<typeof view.result.current.handleKeyDown>[0]);
+  });
+
+  assert.deepEqual(sent.map((message) => message.type), [], 'no chat.send, no chat.side_question');
+  assert.equal(createSessionCalls.length, 0, 'a session is never allocated for a refused side question');
+  assert.equal(view.result.current.input, 'what does this flag do?', 'the typed text stays');
+  const errors = added.filter((row) => row.type === 'error');
+  assert.equal(errors.length, 1, 'one error row');
+  assert.equal(errors[0]?.content, NO_SESSION);
+});

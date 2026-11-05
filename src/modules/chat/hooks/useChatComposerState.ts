@@ -785,11 +785,16 @@ export function useChatComposerState({
     }
   }, [resetCommandMenuState, setInput]);
 
-  // Shared by the `/btw` command, the background-send dialog's side question choice and
-  // the send menu's side question row: all three ask the same way and clear the
-  // composer the same way on success, and do nothing extra when the ask was
-  // refused (no connection) — the caller's own `return` right after is what
-  // actually ends that branch either way.
+  // Shared by the `/btw` command, Option/Alt+Enter, the background-send
+  // dialog's side question choice and the send menu's side question row: all
+  // four ask the same way and clear the composer the same way on success, and
+  // refuse the same way when there is nothing to ask it on — no connection,
+  // no provider support, or (a brand-new chat) no session yet. Without this
+  // check here, a caller with no session relied on `useAskSideQuestion`
+  // refusing a null `sessionId` on its own, which it does silently: the
+  // keypress did nothing, with no error and no explanation. Checking it once,
+  // here, means every caller gets the same `noSession` message instead of
+  // each needing its own copy of the check.
   const askSideQuestionAndClear = useCallback(
     (sessionId: string | null, text: string) => {
       if (!supportsSideQuestions) {
@@ -800,11 +805,19 @@ export function useChatComposerState({
         });
         return;
       }
+      if (!sessionId) {
+        addMessage({
+          type: 'error',
+          content: t('sideQuestion.noSession'),
+          timestamp: Date.now(),
+        });
+        return;
+      }
       if (askSideQuestion(sessionId, text, { model: currentProviderModel }, isConnected)) {
         clearComposerAfterSideQuestion();
       }
     },
-    [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, supportsSideQuestions],
+    [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, supportsSideQuestions, t],
   );
 
   // Persist a message to send "when this finishes" and show it as the queued
@@ -946,21 +959,14 @@ export function useChatComposerState({
       // queue below, since that branch runs before slash-command
       // interception ever would. Recognised in every state, including a
       // brand-new chat that has no session yet — there is nothing to ask it
-      // on the side of, so it is refused with an error instead of falling
-      // through to the normal send path below, which would otherwise
-      // allocate a session and send the raw `/btw ...` text as a turn. A
-      // queued re-dispatch never carries this prefix, so it is skipped.
+      // on the side of, so `askSideQuestionAndClear` refuses it with an error
+      // instead of falling through to the normal send path below, which
+      // would otherwise allocate a session and send the raw `/btw ...` text
+      // as a turn. A queued re-dispatch never carries this prefix, so it is
+      // skipped.
       if (!queuedSubmission && !submitOptions?.skipCommandInterception) {
         const btwMatch = currentInput.trim().match(/^\/btw(?:\s+([\s\S]*))?$/i);
         if (btwMatch) {
-          if (!sessionKey) {
-            addMessage({
-              type: 'error',
-              content: t('sideQuestion.noSession'),
-              timestamp: Date.now(),
-            });
-            return;
-          }
           askSideQuestionAndClear(sessionKey, btwMatch[1] ?? '');
           return;
         }
