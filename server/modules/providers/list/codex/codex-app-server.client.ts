@@ -393,6 +393,22 @@ export const codexAppServer = {
    *   that errors (or would need auth) is treated as "no plugins" rather
    *   than failing the side question — nothing is disabled that could not be
    *   named, but the question still gets asked.
+   * - `config: { features: { plugins: false } }` — the app-server README
+   *   says of `disabledPluginIds` "Saving this selection does not yet filter
+   *   plugin capabilities", and a probe against the real 0.166.0 binary
+   *   (throwaway `CODEX_HOME`, one local plugin shipping an MCP server and a
+   *   skill) showed why that matters: with `disabledPluginIds` alone the
+   *   plugin's tool and skill stayed out of the fork's model request, but its
+   *   MCP server process still started in the fork. With this override the
+   *   fork started no plugin MCP server, exposed no plugin tool and injected
+   *   no plugin skill, with or without `disabledPluginIds`, while the parent
+   *   thread kept all three. It is the master switch the fork's own config
+   *   reads (`Feature::Plugins`, which `PluginsManager::plugins_for_config`
+   *   checks first), so it needs no plugin ids and also holds when
+   *   `plugin/list` fails. `plugins: { _default: { enabled: false } }`
+   *   alone did not stop the server: a per-plugin `enabled = true`, which
+   *   `plugin/install` writes, overrides `_default` (`allows_plugin`,
+   *   codex-rs/config/src/types.rs at rust-v0.166.0).
    */
   async askSideQuestion(
     input: { threadId: string; cwd: string; model: string; question: string; signal: AbortSignal },
@@ -516,6 +532,7 @@ export const codexAppServer = {
               mcp_servers: mcpServers,
               web_search: 'disabled',
               apps,
+              features: { plugins: false },
             },
           });
         }).then((forkResult) => {

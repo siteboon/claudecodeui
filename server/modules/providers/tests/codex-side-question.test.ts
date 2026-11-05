@@ -234,7 +234,12 @@ test('the fork is ephemeral, read-only and carries the side-conversation instruc
       approvalPolicy: 'never',
       developerInstructions: SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
       excludeTurns: true,
-      config: { mcp_servers: {}, web_search: 'disabled', apps: { _default: { enabled: false } } },
+      config: {
+        mcp_servers: {},
+        web_search: 'disabled',
+        apps: { _default: { enabled: false } },
+        features: { plugins: false },
+      },
     });
   });
 });
@@ -254,6 +259,7 @@ test('the fork disables every MCP server config/read names, by name, instead of 
       mcp_servers: { github: { enabled: false }, filesystem: { enabled: false } },
       web_search: 'disabled',
       apps: { _default: { enabled: false } },
+      features: { plugins: false },
     });
   }, ['github', 'filesystem']);
 });
@@ -331,6 +337,26 @@ test('every plugin/list id is passed as disabledPluginIds on turn/start', { conc
     const turnStart = (await received()).find((line) => line.method === 'turn/start');
     assert.deepEqual(turnStart?.params.disabledPluginIds, ['game-studio@openai-api-curated', 'github@openai-api-curated']);
   }, [], ['game-studio@openai-api-curated', 'github@openai-api-curated']);
+});
+
+test('the fork switches plugins off with features.plugins, whether or not plugin/list answers', { concurrency: false }, async () => {
+  // Probed against the real 0.166.0 binary with a throwaway CODEX_HOME and a
+  // local plugin shipping an MCP server and a skill: `disabledPluginIds`
+  // alone kept the plugin's tool and skill out of the fork's model request,
+  // but the plugin's MCP server process still started in the fork. The
+  // app-server README says of that field "Saving this selection does not yet
+  // filter plugin capabilities". `config: { features: { plugins: false } }`
+  // on the fork started no plugin MCP server, exposed no plugin tool and
+  // injected no plugin skill, with or without `disabledPluginIds`, while the
+  // parent thread kept all three. It needs no plugin ids, so it also holds
+  // when plugin/list fails.
+  for (const mode of ['complete', 'plugin-list-error'] as const) {
+    await withFakeAppServer(mode, async ({ received }) => {
+      await appServer.askSideQuestion!(askInput(), () => {});
+      const fork = (await received()).find((line) => line.method === 'thread/fork');
+      assert.deepEqual(fork?.params.config.features, { plugins: false }, `features override in ${mode} mode`);
+    }, [], ['github@openai-api-curated']);
+  }
 });
 
 test('a plugin/list that errors offline is treated as no plugins, not a failure', { concurrency: false }, async () => {
