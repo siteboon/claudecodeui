@@ -266,11 +266,12 @@ export default function Shell({
     return (
       <>
         <ShellMinimalView terminalContainerRef={terminalContainerRef} />
+        {/* The minimal view fills a plain block with no row to spare, so the bar floats. */}
         <TerminalShortcutsPanel
           wsRef={wsRef}
           terminalRef={terminalRef}
           isConnected={isConnected}
-          bottomOffset="bottom-0"
+          placement="floating"
         />
       </>
     );
@@ -382,6 +383,7 @@ export default function Shell({
         wsRef={wsRef}
         terminalRef={terminalRef}
         isConnected={isConnected}
+        placement="inline"
       />
 
     </div>
