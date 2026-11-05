@@ -169,6 +169,26 @@ test('while a turn is written the send button is the menu, and its Stop is the e
   assert.equal(onAbortSession.mock.calls.length, 1, 'Stop calls the existing abort once');
 });
 
+// CodeRabbit comment 4478109479: the menu's Stop row stayed enabled even
+// when the session could not be interrupted, because `ChatComposer` never
+// received `canAbortSession` to forward to the menu. Clicking it looked
+// actionable but did nothing, since `handleAbortSession` already no-ops in
+// that case.
+test('turn running, cannot be interrupted: the menu Stop row is disabled', () => {
+  const onAbortSession = vi.fn();
+  render(<UiPreferencesProvider><ChatComposer {...props({ isLoading: true, onAbortSession, canAbortSession: false })} /></UiPreferencesProvider>);
+
+  const trigger = screen.getByRole('button', { name: 'Send options' });
+  fireEvent.click(trigger);
+  const stop = Array.from(screen.getByRole('menu').querySelectorAll<HTMLElement>('[role^="menuitem"]'))
+    .find((row) => (row.textContent ?? '').startsWith('Stop'));
+  assert.ok(stop, 'the menu has a Stop row');
+  assert.ok((stop as HTMLButtonElement).disabled || stop?.getAttribute('aria-disabled') === 'true', 'Stop is disabled');
+
+  fireEvent.click(stop as HTMLElement);
+  assert.equal(onAbortSession.mock.calls.length, 0, 'a disabled Stop row does nothing');
+});
+
 test('while only background work runs the send button is the menu, ending in Send anyway', () => {
   render(<UiPreferencesProvider><ChatComposer {...props({ activity: BACKGROUND })} /></UiPreferencesProvider>);
 

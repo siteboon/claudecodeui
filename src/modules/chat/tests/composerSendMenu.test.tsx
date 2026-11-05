@@ -23,10 +23,21 @@ type SendMenuChoice = 'queue' | 'sideQuestion' | 'stop' | 'send';
 // Every test but the capability-gate ones draws the menu for a provider that
 // answers side questions; the component's default is false until the
 // capability matrix has loaded.
-const renderMenu = (state: SendMenuState, hasInput: boolean, supportsSideQuestions = true) => {
+const renderMenu = (
+  state: SendMenuState,
+  hasInput: boolean,
+  supportsSideQuestions = true,
+  canAbortSession = true,
+) => {
   const onSelect = vi.fn<(choice: SendMenuChoice) => void>();
   const view = render(
-    <ComposerSendMenu state={state} hasInput={hasInput} supportsSideQuestions={supportsSideQuestions} onSelect={onSelect} />,
+    <ComposerSendMenu
+      state={state}
+      hasInput={hasInput}
+      supportsSideQuestions={supportsSideQuestions}
+      canAbortSession={canAbortSession}
+      onSelect={onSelect}
+    />,
   );
   return { ...view, onSelect };
 };
@@ -120,6 +131,31 @@ test('without input, Queue and Side question are disabled while a turn is writte
 
   fireEvent.click(item(menu, 'Stop'));
   assert.deepEqual(onSelect.mock.calls.map((args) => args.map((arg) => (typeof arg === 'string' ? arg : typeof arg))), [['stop']], 'Stop works with an empty composer');
+});
+
+// CodeRabbit comment 4478109479: `handleAbortSession` already no-ops when the
+// session cannot be interrupted, so an enabled Stop row here looked
+// actionable but did nothing — the same non-interruptible state the
+// activity indicator's own Stop button already hides for.
+test('while the session cannot be interrupted, Stop is disabled and a click does nothing', () => {
+  const { onSelect } = renderMenu('responding', true, true, false);
+  const menu = open();
+
+  const stop = item(menu, 'Stop');
+  assert.ok(isDisabled(stop), 'Stop is disabled when the session cannot be interrupted');
+
+  fireEvent.click(stop);
+  assert.equal(onSelect.mock.calls.length, 0, 'a disabled Stop row does nothing');
+});
+
+// The background-state rule is about input, not interruptibility: "Send
+// anyway" does not stop anything, so a session that cannot be interrupted
+// must not disable it.
+test('while only background work runs, a non-interruptible session leaves Send anyway enabled', () => {
+  renderMenu('background', true, true, false);
+  const menu = open();
+
+  assert.ok(!isDisabled(item(menu, 'Send anyway')), 'Send anyway does not depend on interruptibility');
 });
 
 test('without input, Queue, Side question and Send anyway are all disabled while background work runs', () => {

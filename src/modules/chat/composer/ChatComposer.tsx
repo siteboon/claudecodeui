@@ -55,6 +55,8 @@ type ChatComposerProps = {
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
+  /** Whether the viewed session can currently be interrupted; threaded to the send menu's Stop row, which otherwise looks actionable while `onAbortSession` already no-ops. Defaults to true so existing callers and tests, which never had a non-interruptible turn, keep working. */
+  canAbortSession?: boolean;
   permissionMode: PermissionMode;
   availablePermissionModes: PermissionMode[];
   onSelectPermissionMode: (mode: PermissionMode) => void;
@@ -136,6 +138,7 @@ export default function ChatComposer({
   activity,
   isLoading,
   onAbortSession,
+  canAbortSession = true,
   permissionMode,
   availablePermissionModes,
   onSelectPermissionMode,
@@ -524,6 +527,7 @@ export default function ChatComposer({
                 state={isLoading ? 'responding' : 'background'}
                 hasInput={hasAnyInput}
                 hasText={Boolean(input.trim())}
+                canAbortSession={canAbortSession}
                 supportsSideQuestions={supportsSideQuestions}
                 sendByCtrlEnter={sendByCtrlEnter}
                 onSelect={(choice) => {

@@ -27,6 +27,8 @@ type ComposerSendMenuProps = {
   hasInput: boolean;
   /** Side question cannot carry attachments, so it needs non-whitespace text on its own; defaults to `hasInput` so existing callers and tests, which never had attachment-only input, keep working. */
   hasText?: boolean;
+  /** Whether the viewed session can currently be interrupted. Only gates the Stop row (`state === 'responding'`); "Send anyway" over background work does not stop anything, so it keeps the existing background-state rule regardless. Defaults to true so existing callers and tests, which never had a non-interruptible turn, keep working. */
+  canAbortSession?: boolean;
   /** False until the capability matrix has loaded, or for a provider it does not list; the side-question row is left out rather than offered and then refused. */
   supportsSideQuestions?: boolean;
   /** Mirrors the composer's "send with Ctrl+Enter" setting, so Queue's hint names the key that actually sends; defaults to false, Enter-to-send, like the composer's own default. */
@@ -54,7 +56,7 @@ function ShortcutHint({ children }: { children: string }) {
  * background-send dialog, so a tap on the first row can never stop or
  * override anything.
  */
-export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, supportsSideQuestions = false, sendByCtrlEnter = false, onSelect }: ComposerSendMenuProps) {
+export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, supportsSideQuestions = false, canAbortSession = true, sendByCtrlEnter = false, onSelect }: ComposerSendMenuProps) {
   const { t } = useTranslation('chat');
   const [isOpen, setIsOpen] = useState(false);
   const close = useCallback(() => setIsOpen(false), []);
@@ -130,7 +132,12 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
           )}
           <ComposerMenuSeparator />
           <ComposerMenuItem
-            disabled={state === 'background' && !hasInput}
+            // Background state keeps its own input-only rule: "Send anyway"
+            // does not stop anything. Only Stop (`responding`) depends on
+            // whether the session can actually be interrupted — matching the
+            // activity indicator's own Stop button, which hides for the same
+            // `canInterrupt: false` case.
+            disabled={state === 'background' ? !hasInput : !canAbortSession}
             isSelected={false}
             role="menuitem"
             label={lastLabel}
