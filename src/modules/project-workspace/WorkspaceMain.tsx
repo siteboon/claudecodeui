@@ -35,6 +35,8 @@ type WorkspaceMainProps = {
   onProjectSelect: (project: Project) => void;
   /** Silently re-syncs the sidebar project list after worktree projects change. */
   onProjectsRefresh: () => void;
+  /** Opens a new chat for a project — the host action behind `api.host.startNewSession`. */
+  onStartNewSession: (project: Project) => void;
   /** Persists a new title for a session; resolves false when the backend refuses it. Used by the header's inline rename. */
   onRenameSession: (sessionId: string, summary: string) => Promise<boolean>;
 };
@@ -57,6 +59,7 @@ function WorkspaceMain({
   newSessionTrigger,
   onProjectSelect,
   onProjectsRefresh,
+  onStartNewSession,
   onRenameSession,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
@@ -226,6 +229,8 @@ function WorkspaceMain({
                 pluginName={activeTab.replace('plugin:', '')}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
+                onStartNewSession={onStartNewSession}
+                onOpenSession={(sessionId) => onNavigateToSession(sessionId)}
               />
             </div>
           )}
