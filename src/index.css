@@ -659,14 +659,6 @@
       max-width: calc(100vw - 120px); /* Account for sidebar padding and buttons */
     }
     
-    /* Enable text selection on mobile for terminal */
-    .xterm,
-    .xterm .xterm-viewport {
-      -webkit-user-select: text !important;
-      user-select: text !important;
-      -webkit-touch-callout: default !important;
-    }
-    
     /* Fix mobile scrolling */
     .overflow-y-auto {
       touch-action: pan-y;
