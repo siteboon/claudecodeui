@@ -559,7 +559,11 @@ export default function ChatComposer({
                   isTranscribing
                     ? true
                     : isLoading
-                      ? false
+                      // With an empty composer this button is the one-tap Stop
+                      // (see `onClick` above), so it disables on `canAbortSession`
+                      // exactly like the send menu's Stop row does. Recording
+                      // keeps its own voice-stop behavior either way.
+                      ? !isRecording && !canAbortSession
                       : isRecording
                         ? false
                         : !hasAnyInput

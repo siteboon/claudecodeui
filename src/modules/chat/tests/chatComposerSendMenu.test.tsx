@@ -121,6 +121,24 @@ test('turn running, composer empty: the green submit button is Stop, one tap abo
   assert.equal(onAbortSession.mock.calls.length, 1, 'one tap aborts the turn');
 });
 
+// CodeRabbit: the menu's Stop row was disabled by `canAbortSession` in the
+// previous commit, but the one-tap Stop button shown with an empty composer
+// predates it and never got the same check, so it stayed enabled and called
+// `onAbortSession` while that turn could not actually be interrupted — a tap
+// that reaches the handler and does nothing.
+test('turn running, composer empty, cannot be interrupted: the one-tap Stop button is disabled', () => {
+  const onAbortSession = vi.fn();
+  render(<UiPreferencesProvider><ChatComposer {...props({ isLoading: true, onAbortSession, input: '', hasInput: false, attachedFiles: [], canAbortSession: false })} /></UiPreferencesProvider>);
+
+  assert.ok(!hasMenuTrigger(), 'an empty composer keeps the plain button, not the menu');
+  const stop = screen.getByRole('button', { name: 'Stop' });
+  assert.ok((stop as HTMLButtonElement).disabled, 'disabled like the menu row would be');
+
+  fireEvent.click(stop);
+
+  assert.equal(onAbortSession.mock.calls.length, 0, 'a disabled Stop button does nothing');
+});
+
 test('background work, composer empty: the submit button is disabled', () => {
   render(<UiPreferencesProvider><ChatComposer {...props({ activity: BACKGROUND, input: '', hasInput: false, attachedFiles: [] })} /></UiPreferencesProvider>);
 
