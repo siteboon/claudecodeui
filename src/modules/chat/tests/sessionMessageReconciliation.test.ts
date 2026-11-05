@@ -99,3 +99,26 @@ test('a replacement echo survives a kept turn that repeats its text', () => {
   const persisted = [...kept, userRow('persisted', 'continue', '2026-01-01T00:00:25.000Z')];
   assert.deepEqual(removeOptimisticUserEchoes(persisted, [echo]), []);
 });
+
+test('the 10s skew allowance stays as the net for rows stamped before the clock was measured', () => {
+  // Local rows are stamped on the server timeline now (`serverClock`), but the
+  // first message of a session can be typed before any `chat_subscribed` ack
+  // has landed, so it still carries raw browser time. This allowance is what
+  // keeps a small skew from leaving a duplicate bubble in that window — it is
+  // deliberately kept, not superseded by the clock correction.
+  const persisted = createUserMessage('claude_user', '2026-01-01T00:00:10.000Z', {
+    content: 'привет',
+  });
+
+  const withinAllowance = createUserMessage('local_within', '2026-01-01T00:00:18.000Z', {
+    content: 'привет',
+  });
+  assert.deepEqual(removeOptimisticUserEchoes([persisted], [withinAllowance]), []);
+
+  // Past it, the match is refused and the echo survives as the second bubble.
+  // That is the failure the server-clock stamp exists to prevent.
+  const beyondAllowance = createUserMessage('local_beyond', '2026-01-01T00:00:55.000Z', {
+    content: 'привет',
+  });
+  assert.deepEqual(removeOptimisticUserEchoes([persisted], [beyondAllowance]), [beyondAllowance]);
+});
