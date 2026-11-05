@@ -37,12 +37,13 @@ function readString(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-/** The file a tool call worked on, when its tool config names one. */
+/** The file a tool call worked on: its tool config's, else the raw input's (MultiEdit, NotebookEdit). */
 function toolFilePath(message: ChatMessage): string | undefined {
-  const input = parseToolPayload(message.toolInput);
-  const contentProps = getToolConfig(message.toolName || 'Tool').input.getContentProps?.(input ?? {}) as
+  const input = (parseToolPayload(message.toolInput) ?? {}) as Record<string, unknown>;
+  const contentProps = getToolConfig(message.toolName || 'Tool').input.getContentProps?.(input) as
     Record<string, unknown> | undefined;
-  return typeof contentProps?.filePath === 'string' ? contentProps.filePath : undefined;
+  const filePath = contentProps?.filePath ?? input.file_path ?? input.notebook_path;
+  return typeof filePath === 'string' ? filePath : undefined;
 }
 
 /**
@@ -63,7 +64,7 @@ function renderToolCall(
   const lines: string[] = [];
 
   const contentProps = config.getContentProps?.(input ?? {}) as Record<string, unknown> | undefined;
-  const filePath = toolFilePath(message);
+  const filePath = typeof contentProps?.filePath === 'string' ? contentProps.filePath : undefined;
 
   lines.push(`**\`${toolName}\`**${filePath ? ` — \`${filePath}\`` : ''}`);
 
@@ -182,7 +183,12 @@ export function buildHandoffMarkdown({
     }
     if (message.isThinking || message.isLocalCommand || message.isLocalCommandStdout) continue;
     if (message.type !== 'user' && message.type !== 'assistant') continue;
-    const text = readString(message.content).trim();
+    // A compaction row keeps its summary of everything before it apart from the content.
+    let text = message.compactSummary
+      ? `Summary of the earlier conversation:\n\n${message.compactSummary.trim()}`
+      : readString(message.content).trim();
+    const attachments = (message.images?.length ?? 0) + (message.files?.length ?? 0);
+    if (attachments > 0) text = `${text}\n\n_[${attachments} attachment(s) not carried over]_`.trim();
     if (text) turns.push({ isUser: message.type === 'user', text });
   }
 
@@ -191,10 +197,15 @@ export function buildHandoffMarkdown({
     `I am continuing a ${providerLabel} session ("${sessionTitle}") here. The context is below. Pick up where it left off.`,
   ];
   if (taskIndex >= 0) {
-    head.push('', '## Original task', '', turns[taskIndex].text.slice(0, Math.floor(maxChars / 2)));
+    const task = turns[taskIndex].text;
+    const taskCap = Math.floor(maxChars / 4);
+    head.push('', '## Original task', '', task.length > taskCap ? `${task.slice(0, taskCap)}…` : task);
   }
   if (files.size > 0) {
-    head.push('', '## Files touched', '', ...[...files].map((file) => `- \`${file}\``));
+    // The newest paths, capped so a sweeping refactor cannot crowd out the conversation.
+    const shown = [...files].slice(-40);
+    head.push('', '## Files touched', '', ...shown.map((file) => `- \`${file}\``));
+    if (files.size > shown.length) head.push(`- _…${files.size - shown.length} more_`);
   }
 
   // Newest turns first until the budget runs out, then back into reading order.
@@ -203,10 +214,13 @@ export function buildHandoffMarkdown({
   const recent: string[] = [];
   for (let index = turns.length - 1; index > taskIndex; index -= 1) {
     const turn = turns[index];
-    const block = `### ${turn.isUser ? 'User' : providerLabel}\n\n${turn.text}`;
+    const heading = `### ${turn.isUser ? 'User' : providerLabel}\n\n`;
+    const block = `${heading}${turn.text}`;
     if (block.length + 2 > budget) {
-      // The latest turn matters most, so a long one is cut rather than dropped.
-      if (recent.length === 0 && budget > 200) recent.unshift(`${block.slice(0, budget - 4)}…`);
+      // The latest turn matters most and ends with where it got to, so keep its tail.
+      if (recent.length === 0 && budget > 200) {
+        recent.unshift(`${heading}…${turn.text.slice(-(budget - heading.length - 4))}`);
+      }
       break;
     }
     budget -= block.length + 2;

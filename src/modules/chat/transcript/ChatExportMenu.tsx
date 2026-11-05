@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowRightLeft, Braces, Download, FileCode2, FileText, Loader2 } from 'lucide-react';
 
 import { ActionMenu } from '@/shared/ui';
-import { writeDraftText } from '@/shared/chatDrafts';
+import { readDraftText, writeDraftText } from '@/shared/chatDrafts';
 import type { ChatMessage, DiffLine, LLMProvider, Project } from '@/shared/types';
 import {
   downloadTranscriptExport,
@@ -88,11 +88,15 @@ export default function ChatExportMenu({
   const continueInNewChat = async (project: Project, openNewSession: (project: Project) => void) => {
     setBusyFormat('handoff');
     try {
-      writeDraftText(`project:${project.projectId}`, buildHandoffMarkdown({
+      const scope = `project:${project.projectId}`;
+      const digest = buildHandoffMarkdown({
         messages: await loadMessages(),
         sessionTitle: sessionTitle?.trim() || t('export.untitled'),
         provider,
-      }));
+      });
+      // Keep whatever was already typed for a new chat in this project.
+      const existing = readDraftText(scope).trim();
+      writeDraftText(scope, existing ? `${existing}\n\n${digest}` : digest);
       openNewSession(project);
     } catch (error) {
       console.error('Failed to continue conversation in a new chat:', error);

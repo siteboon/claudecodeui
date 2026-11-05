@@ -218,14 +218,35 @@ describe('handoff digest', () => {
     expect(digest.indexOf('turn-19 ')).toBeLessThan(digest.indexOf('turn-20 '));
   });
 
-  it('cuts an oversized latest turn instead of dropping it', () => {
-    const messages = [turn('user', 'the task'), turn('assistant', `latest ${'y'.repeat(5000)}`)];
+  it('keeps the tail of an oversized latest turn instead of dropping it', () => {
+    const messages = [turn('user', 'the task'), turn('assistant', `${'y'.repeat(5000)} where it got to`)];
 
     const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude', maxChars: 1000 });
 
     expect(digest.length).toBeLessThanOrEqual(1000);
-    expect(digest).toContain('### Claude\n\nlatest');
-    expect(digest.endsWith('…')).toBe(true);
+    expect(digest).toContain('### Claude\n\n…y');
+    expect(digest.endsWith('where it got to')).toBe(true);
+  });
+
+  it('carries a compaction summary and caps the files list', () => {
+    const edits = Array.from({ length: 300 }, (_, index) => ({
+      type: 'assistant',
+      isToolUse: true,
+      toolName: 'MultiEdit',
+      toolInput: { file_path: `/repo/src/very/long/path/to/module-${index}.ts`, edits: [] },
+      timestamp: new Date('2026-08-24T09:00:00.000Z'),
+    }) as unknown as ChatMessage);
+    const compaction = { ...turn('assistant', ''), compact: { phase: 'done' }, compactSummary: 'Did steps 1-3.' } as ChatMessage;
+    const messages = [turn('user', 'the task'), ...edits, compaction, turn('assistant', 'latest reply')];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude' });
+
+    expect(digest.length).toBeLessThanOrEqual(16000);
+    expect(digest).toContain('Summary of the earlier conversation:\n\nDid steps 1-3.');
+    expect(digest).toContain('module-299.ts');
+    expect(digest).not.toContain('module-0.ts');
+    expect(digest).toContain('- _…260 more_');
+    expect(digest).toContain('latest reply');
   });
 
   it('handles an empty transcript', () => {
