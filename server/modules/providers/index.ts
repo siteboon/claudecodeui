@@ -23,6 +23,7 @@ export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
 // service instance starts empty, as after a CloudCLI restart.
 export {
   createSideQuestionsService,
+  MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION,
   MAX_SIDE_QUESTIONS_PER_SESSION,
   sideQuestionsService,
 } from './services/side-questions.service.js';

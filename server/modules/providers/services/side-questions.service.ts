@@ -37,6 +37,19 @@ type AskInput = {
 export const MAX_SIDE_QUESTIONS_PER_SESSION = 50;
 
 /**
+ * A person asks one or two side questions at a time, never dozens; 3 leaves
+ * headroom for that without letting one session hold open an unbounded
+ * number of provider processes (a codex app-server, an opencode serve, a
+ * Claude CLI) at once. Unlike `MAX_SIDE_QUESTIONS_PER_SESSION` above, this
+ * counts only what is still running, via `controllers`.
+ *
+ * Exported through the providers barrel for the websocket module's
+ * `chat.side_question` handler, which enforces the cap (so the refusal stays
+ * asker-only, like its other pre-start refusals) using `countRunning` below.
+ */
+export const MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION = 3;
+
+/**
  * Broadcasts a side-question event to every connected chat client. The
  * default `notify` for `ask`/`dismiss` below; tests inject their own to
  * assert on the events without a real websocket.
@@ -62,7 +75,26 @@ export function createSideQuestionsService(dependencies: SideQuestionsServiceDep
   const maxPerSession = dependencies.maxPerSession ?? MAX_SIDE_QUESTIONS_PER_SESSION;
   // Keyed by side-question id (unique across sessions), so `dismiss` can abort
   // the one in-flight runtime call without knowing which session owns it.
-  const controllers = new Map<string, AbortController>();
+  // Each entry also carries its session, so `countRunning` can answer "how
+  // many of this session's questions are still running" without a second map.
+  const controllers = new Map<string, { sessionId: string; controller: AbortController }>();
+
+  /**
+   * How many of this session's side questions currently have a runtime call
+   * in flight. Used by the websocket module's `chat.side_question` handler to
+   * enforce `MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION` before admitting a
+   * new one — `controllers` is the only place that knows what is actually
+   * still running, as opposed to merely stored.
+   */
+  function countRunning(sessionId: string): number {
+    let count = 0;
+    for (const entry of controllers.values()) {
+      if (entry.sessionId === sessionId) {
+        count += 1;
+      }
+    }
+    return count;
+  }
 
   function notifyDismissed(sessionId: string, id: string, notify: (event: SideQuestionEvent) => void): void {
     notify({
@@ -98,7 +130,7 @@ export function createSideQuestionsService(dependencies: SideQuestionsServiceDep
       return false;
     }
 
-    controllers.get(id)?.abort();
+    controllers.get(id)?.controller.abort();
     const deleted = store.delete(sessionId, id);
     if (deleted) {
       notifyDismissed(sessionId, id, notify);
@@ -156,7 +188,7 @@ export function createSideQuestionsService(dependencies: SideQuestionsServiceDep
     });
 
     const controller = new AbortController();
-    controllers.set(input.sideQuestionId, controller);
+    controllers.set(input.sideQuestionId, { sessionId: input.sessionId, controller });
 
     try {
       // Race the runtime call against the abort signal so that a `dismiss`
@@ -250,7 +282,7 @@ export function createSideQuestionsService(dependencies: SideQuestionsServiceDep
     return store.getById(id);
   }
 
-  return { ask, listForSession, dismiss, getById };
+  return { ask, listForSession, dismiss, getById, countRunning };
 }
 
 /** Default instance, consumed through `@/modules/providers/index.js`. */

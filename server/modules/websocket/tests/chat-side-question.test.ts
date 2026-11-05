@@ -301,6 +301,31 @@ test('an empty question is refused with a side_question error on the asking sock
   });
 });
 
+test('a question over 100,000 characters is refused before anything is stored or started', { timeout: 5000 }, async () => {
+  await withGateway(async ({ asker, watcher, asks }) => {
+    sendSideQuestion(asker, { sideQuestionId: 'sq-too-long', question: 'x'.repeat(100_001) });
+    await settle();
+
+    assert.equal(asks.length, 0);
+    assert.equal(sideQuestionsService.getById('sq-too-long'), null);
+    const frames = sideQuestionFrames(asker, 'sq-too-long');
+    assert.equal(frames.length, 1);
+    assert.equal(frames[0].phase, 'error');
+    assert.equal(typeof frames[0].error, 'string');
+    assert.deepEqual(watcher.frames, []);
+  });
+});
+
+test('a question of exactly 100,000 characters is accepted', { timeout: 5000 }, async () => {
+  await withGateway(async ({ asker, asks }) => {
+    sendSideQuestion(asker, { sideQuestionId: 'sq-max-length', question: 'x'.repeat(100_000) });
+    await settle();
+
+    assert.equal(asks.length, 1);
+    assert.equal(sideQuestionsService.getById('sq-max-length')?.question.length, 100_000);
+  });
+});
+
 test('a question for an unknown session is refused on the asking socket only', { timeout: 5000 }, async () => {
   await withGateway(async ({ asker, watcher, asks }) => {
     asker.emit('message', JSON.stringify({
@@ -410,6 +435,46 @@ test('chat.btw is no longer handled: it is an unknown frame type and asks nothin
     assert.ok(protocolErrorCodes(asker).includes('UNKNOWN_MESSAGE_TYPE'));
     assert.deepEqual(sideQuestionFrames(asker, 'sq-old-frame'), []);
     assert.deepEqual(watcher.frames, []);
+  });
+});
+
+test('a 4th concurrent side question in one session is refused while 3 run; another session is unaffected; a slot frees once one ends', { timeout: 5000 }, async () => {
+  await withGateway(async ({ asker, asks }) => {
+    sendSideQuestion(asker, { sideQuestionId: 'sq-1', question: 'one' });
+    sendSideQuestion(asker, { sideQuestionId: 'sq-2', question: 'two' });
+    sendSideQuestion(asker, { sideQuestionId: 'sq-3', question: 'three' });
+    await settle();
+    assert.equal(asks.length, 3, 'all 3 running questions reach the runtime');
+
+    sendSideQuestion(asker, { sideQuestionId: 'sq-4', question: 'four' });
+    await settle();
+
+    assert.equal(asks.length, 3, 'the 4th never reaches the runtime');
+    assert.equal(sideQuestionsService.getById('sq-4'), null, 'nothing is stored for the refused question');
+    const refusal = sideQuestionFrames(asker, 'sq-4');
+    assert.equal(refusal.length, 1);
+    assert.equal(refusal[0].phase, 'error');
+    assert.equal(typeof refusal[0].error, 'string');
+
+    // Another session is not affected by this session's cap.
+    asker.emit('message', JSON.stringify({
+      type: 'chat.side_question',
+      sessionId: CODEX_SESSION_ID,
+      sideQuestionId: 'sq-codex',
+      question: 'codex, are you there?',
+    }));
+    await settle();
+    assert.equal(asks.length, 4, 'the other session\'s question is accepted');
+
+    // Finishing one of the 3 running questions frees exactly one slot.
+    asks.find((ask) => ask.request.question === 'one')!.resolve({ status: 'done', answer: 'done' });
+    await settle();
+
+    sendSideQuestion(asker, { sideQuestionId: 'sq-5', question: 'five' });
+    await settle();
+
+    assert.equal(asks.length, 5, 'the freed slot admits the next question');
+    assert.equal(sideQuestionsService.getById('sq-5')?.status, 'running');
   });
 });
 

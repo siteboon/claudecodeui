@@ -435,3 +435,49 @@ test('the service has no recoverInterrupted: nothing outlives a restart', () => 
   const service = createSideQuestionsService() as Record<string, unknown>;
   assert.equal(service.recoverInterrupted, undefined);
 });
+
+test('the default concurrency cap is 3', () => {
+  assert.equal(sideQuestionsServiceModule.MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION, 3);
+});
+
+test('countRunning counts only the controllers still in flight for that session', { timeout: 5000 }, async () => {
+  await withoutDatabase(async () => {
+    const service = createSideQuestionsService();
+    const { runtime, nextCall } = createManualRuntime();
+
+    assert.equal(service.countRunning(SESSION_ID), 0);
+
+    const first = service.ask(askInput({ sideQuestionId: 'sq-1', question: 'one' }), runtime, () => {});
+    await nextCall();
+    assert.equal(service.countRunning(SESSION_ID), 1);
+
+    const second = service.ask(askInput({ sideQuestionId: 'sq-2', question: 'two' }), runtime, () => {});
+    await nextCall();
+    assert.equal(service.countRunning(SESSION_ID), 2);
+
+    // A different session's in-flight question never counts toward this one.
+    const elsewhere = service.ask(
+      askInput({ sessionId: OTHER_SESSION_ID, sideQuestionId: 'sq-other', question: 'other' }),
+      runtime,
+      () => {},
+    );
+    const elsewhereCall = await nextCall();
+    assert.equal(service.countRunning(SESSION_ID), 2);
+    assert.equal(service.countRunning(OTHER_SESSION_ID), 1);
+
+    elsewhereCall.resolve({ status: 'done', answer: 'ok' });
+    await elsewhere;
+    assert.equal(service.countRunning(OTHER_SESSION_ID), 0);
+
+    // Finishing one of the two in SESSION_ID frees exactly one slot, not both.
+    const firstStillRunning = service.getById('sq-1');
+    assert.ok(firstStillRunning);
+    service.dismiss(SESSION_ID, 'sq-1', () => {});
+    await first;
+    assert.equal(service.countRunning(SESSION_ID), 1);
+
+    service.dismiss(SESSION_ID, 'sq-2', () => {});
+    await second;
+    assert.equal(service.countRunning(SESSION_ID), 0);
+  });
+});

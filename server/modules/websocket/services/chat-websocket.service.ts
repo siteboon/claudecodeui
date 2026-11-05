@@ -4,6 +4,7 @@ import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
+  MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION,
   providerCapabilitiesService,
   providerModelsService,
   sessionsService,
@@ -343,6 +344,14 @@ function sendSideQuestionError(
 }
 
 /**
+ * A side question's whole text sits in a service-memory row for as long as
+ * the session lives, and every character of it broadcasts to every connected
+ * tab on `started`. No model takes an input anywhere near this large either,
+ * so refusing past it costs nothing a real question would ever hit.
+ */
+const MAX_SIDE_QUESTION_LENGTH = 100_000;
+
+/**
  * Handles `chat.side_question`: asks a question on the side while a turn
  * runs, or while only background work runs. Unlike `chat.send`, it never
  * calls `chatRunRegistry.startRun`, so it never competes with (or waits
@@ -390,6 +399,16 @@ function handleChatSideQuestion(
     return;
   }
 
+  if (question.length > MAX_SIDE_QUESTION_LENGTH) {
+    sendSideQuestionError(
+      ws,
+      sessionId,
+      sideQuestionId,
+      `chat.side_question question must be at most ${MAX_SIDE_QUESTION_LENGTH} characters.`,
+    );
+    return;
+  }
+
   // Looked up across every session, not just this one, so a duplicate from
   // another session is refused instead of leaking into it. The existing
   // question is only attached to the refusal when it belongs to the asker's
@@ -402,6 +421,22 @@ function handleChatSideQuestion(
       sideQuestionId,
       'A side question with that id already exists.',
       existing.sessionId === sessionId ? existing : undefined,
+    );
+    return;
+  }
+
+  // Checked here, not inside `ask`, so the refusal stays asker-only like
+  // every other pre-start refusal above — `ask`'s own notify broadcasts to
+  // every tab, which is right once a question has actually started, not for
+  // one that never will. A slot frees as soon as `ask` settles or `dismiss`
+  // removes a running question (both delete from the service's `controllers`
+  // that `countRunning` reads).
+  if (sideQuestionsService.countRunning(sessionId) >= MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION) {
+    sendSideQuestionError(
+      ws,
+      sessionId,
+      sideQuestionId,
+      `No more than ${MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION} side questions can run at once in a session.`,
     );
     return;
   }
