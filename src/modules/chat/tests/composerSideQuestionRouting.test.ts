@@ -318,6 +318,90 @@ for (const [name, state] of [
   });
 }
 
+// CodeRabbit: `handleCommandMenuKeyDown` consumes Enter whenever the command
+// menu has a match, before `handleKeyDown`'s own altKey branch ever runs, and
+// it never checks altKey itself. Typing "What does /help" and pressing
+// Option+Enter ran `/help` instead of asking the side question. The command
+// menu must lose to Option/Alt+Enter, the same way the plain-Enter submit
+// branches already do.
+test('Option/Alt+Enter asks the side question even when the command menu has a match, instead of running the command', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const target = String(url);
+    if (target === '/api/commands/list' && init?.method === 'POST') {
+      return new Response(
+        JSON.stringify({ builtIn: [{ name: '/help', description: 'Show help', namespace: 'builtin' }], custom: [], count: 1 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    if (target.startsWith('/api/providers/') && target.includes('/skills')) {
+      return new Response(JSON.stringify({ success: true, data: { skills: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }));
+
+  const { view, of, types } = render({ isLoading: false, processingSessions: new Map() as SessionActivityMap });
+  await waitFor(() => assert.equal(view.result.current.slashCommandsCount, 1, 'the /help command loaded'));
+
+  const text = 'What does /help';
+  await act(async () => {
+    view.result.current.handleInputChange(
+      { target: { value: text, selectionStart: text.length } } as unknown as Parameters<View['result']['current']['handleInputChange']>[0],
+    );
+  });
+  await waitFor(() => assert.equal(view.result.current.showCommandMenu, true, 'the command menu opened on the /help match'));
+  await waitFor(() => assert.ok(view.result.current.filteredCommands.length > 0, 'the menu has a match'));
+
+  await act(async () => { view.result.current.handleKeyDown(altEnter()); });
+
+  assertOneSideQuestion(of('chat.side_question'), text);
+  assert.deepEqual(types(), ['chat.side_question'], 'no /api/commands/execute run, no chat.send, nothing stopped');
+  assert.equal(view.result.current.showCommandMenu, false, 'the menu closes like any other successful side question');
+  assert.equal(view.result.current.input, '', 'the composer is cleared');
+});
+
+// Plain Enter must still behave as before: the command menu keeps selecting
+// its highlighted entry, so the fix above cannot simply stop the menu from
+// ever seeing Enter.
+test('plain Enter in the command menu still runs the matched command, not a side question', async () => {
+  const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const target = String(url);
+    if (target === '/api/commands/list' && init?.method === 'POST') {
+      return new Response(
+        JSON.stringify({ builtIn: [{ name: '/help', description: 'Show help', namespace: 'builtin' }], custom: [], count: 1 }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    if (target.startsWith('/api/providers/') && target.includes('/skills')) {
+      return new Response(JSON.stringify({ success: true, data: { skills: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (target === '/api/commands/execute' && init?.method === 'POST') {
+      return new Response(JSON.stringify({ type: 'builtin', action: 'help' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  const { view, types } = render({ isLoading: false, processingSessions: new Map() as SessionActivityMap });
+  await waitFor(() => assert.equal(view.result.current.slashCommandsCount, 1, 'the /help command loaded'));
+
+  const text = 'What does /help';
+  await act(async () => {
+    view.result.current.handleInputChange(
+      { target: { value: text, selectionStart: text.length } } as unknown as Parameters<View['result']['current']['handleInputChange']>[0],
+    );
+  });
+  await waitFor(() => assert.equal(view.result.current.showCommandMenu, true, 'the command menu opened on the /help match'));
+  await waitFor(() => assert.ok(view.result.current.filteredCommands.length > 0, 'the menu has a match'));
+
+  await act(async () => { view.result.current.handleKeyDown(plainEnter()); });
+
+  await waitFor(() => assert.ok(
+    fetchMock.mock.calls.some(([callUrl]) => String(callUrl) === '/api/commands/execute'),
+    'plain Enter still runs the highlighted command',
+  ));
+  assert.deepEqual(types(), [], 'no side question is asked');
+});
+
 test('plain Enter while a turn is written still queues, not a side question', async () => {
   const { view, of, types } = render({ isLoading: true, processingSessions: responding });
   await act(async () => { view.result.current.setInput('hello'); });

@@ -1459,6 +1459,27 @@ export function useChatComposerState({
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === 'Enter') {
+        const endedJustNow =
+          performance.now() - lastCompositionEndAtRef.current < SAFARI_IME_RACE_WINDOW_MS;
+        if (event.nativeEvent.isComposing || isComposingRef.current || endedJustNow) {
+          return;
+        }
+
+        // Option/Alt+Enter asks a side question in every state (loading,
+        // background, idle) and even with the command menu or file-mention
+        // dropdown open, so this has to run ahead of
+        // `handleCommandMenuKeyDown`/`handleFileMentionsKeyDown` below: both
+        // consume a plain Enter to select their highlighted entry and never
+        // check altKey, so they would otherwise run the highlighted command
+        // or mention instead of asking the side question.
+        if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+          event.preventDefault();
+          askSideQuestionAndClear(sessionKey, inputValueRef.current);
+          return;
+        }
+      }
+
       if (handleCommandMenuKeyDown(event)) {
         return;
       }
@@ -1478,19 +1499,7 @@ export function useChatComposerState({
       }
 
       if (event.key === 'Enter') {
-        const endedJustNow =
-          performance.now() - lastCompositionEndAtRef.current < SAFARI_IME_RACE_WINDOW_MS;
-        if (event.nativeEvent.isComposing || isComposingRef.current || endedJustNow) {
-          return;
-        }
-
-        // Option/Alt+Enter asks a side question in every state (loading,
-        // background, idle), ahead of the ctrl/meta and plain-Enter submit
-        // branches below, which never see altKey set.
-        if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
-          event.preventDefault();
-          askSideQuestionAndClear(sessionKey, inputValueRef.current);
-        } else if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
+        if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
           event.preventDefault();
           handleSubmit(event);
         } else if (
