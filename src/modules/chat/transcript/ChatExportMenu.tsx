@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Braces, Download, FileCode2, FileText, Loader2 } from 'lucide-react';
+import { ArrowRightLeft, Braces, Download, FileCode2, FileText, Loader2 } from 'lucide-react';
 
 import { ActionMenu } from '@/shared/ui';
+import { writeDraftText } from '@/shared/chatDrafts';
 import type { ChatMessage, DiffLine, LLMProvider, Project } from '@/shared/types';
 import {
   downloadTranscriptExport,
   type TranscriptExportFormat,
 } from '@/modules/chat/utils/chatExport';
+import { buildHandoffMarkdown } from '@/modules/chat/export/buildTranscriptMarkdown';
 
 type ChatExportMenuProps = {
   messages: ChatMessage[];
@@ -23,6 +25,8 @@ type ChatExportMenuProps = {
    * last twenty messages.
    */
   onLoadFullTranscript?: () => Promise<ChatMessage[]>;
+  /** Opens a new chat in the project; enables "Continue in new chat". */
+  onNewSession?: (project: Project) => void;
 };
 
 const FORMATS: Array<{ id: TranscriptExportFormat; icon: typeof FileText; labelKey: string; descriptionKey: string }> = [
@@ -42,11 +46,12 @@ export default function ChatExportMenu({
   selectedProject,
   createDiff,
   onLoadFullTranscript,
+  onNewSession,
 }: ChatExportMenuProps) {
   const { t } = useTranslation('chat');
   // Building a large transcript takes long enough to notice, and the download
   // only appears at the end — without this the button looks unresponsive.
-  const [busyFormat, setBusyFormat] = useState<TranscriptExportFormat | null>(null);
+  const [busyFormat, setBusyFormat] = useState<TranscriptExportFormat | 'handoff' | null>(null);
   // Whether the side-question asides go into the file. Off by default, so a plain export
   // matches what the session itself saw; the operator opts in from this option.
   const [includeSideQuestions, setIncludeSideQuestions] = useState(false);
@@ -55,12 +60,16 @@ export default function ChatExportMenu({
     return null;
   }
 
+  const loadMessages = async () => {
+    const fullMessages = (await onLoadFullTranscript?.()) ?? messages;
+    return fullMessages.length > 0 ? fullMessages : messages;
+  };
+
   const runExport = async (format: TranscriptExportFormat) => {
     setBusyFormat(format);
     try {
-      const fullMessages = (await onLoadFullTranscript?.()) ?? messages;
       await downloadTranscriptExport(format, {
-        messages: fullMessages.length > 0 ? fullMessages : messages,
+        messages: await loadMessages(),
         sessionTitle: sessionTitle?.trim() || t('export.untitled'),
         provider,
         selectedProject,
@@ -73,6 +82,43 @@ export default function ChatExportMenu({
       setBusyFormat(null);
     }
   };
+
+  // The digest lands in the new chat's draft, where the user picks the other
+  // provider and can edit it before sending.
+  const continueInNewChat = async (project: Project, openNewSession: (project: Project) => void) => {
+    setBusyFormat('handoff');
+    try {
+      writeDraftText(`project:${project.projectId}`, buildHandoffMarkdown({
+        messages: await loadMessages(),
+        sessionTitle: sessionTitle?.trim() || t('export.untitled'),
+        provider,
+      }));
+      openNewSession(project);
+    } catch (error) {
+      console.error('Failed to continue conversation in a new chat:', error);
+    } finally {
+      setBusyFormat(null);
+    }
+  };
+
+  const items = FORMATS.map((format) => ({
+    key: format.id as string,
+    label: t(format.labelKey),
+    description: t(format.descriptionKey),
+    icon: format.icon,
+    loading: busyFormat === format.id,
+    onSelect: () => { void runExport(format.id); },
+  }));
+  if (selectedProject && onNewSession) {
+    items.push({
+      key: 'handoff',
+      label: t('export.handoff.label'),
+      description: t('export.handoff.description'),
+      icon: ArrowRightLeft,
+      loading: busyFormat === 'handoff',
+      onSelect: () => { void continueInNewChat(selectedProject, onNewSession); },
+    });
+  }
 
   return (
     <ActionMenu
@@ -101,14 +147,7 @@ export default function ChatExportMenu({
           </label>
         </div>
       )}
-      items={FORMATS.map((format) => ({
-        key: format.id,
-        label: t(format.labelKey),
-        description: t(format.descriptionKey),
-        icon: format.icon,
-        loading: busyFormat === format.id,
-        onSelect: () => { void runExport(format.id); },
-      }))}
+      items={items}
     />
   );
 }

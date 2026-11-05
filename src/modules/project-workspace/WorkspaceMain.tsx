@@ -37,6 +37,8 @@ type WorkspaceMainProps = {
   onProjectsRefresh: () => void;
   /** Persists a new title for a session; resolves false when the backend refuses it. Used by the header's inline rename. */
   onRenameSession: (sessionId: string, summary: string) => Promise<boolean>;
+  /** Opens a new chat in a project; the chat's "Continue in new chat" uses it. */
+  onNewSession: (project: Project) => void;
 };
 
 /** Rendered by ProjectMainRegion to show the selected project's active tab: chat, files, shell, git, tasks, browser or a plugin. */
@@ -58,6 +60,7 @@ function WorkspaceMain({
   onProjectSelect,
   onProjectsRefresh,
   onRenameSession,
+  onNewSession,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
@@ -175,6 +178,7 @@ function WorkspaceMain({
                 externalMessageUpdate={externalMessageUpdate}
                 newSessionTrigger={newSessionTrigger}
                 onShowAllTasks={tasksEnabled ? showAllTasks : null}
+                onNewSession={onNewSession}
               />
             </WorkspaceErrorBoundary>
           </div>

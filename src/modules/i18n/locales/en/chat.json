@@ -392,6 +392,10 @@
       "label": "JSON (.json)",
       "description": "Every message, unformatted, for tooling."
     },
+    "handoff": {
+      "label": "Continue in new chat",
+      "description": "Short summary as the first message; pick any provider."
+    },
     "includeSideQuestions": "Include side questions"
   },
   "schedule": {

@@ -47,6 +47,7 @@ type ChatInterfaceProps = {
   newSessionTrigger?: number;
   onTaskClick?: (...args: unknown[]) => void;
   onShowAllTasks?: (() => void) | null;
+  onNewSession?: (project: Project) => void;
 };
 
 /**
@@ -70,6 +71,7 @@ function ChatInterface({
   externalMessageUpdate,
   newSessionTrigger,
   onShowAllTasks,
+  onNewSession,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe, isConnected } = useWebSocket();
@@ -523,6 +525,7 @@ function ChatInterface({
               onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
               onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
               onLoadFullTranscript={loadFullTranscript}
+              onNewSession={onNewSession}
             />
           </TranscriptSessionContext.Provider>
         </MarkdownWorkspaceContext.Provider>

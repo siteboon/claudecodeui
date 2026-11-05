@@ -295,6 +295,10 @@
       "label": "JSON (.json)",
       "description": "Alle Nachrichten, unformatiert, für Tools."
     },
+    "handoff": {
+      "label": "In neuem Chat fortsetzen",
+      "description": "Kurze Zusammenfassung als erste Nachricht; beliebigen Provider wählen."
+    },
     "includeSideQuestions": "Nebenfragen mitexportieren"
   },
   "schedule": {

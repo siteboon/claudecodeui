@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ChatMessage } from '@/shared/types';
 import { buildTranscriptExport, toExportFileStem } from '@/modules/chat/utils/chatExport';
+import { buildHandoffMarkdown } from '@/modules/chat/export/buildTranscriptMarkdown';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 
 const createDiff = createCachedDiffCalculator();
@@ -182,5 +183,53 @@ describe('html export', () => {
 
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
     expect(html).not.toContain('<img src=x');
+  });
+});
+
+describe('handoff digest', () => {
+  const turn = (type: 'user' | 'assistant', content: string): ChatMessage =>
+    ({ type, content, timestamp: new Date('2026-08-24T09:00:00.000Z') }) as ChatMessage;
+
+  it('keeps the task, lists touched files and drops tool payloads', () => {
+    const digest = buildHandoffMarkdown(input);
+
+    expect(digest).toContain('Claude session ("Rename the helper")');
+    expect(digest).toContain('## Original task\n\nPlease rename the helper');
+    expect(digest).toContain('- `/repo/src/helper.js`');
+    expect(digest).toContain('### Claude\n\nDone. Here is the change:');
+    expect(digest).not.toContain('Applied 1 edit');
+    expect(digest).not.toContain('old_string');
+    expect(digest).not.toContain('omitted');
+  });
+
+  it('keeps the newest turns in order within the cap and marks the rest omitted', () => {
+    const messages = [turn('user', 'the task')];
+    for (let index = 1; index <= 20; index += 1) {
+      messages.push(turn(index % 2 ? 'assistant' : 'user', `turn-${index} ${'x'.repeat(400)}`));
+    }
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'codex', maxChars: 2500 });
+
+    expect(digest.length).toBeLessThanOrEqual(2500);
+    expect(digest).toContain('the task');
+    expect(digest).toMatch(/_…\d+ earlier turn\(s\) omitted_/);
+    expect(digest).not.toContain('turn-1 ');
+    expect(digest.indexOf('turn-19 ')).toBeGreaterThan(-1);
+    expect(digest.indexOf('turn-19 ')).toBeLessThan(digest.indexOf('turn-20 '));
+  });
+
+  it('cuts an oversized latest turn instead of dropping it', () => {
+    const messages = [turn('user', 'the task'), turn('assistant', `latest ${'y'.repeat(5000)}`)];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude', maxChars: 1000 });
+
+    expect(digest.length).toBeLessThanOrEqual(1000);
+    expect(digest).toContain('### Claude\n\nlatest');
+    expect(digest.endsWith('…')).toBe(true);
+  });
+
+  it('handles an empty transcript', () => {
+    expect(buildHandoffMarkdown({ messages: [], sessionTitle: 'T', provider: 'claude' }))
+      .toBe('I am continuing a Claude session ("T") here. The context is below. Pick up where it left off.');
   });
 });
