@@ -223,6 +223,12 @@ export function createSideQuestionsService(dependencies: SideQuestionsServiceDep
             },
             {
               delta: (text: string) => {
+                // A dismissed runtime can still stream, and its id is free
+                // again once dismissed: only the very question this call
+                // created may take the delta, never a new one reusing the id.
+                if (store.getById(input.sideQuestionId) !== sideQuestion) {
+                  return;
+                }
                 store.appendAnswer(input.sideQuestionId, text);
                 notify({
                   kind: 'side_question',

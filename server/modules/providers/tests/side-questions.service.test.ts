@@ -314,6 +314,34 @@ test('dismiss aborts a running side question and deletes it', { timeout: 5000 },
   });
 });
 
+test('a late delta from a dismissed question is dropped, even once a new question reuses its id', { timeout: 5000 }, async () => {
+  await withoutDatabase(async () => {
+    const service = createSideQuestionsService();
+    const { runtime, nextCall } = createManualRuntime();
+    const firstEvents: SideQuestionEvent[] = [];
+
+    const firstAsking = service.ask(askInput(), runtime, (event) => { firstEvents.push(event); });
+    const first = await nextCall();
+    assert.equal(service.dismiss(SESSION_ID, 'sq-1', () => {}), true);
+    await firstAsking;
+
+    // The id is free again, and the client may send it once more.
+    const secondAsking = service.ask(askInput({ question: 'second question' }), runtime, () => {});
+    const second = await nextCall();
+    firstEvents.length = 0;
+
+    // The dismissed runtime has not stopped yet and streams one more delta.
+    first.sink.delta('late from the dismissed one');
+    assert.equal(service.getById('sq-1')?.answer, '', 'the new question does not carry the old one\'s delta');
+    assert.deepEqual(firstEvents, [], 'nothing is broadcast for the dismissed question');
+
+    second.sink.delta('fresh');
+    assert.equal(service.getById('sq-1')?.answer, 'fresh');
+    second.resolve({ status: 'done', answer: 'fresh' });
+    await secondAsking;
+  });
+});
+
 test('dismiss deletes a finished side question and reports false for an unknown one', { timeout: 5000 }, async () => {
   await withoutDatabase(async () => {
     const service = createSideQuestionsService();
