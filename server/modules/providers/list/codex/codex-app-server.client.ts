@@ -348,6 +348,14 @@ export const codexAppServer = {
    * from the user's `~/.codex/config.toml` on disk, and only the names are
    * read — never a value, since an MCP entry can carry a token.
    *
+   * `config/read` is sent with `cwd: input.cwd`, for the same reason
+   * `thread/fork` below gets it: without it the app-server only reads the
+   * user-level config, never `<project>/.codex/config.toml` of a trusted
+   * project, so a project-only MCP server or app would never be named here
+   * and would stay on in the fork. A probe against the real binary showed
+   * `config/read {}` omits project entries while `config/read {cwd}` lists
+   * them.
+   *
    * Three more tools that reach outside the `read-only` sandbox get switched
    * off the same way, each measured against the real 0.156.1 binary with a
    * throwaway `CODEX_HOME` (codex-read-only-tools, second half):
@@ -356,13 +364,19 @@ export const codexAppServer = {
    *   without error, and an invalid value (`'nope'`) is rejected with
    *   "unknown variant `nope`, expected one of `disabled`, `cached`,
    *   `indexed`, `live`", so the field is real and the value lands.
-   * - `config: { apps: { _default: { enabled: false } } }` — `AppsConfig`'s
-   *   `_default: AppsDefaultConfig | null` is the fallback applied to every
-   *   connector that has no per-app entry; `enabled: false` there is
-   *   accepted, while `enabled: 'nope'` is rejected with "invalid type:
-   *   string \"nope\", expected a boolean in `apps._default.enabled`" —
-   *   proof the override reaches that exact field rather than being ignored
-   *   as an unknown config key.
+   * - `config: { apps: { _default: { enabled: false }, ...per-app } }` —
+   *   `AppsConfig`'s `_default: AppsDefaultConfig | null` is the fallback
+   *   applied to every connector that has no per-app entry, and `enabled:
+   *   false` there is accepted (while `enabled: 'nope'` is rejected with
+   *   "invalid type: string \"nope\", expected a boolean in
+   *   `apps._default.enabled`", proof the override reaches that exact
+   *   field). `_default` alone is not enough: `app_is_enabled`
+   *   (codex-rs/connectors/src/app_tool_policy.rs:107 at rust-v0.166.0)
+   *   prefers a per-app `[apps.<id>]` entry over `_default` when one exists,
+   *   and `AppConfig.enabled` defaults to `true` — so a user's own `github`
+   *   table, with or without an explicit `enabled` key, would keep that
+   *   connector on in the fork unless every app name `config/read` reports
+   *   also gets its own `enabled: false`.
    * - `disabledPluginIds` on the `turn/start` below — `plugin/list` needs no
    *   auth offline and lists every installed marketplace's plugins;
    *   `TurnStartParams.disabledPluginIds` "replaces this thread's disabled
@@ -381,10 +395,25 @@ export const codexAppServer = {
     });
 
     return withAppServer(async ({ call, onNotification, onExit }) => {
-      const mcpServersOff = async (): Promise<Record<string, unknown>> => {
-        const configResult = await call('config/read', {}) as { config?: { mcp_servers?: Record<string, unknown> } } | undefined;
-        const names = Object.keys(configResult?.config?.mcp_servers ?? {});
-        return Object.fromEntries(names.map((name) => [name, { enabled: false }]));
+      // Reads the config layer stack the same way `thread/fork` below will
+      // see it — `cwd` is what makes `config/read` fold in the project
+      // layer — and turns each MCP server and app it names off by name, the
+      // way the doc comment above explains.
+      const configOverridesOff = async (): Promise<{
+        mcpServers: Record<string, unknown>;
+        apps: Record<string, unknown>;
+      }> => {
+        const configResult = await call('config/read', input.cwd ? { cwd: input.cwd } : {}) as {
+          config?: { mcp_servers?: Record<string, unknown>; apps?: Record<string, unknown> };
+        } | undefined;
+        const mcpServerNames = Object.keys(configResult?.config?.mcp_servers ?? {});
+        const appNames = Object.keys(configResult?.config?.apps ?? {});
+        return {
+          mcpServers: Object.fromEntries(mcpServerNames.map((name) => [name, { enabled: false }])),
+          apps: Object.fromEntries(
+            [...new Set([...appNames, '_default'])].map((name) => [name, { enabled: false }]),
+          ),
+        };
       };
 
       // `plugin/list` can fail offline (no auth, no network) and that is not
@@ -451,7 +480,7 @@ export const codexAppServer = {
 
         let pluginIds: string[] = [];
 
-        Promise.all([mcpServersOff(), pluginIdsOff()]).then(([mcpServers, ids]) => {
+        Promise.all([configOverridesOff(), pluginIdsOff()]).then(([{ mcpServers, apps }, ids]) => {
           pluginIds = ids;
           if (settled) {
             // Aborted, or already timed out, while config/read or
@@ -470,7 +499,7 @@ export const codexAppServer = {
             config: {
               mcp_servers: mcpServers,
               web_search: 'disabled',
-              apps: { _default: { enabled: false } },
+              apps,
             },
           });
         }).then((forkResult) => {

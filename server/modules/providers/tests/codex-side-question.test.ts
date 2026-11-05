@@ -60,6 +60,8 @@ function fakeAppServerSource(
   pidFile: string,
   mcpServerNames: string[] = [],
   pluginIds: string[] = [],
+  appsConfig: Record<string, unknown> = {},
+  projectOnlyMcpServerNames: string[] = [],
 ): string {
   return `
 const fs = require('node:fs');
@@ -68,6 +70,11 @@ const MODE = ${JSON.stringify(mode)};
 const LOG = ${JSON.stringify(log)};
 const MCP_SERVER_NAMES = ${JSON.stringify(mcpServerNames)};
 const PLUGIN_IDS = ${JSON.stringify(pluginIds)};
+const APPS_CONFIG = ${JSON.stringify(appsConfig)};
+// Returned only when config/read is called with a cwd, the same way the real
+// binary only reads a project's .codex/config.toml when it knows which
+// project — this is what the "cwd-aware config/read" tests are checking for.
+const PROJECT_ONLY_MCP_SERVER_NAMES = ${JSON.stringify(projectOnlyMcpServerNames)};
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 setTimeout(() => process.exit(0), 15000);
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n');
@@ -114,7 +121,10 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   } else if (message.method === 'config/read') {
     const mcp_servers = {};
     for (const name of MCP_SERVER_NAMES) { mcp_servers[name] = { command: 'node', args: [] }; }
-    send({ jsonrpc: '2.0', id: message.id, result: { config: { mcp_servers }, origins: {}, layers: null } });
+    if (message.params && message.params.cwd) {
+      for (const name of PROJECT_ONLY_MCP_SERVER_NAMES) { mcp_servers[name] = { command: 'node', args: [] }; }
+    }
+    send({ jsonrpc: '2.0', id: message.id, result: { config: { mcp_servers, apps: APPS_CONFIG }, origins: {}, layers: null } });
   } else if (message.method === 'plugin/list') {
     if (MODE === 'plugin-list-error') {
       send({ jsonrpc: '2.0', id: message.id, error: { code: -32600, message: 'plugin/list needs auth' } });
@@ -152,6 +162,8 @@ async function withFakeAppServer(
   runTest: (fake: Fake) => Promise<void>,
   mcpServerNames: string[] = [],
   pluginIds: string[] = [],
+  appsConfig: Record<string, unknown> = {},
+  projectOnlyMcpServerNames: string[] = [],
 ): Promise<void> {
   assert.equal(typeof appServer.resolveLauncher, 'function', 'codexAppServer.resolveLauncher is missing (contract-server: the launcher seam)');
   assert.equal(typeof appServer.askSideQuestion, 'function', 'codexAppServer.askSideQuestion is missing (contract-server)');
@@ -160,7 +172,11 @@ async function withFakeAppServer(
   const log = path.join(dir, 'received.jsonl');
   const pidFile = path.join(dir, 'pid');
   const script = path.join(dir, 'fake-app-server.cjs');
-  await writeFile(script, fakeAppServerSource(mode, log, pidFile, mcpServerNames, pluginIds), 'utf8');
+  await writeFile(
+    script,
+    fakeAppServerSource(mode, log, pidFile, mcpServerNames, pluginIds, appsConfig, projectOnlyMcpServerNames),
+    'utf8',
+  );
   await writeFile(log, '', 'utf8');
 
   const original = appServer.resolveLauncher;
@@ -247,6 +263,52 @@ test('the fork turns web search and apps/connectors off in the same config overr
   });
 });
 
+test('config/read is sent with the side question\'s own working directory as cwd', { concurrency: false }, async () => {
+  // Without `cwd`, `config/read` never reads the project layer
+  // (`<project>/.codex/config.toml`), so a trusted project's own MCP servers
+  // and apps would be invisible to the overrides below and stay on in the
+  // fork, where approvalPolicy is 'never'.
+  await withFakeAppServer('complete', async ({ received }) => {
+    await appServer.askSideQuestion!(askInput(), () => {});
+    const configRead = (await received()).find((line) => line.method === 'config/read');
+    assert.ok(configRead, 'config/read was sent');
+    assert.deepEqual(configRead.params, { cwd: '/work/project' });
+  });
+});
+
+test('a per-app entry config/read reports is switched off by name, alongside _default', { concurrency: false }, async () => {
+  // `app_is_enabled` (codex-rs/connectors/src/app_tool_policy.rs:107 at
+  // rust-v0.166.0) prefers a per-app `[apps.<id>]` entry over `_default`, and
+  // `AppConfig.enabled` defaults to true. So a user's `github` table with no
+  // `enabled` key, or one that explicitly turns itself on, stays enabled in
+  // the fork unless each reported app name gets its own `enabled: false` —
+  // `_default` alone does not reach it.
+  await withFakeAppServer('complete', async ({ received }) => {
+    await appServer.askSideQuestion!(askInput(), () => {});
+    const fork = (await received()).find((line) => line.method === 'thread/fork');
+    assert.deepEqual(fork?.params.config.apps, {
+      _default: { enabled: false },
+      github: { enabled: false },
+      slack: { enabled: false },
+    });
+  }, [], [], { github: {}, slack: { enabled: true } });
+});
+
+test('MCP servers only the project layer defines are switched off too, because config/read carries cwd', { concurrency: false }, async () => {
+  // A probe against the real binary showed `config/read {}` omits project
+  // entries while `config/read {cwd}` lists them, so a server only
+  // `<project>/.codex/config.toml` defines would otherwise never be named
+  // here and would stay on in the read-only fork.
+  await withFakeAppServer('complete', async ({ received }) => {
+    await appServer.askSideQuestion!(askInput(), () => {});
+    const fork = (await received()).find((line) => line.method === 'thread/fork');
+    assert.deepEqual(fork?.params.config.mcp_servers, {
+      github: { enabled: false },
+      'project-only-server': { enabled: false },
+    });
+  }, ['github'], [], {}, ['project-only-server']);
+});
+
 test('every plugin/list id is passed as disabledPluginIds on turn/start', { concurrency: false }, async () => {
   // Measured against the real 0.156.1 binary: `turn/start` accepted
   // `disabledPluginIds` populated with real plugin ids from `plugin/list`
@@ -268,13 +330,17 @@ test('a plugin/list that errors offline is treated as no plugins, not a failure'
   });
 });
 
-test('an empty cwd or model is left out of the fork', { concurrency: false }, async () => {
+test('an empty cwd or model is left out of the fork, and out of config/read too', { concurrency: false }, async () => {
   await withFakeAppServer('complete', async ({ received }) => {
     await appServer.askSideQuestion!(askInput({ cwd: '', model: '' }), () => {});
-    const fork = (await received()).find((line) => line.method === 'thread/fork');
+    const lines = await received();
+    const fork = lines.find((line) => line.method === 'thread/fork');
     assert.ok(fork, 'thread/fork was sent');
     assert.equal('cwd' in fork.params, false);
     assert.equal('model' in fork.params, false);
+    const configRead = lines.find((line) => line.method === 'config/read');
+    assert.ok(configRead, 'config/read was sent');
+    assert.equal('cwd' in configRead.params, false);
   });
 });
 
