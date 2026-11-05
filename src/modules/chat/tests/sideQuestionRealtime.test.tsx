@@ -39,7 +39,7 @@ const SESSIONS = ['viewed-session', 'other-session', 'session-1'];
 const clearStore = () => {
   for (const sessionId of SESSIONS) {
     for (const item of sideQuestionStore.forSession(sessionId)) {
-      sideQuestionStore.remove(item.id);
+      sideQuestionStore.remove(sessionId, item.id);
     }
   }
 };

@@ -94,9 +94,13 @@ export function mergeSideQuestions(
     let oldestLoadedTime: number | null = null;
     for (const message of messages) {
       const time = readableTime(message.timestamp);
-      if (time !== null) {
+      // The earliest readable row, not the first one in the list: a
+      // provider that rewinds by branching (Codex) can put a replacement
+      // echo stamped with an earlier time after the rows it replaced, so
+      // stopping at the first readable row would use a window start that is
+      // later than history actually goes back.
+      if (time !== null && (oldestLoadedTime === null || time < oldestLoadedTime)) {
         oldestLoadedTime = time;
-        break;
       }
     }
     // No readable row to compare against: the window's start is unknown, so

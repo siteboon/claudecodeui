@@ -65,7 +65,7 @@ const ids = (sessionId: string) => sideQuestionStore.forSession(sessionId).map((
 const clearStore = () => {
   for (const sessionId of SESSIONS) {
     for (const item of sideQuestionStore.forSession(sessionId)) {
-      sideQuestionStore.remove(item.id);
+      sideQuestionStore.remove(sessionId, item.id);
     }
   }
 };
@@ -207,9 +207,32 @@ describe('sideQuestionStore', () => {
   it('remove takes the entry out', () => {
     sideQuestionStore.replaceForSession('session-1', [row({ id: 'a', status: 'done' }), row({ id: 'b', status: 'done', createdAt: '2026-10-26T10:01:00.000Z' })]);
 
-    sideQuestionStore.remove('a');
+    sideQuestionStore.remove('session-1', 'a');
 
     assert.deepEqual(ids('session-1'), ['b']);
+  });
+
+  it('remove is scoped to the session it is given: an id another session reused is untouched', () => {
+    // The server's in-memory id space is empty after a restart, so a side
+    // question in session-2 can be assigned the same id a now-gone
+    // session-1 row once had.
+    sideQuestionStore.replaceForSession('session-1', [row({ id: 'reused-id', status: 'done' })]);
+    sideQuestionStore.replaceForSession('session-2', [row({ id: 'reused-id', sessionId: 'session-2', status: 'running' })]);
+
+    sideQuestionStore.remove('session-2', 'reused-id');
+
+    assert.deepEqual(ids('session-1'), ['reused-id']);
+    assert.deepEqual(ids('session-2'), []);
+  });
+
+  it('a dismissed event only removes the row from its own session, even when another session reused the id', () => {
+    sideQuestionStore.replaceForSession('session-1', [row({ id: 'reused-id', status: 'done' })]);
+    sideQuestionStore.replaceForSession('session-2', [row({ id: 'reused-id', sessionId: 'session-2', status: 'running' })]);
+
+    sideQuestionStore.applyEvent(event({ sessionId: 'session-2', sideQuestionId: 'reused-id', phase: 'dismissed' }));
+
+    assert.deepEqual(ids('session-1'), ['reused-id']);
+    assert.deepEqual(ids('session-2'), []);
   });
 
   it('subscribe hears every change until it unsubscribes', () => {
@@ -221,7 +244,7 @@ describe('sideQuestionStore', () => {
     assert.ok(afterBegin >= 1);
 
     unsubscribe();
-    sideQuestionStore.remove('q1');
+    sideQuestionStore.remove('session-1', 'q1');
 
     assert.equal(listener.mock.calls.length, afterBegin);
   });
@@ -364,5 +387,32 @@ describe('useDismissSideQuestion', () => {
     assert.deepEqual(dismissSideQuestion.mock.calls, [['session-1', 'q1']]);
     assert.deepEqual(presentWhenCalled, [true]);
     assert.deepEqual(ids('session-1'), []);
+  });
+
+  it('removes the entry when the server 404s: it already lacks the row', async () => {
+    sideQuestionStore.replaceForSession('session-1', [row({ id: 'q1', status: 'done', answer: 'A' })]);
+    dismissSideQuestion.mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
+    const { result } = renderHook(() => useDismissSideQuestion());
+
+    await act(async () => {
+      await result.current('session-1', 'q1');
+    });
+
+    assert.deepEqual(ids('session-1'), []);
+  });
+
+  it('keeps the entry when the server rejects the dismissal for a reason other than 404', async () => {
+    // An expired token is one way to hit this: the auth middleware runs
+    // before the provider router, so the delete handler never runs and the
+    // row still exists on the server.
+    sideQuestionStore.replaceForSession('session-1', [row({ id: 'q1', status: 'done', answer: 'A' })]);
+    dismissSideQuestion.mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
+    const { result } = renderHook(() => useDismissSideQuestion());
+
+    await act(async () => {
+      await result.current('session-1', 'q1');
+    });
+
+    assert.deepEqual(ids('session-1'), ['q1']);
   });
 });

@@ -89,7 +89,7 @@ export const sideQuestionStore = {
     const index = list.findIndex((item) => item.id === event.sideQuestionId);
 
     if (event.phase === 'dismissed') {
-      sideQuestionStore.remove(event.sideQuestionId);
+      sideQuestionStore.remove(event.sessionId, event.sideQuestionId);
       return;
     }
 
@@ -115,16 +115,20 @@ export const sideQuestionStore = {
     upsert(event.sessionId, { ...current, status: 'error', error: event.error ?? null });
   },
 
-  /** Takes one entry out, wherever its session is. */
-  remove(id: string): void {
-    for (const [sessionId, list] of sessions) {
-      const index = list.findIndex((item) => item.id === id);
-      if (index === -1) continue;
-      const next = list.slice();
-      next.splice(index, 1);
-      setList(sessionId, next);
-      return;
-    }
+  /**
+   * Takes one entry out of the given session's own list. Scoped to the
+   * session rather than searched for across every session: the server's
+   * in-memory id space is empty after a restart, so a second session can be
+   * assigned an id a now-gone session once used, and an unscoped search
+   * would delete that unrelated row instead.
+   */
+  remove(sessionId: string, id: string): void {
+    const list = getList(sessionId);
+    const index = list.findIndex((item) => item.id === id);
+    if (index === -1) return;
+    const next = list.slice();
+    next.splice(index, 1);
+    setList(sessionId, next);
   },
 
   /** A session's side questions, oldest first; an unknown session reads as empty. */
@@ -203,10 +207,18 @@ export function useAskSideQuestion(
   );
 }
 
-/** Dismisses a side question: deletes it through the API, then removes it from the store. */
+/**
+ * Dismisses a side question: deletes it through the API, then removes it from
+ * the store. A 404 means the server already lacks the row, so the local
+ * entry is stale and comes out anyway; any other failure (an expired token,
+ * for instance — the auth middleware runs before the provider router, so the
+ * delete handler never runs) leaves the row on the server, and removing it
+ * locally would only have it reappear on the next history load.
+ */
 export function useDismissSideQuestion(): (sessionId: string, id: string) => Promise<void> {
   return useCallback(async (sessionId: string, id: string): Promise<void> => {
-    await api.providers.dismissSideQuestion(sessionId, id);
-    sideQuestionStore.remove(id);
+    const response = await api.providers.dismissSideQuestion(sessionId, id);
+    if (!response.ok && response.status !== 404) return;
+    sideQuestionStore.remove(sessionId, id);
   }, []);
 }

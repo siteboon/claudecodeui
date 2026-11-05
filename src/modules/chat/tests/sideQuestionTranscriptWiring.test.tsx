@@ -60,7 +60,7 @@ const page = (sideQuestions: SideQuestion[]) => ({
 });
 
 const clearStore = () => {
-  for (const item of sideQuestionStore.forSession(SESSION_ID)) sideQuestionStore.remove(item.id);
+  for (const item of sideQuestionStore.forSession(SESSION_ID)) sideQuestionStore.remove(SESSION_ID, item.id);
 };
 
 beforeEach(() => {

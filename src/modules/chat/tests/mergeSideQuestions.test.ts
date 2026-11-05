@@ -187,4 +187,19 @@ describe('mergeSideQuestions', () => {
     const full = mergeSideQuestions([A, B, C], items, { hasOlder: false });
     assert.deepEqual(order(full).slice(0, 2), ['side-question-q-before-window', 'side-question-a-before-window']);
   });
+
+  it('with older pages not loaded, uses the earliest loaded row as the window start even when it is not first in the list', () => {
+    // A Codex edit copies the kept history into a new transcript stamped with
+    // the replacement's own time, so the replacement can sort last in the
+    // list while carrying an earlier timestamp than the rows ahead of it.
+    const reordered = [C, A, B];
+    const item1 = item({ id: 'q1', createdAt: '2026-10-26T10:01:00.000Z' });
+
+    const cut = mergeSideQuestions(reordered, [item1], { hasOlder: true });
+
+    assert.ok(
+      order(cut).includes('side-question-q-q1'),
+      'kept: 10:01 is at or after the earliest loaded row (A, 10:00), even though C (10:04) is first in the list',
+    );
+  });
 });
