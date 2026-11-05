@@ -2,16 +2,16 @@
  * Side-question fork tracking for opencode, confirmed ids and the pending
  * window before an id is known.
  *
- * `opencode run --fork` creates the forked session row with `agent` left
- * `NULL` — opencode sets it asynchronously, in practice well before the run's
- * first stdout event but not provably before it — and keeps reusing the
- * parent's own title with a `(fork #N)` suffix; a `--title` passed to the
- * fork is ignored (both verified live against 1.18.30, 2026-10-27). So before
- * the fork's id is read off an event, the only marker available is
- * (directory, a start time taken just before spawn, that title suffix):
- * `registerPending`/`listPending` hand that marker to the synchronizer's SQL
- * exclusion, and `opencode-runtime.provider.js` uses the same marker to find
- * and delete a fork whose run ended before any id arrived.
+ * A side question's `session.fork` creates the forked session row with
+ * `agent` left `NULL` — opencode sets it asynchronously, in practice well
+ * before the fork's first event but not provably before it — and keeps
+ * reusing the parent's own title with a `(fork #N)` suffix; a title passed to
+ * the fork is ignored (both verified live against 1.18.30, 2026-10-27). So
+ * before the fork's id is read off the SDK's own response, the only marker
+ * available is (directory, a start time taken just before the fork is
+ * requested, that title suffix): `registerPending`/`listPending` hand that
+ * marker to the synchronizer's SQL exclusion, so a fork never becomes a
+ * sidebar session even in the window before its id is registered.
  */
 type PendingOpenCodeSideQuestionFork = {
   directory: string;
@@ -56,9 +56,9 @@ function createOpenCodeSideQuestionForkRegistry() {
   };
 }
 
-// Consumed by opencode-runtime.provider.js, which registers a pending fork
-// before spawning, confirms it with an id once an event names one (or clears
-// it unconfirmed on an early exit), and by OpenCodeSessionSynchronizer, which
-// excludes both the pending window and the confirmed ids from the sidebar in
-// its SQL.
+// Consumed by opencode-runtime.provider.ts, which registers a pending fork
+// before forking the session over the SDK, confirms it with an id once
+// `session.fork` returns one (or clears it unconfirmed on an early exit),
+// and by OpenCodeSessionSynchronizer, which excludes both the pending window
+// and the confirmed ids from the sidebar in its SQL.
 export const opencodeSideQuestionForks = createOpenCodeSideQuestionForkRegistry();

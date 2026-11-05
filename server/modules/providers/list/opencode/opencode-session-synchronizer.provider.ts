@@ -18,14 +18,21 @@ import { opencodeSideQuestionForks } from './opencode-side-question-forks.js';
 
 // Opencode sets its own `session.agent` column asynchronously, not from the
 // row's creation (verified live, 2026-10-27), so it alone cannot close the
-// window right after `--fork` starts. The registry's pending-window clause
-// (below) covers that window by directory, start time and opencode's own
-// `(fork #N)` title suffix; the registry's confirmed-id clause covers a fork
-// once its id is read off the first event; this `agent` column adds a third
-// layer wherever opencode has actually set it by query time. All three sit in
-// the SQL so a fork can never be the newest row that `synchronizeFile`'s
-// `LIMIT 1` picks, not after.
+// window right after a side question's fork is created. The registry's
+// pending-window clause (below) covers that window by directory, start time
+// and opencode's own `(fork #N)` title suffix; the registry's confirmed-id
+// clause covers a fork once its id is read off the first event; this `agent`
+// column adds a third layer wherever opencode has actually set it by query
+// time. All three sit in the SQL so a fork can never be the newest row that
+// `synchronizeFile`'s `LIMIT 1` picks, not after.
+//
+// Every side question gets a fresh agent name, `sidequestion-<uuid>` (gate F8
+// of the cut-review: a project or global config cannot predict it and so
+// cannot merge permission keys into it); the plain `sidequestion` name is the
+// CLI-era agent, kept here for an older row still on disk. Neither matches a
+// user's own agent that merely starts with the word (e.g. `sidequestioner`).
 const SIDE_QUESTION_AGENT = 'sidequestion';
+const SIDE_QUESTION_AGENT_PREFIX = 'sidequestion-';
 
 type OpenCodeSessionRow = {
   id: string;
@@ -102,7 +109,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       // an extra layer where the column exists and simply absent where it
       // doesn't, rather than a query that throws and drops every session.
       const agentFilterClause = this.hasAgentColumn(db)
-        ? `AND (s.agent IS NULL OR s.agent != '${SIDE_QUESTION_AGENT}')`
+        ? `AND (s.agent IS NULL OR (s.agent != '${SIDE_QUESTION_AGENT}' AND s.agent NOT LIKE '${SIDE_QUESTION_AGENT_PREFIX}%'))`
         : '';
       const params = [
         sinceMillis,
