@@ -289,6 +289,9 @@ function assertFreshAgentName(name: string): void {
   assert.ok(match, `the agent is sidequestion-<letters, digits, -> (got ${name})`);
   assert.ok(match[1].length >= 8, `the suffix has at least 8 characters (got ${name})`);
   assert.doesNotMatch(match[1], /^[0-9]+$/, `the suffix is not a counter (got ${name})`);
+  // The synchronizer hides forks by exactly this shape, and only this shape,
+  // so a user's own \`sidequestion-review\` agent stays in the sidebar.
+  assert.match(match[1], /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, `the suffix is a lowercase UUID (got ${name})`);
 }
 
 function assertForkDeleted(log: LogEntry[]): void {
@@ -670,15 +673,17 @@ test('synchronizeFile skips a registered fork that is the newest row and indexes
   }
 });
 
-test('synchronize skips a fork whose agent is a per-question sidequestion-<suffix> name, and only such names', { concurrency: false }, async () => {
+test('synchronize skips a fork whose agent is a per-question sidequestion-<uuid> name, and only such names', { concurrency: false }, async () => {
   const SUFFIX_FORK = 'open-fork-suffixed';
-  // A user's own agent that merely starts with the word, older than the parent
+  // Users' own agents that merely start with the word, older than the parent
   // so the parent still takes the pending app session.
   const USER_AGENT_SESSION = 'open-user-agent';
+  const USER_DASHED_AGENT_SESSION = 'open-user-dashed-agent';
   await withSynchronizerFixture([
     { id: USER_AGENT_SESSION, agent: 'sidequestioner', updated: 1_700_000_000_500 },
+    { id: USER_DASHED_AGENT_SESSION, agent: 'sidequestion-review', updated: 1_700_000_000_700 },
     { id: PARENT_SESSION, agent: 'build', updated: 1_700_000_001_000 },
-    { id: SUFFIX_FORK, agent: 'sidequestion-k3x9-q2', updated: 1_700_000_002_000 },
+    { id: SUFFIX_FORK, agent: 'sidequestion-3f2b8c1e-9a4d-4e7b-8c6f-1d2e3f4a5b6c', updated: 1_700_000_002_000 },
   ], async ({ workspacePath, dbPath }) => {
     sessionsDb.createAppSession('app-pending', 'opencode', workspacePath);
     const sessionId = await new OpenCodeSessionSynchronizer().synchronizeFile(dbPath);
@@ -689,6 +694,7 @@ test('synchronize skips a fork whose agent is a per-question sidequestion-<suffi
     assert.equal(sessionsDb.getSessionByProviderSessionId(SUFFIX_FORK), null, `${SUFFIX_FORK} is not bound to any app session`);
     assert.equal(sessionsDb.getSessionById(SUFFIX_FORK), null, `${SUFFIX_FORK} is not indexed as a session`);
     assert.ok(sessionsDb.getSessionByProviderSessionId(USER_AGENT_SESSION), 'a sidequestioner agent\'s session stays indexed');
-    assert.equal(sessionsDb.getAllSessions().length, 2);
+    assert.ok(sessionsDb.getSessionByProviderSessionId(USER_DASHED_AGENT_SESSION), 'a sidequestion-review agent\'s session stays indexed');
+    assert.equal(sessionsDb.getAllSessions().length, 3);
   });
 });

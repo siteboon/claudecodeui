@@ -29,10 +29,14 @@ import { opencodeSideQuestionForks } from './opencode-side-question-forks.js';
 // Every side question gets a fresh agent name, `sidequestion-<uuid>` (gate F8
 // of the cut-review: a project or global config cannot predict it and so
 // cannot merge permission keys into it); the plain `sidequestion` name is the
-// CLI-era agent, kept here for an older row still on disk. Neither matches a
-// user's own agent that merely starts with the word (e.g. `sidequestioner`).
+// CLI-era agent, kept here for an older row still on disk. The per-question
+// name is matched by the exact lowercase shape `crypto.randomUUID()` gives,
+// as a GLOB (LIKE has no character classes and ignores case), so neither
+// matches a user's own agent that merely starts with the word, such as
+// `sidequestioner` or `sidequestion-review`.
 const SIDE_QUESTION_AGENT = 'sidequestion';
-const SIDE_QUESTION_AGENT_PREFIX = 'sidequestion-';
+const HEX_GLOB = '[0-9a-f]';
+const SIDE_QUESTION_AGENT_GLOB = `sidequestion-${HEX_GLOB.repeat(8)}-${HEX_GLOB.repeat(4)}-${HEX_GLOB.repeat(4)}-${HEX_GLOB.repeat(4)}-${HEX_GLOB.repeat(12)}`;
 
 type OpenCodeSessionRow = {
   id: string;
@@ -109,7 +113,7 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
       // an extra layer where the column exists and simply absent where it
       // doesn't, rather than a query that throws and drops every session.
       const agentFilterClause = this.hasAgentColumn(db)
-        ? `AND (s.agent IS NULL OR (s.agent != '${SIDE_QUESTION_AGENT}' AND s.agent NOT LIKE '${SIDE_QUESTION_AGENT_PREFIX}%'))`
+        ? `AND (s.agent IS NULL OR (s.agent != '${SIDE_QUESTION_AGENT}' AND s.agent NOT GLOB '${SIDE_QUESTION_AGENT_GLOB}'))`
         : '';
       const params = [
         sinceMillis,
