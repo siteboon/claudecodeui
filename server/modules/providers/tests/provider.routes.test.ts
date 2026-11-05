@@ -175,6 +175,32 @@ test('reasoning effort is persisted and returned with the active session model',
   });
 });
 
+test('the rename route answers with the renamed session, and 404s an unknown one', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createAppSession('rename-route-session', 'codex', workspacePath, 'Old name');
+    const rename = (sessionId: string) => fetch(`${baseUrl}/api/providers/sessions/${sessionId}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ summary: '  New name  ' }),
+    });
+
+    // The rename is async (it also writes the provider's transcript), so the
+    // route has to wait for it: both the payload and the 404 come from there.
+    const renamed = await rename('rename-route-session');
+    assert.equal(renamed.status, 200);
+    assert.deepEqual(await renamed.json(), {
+      success: true,
+      data: { sessionId: 'rename-route-session', summary: 'New name' },
+    });
+    assert.equal(sessionsDb.getSessionById('rename-route-session')?.custom_name, 'New name');
+
+    const missing = await rename('no-such-session');
+    const missingPayload = await missing.json() as { error: { code: string } };
+    assert.equal(missing.status, 404);
+    assert.equal(missingPayload.error.code, 'SESSION_NOT_FOUND');
+  });
+});
+
 test('model routes expose immutable defaults and full custom model CRUD', async () => {
   await withProviderServer(async (baseUrl) => {
     const initialResponse = await fetch(`${baseUrl}/api/providers/codex/models`);
