@@ -90,6 +90,7 @@ async function withAppServer<T>(
      */
     onExit: (handler: (reason: string) => void) => () => void;
   }) => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
   // Resolved through the exported object, not a module-local function, so
   // tests can replace `codexAppServer.resolveLauncher` with a fake app-server
@@ -225,6 +226,13 @@ async function withAppServer<T>(
       child.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
     });
 
+  // Attached before `initialize`: `run` adds its own abort listener only
+  // once the handshake has returned, so a dismiss while `initialize` hangs
+  // would otherwise leave the child up until REQUEST_TIMEOUT_MS. Killing it
+  // fails that pending call through the exit handler above.
+  const killOnAbort = () => child.kill();
+  signal?.addEventListener('abort', killOnAbort, { once: true });
+
   try {
     // `capabilities` is deliberately empty. `thread/fork` with `lastTurnId` is
     // in the stable protocol; only `beforeTurnId` and the turn-listing methods
@@ -245,6 +253,7 @@ async function withAppServer<T>(
     }
     throw error;
   } finally {
+    signal?.removeEventListener('abort', killOnAbort);
     reader.close();
     child.kill();
   }
@@ -394,6 +403,10 @@ export const codexAppServer = {
       statusCode: 499,
     });
 
+    if (input.signal.aborted) {
+      throw abortedError();
+    }
+
     return withAppServer(async ({ call, onNotification, onExit }) => {
       // Reads the config layer stack the same way `thread/fork` below will
       // see it — `cwd` is what makes `config/read` fold in the project
@@ -441,6 +454,9 @@ export const codexAppServer = {
 
       return new Promise<string>((resolve, reject) => {
         let text = '';
+        // Deltas are optional and `item/completed` is the final item, so an
+        // agent message that never streamed is taken from there instead.
+        const streamedItemIds = new Set<string>();
         let settled = false;
         let removeNotificationListener: (() => void) | null = null;
         let removeExitListener: (() => void) | null = null;
@@ -455,10 +471,10 @@ export const codexAppServer = {
         const onAbort = () => {
           settle(() => reject(abortedError()));
         };
-        // Attached before the `thread/fork` request even goes out, so a
-        // dismiss during `initialize`/`thread/fork` is caught the same way
-        // as one during the turn itself — it used to be added only once the
-        // fork had already returned, and an abort in that window was lost.
+        // Attached before `config/read` and `thread/fork` go out, so a
+        // dismiss while they are in flight is caught the same way as one
+        // during the turn itself. A dismiss during `initialize`, before this
+        // runs, is `withAppServer`'s: it kills the child.
         input.signal.addEventListener('abort', onAbort);
 
         function settle(action: () => void) {
@@ -529,7 +545,13 @@ export const codexAppServer = {
           });
 
           removeNotificationListener = onNotification((method, params) => {
-            const notificationParams = params as { threadId?: unknown; delta?: unknown; turn?: { status?: unknown; error?: { message?: unknown } } } | undefined;
+            const notificationParams = params as {
+              threadId?: unknown;
+              itemId?: unknown;
+              delta?: unknown;
+              item?: { type?: unknown; id?: unknown; text?: unknown };
+              turn?: { status?: unknown; error?: { message?: unknown } };
+            } | undefined;
             // Another thread's deltas (e.g. the one this fork was copied from)
             // arrive on the same connection; only this fork's own notifications
             // belong to this question.
@@ -540,8 +562,24 @@ export const codexAppServer = {
             if (method === 'item/agentMessage/delta') {
               const delta = typeof notificationParams.delta === 'string' ? notificationParams.delta : '';
               if (delta) {
+                if (typeof notificationParams.itemId === 'string') {
+                  streamedItemIds.add(notificationParams.itemId);
+                }
                 text += delta;
                 onDelta(delta);
+              }
+              return;
+            }
+
+            if (method === 'item/completed') {
+              const item = notificationParams.item;
+              if (
+                item?.type === 'agentMessage'
+                && typeof item.text === 'string' && item.text
+                && !(typeof item.id === 'string' && streamedItemIds.has(item.id))
+              ) {
+                text += item.text;
+                onDelta(item.text);
               }
               return;
             }
@@ -577,6 +615,10 @@ export const codexAppServer = {
           settle(() => reject(error));
         });
       });
+    }, input.signal).catch((error: unknown) => {
+      // A dismiss during `initialize` surfaces as the killed child's exit;
+      // report it as the abort it was.
+      throw input.signal.aborted ? abortedError() : error;
     });
   },
 };

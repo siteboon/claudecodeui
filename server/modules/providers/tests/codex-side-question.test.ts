@@ -46,7 +46,8 @@ type RuntimeSideQuestion = {
 const appServer = codexAppServer as unknown as AppServerSideQuestion;
 const runtime = codexRuntime as unknown as RuntimeSideQuestion;
 
-type Mode = 'complete' | 'failed' | 'fork-error' | 'hang' | 'server-request' | 'plugin-list-error';
+type Mode = 'complete' | 'failed' | 'fork-error' | 'hang' | 'server-request' | 'plugin-list-error'
+  | 'initialize-hang' | 'completed-only';
 
 /**
  * The fake app-server. `mode` decides how the turn goes; everything received
@@ -80,6 +81,7 @@ setTimeout(() => process.exit(0), 15000);
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n');
 const notify = (method, params) => send({ jsonrpc: '2.0', method, params });
 const delta = (threadId, text) => notify('item/agentMessage/delta', { threadId, turnId: ${JSON.stringify(TURN_ID)}, itemId: 'msg-1', delta: text });
+const completedMessage = (threadId, id, text) => notify('item/completed', { threadId, turnId: ${JSON.stringify(TURN_ID)}, item: { type: 'agentMessage', id, text, phase: 'final_answer', memoryCitation: null, delivery: null, questions: null }, completedAtMs: 0 });
 const turn = (status, error) => ({ id: ${JSON.stringify(TURN_ID)}, items: [], itemsView: 'full', status, error, startedAt: null, completedAt: null });
 const FORK = ${JSON.stringify(FORK_THREAD)};
 let serverRequestId = null;
@@ -95,10 +97,19 @@ function runTurn() {
     notify('turn/completed', { threadId: FORK, turn: turn('failed', { message: 'model overloaded', codexErrorInfo: null, additionalDetails: null, misalignment: null }) });
     return;
   }
+  if (MODE === 'completed-only') {
+    // Deltas are optional; item/completed carries the final text either way.
+    completedMessage('thread-other', 'msg-other', 'NOT THIS THREAD');
+    completedMessage(FORK, 'msg-1', 'The router is in src/router.ts.');
+    notify('turn/completed', { threadId: FORK, turn: turn('completed', null) });
+    return;
+  }
   delta(FORK, 'The router ');
   delta('thread-other', 'NOT THIS THREAD');
   delta(FORK, 'is in ');
   delta(FORK, 'src/router.ts.');
+  // As the real binary does: the streamed item completes with its whole text.
+  completedMessage(FORK, 'msg-1', 'The router is in src/router.ts.');
   notify('turn/completed', { threadId: FORK, turn: turn('completed', null) });
 }
 
@@ -117,6 +128,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   }
 
   if (message.method === 'initialize') {
+    if (MODE === 'initialize-hang') return;
     send({ jsonrpc: '2.0', id: message.id, result: { userAgent: 'fake-codex/0.156.1' } });
   } else if (message.method === 'config/read') {
     const mcp_servers = {};
@@ -366,6 +378,15 @@ test('deltas for the fork are forwarded in order and the answer resolves after t
   });
 });
 
+test('an agent message that arrives only as item/completed, with no deltas, is the answer', { concurrency: false }, async () => {
+  await withFakeAppServer('completed-only', async () => {
+    const deltas: string[] = [];
+    const answer = await appServer.askSideQuestion!(askInput(), (text) => { deltas.push(text); });
+    assert.equal(answer, 'The router is in src/router.ts.', 'the completed item\'s text, and only this fork\'s');
+    assert.deepEqual(deltas, ['The router is in src/router.ts.'], 'forwarded once, like a delta');
+  });
+});
+
 test('a failed turn rejects with the turn\'s error message', { concurrency: false }, async () => {
   await withFakeAppServer('failed', async () => {
     await assert.rejects(appServer.askSideQuestion!(askInput(), () => {}), /model overloaded/);
@@ -391,6 +412,33 @@ test('an aborted signal kills the child and rejects', { concurrency: false }, as
 
     controller.abort();
     await assert.rejects(pending);
+
+    let alive = true;
+    for (let attempt = 0; attempt < 80 && alive; attempt += 1) {
+      try { process.kill(pid, 0); await settle(); } catch { alive = false; }
+    }
+    assert.equal(alive, false, 'the app-server child is gone after the abort');
+  });
+});
+
+test('a dismiss while initialize is still pending kills the child at once, not after the request timeout', { concurrency: false, timeout: 30000 }, async () => {
+  await withFakeAppServer('initialize-hang', async ({ pidFile, received }) => {
+    const controller = new AbortController();
+    const pending = appServer.askSideQuestion!(askInput({ signal: controller.signal }), () => {});
+    const outcome = pending.then(() => 'resolved', (error: unknown) => error);
+    for (let attempt = 0; attempt < 200 && !(await received()).some((line) => line.method === 'initialize'); attempt += 1) {
+      await settle();
+    }
+    assert.ok((await received()).some((line) => line.method === 'initialize'), 'initialize was sent and left unanswered');
+    const pid = Number(await readFile(pidFile, 'utf8'));
+
+    controller.abort();
+    const settled = await Promise.race([
+      outcome,
+      new Promise((resolve) => { setTimeout(() => resolve('still pending 2 s after the abort'), 2000); }),
+    ]);
+    assert.ok(settled instanceof Error, `the ask rejects right after the abort (got ${String(settled)})`);
+    assert.match(settled.message, /aborted/);
 
     let alive = true;
     for (let attempt = 0; attempt < 80 && alive; attempt += 1) {
