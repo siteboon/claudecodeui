@@ -57,7 +57,7 @@ Each provider lives under its own folder in `server/modules/providers/list/`:
 ```text
 server/modules/providers/list/<provider>/
   <provider>.provider.ts
-  <provider>-runtime.provider.js
+  <provider>-runtime.provider.ts
   <provider>-auth.provider.ts
   <provider>-models.provider.ts
   <provider>-mcp.provider.ts
@@ -111,7 +111,7 @@ import the service from `server/modules/providers/index.ts`.
 2. Create the wrapper class.
 
 - Add `server/modules/providers/list/<provider>/<provider>.provider.ts`.
-- Add `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+- Add `server/modules/providers/list/<provider>/<provider>-runtime.provider.ts`
   when the provider supports live SDK/CLI execution.
 - Extend `AbstractProvider`.
 - Expose readonly `auth`, `mcp`, `skills`, `sessions`, and `sessionSynchronizer`.
@@ -225,7 +225,7 @@ Current session sync roots are:
 
 If the provider can run live chat sessions, update the runtime entrypoints too:
 
-- `server/modules/providers/list/<provider>/<provider>-runtime.provider.js`
+- `server/modules/providers/list/<provider>/<provider>-runtime.provider.ts`
 - `server/modules/providers/list/<provider>/<provider>.provider.ts`
 - `server/modules/agent/agent.routes.ts`
 - `server/index.ts`
@@ -241,7 +241,7 @@ If the provider is visible in the UI, update:
 ## Kiro ACP Runtime
 
 Kiro adds `kiro` through the same seven facets. Its runtime lives in
-`list/kiro/kiro-runtime.provider.js` and uses `kiro-cli acp --trust-all-tools`
+`list/kiro/kiro-runtime.provider.ts` and uses `kiro-cli acp --trust-all-tools`
 with JSON-RPC over stdio. New runs call `session/new`; resumed runs resolve the
 app session id to the provider-native id before `session/load`. App model
 selections use `--model` for new sessions and `session/set_model` after loading.
@@ -251,7 +251,9 @@ and execution. Only real native ids reach the session writer. History replay
 from `session/load` is suppressed; live text uses `stream_delta` / `stream_end`
 and each non-aborted run emits one terminal `complete`. Prompt requests have
 no handshake timeout; cancellation shuts down the child with a bounded grace
-period.
+period. The runtime reports completed, failed, and aborted outcomes through
+the shared notification channels. The chat gateway owns the terminal event
+for an aborted run, so cancellation does not emit a duplicate completion.
 
 Kiro reads ACP transcripts and metadata from `~/.kiro/sessions/cli/*.{jsonl,json}`.
 MCP config is stored in `~/.kiro/settings/mcp.json` and
@@ -359,7 +361,7 @@ Add a new provider "<provider>" using the current provider module architecture.
 Requirements:
 1) Create:
     - server/modules/providers/list/<provider>/<provider>.provider.ts
-    - server/modules/providers/list/<provider>/<provider>-runtime.provider.js
+    - server/modules/providers/list/<provider>/<provider>-runtime.provider.ts
    - server/modules/providers/list/<provider>/<provider>-auth.provider.ts
    - server/modules/providers/list/<provider>/<provider>-models.provider.ts
    - server/modules/providers/list/<provider>/<provider>-mcp.provider.ts
@@ -415,4 +417,3 @@ alongside the implementation.
 - Forgetting that Claude plugin skills are discovered differently from normal
   user/project skill folders.
 - Assuming one provider's MCP config file format works for the others.
-

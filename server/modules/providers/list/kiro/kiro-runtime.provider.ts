@@ -1,18 +1,30 @@
 import { spawn } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import crypto from 'node:crypto';
 
 import crossSpawn from 'cross-spawn';
 
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage } from '@/shared/index.js';
+import type {
+  AnyRecord,
+  NormalizedMessage,
+  ProviderRuntimeContext,
+  ProviderRuntimeWriter,
+} from '@/shared/index.js';
 
 import { StdioJsonRpcClient } from './stdio-jsonrpc-client.js';
 
 const spawnFunction = process.platform === 'win32' ? crossSpawn : spawn;
 
+type KiroProcess = ChildProcessWithoutNullStreams & {
+  aborted?: boolean;
+  abortRun: () => void;
+};
+
 // Tracks active Kiro processes by session id (or a temporary process key
 // before the ACP `session/new` reply assigns a real sessionId).
-const activeKiroProcesses = new Map();
+const activeKiroProcesses = new Map<string, KiroProcess>();
 
 const PROVIDER = 'kiro';
 
@@ -35,12 +47,12 @@ const PROVIDER = 'kiro';
  *   sessionUpdate: 'tool_call_chunk'     → {toolCallId, ...}  (progressive args)
  *   sessionUpdate: 'tool_call_update'    → {toolCallId, status: 'completed'|'failed', ...}
  */
-function normalizeAcpUpdate(params, sessionId) {
+function normalizeAcpUpdate(params: unknown, sessionId: string | null): NormalizedMessage[] {
   if (!params || typeof params !== 'object') {
     return [];
   }
 
-  const update = params.update;
+  const update = (params as AnyRecord).update;
   if (!update || typeof update !== 'object') {
     return [];
   }
@@ -92,7 +104,7 @@ function normalizeAcpUpdate(params, sessionId) {
     const isError = status === 'failed';
     let content = '';
     if (Array.isArray(update.content)) {
-      content = update.content.map((part) => part?.content?.text ?? '').filter(Boolean).join('\n');
+      content = update.content.map((part: AnyRecord | null) => part?.content?.text ?? '').filter(Boolean).join('\n');
     } else if (typeof update.output === 'string') {
       content = update.output;
     } else if (update.output && typeof update.output === 'object') {
@@ -120,7 +132,12 @@ function normalizeAcpUpdate(params, sessionId) {
  * process-map key for cancellation; only real ACP ids may reach setSessionId,
  * which now persists the app-to-provider mapping through ChatSessionWriter.
  */
-async function spawnKiro(command, options = {}, ws, context) {
+async function spawnKiro(
+  command: string,
+  options: AnyRecord = {},
+  ws: ProviderRuntimeWriter,
+  context: ProviderRuntimeContext,
+): Promise<void> {
   const { sessionId, projectPath, cwd, model, agent, sessionSummary } = options;
   const providerSessionId = context.resolveProviderSessionId(sessionId);
   const workingDir = cwd || projectPath || process.cwd();
@@ -129,10 +146,10 @@ async function spawnKiro(command, options = {}, ws, context) {
   let activeKey = processKey;
   let acceptingUpdates = false;
   let streamedText = '';
-  let runError = null;
+  let runError: Error | null = null;
   let finished = false;
-  let stopTimer;
-  let killTimer;
+  let stopTimer: NodeJS.Timeout | undefined;
+  let killTimer: NodeJS.Timeout | undefined;
 
   const resolvedModel = await context.resolveResumeModel(sessionId, model);
   const acpArgs = ['acp', '--trust-all-tools'];
@@ -143,7 +160,7 @@ async function spawnKiro(command, options = {}, ws, context) {
     cwd: workingDir,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env },
-  });
+  }) as KiroProcess;
   activeKiroProcesses.set(activeKey, kiroProcess);
 
   // ChildProcess.killed means a signal was sent, not that the child exited.
@@ -192,16 +209,22 @@ async function spawnKiro(command, options = {}, ws, context) {
     }
   });
 
-  return new Promise((resolve, reject) => {
-    const finish = (code) => {
+  return new Promise<void>((resolve, reject) => {
+    const finish = (code: number | null) => {
       if (finished) return;
       finished = true;
       clearTimeout(stopTimer);
       clearTimeout(killTimer);
       activeKiroProcesses.delete(activeKey);
       const finalSessionId = sessionId || capturedSessionId || processKey;
+      const notification = {
+        userId: ws.userId || null, provider: PROVIDER,
+        sessionId: finalSessionId, sessionName: sessionSummary,
+      };
       if (kiroProcess.aborted) {
-        // chat.abort owns the aborted terminal event and notification.
+        // The gateway owns the terminal event; the runtime reports each run's
+        // outcome to all enabled notification channels, including webhooks.
+        notifyRunStopped({ ...notification, stopReason: 'aborted' });
         resolve();
         return;
       }
@@ -215,10 +238,6 @@ async function spawnKiro(command, options = {}, ws, context) {
       ws.send(createCompleteMessage({
         provider: PROVIDER, sessionId: finalSessionId, exitCode: error ? 1 : 0,
       }));
-      const notification = {
-        userId: ws.userId || null, provider: PROVIDER,
-        sessionId: finalSessionId, sessionName: sessionSummary,
-      };
       if (error) {
         notifyRunFailed({ ...notification, error });
         reject(error);
@@ -229,7 +248,7 @@ async function spawnKiro(command, options = {}, ws, context) {
     };
 
     kiroProcess.on('close', finish);
-    kiroProcess.on('error', (error) => {
+    kiroProcess.on('error', (error: NodeJS.ErrnoException) => {
       runError = error.code === 'ENOENT'
         ? new Error('Kiro CLI is not installed. Install it from https://kiro.dev/docs/cli/')
         : error;
@@ -254,7 +273,7 @@ async function spawnKiro(command, options = {}, ws, context) {
             });
           }
         } else {
-          const result = await client.request('session/new', { cwd: workingDir, mcpServers: [] });
+          const result = await client.request<{ sessionId?: unknown }>('session/new', { cwd: workingDir, mcpServers: [] });
           if (kiroProcess.aborted || finished) return;
           if (typeof result?.sessionId !== 'string' || !result.sessionId.trim()) {
             throw new Error('Kiro ACP did not return a session id');
@@ -276,7 +295,7 @@ async function spawnKiro(command, options = {}, ws, context) {
 
         if (command?.trim()) {
           // Tool-running prompts can take much longer than the handshake timeout.
-          const result = await client.request('session/prompt', {
+          const result = await client.request<{ stopReason?: string }>('session/prompt', {
             sessionId: capturedSessionId,
             prompt: [{ type: 'text', text: command }],
           }, { timeoutMs: 0 });
@@ -303,7 +322,7 @@ async function spawnKiro(command, options = {}, ws, context) {
   });
 }
 
-function abortKiroSession(sessionId) {
+function abortKiroSession(sessionId: string): boolean {
   const child = activeKiroProcesses.get(sessionId);
   if (!child) return false;
   child.abortRun();
@@ -311,6 +330,7 @@ function abortKiroSession(sessionId) {
   return true;
 }
 
+/** Used by the Providers registry and runtime tests to run and cancel Kiro ACP sessions. */
 export const kiroRuntime = {
   run: spawnKiro,
   abort: abortKiroSession,
