@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
-import { setNotificationSoundEnabled } from '@/shared/utils';
+import { DEFAULT_NOTIFICATION_SOUND_VOLUME } from '@/shared/constants';
+import { setNotificationSoundEnabled, setNotificationSoundVolume } from '@/shared/utils';
 import {
   readCodeEditorSettings,
   writeCodeEditorSettings,
@@ -97,6 +98,7 @@ const createDefaultNotificationPreferences = (): NotificationPreferencesState =>
     stop: true,
     error: true,
   },
+  soundVolume: DEFAULT_NOTIFICATION_SOUND_VOLUME,
 });
 
 const normalizeNotificationPreferences = (
@@ -116,6 +118,9 @@ const normalizeNotificationPreferences = (
       stop: preferences?.events?.stop ?? defaults.events.stop,
       error: preferences?.events?.error ?? defaults.events.error,
     },
+    soundVolume: typeof preferences?.soundVolume === 'number' && Number.isFinite(preferences.soundVolume)
+      ? Math.min(100, Math.max(0, preferences.soundVolume))
+      : defaults.soundVolume,
   };
 };
 
@@ -295,6 +300,10 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   useEffect(() => {
     setNotificationSoundEnabled(notificationPreferences.channels.sound);
   }, [notificationPreferences.channels.sound]);
+
+  useEffect(() => {
+    setNotificationSoundVolume(notificationPreferences.soundVolume);
+  }, [notificationPreferences.soundVolume]);
 
   // Auto-save permissions and sort order with debounce
   const autoSaveTimerRef = useRef<number | null>(null);

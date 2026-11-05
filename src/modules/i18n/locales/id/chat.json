@@ -139,6 +139,7 @@
     "disabled": "Input dinonaktifkan",
     "attachFiles": "Lampirkan file",
     "attachImages": "Lampirkan gambar",
+    "fileTooLarge": "{{name}} terlalu besar untuk dilampirkan (maks. {{size}} MB)",
     "send": "Kirim",
     "stop": "Hentikan",
     "hintText": {
