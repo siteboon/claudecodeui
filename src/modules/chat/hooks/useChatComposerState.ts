@@ -766,9 +766,15 @@ export function useChatComposerState({
   // send, which takes them. Called only when `askSideQuestion` returned
   // `true`; a refusal (no connection) leaves the text in place too, so the
   // user does not lose what they typed.
+  //
+  // Also ends edit mode, matching `cancelEditMessage`: a side question asked
+  // while editing a sent message must not leave `editingAnchorId` set over
+  // the now-empty composer, which previously turned the next plain send into
+  // a `chat.edit-send` that replaced the edited turn and everything after it.
   const clearComposerAfterSideQuestion = useCallback(() => {
     setInput('');
     inputValueRef.current = '';
+    setEditingAnchorId(null);
     resetCommandMenuState();
     setIsTextareaExpanded(false);
     if (textareaRef.current) {
