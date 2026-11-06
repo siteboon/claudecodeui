@@ -201,10 +201,14 @@ test('bypassPermissions carries through to resumed claude sessions', () => {
 test('a claude resume has no fallback to a new session on bash or PowerShell', (t) => {
   const { calls, dependencies } = spawnRecorder('resumed-session-id');
 
+  // Both platforms are mocked, so the bash launch is checked on Windows too.
+  let platform: NodeJS.Platform = 'linux';
+  t.mock.method(os, 'platform', () => platform);
   launch(dependencies, { provider: 'claude', hasSession: true });
-  t.mock.method(os, 'platform', () => 'win32');
+  platform = 'win32';
   launch(dependencies, { provider: 'claude', hasSession: true });
 
+  assert.deepEqual(calls.map((call) => call.shell), ['bash', 'powershell.exe']);
   assert.deepEqual(
     calls.map((call) => call.command),
     ['claude --resume "resumed-session-id"', 'claude --resume "resumed-session-id"']
