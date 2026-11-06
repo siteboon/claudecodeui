@@ -42,7 +42,10 @@ function createFakePty() {
     emitExit() {
       exitListener?.({ exitCode: 0 });
     },
-    write() {},
+    writes: [] as string[],
+    write(data: string) {
+      this.writes.push(data);
+    },
     resize() {},
     kill() {
       this.killed = true;
@@ -830,4 +833,94 @@ test('a socket that closes during the background lookup starts no pty', async ()
   await settle();
 
   assert.equal(calls.length, 0);
+});
+
+/** A launch whose background-job lookup waits until the test settles it. */
+function pendingLookupRecorder() {
+  const ptys: Array<ReturnType<typeof createFakePty>> = [];
+  const lookups: Array<(jobId: string | null) => void> = [];
+  let lookupStarted: () => void = () => undefined;
+  let started = new Promise<void>((resolve) => { lookupStarted = resolve; });
+  const dependencies = {
+    resolveProviderSessionId: (sessionId: string) => sessionId,
+    findBackgroundClaudeJobId: () => new Promise<string | null>((resolve) => {
+      lookups.push(resolve);
+      lookupStarted();
+    }),
+    spawnPty: () => {
+      const fakePty = createFakePty();
+      ptys.push(fakePty);
+      return fakePty as never;
+    },
+  };
+  const nextLookup = async () => {
+    await started;
+    started = new Promise<void>((resolve) => { lookupStarted = resolve; });
+  };
+  return { ptys, lookups, dependencies, nextLookup };
+}
+
+function openSession(dependencies: Parameters<typeof handleShellConnection>[1], sessionId: string) {
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, dependencies);
+  socket.emit('message', JSON.stringify({ type: 'init', projectPath: process.cwd(), sessionId, hasSession: true, provider: 'claude' }));
+  return socket;
+}
+
+const hasOutput = (socket: ReturnType<typeof createFakeSocket>, text: string) =>
+  socket.frames.some((frame) => {
+    const parsed = JSON.parse(frame) as { type?: string; data?: unknown };
+    return parsed.type === 'output' && String(parsed.data).includes(text);
+  });
+
+test('a reconnect to a running pty does not wait for the background lookup', async () => {
+  const { ptys, lookups, dependencies, nextLookup } = pendingLookupRecorder();
+  const sessionId = `no-wait-${Date.now()}`;
+
+  const first = openSession(dependencies, sessionId);
+  await nextLookup();
+  lookups[0](null);
+  await settle();
+  assert.equal(ptys.length, 1);
+  first.emit('close');
+
+  // The registry lookup for this one would never settle.
+  const back = openSession(dependencies, sessionId);
+  assert.ok(hasOutput(back, 'Reconnected to existing session'));
+  assert.equal(lookups.length, 1, 'no lookup for a reattach');
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('input sent while the background lookup runs reaches the pty', async () => {
+  const { ptys, lookups, dependencies, nextLookup } = pendingLookupRecorder();
+
+  const socket = openSession(dependencies, `typed-early-${Date.now()}`);
+  await nextLookup();
+  socket.emit('message', JSON.stringify({ type: 'input', data: 'hello' }));
+  lookups[0](null);
+  await settle();
+
+  assert.equal(ptys.length, 1);
+  assert.deepEqual(ptys[0].writes, ['hello']);
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('of two sockets opening a session, the later one keeps it when lookups finish out of order', async () => {
+  const { ptys, lookups, dependencies, nextLookup } = pendingLookupRecorder();
+  const sessionId = `racing-${Date.now()}`;
+
+  const older = openSession(dependencies, sessionId);
+  await nextLookup();
+  const newer = openSession(dependencies, sessionId);
+  await nextLookup();
+  lookups[1](null);
+  await settle();
+  lookups[0](null);
+  await settle();
+
+  assert.equal(ptys.length, 1);
+  ptys[0].emitData('from the cli');
+  assert.ok(hasOutput(newer, 'from the cli'), 'the later socket gets the output');
+  assert.ok(!hasOutput(older, 'from the cli'));
+  ptys.forEach((fakePty) => fakePty.emitExit());
 });

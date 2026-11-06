@@ -39,6 +39,10 @@ type PtySessionEntry = {
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
+// The newest `init` for each pty key that is still waiting on a lookup. An
+// older one that finishes its wait later gives up instead of spawning or
+// reattaching, so the socket that opened the session last keeps its output.
+const latestInitByKey = new Map<string, symbol>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
@@ -579,7 +583,33 @@ export function handleShellConnection(
   let urlDetectionBuffer = '';
   const announcedAuthUrls = new Set<string>();
 
-  ws.on('message', async (rawMessage) => {
+  // While an `init` waits for the registry, later messages (input, resize)
+  // queue behind it and are applied once the pty exists, instead of being
+  // dropped. Otherwise each message is handled as it arrives.
+  let initWaiting = false;
+  let messageQueue: Promise<void> | null = null;
+  const settleQueue = (tail: Promise<void>) => {
+    void tail.then(() => {
+      if (messageQueue === tail) {
+        messageQueue = null;
+      }
+    });
+  };
+  ws.on('message', (rawMessage) => {
+    if (messageQueue) {
+      const tail = messageQueue.then(() => handleMessage(rawMessage));
+      messageQueue = tail;
+      settleQueue(tail);
+      return;
+    }
+    const handled = handleMessage(rawMessage);
+    if (initWaiting) {
+      messageQueue = handled;
+      settleQueue(handled);
+    }
+  });
+
+  async function handleMessage(rawMessage: RawData): Promise<void> {
     try {
       const data = parseShellMessage(rawMessage);
       if (!data?.type) {
@@ -587,16 +617,6 @@ export function handleShellConnection(
       }
 
       if (data.type === 'init') {
-        // Looked up first, so the rest of the launch runs without yielding:
-        // nothing else can take this pty key between the check for an
-        // existing pty and the spawn.
-        const backgroundJobLookup = findBackgroundJobForLaunch(data, dependencies);
-        const backgroundJobId = backgroundJobLookup ? await backgroundJobLookup : null;
-        // The socket may have closed while the lookup ran. Its close handler
-        // found no pty to schedule cleanup for, so none may be started now.
-        if (backgroundJobLookup && ws.readyState !== WebSocket.OPEN) {
-          return;
-        }
         const projectPath = readString(data.projectPath, process.cwd());
         const sessionId = readString(data.sessionId) || null;
         const hasSession = readBoolean(data.hasSession);
@@ -623,6 +643,10 @@ export function handleShellConnection(
             ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
             : '';
         ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+        const initKey = ptySessionKey;
+        // Any later init for this key, from any socket, supersedes this one.
+        const initToken = Symbol('shell-init');
+        latestInitByKey.set(initKey, initToken);
 
         if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
@@ -635,8 +659,36 @@ export function handleShellConnection(
           }
         }
 
-        const existingSession =
-          isLoginCommand || forceRestart ? null : ptySessionsMap.get(ptySessionKey);
+        let existingSession =
+          isLoginCommand || forceRestart ? null : ptySessionsMap.get(initKey);
+        let backgroundJobId: string | null = null;
+        // Only a launch that resumes a session waits for the registry, and
+        // only when no pty is there to reattach to.
+        const backgroundJobLookup = existingSession ? null : findBackgroundJobForLaunch(data, dependencies);
+        if (backgroundJobLookup) {
+          initWaiting = true;
+          try {
+            backgroundJobId = await backgroundJobLookup;
+          } finally {
+            initWaiting = false;
+          }
+          const superseded = latestInitByKey.get(initKey) !== initToken;
+          // The socket may have closed meanwhile: its close handler found no pty
+          // to schedule cleanup for, so none may be started now. And another
+          // socket may have opened this session since; the newer one wins.
+          if (superseded || ws.readyState !== WebSocket.OPEN) {
+            if (!superseded) {
+              latestInitByKey.delete(initKey);
+            }
+            return;
+          }
+          // Another socket may have started this session's pty meanwhile.
+          existingSession = isLoginCommand || forceRestart ? null : ptySessionsMap.get(initKey);
+        }
+        // Nothing below yields, so this init can no longer be overtaken.
+        if (latestInitByKey.get(initKey) === initToken) {
+          latestInitByKey.delete(initKey);
+        }
         if (existingSession) {
           shellProcess = existingSession.pty;
           if (existingSession.timeoutId) {
@@ -881,7 +933,7 @@ export function handleShellConnection(
         );
       }
     }
-  });
+  }
 
   ws.on('close', () => {
     if (!ptySessionKey) {
