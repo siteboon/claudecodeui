@@ -24,6 +24,10 @@
  * with whatever was configured when it started. A fresh server per turn picks
  * up the current config exactly like the `opencode run` process it replaces.
  * The server is private to its turn, so every request it raises is the turn's.
+ * An operator can explicitly opt into an authenticated loopback managed server
+ * with CLOUDCLI_OPENCODE_SERVER_URL. That mode filters permission/question
+ * requests to the turn's session tree, never stops the server process, and
+ * leaves config refresh and concurrency control to the operator.
  *
  * ## Usage
  *
@@ -639,7 +643,8 @@ function reserveFreePort(): Promise<number> {
 }
 
 /**
- * Starts a private `opencode serve` for one turn through the SDK.
+ * Connects to an explicitly configured managed server, or starts a private
+ * `opencode serve` for one turn through the SDK by default.
  *
  * The server listens on loopback only, and a random Basic-auth password keeps
  * other local processes and web pages from driving it. OpenCode reads that
@@ -648,7 +653,34 @@ function reserveFreePort(): Promise<number> {
  * so the variables are set just around that call and restored right after.
  * The question tool is switched on explicitly, since the chat can answer it.
  */
-async function startOpenCodeServer(signal: AbortSignal): Promise<{ server: OpenCodeServer; password: string }> {
+async function startOpenCodeServer(signal: AbortSignal): Promise<{ server: OpenCodeServer; password: string; username: string; managed: boolean }> {
+  const managedUrl = process.env.CLOUDCLI_OPENCODE_SERVER_URL?.trim();
+  if (managedUrl) {
+    let url: URL;
+    try {
+      url = new URL(managedUrl);
+    } catch {
+      // Do not echo a URL that may accidentally contain credentials.
+      throw new Error('CLOUDCLI_OPENCODE_SERVER_URL must be an HTTP(S) loopback origin.');
+    }
+    if (!['http:', 'https:'].includes(url.protocol)
+      || !['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname)
+      || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+      throw new Error('CLOUDCLI_OPENCODE_SERVER_URL must be an HTTP(S) loopback origin without credentials, a path, query, or fragment.');
+    }
+    const password = process.env.CLOUDCLI_OPENCODE_SERVER_PASSWORD;
+    const username = process.env.CLOUDCLI_OPENCODE_SERVER_USERNAME ?? 'opencode';
+    if (!password?.trim() || !username || /[:\r\n]/.test(username)) {
+      throw new Error('Managed OpenCode requires CLOUDCLI_OPENCODE_SERVER_PASSWORD and a valid Basic-auth username.');
+    }
+    return {
+      // CloudCLI owns the turn and its session abort, never this process.
+      server: { url: url.origin, close() {} },
+      password,
+      username,
+      managed: true,
+    };
+  }
   const port = await reserveFreePort();
   const password = crypto.randomBytes(24).toString('base64url');
   const childEnv: Record<string, string> = {
@@ -685,7 +717,7 @@ async function startOpenCodeServer(signal: AbortSignal): Promise<{ server: OpenC
     }
   }
 
-  return { server: await starting, password };
+  return { server: await starting, password, username: 'opencode', managed: false };
 }
 
 /**
@@ -881,7 +913,9 @@ async function runOpenCodeTurn(
 
   const replyToPermission = async (requestId: string, reply: OpenCodePermissionReply) => {
     try {
-      await turn.client!.permission.reply({ requestID: requestId, reply });
+      // Chat-scoped rememberedApprovals handles "Always allow" across turns.
+      // Do not also grant it in a managed server's shared project memory.
+      await turn.client!.permission.reply({ requestID: requestId, reply: managedServer && reply === 'always' ? 'once' : reply });
     } catch (error) {
       // Already settled by OpenCode itself (its cascade after another reply).
       if (isNotFoundError(error) || turn.aborted || turnEnded) {
@@ -1154,6 +1188,25 @@ async function runOpenCodeTurn(
   });
   let eventLoop: Promise<void> = Promise.resolve();
   let completedNormally = false;
+  let managedServer = false;
+  const ownedPromptSessions = new Set<string>();
+  const ownsPromptSession = async (sessionID: string): Promise<boolean> => {
+    const visited = new Set<string>();
+    let current: string | undefined = sessionID;
+    while (current && !visited.has(current) && visited.size < 100) {
+      if (current === turn.providerSessionId || ownedPromptSessions.has(current)) {
+        for (const id of visited) ownedPromptSessions.add(id);
+        return true;
+      }
+      visited.add(current);
+      try {
+        current = (await turn.client!.session.get({ sessionID: current })).data?.parentID;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  };
 
   try {
     const hasAttachments =
@@ -1189,6 +1242,7 @@ async function runOpenCodeTurn(
       started = await startOpenCodeServer(turn.abortController.signal);
     }
     turn.server = started.server;
+    managedServer = started.managed;
     if (turn.aborted) {
       throw new Error('aborted');
     }
@@ -1196,7 +1250,7 @@ async function runOpenCodeTurn(
     const client = createOpencodeClient({
       baseUrl: started.server.url,
       directory: workingDir,
-      headers: { Authorization: `Basic ${Buffer.from(`opencode:${started.password}`).toString('base64')}` },
+      headers: { Authorization: `Basic ${Buffer.from(`${started.username}:${started.password}`).toString('base64')}` },
       throwOnError: true,
     });
     turn.client = client;
@@ -1220,6 +1274,12 @@ async function runOpenCodeTurn(
             continue;
           }
           try {
+            // A managed server broadcasts other chats' and subagents' requests
+            // too. Never approve or display one outside this turn's ancestry.
+            if (managedServer && (event.type === 'permission.asked' || event.type === 'question.asked')
+              && !(await ownsPromptSession(event.properties.sessionID))) {
+              continue;
+            }
             handleEvent(event);
           } catch (error) {
             // One event that cannot be handled must not end the turn.
@@ -1285,6 +1345,16 @@ async function runOpenCodeTurn(
     }
   } finally {
     turnEnded = true;
+    if (managedServer && !completedNormally && !turn.aborted && turn.client && turn.providerSessionId) {
+      // A failed stream must not leave this turn running on an operator-owned
+      // server. Only abort its session; the server and other chats stay alive.
+      try {
+        await withTimeout(turn.client.session.abort({ sessionID: turn.providerSessionId }),
+          SESSION_ABORT_TIMEOUT_MS, 'OpenCode did not confirm the abort in time.');
+      } catch {
+        // Preserve the original failure, not a secondary cleanup error.
+      }
+    }
     // Whatever is still open was asked of a turn that has ended.
     for (const requestId of Array.from(turnPromptIds)) {
       pendingPrompts.get(requestId)?.settle('cancelled');

@@ -6,6 +6,8 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { createOpencodeServer } from '@opencode-ai/sdk/v2';
+
 import type { ProviderPermissionDecision, ProviderRuntimeContext } from '@/shared/types.js';
 
 /**
@@ -84,6 +86,9 @@ before(async () => {
   setEnv('HOME', tempRoot);
   setEnv('USERPROFILE', tempRoot);
   setEnv('OPENCODE_SERVER_PASSWORD', undefined);
+  setEnv('CLOUDCLI_OPENCODE_SERVER_URL', undefined);
+  setEnv('CLOUDCLI_OPENCODE_SERVER_USERNAME', undefined);
+  setEnv('CLOUDCLI_OPENCODE_SERVER_PASSWORD', undefined);
 });
 
 after(async () => {
@@ -119,6 +124,7 @@ async function waitForExit(pid: number): Promise<boolean> {
 
 type TurnOptions = {
   scenario: Record<string, unknown>;
+  managedLogPath?: string;
   appSessionId?: string;
   resumeSessionId?: string | null;
   command?: string;
@@ -131,7 +137,7 @@ type TurnOptions = {
 };
 
 async function runTurn(options: TurnOptions) {
-  const logPath = path.join(tempRoot, `requests-${++logCounter}.jsonl`);
+  const logPath = options.managedLogPath ?? path.join(tempRoot, `requests-${++logCounter}.jsonl`);
   setEnv('FAKE_OPENCODE_SCENARIO', JSON.stringify(options.scenario));
   setEnv('FAKE_OPENCODE_LOG', logPath);
 
@@ -200,6 +206,180 @@ async function runTurn(options: TurnOptions) {
 }
 
 const kinds = (frames: Frame[]) => frames.map((frame) => frame.kind);
+
+// Runs the same fixture as an operator-owned server. Clearing PATH after it
+// starts also proves the runtime never invokes a local `opencode serve`.
+async function withManagedServer(
+  scenario: Record<string, unknown>,
+  check: (server: { url: string; logPath: string; pid: number; authorization: string }) => Promise<void>,
+) {
+  const logPath = path.join(tempRoot, `managed-${++logCounter}.jsonl`);
+  const password = 'managed-test-password';
+  const username = 'managed-test-user';
+  setEnv('FAKE_OPENCODE_SCENARIO', JSON.stringify(scenario));
+  setEnv('FAKE_OPENCODE_LOG', logPath);
+  setEnv('OPENCODE_SERVER_PASSWORD', password);
+  setEnv('OPENCODE_SERVER_USERNAME', username);
+  const server = await createOpencodeServer({ hostname: '127.0.0.1', port: 0, timeout: 10_000 });
+  const pathKey = findEnvKey('PATH');
+  const previousPath = process.env[pathKey];
+  try {
+    const started = (await readFile(logPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)).find((entry) => entry.started);
+    setEnv('CLOUDCLI_OPENCODE_SERVER_URL', server.url);
+    setEnv('CLOUDCLI_OPENCODE_SERVER_USERNAME', username);
+    setEnv('CLOUDCLI_OPENCODE_SERVER_PASSWORD', password);
+    setEnv(pathKey, '');
+    await check({ url: server.url, logPath, pid: started.pid, authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}` });
+  } finally {
+    setEnv(pathKey, previousPath);
+    setEnv('CLOUDCLI_OPENCODE_SERVER_URL', undefined);
+    setEnv('CLOUDCLI_OPENCODE_SERVER_USERNAME', undefined);
+    setEnv('CLOUDCLI_OPENCODE_SERVER_PASSWORD', undefined);
+    setEnv('OPENCODE_SERVER_PASSWORD', undefined);
+    setEnv('OPENCODE_SERVER_USERNAME', undefined);
+    server.close();
+  }
+}
+
+test('managed server streams and resumes turns without spawning or stopping a process', async () => {
+  const scenario = { newSessionId: 'ses_managed', steps: [{ type: 'text', text: 'managed reply' }] };
+  await withManagedServer(scenario, async ({ url, logPath, pid, authorization }) => {
+    const first = await runTurn({ scenario, managedLogPath: logPath });
+    assert.equal(first.error, null);
+    assert.ok(first.frames.some((frame) => frame.kind === 'text' && frame.content === 'managed reply'));
+    const resumed = await runTurn({ scenario, managedLogPath: logPath, resumeSessionId: 'ses_managed' });
+    assert.equal(resumed.error, null);
+    const entries = (await readFile(logPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    assert.equal(entries.filter((entry) => entry.started).length, 1);
+    assert.equal(entries.filter((entry) => entry.method === 'POST' && entry.path === '/session').length, 1);
+    assert.ok(isProcessAlive(pid));
+    assert.equal((await fetch(`${url}/global/health`, { headers: { Authorization: authorization } })).status, 200);
+  });
+});
+
+test('stopping a managed-server turn aborts only its session and leaves the server alive', async () => {
+  const scenario = { newSessionId: 'ses_managed_stop', steps: [{ type: 'hang' }] };
+  await withManagedServer(scenario, async ({ url, logPath, pid, authorization }) => {
+    const running = runTurn({ scenario, managedLogPath: logPath, appSessionId: 'app-managed-stop' });
+    const deadline = Date.now() + 10_000;
+    let submitted = false;
+    while (Date.now() < deadline) {
+      submitted = (await readFile(logPath, 'utf8')).includes('/session/ses_managed_stop/prompt_async');
+      if (submitted) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.ok(submitted);
+    assert.equal(await opencodeRuntime.abort('app-managed-stop'), true);
+    const result = await running;
+    assert.ok(findRequest(result.requests, 'POST', /^\/session\/ses_managed_stop\/abort$/));
+    assert.equal(result.error, null);
+    assert.equal(result.frames.some((frame) => frame.kind === 'complete' || frame.kind === 'error'), false);
+    assert.ok(isProcessAlive(pid));
+    assert.equal((await fetch(`${url}/global/health`, { headers: { Authorization: authorization } })).status, 200);
+  });
+});
+
+test('managed server authentication failure does not fall back to a private server', async () => {
+  const scenario = { steps: [{ type: 'text', text: 'must not run' }] };
+  await withManagedServer(scenario, async ({ pid, logPath }) => {
+    setEnv('CLOUDCLI_OPENCODE_SERVER_PASSWORD', 'incorrect-password');
+    const result = await runTurn({ scenario, managedLogPath: logPath });
+    assert.ok(result.error);
+    assert.ok(!findRequest(result.requests, 'POST', /prompt_async$/));
+    assert.ok(isProcessAlive(pid));
+    assert.equal(result.requests.length, 1); // only the failed health check
+  });
+});
+
+test('a lost managed-server event stream aborts its task without stopping the server', async () => {
+  const scenario = { newSessionId: 'ses_managed_disconnect', steps: [{ type: 'disconnect' }] };
+  await withManagedServer(scenario, async ({ logPath, pid, url, authorization }) => {
+    const result = await runTurn({ scenario, managedLogPath: logPath });
+    assert.ok(result.error);
+    const requests = (await readFile(logPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    assert.ok(findRequest(requests, 'POST', /^\/session\/ses_managed_disconnect\/abort$/));
+    assert.ok(isProcessAlive(pid));
+    assert.equal((await fetch(`${url}/global/health`, { headers: { Authorization: authorization } })).status, 200);
+  });
+});
+
+test('managed server keeps Always allow approvals scoped to the chat', async () => {
+  const scenario = { steps: [{ type: 'permission', id: 'per_remembered', permission: 'bash', patterns: ['echo safe'], always: ['echo *'] }] };
+  await withManagedServer(scenario, async ({ logPath }) => {
+    let firstAsked = 0;
+    const first = await runTurn({ scenario, managedLogPath: logPath, appSessionId: 'managed-remember-a',
+      onFrame: (frame) => {
+        if (frame.kind === 'permission_request') {
+          firstAsked++;
+          return { allow: true, rememberEntry: true };
+        }
+      } });
+    assert.equal(first.error, null);
+    assert.equal(firstAsked, 1);
+    assert.deepEqual(findRequest(first.requests, 'POST', /^\/permission\/per_remembered\/reply$/)?.body, { reply: 'once' });
+    let otherAsked = 0;
+    const other = await runTurn({ scenario, managedLogPath: logPath, appSessionId: 'managed-remember-b',
+      onFrame: (frame) => {
+        if (frame.kind === 'permission_request') {
+          otherAsked++;
+          return { allow: true };
+        }
+      } });
+    assert.equal(other.error, null);
+    assert.equal(otherAsked, 1);
+  });
+});
+
+test('managed-server prompts stay in their session tree, including subagents', async () => {
+  const unrelated = 'ses_unrelated';
+  const scenario = {
+    newSessionId: 'ses_managed_tree',
+    sessions: { ses_child: { parentID: 'ses_managed_tree' }, [unrelated]: {} },
+    backgroundEvents: [
+      { type: 'permission.asked', properties: { id: 'per_foreign', sessionID: unrelated, permission: 'bash', patterns: ['echo wrong'], always: [], metadata: {} } },
+      { type: 'question.asked', properties: { id: 'que_foreign', sessionID: unrelated, questions: [] } },
+    ],
+    steps: [
+      { type: 'permission', sessionID: 'ses_child', id: 'per_child', permission: 'bash', patterns: ['echo child'], always: [] },
+      { type: 'question', sessionID: 'ses_child', id: 'que_child', questions: [] },
+      { type: 'text', text: 'child finished' },
+    ],
+  };
+  await withManagedServer(scenario, async ({ logPath }) => {
+    const result = await runTurn({ scenario, managedLogPath: logPath,
+      onFrame: (frame) => frame.kind === 'permission_request' ? { allow: true } : undefined });
+    assert.equal(result.error, null);
+    assert.ok(findRequest(result.requests, 'POST', /^\/permission\/per_child\/reply$/));
+    assert.ok(findRequest(result.requests, 'POST', /^\/question\/que_child\/reply$/));
+    assert.equal(result.requests.some((entry) => entry.method === 'POST' && entry.path.includes('foreign')), false);
+    assert.equal(result.frames.some((frame) => frame.requestId === 'per_foreign' || frame.requestId === 'que_foreign'), false);
+  });
+});
+
+test('managed server configuration rejects unsafe origins and missing authentication without leaking the URL', async () => {
+  const cases = [
+    'not-a-url',
+    'file:///tmp/server',
+    'http://example.com:4096',
+    'http://user:secret@127.0.0.1:4096',
+    'http://127.0.0.1:4096/prefix',
+    'http://127.0.0.1:4096/?token=secret',
+    'http://127.0.0.1:4096/#secret',
+    'http://127.0.0.1:4096', // missing required password
+  ];
+  try {
+    for (const url of cases) {
+      setEnv('CLOUDCLI_OPENCODE_SERVER_URL', url);
+      const result = await runTurn({ scenario: { steps: [] } });
+      assert.ok(result.error, url);
+      assert.ok(result.error.message.includes('CLOUDCLI_OPENCODE_SERVER'));
+      assert.ok(!result.error.message.includes('secret'));
+      assert.equal(result.serverPid, undefined);
+    }
+  } finally {
+    setEnv('CLOUDCLI_OPENCODE_SERVER_URL', undefined);
+  }
+});
 const findRequest = (requests: LogEntry[], method: string, pathPattern: RegExp) =>
   requests.find((entry) => entry.method === method && pathPattern.test(entry.path));
 
