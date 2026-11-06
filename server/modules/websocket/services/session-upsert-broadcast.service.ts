@@ -54,9 +54,13 @@ function recordAnnounced(announcements: PendingAnnouncement[]): void {
 
 /**
  * Forgets what was last announced for a session, so its next upsert is sent
- * even if nothing about it changed. Called when a session is archived,
- * restored or deleted: clients that loaded their list in between may not
- * have it, and a deleted session's entry would otherwise never be removed.
+ * even if nothing about it changed. Clients that loaded their list in between
+ * may not have it, and a deleted session's entry would otherwise stay.
+ *
+ * Used by the providers module's sessions service (archive, restore, delete)
+ * and session synchronizer (pruning sessions whose transcript is gone). A
+ * project deleted with its sessions needs no call: a session recreated there
+ * belongs to a new project row, so its announcement differs anyway.
  */
 export function forgetAnnouncedSession(sessionId: string): void {
   lastAnnouncedContent.delete(sessionId);

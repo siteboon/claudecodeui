@@ -271,3 +271,21 @@ test('a new provider id or project change is announced even with the same activi
     assert.equal(new Set(activities).size, 1);
   });
 });
+
+// The recreated project gets a new id, which is part of the announcement.
+test('a session deleted with its project is announced again if it comes back unchanged', async () => {
+  await withIsolatedDatabase(async () => {
+    const { deleteOrArchiveProject } = await import('@/modules/projects/index.js');
+    sessionsDb.createSession('project-gone-1', 'claude', '/workspace/gone', 'Title', undefined, '2026-07-10T00:00:00.000Z');
+
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+    await broadcastSessionUpserted('project-gone-1');
+
+    await deleteOrArchiveProject(projectsDb.getProjectPath('/workspace/gone')!.project_id, true);
+    sessionsDb.createSession('project-gone-1', 'claude', '/workspace/gone', 'Title', undefined, '2026-07-10T00:00:00.000Z');
+    await broadcastSessionUpserted('project-gone-1');
+
+    assert.equal(connection.frames.length, 2);
+  });
+});

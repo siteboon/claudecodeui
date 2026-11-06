@@ -3,6 +3,7 @@ import { access } from 'node:fs/promises';
 
 import { scanStateDb, sessionsDb } from '@/modules/database/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { forgetAnnouncedSession } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 type SessionSynchronizeResult = {
@@ -54,6 +55,8 @@ const pruneOrphanedSessions = async (): Promise<number> => {
     }
 
     if (sessionsDb.deleteSessionById(sessionId)) {
+      // Its transcript may come back (e.g. restored from a backup) unchanged.
+      forgetAnnouncedSession(sessionId);
       pruned += 1;
     }
   }

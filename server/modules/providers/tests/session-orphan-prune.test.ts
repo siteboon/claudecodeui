@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { broadcastSessionUpserted, connectedClients } from '@/modules/websocket/index.js';
 
 // Each provider synchronizer resolves `os.homedir()` when the registry module is
 // first imported, so HOME has to point at an empty fixture home *before* that
@@ -103,5 +104,35 @@ test('synchronizeSessions keeps sessions that have no transcript path yet', asyn
     assert.equal(result.prunedOrphans, 0);
     assert.ok(sessionsDb.getSessionById('pending-app-session'));
     assert.ok(sessionsDb.getSessionById('opencode-session'));
+  });
+});
+
+test('a pruned session is announced again when its transcript comes back unchanged', async () => {
+  await withIsolatedDatabase(async (workspace) => {
+    const transcriptDirectory = path.join(workspace, 'transcripts');
+    await mkdir(transcriptDirectory, { recursive: true });
+    const transcriptPath = path.join(transcriptDirectory, 'restored.jsonl');
+    const index = () => sessionsDb.createSession(
+      'restored-session', 'claude', PROJECT_PATH, 'Restored', undefined, '2026-07-10T00:00:00.000Z', transcriptPath,
+    );
+    index();
+
+    const frames: string[] = [];
+    const connection = { readyState: 1, send: (data: string) => frames.push(data) };
+    connectedClients.add(connection as never);
+    try {
+      await broadcastSessionUpserted('restored-session');
+
+      // The transcript is gone, so the row is pruned; then it is restored as it was.
+      await sessionSynchronizerService.synchronizeSessions();
+      assert.equal(sessionsDb.getSessionById('restored-session'), null);
+      await writeFile(transcriptPath, '{}\n');
+      index();
+      await broadcastSessionUpserted('restored-session');
+
+      assert.equal(frames.length, 2);
+    } finally {
+      connectedClients.delete(connection as never);
+    }
   });
 });
