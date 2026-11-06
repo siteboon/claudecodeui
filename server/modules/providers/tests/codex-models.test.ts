@@ -54,6 +54,18 @@ test('bundles a Codex CLI new enough to know the GPT-6.1 Sol and Terra models', 
   assert.ok(major > 0 || minor >= 160, `bundled @openai/codex ${version} predates 0.160.0`);
 });
 
+test('drops the models ChatGPT-account Codex no longer serves', () => {
+  // The Responses backend rejects GPT-5.5-and-below for ChatGPT-account auth
+  // ("The 'gpt-5.5' model is not supported when using Codex with a ChatGPT
+  // account"), and no bundled CLI catalog still ships metadata for
+  // gpt-5.4 / gpt-5.4-mini. Keeping them in the picker only offered turns
+  // that fail outright or run on fallback metadata.
+  const values = CODEX_PREDEFINED_MODELS.OPTIONS.map((option) => option.value);
+  for (const retired of ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']) {
+    assert.ok(!values.includes(retired), `${retired} should no longer be listed`);
+  }
+});
+
 test('bundles a Codex CLI new enough to know the GPT-6 Sol and Luna models', () => {
   // Codex only ships metadata for gpt-6-sol / gpt-6-luna from 0.155.0 on. An
   // older CLI still sends the request, but on fallback metadata: it warns
