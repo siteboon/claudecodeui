@@ -1,6 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { open, readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import {
@@ -11,6 +11,11 @@ import {
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+
+// The tail is read in growing windows until a message turns up; a transcript
+// whose last message is further back than the cap keeps the file time.
+const LAST_MESSAGE_FIRST_WINDOW_BYTES = 64 * 1024;
+const LAST_MESSAGE_MAX_WINDOW_BYTES = 8 * 1024 * 1024;
 
 type ParsedSession = {
   sessionId: string;
@@ -64,7 +69,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const timestamps = await readFileTimestamps(filePath);
+      const timestamps = await this.readSessionTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
@@ -97,7 +102,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
-    const timestamps = await readFileTimestamps(filePath);
+    const timestamps = await this.readSessionTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
@@ -107,6 +112,75 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
+  }
+
+  /**
+   * Created/updated times for one transcript, where "updated" is the time of
+   * its last message rather than the file's modification time.
+   *
+   * Claude Code also appends rows that are not conversation (cost and tool
+   * usage state, titles, mode changes), including when a session is merely
+   * opened or closed. Using the file time moved untouched sessions to the top
+   * of the list, showed hours- or days-off "last activity", and un-archived
+   * archived sessions (an update newer than the stored time un-archives).
+   */
+  private async readSessionTimestamps(
+    filePath: string
+  ): Promise<{ createdAt?: string; updatedAt?: string }> {
+    const timestamps = await readFileTimestamps(filePath);
+    const lastMessageAt = await this.readLastMessageTime(filePath);
+    return lastMessageAt ? { ...timestamps, updatedAt: lastMessageAt } : timestamps;
+  }
+
+  /**
+   * Timestamp of the last user or assistant message in a transcript, reading
+   * from the end. Sidechain (subagent) and meta rows do not count. Returns
+   * undefined when there is none or the file cannot be read.
+   */
+  private async readLastMessageTime(filePath: string): Promise<string | undefined> {
+    let handle: Awaited<ReturnType<typeof open>> | undefined;
+    try {
+      handle = await open(filePath, 'r');
+      const { size } = await handle.stat();
+      let windowSize = Math.min(LAST_MESSAGE_FIRST_WINDOW_BYTES, size);
+      for (;;) {
+        const buffer = Buffer.alloc(windowSize);
+        await handle.read(buffer, 0, windowSize, size - windowSize);
+        const lines = buffer.toString('utf8').split('\n');
+        if (windowSize < size) {
+          lines.shift(); // may start mid-line
+        }
+        for (let index = lines.length - 1; index >= 0; index -= 1) {
+          const line = lines[index]?.trim();
+          if (!line) {
+            continue;
+          }
+          let row: Record<string, unknown>;
+          try {
+            row = JSON.parse(line) as Record<string, unknown>;
+          } catch {
+            continue; // a row still being written
+          }
+          if (
+            (row.type === 'user' || row.type === 'assistant') &&
+            !row.isSidechain &&
+            !row.isMeta &&
+            typeof row.timestamp === 'string' &&
+            !Number.isNaN(Date.parse(row.timestamp))
+          ) {
+            return row.timestamp;
+          }
+        }
+        if (windowSize >= size || windowSize >= LAST_MESSAGE_MAX_WINDOW_BYTES) {
+          return undefined;
+        }
+        windowSize = Math.min(windowSize * 4, size, LAST_MESSAGE_MAX_WINDOW_BYTES);
+      }
+    } catch {
+      return undefined;
+    } finally {
+      await handle?.close();
+    }
   }
 
   /**

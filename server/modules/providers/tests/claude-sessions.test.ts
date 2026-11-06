@@ -2286,3 +2286,112 @@ test('extractFirstValidJsonlData closes the file stream on the no-match path', {
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// updated_at — the last message, not the file's modification time
+// ---------------------------------------------------------------------------
+
+/** Rows Claude Code appends without a new message, e.g. when a session is opened or closed. */
+const nonMessageRows = (count: number) =>
+  Array.from({ length: count }, (_, index) =>
+    JSON.stringify({ type: 'cost-state', sessionId: 'test-session-1', totalCostUSD: index, padding: 'x'.repeat(200) }),
+  );
+
+async function synchronizeTranscript(lines: string[], runTest: (sessionId: string) => void | Promise<void>) {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-updated-at-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+  try {
+    const filePath = await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', lines);
+    await withIsolatedDatabase(async () => {
+      const sessionId = await new ClaudeSessionSynchronizer().synchronizeFile(filePath);
+      assert.ok(sessionId);
+      await runTest(sessionId!);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+}
+
+const updatedAtOf = (sessionId: string) => new Date(sessionsDb.getSessionById(sessionId)!.updated_at).toISOString();
+
+test('synchronizeFile dates a session by its last message, not by later non-message rows', { concurrency: false }, async () => {
+  await synchronizeTranscript(
+    [
+      JSON.stringify({
+        parentUuid: 'msg-1',
+        isSidechain: false,
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+        uuid: 'msg-2',
+        timestamp: '2026-07-10T00:05:00.000Z',
+        sessionId: 'test-session-1',
+      }),
+      // A subagent's row and a meta row are not the conversation's last message.
+      JSON.stringify({ isSidechain: true, type: 'assistant', uuid: 'side-1', timestamp: '2026-07-11T00:00:00.000Z' }),
+      JSON.stringify({ isMeta: true, type: 'user', uuid: 'meta-1', timestamp: '2026-07-12T00:00:00.000Z' }),
+      ...nonMessageRows(3),
+    ],
+    (sessionId) => {
+      assert.equal(updatedAtOf(sessionId), '2026-07-10T00:05:00.000Z');
+    },
+  );
+});
+
+test('synchronizeFile finds the last message behind a long run of non-message rows', { concurrency: false }, async () => {
+  // ~300 KB of trailing rows: more than the first tail window.
+  await synchronizeTranscript(nonMessageRows(1200), (sessionId) => {
+    assert.equal(updatedAtOf(sessionId), '2026-07-10T00:00:00.000Z');
+  });
+});
+
+test('synchronizeFile keeps the file time for a transcript with no message yet', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-no-message-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+  try {
+    const filePath = path.join(workspacePath, 'fresh.jsonl');
+    // Only a meta row carries cwd and sessionId, as right after `/clear`.
+    await writeFile(
+      filePath,
+      `${JSON.stringify({ isMeta: true, type: 'user', cwd: '/workspace/demo', sessionId: 'fresh-session', timestamp: '2020-01-01T00:00:00.000Z' })}\n`,
+      'utf8',
+    );
+    const fileTime = new Date('2026-08-01T12:00:00.000Z');
+    nodeFs.utimesSync(filePath, fileTime, fileTime);
+
+    await withIsolatedDatabase(async () => {
+      const sessionId = await new ClaudeSessionSynchronizer().synchronizeFile(filePath);
+      assert.equal(updatedAtOf(sessionId!), fileTime.toISOString());
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('an archived session stays archived when only non-message rows are appended', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-archived-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+  try {
+    const filePath = await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', []);
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new ClaudeSessionSynchronizer();
+      const sessionId = (await synchronizer.synchronizeFile(filePath))!;
+      sessionsDb.updateSessionIsArchived(sessionId, true);
+
+      await writeFile(filePath, `${nonMessageRows(2).join('\n')}\n`, { flag: 'a' });
+      await synchronizer.synchronizeFile(filePath);
+
+      assert.ok(sessionsDb.getSessionById(sessionId)?.isArchived);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
