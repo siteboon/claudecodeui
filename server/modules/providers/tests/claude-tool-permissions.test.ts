@@ -38,6 +38,13 @@ test('a Bash deny rule still blocks a command that starts with the prefix', () =
   assert.equal(matchesToolPermission('Bash(rm:*)', 'Bash', { command: 'ls' }, 'deny'), false);
 });
 
+test('an exact Bash allow rule approves only that command', () => {
+  assert.equal(matchesToolPermission('Bash(npm run lint)', 'Bash', { command: 'npm run lint' }), true);
+  assert.equal(matchesToolPermission('Bash(npm run lint)', 'Bash', { command: '  npm run lint  ' }), true);
+  assert.equal(matchesToolPermission('Bash(npm run lint)', 'Bash', { command: 'npm run lint && rm -rf ~' }), false);
+  assert.equal(matchesToolPermission('Bash(npm run lint)', 'Bash', { command: 'npm run lint --fix' }), false);
+});
+
 test('exact tool names still match', () => {
   assert.equal(matchesToolPermission('Read', 'Read', { file_path: '/tmp/x' }), true);
   assert.equal(matchesToolPermission('Read', 'Write', { file_path: '/tmp/x' }), false);

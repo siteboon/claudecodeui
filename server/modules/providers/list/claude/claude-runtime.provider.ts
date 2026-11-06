@@ -293,7 +293,7 @@ function isScopedBashPermission(entry: string): boolean {
 }
 
 // Match stored permission entries against a tool + input combo.
-// This only supports exact tool names and the Bash(command:*) shorthand
+// This only supports exact tool names, exact Bash(command) rules and the Bash(command:*) shorthand
 // used by the UI; it intentionally does not implement full glob semantics,
 // introduced to stay consistent with the UI's "Allow rule" format.
 // Allow rules match the prefix as a whole word and never match a command
@@ -307,9 +307,10 @@ export function matchesToolPermission(entry: string, toolName: string, input: un
     return true;
   }
 
-  const bashMatch = entry.match(/^Bash\((.+):\*\)$/);
+  const bashMatch = entry.match(/^Bash\((.+?)(:\*)?\)$/);
   if (toolName === 'Bash' && bashMatch) {
-    const allowedPrefix = bashMatch[1];
+    const allowedPrefix = bashMatch[1].trim();
+    const isExact = !bashMatch[2];
     let command = '';
 
     if (typeof input === 'string') {
@@ -320,6 +321,12 @@ export function matchesToolPermission(entry: string, toolName: string, input: un
 
     if (!command) {
       return false;
+    }
+
+    // An exact rule like `Bash(npm run lint)` matches only that command, so a
+    // chained command can never equal it.
+    if (isExact) {
+      return command === allowedPrefix;
     }
 
     if (kind === 'deny') {
