@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import {
   broadcastSessionUpserted,
   broadcastSessionUpsertedBatch,
@@ -186,5 +186,88 @@ test('an un-archived session is announced again even if nothing else changed', a
     await broadcastSessionUpserted('archive-1');
 
     assert.equal(connection.frames.length, 2);
+  });
+});
+
+test('an upsert that reached no open client is sent again', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createSession('unheard-1', 'claude', '/workspace/demo', 'Title', undefined, '2026-07-10T00:00:00.000Z');
+
+    const closing = new FakeConnection();
+    closing.readyState = 3;
+    connectedClients.add(closing as never);
+    await broadcastSessionUpsertedBatch(['unheard-1']);
+
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+    await broadcastSessionUpsertedBatch(['unheard-1']);
+
+    assert.equal(connection.frames.length, 1);
+  });
+});
+
+test('archiving or restoring a session forgets its last announcement', async () => {
+  await withIsolatedDatabase(async () => {
+    const { sessionsService } = await import('@/modules/providers/index.js');
+    sessionsDb.createSession('restored-1', 'claude', '/workspace/demo', 'Title', undefined, '2026-07-10T00:00:00.000Z');
+
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+    await broadcastSessionUpserted('restored-1');
+
+    // Archived and restored with no upsert in between: a client that loaded
+    // its list meanwhile does not have the session, so it is announced again.
+    await sessionsService.deleteOrArchiveSessionById('restored-1');
+    sessionsService.restoreSessionById('restored-1');
+    await broadcastSessionUpserted('restored-1');
+
+    assert.equal(connection.frames.length, 2);
+  });
+});
+
+test('a batch that fails to build marks none of its sessions as announced', async (t) => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createSession('batch-ok', 'claude', '/workspace/demo', 'Title', undefined, '2026-07-10T00:00:00.000Z');
+    sessionsDb.createSession('batch-broken', 'claude', '/workspace/broken', 'Title', undefined, '2026-07-10T00:00:00.000Z');
+
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+
+    const getProjectPath = projectsDb.getProjectPath.bind(projectsDb);
+    const lookup = t.mock.method(projectsDb, 'getProjectPath', (projectPath: string) => {
+      if (projectPath === '/workspace/broken') {
+        throw new Error('lookup failed');
+      }
+      return getProjectPath(projectPath);
+    });
+    await assert.rejects(broadcastSessionUpsertedBatch(['batch-ok', 'batch-broken']));
+    lookup.mock.restore();
+
+    await broadcastSessionUpsertedBatch(['batch-ok']);
+
+    assert.deepEqual(connection.frames.map((frame) => frame.sessionId), ['batch-ok']);
+  });
+});
+
+test('a new provider id or project change is announced even with the same activity and title', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('mapped-1', 'claude', '/workspace/demo', 'Title');
+
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+    await broadcastSessionUpserted('mapped-1');
+
+    sessionsDb.assignProviderSessionId('mapped-1', 'native-mapped-1');
+    await broadcastSessionUpserted('mapped-1');
+    projectsDb.updateCustomProjectName('/workspace/demo', 'Renamed project');
+    await broadcastSessionUpserted('mapped-1');
+
+    assert.deepEqual(
+      connection.frames.map((frame) => frame.providerSessionId),
+      [null, 'native-mapped-1', 'native-mapped-1'],
+    );
+    assert.equal((connection.frames[2].project as { displayName: string }).displayName, 'Renamed project');
+    const activities = connection.frames.map((frame) => (frame.session as { lastActivity: string }).lastActivity);
+    assert.equal(new Set(activities).size, 1);
   });
 });

@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
+import { broadcastSessionUpserted, chatRunRegistry, forgetAnnouncedSession } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
@@ -690,6 +690,7 @@ export const sessionsService = {
 
     if (!options.force) {
       sessionsDb.updateSessionIsArchived(sessionId, true);
+      forgetAnnouncedSession(sessionId);
       return {
         sessionId,
         action: 'archived',
@@ -715,6 +716,7 @@ export const sessionsService = {
 
     sessionsDb.clearSupersededProviderSessions(sessionId);
     const deleted = sessionsDb.deleteSessionById(sessionId);
+    forgetAnnouncedSession(sessionId);
     if (!deleted) {
       throw new AppError(`Session "${sessionId}" was not found.`, {
         code: 'SESSION_NOT_FOUND',
@@ -742,6 +744,7 @@ export const sessionsService = {
     }
 
     sessionsDb.updateSessionIsArchived(sessionId, false);
+    forgetAnnouncedSession(sessionId);
     return { sessionId, isArchived: false };
   },
 
