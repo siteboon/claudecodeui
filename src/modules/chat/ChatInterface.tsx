@@ -21,6 +21,7 @@ import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessag
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
+import type { ComposerSendMode } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
 import {
   useProcessingSessions,
@@ -219,6 +220,13 @@ function ChatInterface({
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
+    sendQueuedDraft,
+    sendMode,
+    setSendMode,
+    canSteer,
+    handleSteerAcked,
+    handleSteerRejected,
+    handleSteerSettled,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
@@ -228,6 +236,7 @@ function ChatInterface({
     syncInputOverlayScroll,
     handleClearInput,
     handleAbortSession,
+    handleBackgroundTasks,
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
@@ -264,6 +273,17 @@ function ChatInterface({
     resolvePermissionModeForProvider,
   });
 
+  // Threads the composer's chosen send mode (queue/steer/interrupt) through to
+  // `handleSubmit`'s `queuedSubmission` slot, which the direct-form `onSubmit`
+  // prop never needs to fill in.
+  const handleSubmitWithMode = useCallback(
+    (
+      event: Parameters<typeof handleSubmit>[0],
+      submitOptions?: { mode?: ComposerSendMode },
+    ) => handleSubmit(event, undefined, submitOptions),
+    [handleSubmit],
+  );
+
   // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
   // while Chat is hidden), then re-subscribe — the
   // `chat_subscribed` ack restores or clears the activity indicator, replays
@@ -297,6 +317,9 @@ function ChatInterface({
     onSessionProcessing,
     onSessionIdle,
     onSessionBackground,
+    onSteerAcked: handleSteerAcked,
+    onSteerRejected: handleSteerRejected,
+    onSteerSettled: handleSteerSettled,
     getSessionActivity,
     onWebSocketReconnect: handleWebSocketReconnect,
     requestLatestMessages,
@@ -343,6 +366,39 @@ function ChatInterface({
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
   }, [canAbortSession, handleAbortSession]);
+
+  // Ctrl+B, as in the terminal: move the running commands and subagents to the
+  // background so the main agent can be talked to while they keep running.
+  useEffect(() => {
+    // Only for the chat on screen: hidden tabs stay mounted.
+    if (!isActive || !isProcessing || !canSteer) {
+      return;
+    }
+    const handleBackgroundKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.defaultPrevented || !event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== 'b') {
+        return;
+      }
+      // Ctrl+B means something else in a terminal (tmux, readline) or another
+      // editor; leave it alone anywhere but this chat's own composer.
+      const target = event.target as HTMLElement | null;
+      const editable = target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+      if (target?.closest?.('.xterm, .cm-editor, .monaco-editor')) {
+        return;
+      }
+      if (editable && target !== textareaRef.current) {
+        return;
+      }
+      event.preventDefault();
+      handleBackgroundTasks();
+    };
+    document.addEventListener('keydown', handleBackgroundKey, { capture: true });
+    return () => {
+      document.removeEventListener('keydown', handleBackgroundKey, { capture: true });
+    };
+  }, [canSteer, handleBackgroundTasks, isActive, isProcessing, textareaRef]);
 
   useEffect(() => {
     return () => {
@@ -540,6 +596,7 @@ function ChatInterface({
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
+          onBackgroundTasks={canSteer ? handleBackgroundTasks : undefined}
           permissionMode={permissionMode}
           availablePermissionModes={availablePermissionModes}
           onSelectPermissionMode={selectPermissionMode}
@@ -562,13 +619,17 @@ function ChatInterface({
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}
-          onSubmit={handleSubmit}
+          onSubmit={handleSubmitWithMode}
           isDragActive={isDragActive}
           queuedDraft={queuedDraft}
           backgroundSendPrompt={backgroundSendPrompt}
           onResolveBackgroundSendPrompt={resolveBackgroundSendPrompt}
           onEditQueuedDraft={editQueuedDraft}
           onDeleteQueuedDraft={deleteQueuedDraft}
+          onSendQueuedDraft={sendQueuedDraft}
+          sendMode={sendMode}
+          onSelectSendMode={setSendMode}
+          canSteer={canSteer}
           attachedFiles={attachedFiles}
           onRemoveAttachment={(index) =>
             setAttachedFiles((previous) =>

@@ -14,6 +14,7 @@ import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIc
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
+import type { ComposerSendMode } from '@/modules/chat/hooks/useChatComposerState';
 import { MCP_ELICITATION_TOOL_NAME } from '@/shared/constants';
 import type { BackgroundSendChoice, BackgroundSendPrompt, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
@@ -34,6 +35,7 @@ import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequests
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
 import BackgroundSendDialog from '@/modules/chat/composer/BackgroundSendDialog';
+import ComposerSendModeMenu from '@/modules/chat/composer/ComposerSendModeMenu';
 import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessagePopover';
 import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
 import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
@@ -54,6 +56,8 @@ type ChatComposerProps = {
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
+  /** Ctrl+B: move the running turn's commands and subagents to the background. */
+  onBackgroundTasks?: () => void;
   permissionMode: PermissionMode;
   availablePermissionModes: PermissionMode[];
   onSelectPermissionMode: (mode: PermissionMode) => void;
@@ -71,7 +75,10 @@ type ChatComposerProps = {
   onToggleCommandMenu: () => void;
   hasInput: boolean;
   onClearInput: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
+  onSubmit: (
+    event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>,
+    submitOptions?: { mode?: ComposerSendMode },
+  ) => void;
   isDragActive: boolean;
   queuedDraft: QueuedDraft | null;
   backgroundSendPrompt: BackgroundSendPrompt | null;
@@ -85,6 +92,13 @@ type ChatComposerProps = {
   onCancelScheduledMessage: (id: string) => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
+  /** Dispatches the already-queued draft immediately instead of waiting for the turn to finish. */
+  onSendQueuedDraft: (mode: 'steer' | 'interrupt') => void;
+  /** The send mode the split button currently submits with, and its setter for the menu. */
+  sendMode: ComposerSendMode;
+  onSelectSendMode: (mode: ComposerSendMode) => void;
+  /** Whether the active provider supports `steer` (see providerCanSteer); gates the 'After next tool call' option in the send-mode menu and the queued-card steer action. */
+  canSteer: boolean;
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
   fileErrors: Map<string, string>;
@@ -131,6 +145,7 @@ export default function ChatComposer({
   activity,
   isLoading,
   onAbortSession,
+  onBackgroundTasks,
   permissionMode,
   availablePermissionModes,
   onSelectPermissionMode,
@@ -160,6 +175,10 @@ export default function ChatComposer({
   onCancelScheduledMessage,
   onEditQueuedDraft,
   onDeleteQueuedDraft,
+  onSendQueuedDraft,
+  sendMode,
+  onSelectSendMode,
+  canSteer,
   attachedFiles,
   onRemoveAttachment,
   fileErrors,
@@ -261,16 +280,28 @@ export default function ChatComposer({
   const hasQueuedDraft = Boolean(queuedDraft);
   const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
   const submitHint = canQueueDraft
-    ? hasQueuedDraft
-      ? t('input.hintText.appendQueued', { defaultValue: 'Enter to add to the queued message' })
-      : t('input.hintText.queue', { defaultValue: 'Enter to queue your next message' })
+    ? !canSteer
+      ? sendByCtrlEnter
+        ? t('input.hintText.sendModesNoSteerCtrlEnter', {
+            defaultValue: 'Ctrl+Enter · after turn — Ctrl+Alt+Enter · now',
+          })
+        : t('input.hintText.sendModesNoSteer', {
+            defaultValue: 'Enter · after turn — Ctrl+Shift+Enter · now',
+          })
+      : sendByCtrlEnter
+        ? t('input.hintText.sendModesCtrlEnter', {
+            defaultValue: 'Ctrl+Enter · after turn — Ctrl+Shift+Enter · after next tool call — Ctrl+Alt+Enter · now',
+          })
+        : t('input.hintText.sendModes', {
+            defaultValue: 'Enter · after turn — Ctrl+Enter · after next tool call — Ctrl+Shift+Enter · now',
+          })
     : sendByCtrlEnter
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');
   const submitAriaLabel = canQueueDraft
-    ? hasQueuedDraft
+    ? sendMode === 'queue' && hasQueuedDraft
       ? t('input.queue.append', { defaultValue: 'Add to queued message' })
-      : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
+      : t(`input.sendMode.${sendMode}`, { defaultValue: sendMode })
     : isLoading
       ? t('input.stop')
       : t('input.send');
@@ -279,7 +310,7 @@ export default function ChatComposer({
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
       {!hasPendingPermissions && (
         <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] max-w-[54.25rem] -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
-          <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+          <ActivityIndicator activity={activity} onAbort={onAbortSession} onBackground={onBackgroundTasks} isInputFocused={isInputFocused} />
         </div>
       )}
 
@@ -330,6 +361,9 @@ export default function ChatComposer({
           }
           onEdit={onEditQueuedDraft}
           onDelete={onDeleteQueuedDraft}
+          onSendNow={onSendQueuedDraft}
+          canSteer={canSteer}
+          waitingOnBackgroundWork={Boolean(activity?.background)}
         />
       )}
 
@@ -508,41 +542,62 @@ export default function ChatComposer({
               providerLabel={providerLabel}
             />
 
-            <PromptInputSubmit
-              onClick={
-                canQueueDraft
-                  ? (e: MouseEvent<HTMLButtonElement>) => {
-                      e.preventDefault();
-                      onSubmit(e);
-                    }
-                  : isLoading
-                    ? onAbortSession
-                    : isRecording
-                      ? (e: MouseEvent<HTMLButtonElement>) => {
-                          e.preventDefault();
-                          voiceStop({ send: true });
-                        }
-                      : undefined
-              }
-              disabled={
-                isLoading
-                  ? false
-                  : isRecording
+            <div className="flex shrink-0 items-stretch">
+              <PromptInputSubmit
+                onClick={
+                  canQueueDraft
+                    ? (e: MouseEvent<HTMLButtonElement>) => {
+                        e.preventDefault();
+                        onSubmit(e, { mode: sendMode });
+                      }
+                    : isLoading
+                      ? onAbortSession
+                      : isRecording
+                        ? (e: MouseEvent<HTMLButtonElement>) => {
+                            e.preventDefault();
+                            voiceStop({ send: true });
+                          }
+                        : undefined
+                }
+                disabled={
+                  isLoading
                     ? false
-                    : isTranscribing
-                      ? true
-                      : !input.trim() && attachedFiles.length === 0
-              }
-              aria-label={submitAriaLabel}
-              title={submitAriaLabel}
-              className="h-10 w-10 sm:h-10 sm:w-10"
-            >
-              {isTranscribing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : canQueueDraft ? (
-                <ArrowUpIcon className="h-4 w-4" />
-              ) : undefined}
-            </PromptInputSubmit>
+                    : isRecording
+                      ? false
+                      : isTranscribing
+                        ? true
+                        : !input.trim() && attachedFiles.length === 0
+                }
+                aria-label={submitAriaLabel}
+                title={submitAriaLabel}
+                className={
+                  canQueueDraft
+                    ? 'h-10 w-9 rounded-r-none sm:h-10 sm:w-9'
+                    : 'h-10 w-10 sm:h-10 sm:w-10'
+                }
+              >
+                {isTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : canQueueDraft ? (
+                  <ArrowUpIcon className="h-4 w-4" />
+                ) : undefined}
+              </PromptInputSubmit>
+
+              {canQueueDraft && (
+                <ComposerSendModeMenu
+                  sendMode={sendMode}
+                  sendByCtrlEnter={sendByCtrlEnter}
+                  canSteer={canSteer}
+                  onSelect={(mode) => {
+                    onSelectSendMode(mode);
+                    onSubmit(
+                      { preventDefault: () => undefined } as MouseEvent<HTMLButtonElement>,
+                      { mode },
+                    );
+                  }}
+                />
+              )}
+            </div>
           </div>
 
           <div

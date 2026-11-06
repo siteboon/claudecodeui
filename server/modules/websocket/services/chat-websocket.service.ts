@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import type { WebSocket } from 'ws';
@@ -18,8 +19,9 @@ import type {
   LLMProvider,
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
+  RealtimeClientConnection,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+import { createNormalizedMessage, parseIncomingJsonObject } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -76,8 +78,26 @@ export type ProviderRuntimeGateway = {
   stopBackgroundTask(provider: LLMProvider, sessionId: string, taskId: string): Promise<boolean>;
   /** Whether a provider runtime still holds background work for the session after its turn ended. */
   hasBackgroundWork(sessionId: string): boolean;
+  /** Moves a running turn's foreground tasks to the background (Ctrl+B). */
+  backgroundTasks?(provider: LLMProvider, sessionId: string, toolUseId?: string): Promise<boolean>;
+  /** Whether a new message would be taken by the process holding the session's background work. */
+  canContinueOverBackgroundWork?(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
   getPendingApprovalsForSession(sessionId: string): unknown[];
+  /** Whether the provider's runtime can deliver a message into an already-running turn. */
+  canSteer(provider: string): boolean;
+  /**
+   * Pushes a message into a running turn's stdin so the CLI folds it in at its
+   * next tool boundary, instead of queuing it for a turn of its own. Resolves
+   * `null` when the provider cannot steer, or when the live process wound down
+   * between the `canSteer` check and this call.
+   */
+  steer(
+    provider: LLMProvider,
+    sessionId: string,
+    command: string,
+    options: AnyRecord,
+  ): Promise<{ uuid: string } | null>;
 };
 
 type ChatWebSocketDependencies = {
@@ -115,17 +135,33 @@ function sendJson(ws: WebSocket, payload: unknown): void {
 }
 
 /**
+ * The inbound frame type a protocol error is responding to. Carried on
+ * `RUN_IN_PROGRESS`/`STEER_UNSUPPORTED` protocol errors so the client can
+ * tell a `chat.steer` rejection (silently re-queue the pending steer text)
+ * apart from an ordinary `chat.send`/`chat.edit-send` rejection that happens
+ * to share the same code (a real failure — must surface as an error row).
+ * Used only within this file today; move to `server/shared/types.ts` if a
+ * second module needs it.
+ */
+type ChatRequestType = 'chat.send' | 'chat.steer' | 'chat.edit-send' | 'chat.stop-task' | 'chat.background-tasks';
+
+/**
  * Reports a protocol-level failure to the requesting client.
  *
  * Protocol errors deliberately use their own `kind` (instead of the provider
  * `error` message kind) so the frontend can distinguish "your request was
  * invalid" from "the model run produced an error" without inspecting text.
+ *
+ * `requestType`, when given, is the inbound frame type that triggered this
+ * error — see `ChatRequestType`. Omitted entirely from the payload when not
+ * given, so unrelated protocol errors keep their existing shape.
  */
 function sendProtocolError(
   ws: WebSocket,
   code: string,
   error: string,
   sessionId?: string,
+  requestType?: ChatRequestType,
   extra: AnyRecord = {}
 ): void {
   sendJson(ws, {
@@ -133,6 +169,7 @@ function sendProtocolError(
     code,
     error,
     sessionId: sessionId ?? null,
+    ...(requestType ? { requestType } : {}),
     timestamp: new Date().toISOString(),
     ...extra,
   });
@@ -144,9 +181,71 @@ function readRequiredSessionId(data: AnyRecord): string | null {
 }
 
 /**
+ * Validates client-supplied attachments against the upload store, dedupes
+ * them, and splits the result into images and non-image files.
+ *
+ * Shared by `dispatchRun` (chat.send / chat.edit-send) and `handleChatSteer`,
+ * which accept the same `options.images` / `options.files` / `options.attachments`
+ * shape and must apply the same trust boundary (see `filterAttachmentsToUploadStore`).
+ */
+function resolveVerifiedAttachments(clientOptions: AnyRecord): {
+  attachments: ChatAttachmentDescriptor[];
+  images: ChatAttachmentDescriptor[];
+  files: ChatAttachmentDescriptor[];
+} {
+  const attachmentCandidates = [
+    ...normalizeAttachmentDescriptors(clientOptions.images),
+    ...normalizeAttachmentDescriptors(clientOptions.files),
+    ...normalizeAttachmentDescriptors(clientOptions.attachments),
+  ];
+  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
+  const attachments = verifiedAttachments.filter(
+    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
+  );
+
+  return {
+    attachments,
+    images: attachments.filter(isImageAttachmentDescriptor),
+    files: attachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+  };
+}
+
+/**
+ * Aborts a session's running run and emits its terminal `complete` on its
+ * behalf, so a caller can immediately start a new run in its place.
+ *
+ * Shared by `runDetachedChatTurn` (a scheduled message outranks whatever is
+ * running) and `chat.send` with `options.interrupt` (the user replaces their
+ * own in-flight turn instead of queuing behind it).
+ *
+ * `options.replaced` marks the emitted `complete { aborted: true }` as one
+ * where a replacement run is about to start right after, so a client that
+ * reads it should keep the session's processing state instead of treating it
+ * as the session going idle. Only the `chat.send` interrupt route passes it —
+ * see its call site for why `runDetachedChatTurn`'s does not.
+ */
+async function abortRunningRun(
+  dependencies: ChatWebSocketDependencies,
+  run: NonNullable<ReturnType<typeof chatRunRegistry.getRun>>,
+  sessionId: string,
+  options?: { replaced?: boolean },
+): Promise<void> {
+  const aborted = await dependencies.runtime.abort(run.provider, sessionId);
+  chatRunRegistry.completeRunIfCurrent(run, {
+    exitCode: aborted ? 0 : 1,
+    aborted: true,
+    replaced: options?.replaced,
+  });
+}
+
+/**
  * Handles `chat.send`: resolves the session row (provider, project path, and
  * provider-native id all come from the database — never from the client),
  * registers the run, and dispatches to the provider runtime.
+ *
+ * `options.interrupt === true` while a run is already processing aborts that
+ * run first instead of refusing with `RUN_IN_PROGRESS` — the user is
+ * deliberately replacing their own in-flight turn.
  */
 async function handleChatSend(
   ws: WebSocket,
@@ -159,7 +258,202 @@ async function handleChatSend(
     return;
   }
 
-  await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies);
+  const clientOptions = (data.options ?? {}) as AnyRecord;
+  // Every socket watching the run being replaced, captured before it's
+  // aborted. `dispatchRun` below only attaches the sender to the replacement
+  // run's writer, so without carrying these over, a second tab on the same
+  // session would see the old run's `complete { replaced: true }` (which it
+  // deliberately ignores, expecting a follow-up run) and then never hear from
+  // the replacement run again — stuck "processing" forever.
+  let carryOverConnections: RealtimeClientConnection[] = [];
+  if (clientOptions.interrupt === true && chatRunRegistry.isProcessing(resolved.sessionId)) {
+    const activeRun = chatRunRegistry.getRun(resolved.sessionId);
+    if (activeRun) {
+      console.log(`[Chat] ${new Date().toISOString()} stop requested (send with "Now") for session ${resolved.sessionId}`);
+      carryOverConnections = activeRun.writer.listConnections();
+      await abortRunningRun(dependencies, activeRun, resolved.sessionId, { replaced: true });
+    }
+  }
+
+  await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies, {}, (run) => {
+    for (const connection of carryOverConnections) {
+      // The sender is already attached by `dispatchRun`/`startRun`; skip it
+      // so it isn't double-registered, and skip anything that dropped while
+      // the abort was in flight.
+      if (connection === ws || connection.readyState !== WS_OPEN_STATE) {
+        continue;
+      }
+      run.writer.updateWebSocket(connection);
+    }
+  });
+}
+
+/**
+ * Handles `chat.steer`: while a turn is running, pushes the message into that
+ * turn's stdin so the CLI folds it in at its next tool boundary (the CLI's own
+ * "queued message" behaviour) instead of refusing with `RUN_IN_PROGRESS`.
+ *
+ * A session with nothing running has no turn to fold into, so it behaves
+ * exactly like `chat.send`.
+ */
+/**
+ * Delivers a `chat.steer` request when there is no running turn to fold
+ * into: dispatches a normal run, but still acks the sender (`chat.steer`
+ * expects `chat_steered`, not silence) and echoes the message itself — the
+ * composer already cleared its optimistic input on send, relying on the
+ * same run-stream echo `chat.steer`'s folding path uses.
+ *
+ * Used both when `chatRunRegistry.isProcessing` is already false up front,
+ * and when `runtime.steer` resolves to `null` because the run finished
+ * *during* the steer call (e.g. while awaiting attachment reads) — by the
+ * time we find out, the registry agrees nothing is running, so the same
+ * fallback applies instead of a client-facing `STEER_UNSUPPORTED`.
+ */
+function dispatchSteerFallback(
+  ws: WebSocket,
+  userId: string | number | null,
+  sessionId: string,
+  session: NonNullable<ReturnType<typeof sessionsDb.getSessionById>>,
+  provider: LLMProvider,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies,
+): void {
+  const clientOptions = (data.options ?? {}) as AnyRecord;
+  const content = typeof data.content === 'string' ? data.content : '';
+  const { images, files } = resolveVerifiedAttachments(clientOptions);
+
+  // Not awaited: `runtime.run` only resolves once the whole turn ends, and
+  // the sender's `chat_steered` ack (below) must not wait that long. The
+  // registry's `startRun` call inside `dispatchRun` runs synchronously
+  // before its first `await`, so the run is already registered by the time
+  // execution reaches the `sendJson` call beneath it.
+  void dispatchRun(ws, userId, sessionId, session, data, dependencies, {}, (run) => {
+    run.writer.send(createNormalizedMessage({
+      kind: 'text',
+      role: 'user',
+      content,
+      id: `local_steer_${randomUUID()}`,
+      images,
+      files,
+      sessionId,
+      provider,
+      steered: false,
+    }));
+  }, 'chat.steer');
+
+  sendJson(ws, {
+    kind: 'chat_steered',
+    sessionId,
+    uuid: null,
+    fallback: true,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+async function handleChatSteer(
+  ws: WebSocket,
+  userId: string | number | null,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.steer');
+  if (!resolved) {
+    return;
+  }
+  const { sessionId, session, provider } = resolved;
+
+  if (!chatRunRegistry.isProcessing(sessionId)) {
+    dispatchSteerFallback(ws, userId, sessionId, session, provider, data, dependencies);
+    return;
+  }
+
+  if (!dependencies.runtime.canSteer(provider)) {
+    sendProtocolError(
+      ws,
+      'STEER_UNSUPPORTED',
+      `Provider "${provider}" cannot deliver a message into a running turn.`,
+      sessionId,
+      'chat.steer',
+    );
+    return;
+  }
+
+  const clientOptions = (data.options ?? {}) as AnyRecord;
+  const content = typeof data.content === 'string' ? data.content : '';
+  const { attachments, images, files } = resolveVerifiedAttachments(clientOptions);
+
+  const steerOptions: AnyRecord = {
+    ...clientOptions,
+    attachments,
+    images,
+    files,
+    cwd: clientOptions.cwd ?? session.project_path ?? undefined,
+  };
+
+  let result: { uuid: string } | null;
+  try {
+    result = await dependencies.runtime.steer(provider, sessionId, content, steerOptions);
+  } catch (error) {
+    // The runtime can throw before ever reaching the CLI/SDK — e.g.
+    // `buildPromptMessages` failing on an unreadable image attachment.
+    // Left unguarded, this escaped to `handleChatConnection`'s catch as an
+    // untagged INTERNAL_ERROR with no sessionId, which idles the whole
+    // session client-side even though only this steer failed, and loses the
+    // steered text (the composer already cleared it optimistically on send).
+    // Reporting it as STEER_UNSUPPORTED instead matches the "runtime can't
+    // accept this steer" path below, so the client re-queues it.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Chat] Provider runtime "${provider}" steer failed`, { sessionId, error: message });
+    sendProtocolError(ws, 'STEER_UNSUPPORTED', message, sessionId, 'chat.steer');
+    return;
+  }
+  if (!result) {
+    if (!chatRunRegistry.isProcessing(sessionId)) {
+      // The turn ended while we were awaiting `runtime.steer` (e.g. during
+      // its attachment-read step) — the client's `complete` handler already
+      // ran and discarded any pending-steer bookkeeping, so a late
+      // `STEER_UNSUPPORTED` would land on nothing. Deliver it as a normal
+      // run instead, same as the up-front idle path above.
+      dispatchSteerFallback(ws, userId, sessionId, session, provider, data, dependencies);
+      return;
+    }
+    // Still processing (e.g. the process is winding down but the registry
+    // hasn't caught up yet) — same client-facing outcome as a provider that
+    // never supported steering; the client re-queues it.
+    sendProtocolError(
+      ws,
+      'STEER_UNSUPPORTED',
+      `Provider "${provider}" cannot deliver a message into a running turn.`,
+      sessionId,
+      'chat.steer',
+    );
+    return;
+  }
+
+  // Echoed to every socket attached to the run (not just the sender) via the
+  // run's writer, the same channel the provider's own turn events flow
+  // through — a second tab watching this session sees the steered message too.
+  const run = chatRunRegistry.getRun(sessionId);
+  run?.writer.send(createNormalizedMessage({
+    kind: 'text',
+    role: 'user',
+    content,
+    id: `local_steer_${result.uuid}`,
+    images,
+    files,
+    sessionId,
+    provider,
+    steered: true,
+  }));
+
+  // The ack goes only to the sender — every other attached socket already
+  // learned about the steer from the echo above.
+  sendJson(ws, {
+    kind: 'chat_steered',
+    sessionId,
+    uuid: result.uuid,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 type ResolvedSendTarget = {
@@ -209,6 +503,13 @@ function resolveSendTarget(
  *
  * `extraRuntimeOptions` is how an edited message asks the provider to resume
  * partway instead of continuing from the tip; a normal send passes nothing.
+ *
+ * `requestType` names the inbound frame that led here (defaults to
+ * `chat.send`, its most common caller) purely so a `RUN_IN_PROGRESS` refusal
+ * can tag itself correctly — see `ChatRequestType` and `sendProtocolError`.
+ * `dispatchSteerFallback` passes `chat.steer` and `handleChatEditSend` passes
+ * `chat.edit-send`; a detached run started by `runDetachedChatTurn` has no
+ * `ws` to send the error to, so its requestType never surfaces either way.
  */
 async function dispatchRun(
   ws: WebSocket | null,
@@ -219,6 +520,7 @@ async function dispatchRun(
   dependencies: ChatWebSocketDependencies,
   extraRuntimeOptions: AnyRecord = {},
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
+  requestType: ChatRequestType = 'chat.send',
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
 
@@ -236,7 +538,8 @@ async function dispatchRun(
         ws,
         'RUN_IN_PROGRESS',
         `Session "${sessionId}" already has a run in progress.`,
-        sessionId
+        sessionId,
+        requestType,
       );
     }
     return { started: false, error: 'A run is already in progress for this session.' };
@@ -255,15 +558,7 @@ async function dispatchRun(
     providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
   }
 
-  const attachmentCandidates = [
-    ...normalizeAttachmentDescriptors(clientOptions.images),
-    ...normalizeAttachmentDescriptors(clientOptions.files),
-    ...normalizeAttachmentDescriptors(clientOptions.attachments),
-  ];
-  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
-  const uniqueAttachments = verifiedAttachments.filter(
-    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
-  );
+  const { attachments: uniqueAttachments, images, files } = resolveVerifiedAttachments(clientOptions);
 
   // The provider runtimes receive the stable app session id. When their
   // CLI/SDK needs the provider-native id for resume, they resolve it from the
@@ -277,8 +572,8 @@ async function dispatchRun(
     // Attachments are re-validated server-side: only direct children of the
     // global upload store may reach provider runtimes or their file tools.
     attachments: uniqueAttachments,
-    images: uniqueAttachments.filter(isImageAttachmentDescriptor),
-    files: uniqueAttachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+    images,
+    files,
     sessionId,
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,
@@ -409,6 +704,7 @@ async function handleChatEditSend(
         }
       }
     },
+    'chat.edit-send',
   );
 }
 
@@ -434,6 +730,7 @@ async function handleChatAbort(
     return;
   }
 
+  console.log(`[Chat] ${new Date().toISOString()} stop requested (chat.abort) for session ${sessionId}`);
   const success = await dependencies.runtime.abort(run.provider, sessionId);
 
   // Scoped to the run that was stopped: a stop can take a round trip, and a
@@ -486,8 +783,44 @@ async function handleChatStopTask(
       'NO_SUCH_TASK',
       `Session "${sessionId}" has no running background task "${taskId}".`,
       sessionId,
+      'chat.stop-task',
       // Names the task so the client can settle a chip whose end it missed.
       { taskId },
+    );
+  }
+}
+
+/**
+ * Handles `chat.background-tasks`: the terminal's Ctrl+B. Moves the running
+ * turn's foreground commands and subagents to the background (or only the one
+ * a `toolUseId` names), so the turn carries on and a new message can reach the
+ * main agent while they keep running. The provider reports the moved tasks on
+ * the session's stream; only a refusal is answered here.
+ */
+async function handleChatBackgroundTasks(
+  ws: WebSocket,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const sessionId = readRequiredSessionId(data);
+  if (!sessionId) {
+    sendProtocolError(ws, 'SESSION_ID_REQUIRED', 'chat.background-tasks requires a sessionId.');
+    return;
+  }
+  const session = sessionsDb.getSessionById(sessionId);
+  if (!session) {
+    sendProtocolError(ws, 'SESSION_NOT_FOUND', `Session "${sessionId}" was not found.`, sessionId);
+    return;
+  }
+  const toolUseId = typeof data.toolUseId === 'string' && data.toolUseId.trim() ? data.toolUseId.trim() : undefined;
+  const moved = await dependencies.runtime.backgroundTasks?.(session.provider as LLMProvider, sessionId, toolUseId);
+  if (!moved) {
+    sendProtocolError(
+      ws,
+      'NOTHING_TO_BACKGROUND',
+      `Session "${sessionId}" has no running task that can be moved to the background.`,
+      sessionId,
+      'chat.background-tasks',
     );
   }
 }
@@ -584,9 +917,13 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * Handles authenticated chat websocket messages used by the main chat panel.
  *
  * Inbound protocol (client to server):
- * - `chat.send`                { sessionId, content, options? }
+ * - `chat.send`                { sessionId, content, options? } — `options.interrupt === true`
+ *                               aborts a running turn first instead of refusing with `RUN_IN_PROGRESS`.
+ * - `chat.steer`                { sessionId, content, options? } — while a turn is running, folds the
+ *                               message into it instead of queuing/refusing; idle sessions behave like `chat.send`.
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
+ * - `chat.background-tasks`    { sessionId, toolUseId? } — Ctrl+B: move running foreground tasks to the background
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
  * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
  *
@@ -604,9 +941,10 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * subscribes and replays it from the start, and the session shows as busy
  * everywhere in the meantime.
  *
- * Resolves when the provider run settles. Returns false when the session has
- * gone away or is busy without `interruptActiveRun`, which the caller reports
- * on the schedule.
+ * Resolves when the provider run settles (`onRunStarted` fires as soon as it
+ * has started). `started` is false when the session has gone away
+ * (`reason: 'session-missing'`), its provider is unavailable, or it is busy
+ * without `interruptActiveRun`; the caller reports that on the schedule.
  */
 export async function runDetachedChatTurn(
   input: {
@@ -620,12 +958,17 @@ export async function runDetachedChatTurn(
      * land mid-run, so the timer outranks whatever is running.
      */
     interruptActiveRun?: boolean;
+    /**
+     * Called once the session is reserved for this turn, before the provider
+     * runs it. Lets a caller go on without waiting for the whole turn.
+     */
+    onRunStarted?: () => void;
   },
   dependencies: ChatWebSocketDependencies,
-): Promise<{ started: boolean; error: string | null }> {
+): Promise<{ started: boolean; error: string | null; reason?: 'session-missing' }> {
   const session = sessionsDb.getSessionById(input.sessionId);
   if (!session) {
-    return { started: false, error: 'The session no longer exists.' };
+    return { started: false, error: 'The session no longer exists.', reason: 'session-missing' };
   }
 
   const provider = session.provider as LLMProvider;
@@ -643,11 +986,7 @@ export async function runDetachedChatTurn(
     // interrupted run end before this turn's stream begins. The interrupted
     // run's own dispatch settles later through completeRunIfCurrent, which is
     // scoped to that run and cannot touch the one started here.
-    const aborted = await dependencies.runtime.abort(activeRun.provider, input.sessionId);
-    chatRunRegistry.completeRunIfCurrent(activeRun, {
-      exitCode: aborted ? 0 : 1,
-      aborted: true,
-    });
+    await abortRunningRun(dependencies, activeRun, input.sessionId);
   }
 
   return dispatchRun(
@@ -657,6 +996,8 @@ export async function runDetachedChatTurn(
     session,
     { sessionId: input.sessionId, content: input.content, options: input.options ?? {} },
     dependencies,
+    {},
+    input.onRunStarted ? () => { input.onRunStarted?.(); } : undefined,
   );
 }
 
@@ -687,11 +1028,17 @@ export function handleChatConnection(
         case 'chat.send':
           await handleChatSend(ws, userId, data, dependencies);
           return;
+        case 'chat.steer':
+          await handleChatSteer(ws, userId, data, dependencies);
+          return;
         case 'chat.abort':
           await handleChatAbort(ws, data, dependencies);
           return;
         case 'chat.stop-task':
           await handleChatStopTask(ws, data, dependencies);
+          return;
+        case 'chat.background-tasks':
+          await handleChatBackgroundTasks(ws, data, dependencies);
           return;
         case 'chat.subscribe':
           handleChatSubscribe(ws, data, dependencies);

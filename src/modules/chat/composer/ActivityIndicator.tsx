@@ -9,6 +9,8 @@ import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils
 type ActivityIndicatorProps = {
   activity: SessionActivity | null;
   onAbort?: () => void;
+  /** Moves the running commands and subagents to the background (Ctrl+B). */
+  onBackground?: () => void;
   isInputFocused?: boolean;
 };
 
@@ -45,7 +47,7 @@ function describeBackgroundTasks(allTasks: BackgroundTaskSummary[], t: TFunction
  * Rendered by chat's ChatComposer above the input so the user can see and
  * interrupt the in-flight turn without leaving the composer.
  */
-export default function ActivityIndicator({ activity, onAbort, isInputFocused = false }: ActivityIndicatorProps) {
+export default function ActivityIndicator({ activity, onAbort, onBackground, isInputFocused = false }: ActivityIndicatorProps) {
   const { t } = useTranslation('chat');
   const [renderedActivity, setRenderedActivity] = useState<SessionActivity | null>(activity);
   const [isExiting, setIsExiting] = useState(false);
@@ -121,6 +123,21 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
           <span className="shrink-0 tabular-nums text-muted-foreground/60">{elapsedLabel}</span>
         </div>
 
+        <div className="flex shrink-0 items-end gap-1">
+        {!isBackground && renderedActivity.canInterrupt && onBackground && (
+          <button
+            type="button"
+            onClick={onBackground}
+            className={`${tabSurfaceClassName} pointer-events-auto gap-1.5 text-muted-foreground hover:bg-card hover:text-foreground`}
+            aria-label={t('claudeStatus.background', { defaultValue: 'Background' })}
+            title={t('claudeStatus.backgroundHint', { defaultValue: 'Move running commands and agents to the background, so you can keep talking to Claude' })}
+          >
+            <span>{t('claudeStatus.background', { defaultValue: 'Background' })}</span>
+            <kbd className="hidden rounded border border-border/60 px-1 text-[10px] text-muted-foreground/70 sm:inline-block">
+              ctrl+b
+            </kbd>
+          </button>
+        )}
         {renderedActivity.canInterrupt && onAbort && (
           <button
             type="button"
@@ -137,6 +154,7 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
             </kbd>
           </button>
         )}
+        </div>
       </div>
     </div>
   );

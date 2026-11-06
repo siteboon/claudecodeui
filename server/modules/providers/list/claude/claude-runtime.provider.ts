@@ -66,9 +66,24 @@ type ActiveSession = {
   status: 'active' | 'aborted';
   writer: ClaudeRuntimeWriter | null;
   releaseInput: (() => void) | null;
+  /** Pushes one more user record onto the held prompt stream; false once it is closed. */
+  pushInput: ((record: unknown) => boolean) | null;
+  /** Set once this run's turn has sent its terminal `complete` (held only for background work). */
+  turnCompleted: boolean;
+  /** Steered messages not yet confirmed folded: uuid -> the pushed prompt text. */
+  pendingSteers: Map<string, string>;
+  /**
+   * Set while the process runs: hands a new user turn to this same process once
+   * its turn is over and it is only held open for background work (see
+   * `continueHeldSession`). Returns null when it cannot take one.
+   */
+  continueWith: ((records: unknown[], writer: ClaudeRuntimeWriter, settings: HandoverSettings) => Promise<void> | null) | null;
 };
 
 type ToolApprovalDecision = AnyRecord | null;
+
+/** What a handed-over turn changes on the running process's permission check. */
+type HandoverSettings = { permissionMode: unknown; allowedTools: unknown; disallowedTools: unknown };
 
 /** A pending approval's resolver, carrying the lookup fields getPendingApprovalsForSession reads. */
 type ToolApprovalResolver = ((decision: ToolApprovalDecision) => void) & AnyRecord;
@@ -431,12 +446,14 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
  * @param {Object} queryInstance - SDK query instance
  * @param {Object} writer - WebSocket writer for reconnect support
  * @param {Function} releaseInput - Closes the held stdin stream so the CLI can exit
+ * @param {Function} [pushInput] - Pushes a steered message onto the held stdin stream
  */
 function addSession(
   sessionId: string,
   queryInstance: ClaudeQuery,
   writer: ClaudeRuntimeWriter | null = null,
   releaseInput: (() => void) | null = null,
+  pushInput: ((record: unknown) => boolean) | null = null,
 ) {
   const existing = activeSessions.get(sessionId);
   // A different live instance under the same key means an earlier run was
@@ -468,7 +485,33 @@ function addSession(
     status: 'active',
     writer,
     // Re-registered mid-run once the provider session id lands; keep the closer.
-    releaseInput: releaseInput || carried?.releaseInput || null
+    releaseInput: releaseInput || carried?.releaseInput || null,
+    // Same re-registration as releaseInput; lets steerClaudeSDKSession push a
+    // message onto this run's held stdin stream.
+    pushInput: pushInput || carried?.pushInput || null,
+    // Whether this run's turn has already sent its terminal `complete` (set
+    // by the `result` handling in `queryClaudeSDK`). Carried like the other
+    // fields above ONLY across a same-instance re-registration (the provider
+    // session id landing mid-run re-registers writer/releaseInput/pushInput
+    // on the same still-running turn, which is always before that turn's
+    // `result`, so this is always false at that point in practice — carrying
+    // it keeps this entry consistent with the others rather than for any
+    // case where it would matter yet). A genuinely NEW run (superseding, so
+    // `carried` is null) always starts false — it must be steerable from its
+    // first turn, and the old run's completed-ness says nothing about it.
+    turnCompleted: carried?.turnCompleted || false,
+    // Steered messages not yet confirmed folded into the running turn,
+    // keyed by uuid -> the prompt text that was pushed (cleared as each is
+    // seen on an assistant `user_message_uuid`/`user_message_uuids`, on a
+    // marker-based synthetic `user` echo that quotes the same text — see
+    // `settlePendingSteerByMarker` — or on the next `result` if the CLI
+    // never folds it). The text is kept (a Map, not a Set) so the
+    // marker-based detector has something to match the echoed banner
+    // against. A superseded run's pending steers die with its process, so
+    // `carried` — already null for a superseding add — naturally resets
+    // this to a fresh Map.
+    pendingSteers: carried?.pendingSteers || new Map(),
+    continueWith: carried?.continueWith || null,
   });
   // The history reader reports a background agent as running or stopped by
   // whether this entry exists, and the cached history does not see this map.
@@ -530,6 +573,101 @@ function removeSession(sessionId: string) {
  */
 function getSession(sessionId: string) {
   return activeSessions.get(sessionId);
+}
+
+/**
+ * Reconciles the session's `pendingSteers` against a CLI-emitted message that
+ * confirms folding. The real CLI (2.1.280) stamps exactly one
+ * `user_message_uuid` per frame but can fold several steered messages at the
+ * same tool boundary, listing every one of them in `user_message_uuids`
+ * (array). Deleting only the singular field leaves any additional folded
+ * uuid stuck pending, which later reads as an unconfirmed steer and holds
+ * stdin open needlessly. Both fields are undeclared on the pinned SDK
+ * typings (the real CLI emits them regardless), so both are read
+ * defensively.
+ * @param {Object|undefined} session - Session data (as returned by getSession)
+ * @param {Object} message - CLI message (`assistant` or `result`) that may carry the uuid(s)
+ */
+function settlePendingSteers(session: ActiveSession | undefined, message: AnyRecord) {
+  const pendingSteers = session?.pendingSteers;
+  if (!pendingSteers) {
+    return;
+  }
+  if (typeof message.user_message_uuid === 'string') {
+    pendingSteers.delete(message.user_message_uuid);
+  }
+  if (Array.isArray(message.user_message_uuids)) {
+    for (const uuid of message.user_message_uuids) {
+      if (typeof uuid === 'string') {
+        pendingSteers.delete(uuid);
+      }
+    }
+  }
+}
+
+// The SDK pinned here (0.3.165) bundles an older CLI build that has NO
+// mid-turn fold signal at all — no `user_message_uuid` stamp and no marker
+// banner below. Steering still works without either: with no fold signal
+// `settlePendingSteers`/`settlePendingSteerByMarker` never clear the entry,
+// so the `result` handling below correctly treats it as "about to run as its
+// own turn" and defers `complete` by exactly one extra `result`, per
+// `steerClaudeSDKSession`'s doc comment. Getting an actual mid-turn fold (and
+// the earlier `complete`) requires `CLAUDE_CLI_PATH` pointing at a current
+// CLI (>=2.1.x) or a newer SDK.
+const STEER_FOLD_MARKER = '<system-reminder>\nThe user sent a new message while you were working:';
+
+/**
+ * Reads the plain text out of a live SDK message's content, whichever shape
+ * the SDK used to frame it (a bare string, or Anthropic-style content
+ * blocks).
+ * @param {Object} message - CLI message
+ * @returns {string}
+ */
+function extractSdkMessageText(message: AnyRecord): string {
+  const content = message?.message?.content;
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .filter((part) => part?.type === 'text')
+      .map((part) => String(part.text ?? ''))
+      .join('\n');
+  }
+  return '';
+}
+
+/**
+ * Second fold-confirmation signal, for CLIs that report a fold by echoing the
+ * folded message back to the model instead of (or in addition to) stamping
+ * `user_message_uuid` on the assistant frame that absorbed it (see
+ * `settlePendingSteers`). The CLI surfaces it as a synthetic `user` message
+ * (no `parent_tool_use_id`) whose text opens with a system-reminder banner
+ * and quotes the folded prompt. Matching the banner text alone is not
+ * specific enough when more than one steer is pending, so this also requires
+ * the banner to contain the pending steer's own prompt text — stored
+ * alongside its uuid in `pendingSteers` at push time (see
+ * `steerClaudeSDKSession`).
+ * @param {Object|undefined} session - Session data (as returned by getSession)
+ * @param {Object} message - CLI message that may be the synthetic fold echo
+ */
+function settlePendingSteerByMarker(session: ActiveSession | undefined, message: AnyRecord) {
+  const pendingSteers = session?.pendingSteers;
+  if (!pendingSteers || pendingSteers.size === 0) {
+    return;
+  }
+  if (message.type !== 'user' || message.parent_tool_use_id) {
+    return;
+  }
+  const text = extractSdkMessageText(message);
+  if (!text.includes(STEER_FOLD_MARKER)) {
+    return;
+  }
+  for (const [uuid, steerText] of pendingSteers) {
+    if (steerText && text.includes(steerText)) {
+      pendingSteers.delete(uuid);
+    }
+  }
 }
 
 /**
@@ -967,22 +1105,52 @@ async function buildPromptMessages(command: string, images: unknown, files: unkn
  * of the run and kills anything still going in the background, so the iterable
  * has to stay pending until we actually want the process gone.
  *
+ * Stdin staying open on purpose is also what makes steering a running turn
+ * possible: `push` queues one more record onto the exact same iterable the
+ * SDK is already reading, the SDK writes it straight to the CLI's stdin just
+ * like the initial prompt, and the CLI folds it into the running turn at its
+ * next tool boundary — its own "queued message" behaviour — or, if the turn
+ * ends before it gets the chance, runs the pushed record as a turn of its own.
+ *
  * @param {Array<Object>} messages - SDKUserMessage records to send
- * @returns {{ stream: AsyncIterable, release: () => void }} Stream plus its closer
+ * @returns {{ stream: AsyncIterable, release: () => void, push: (record: Object) => boolean }}
+ *   Stream plus its closer and pusher. `release` is idempotent. `push` returns
+ *   false once the stream is closed instead of queuing onto a dead process.
  */
 function createHeldPromptStream(messages: unknown[]) {
-  let release: () => void = () => {};
-  const held = new Promise<void>((resolve) => { release = resolve; });
+  const queue: unknown[] = [...messages];
+  let closed = false;
+  let wake: (() => void) | null = null;
 
   const stream = (async function* () {
-    for (const message of messages) {
-      yield message;
+    for (;;) {
+      while (queue.length) {
+        yield queue.shift();
+      }
+      if (closed) {
+        return;
+      }
+      // Keeps stdin open — the CLI stays alive until release() is called.
+      await new Promise<void>((resolve) => { wake = resolve; });
+      wake = null;
     }
-    // Keeps stdin open — the CLI stays alive until release() is called.
-    await held;
   })();
 
-  return { stream, release };
+  const release = () => {
+    closed = true;
+    wake?.();
+  };
+
+  const push = (record: unknown) => {
+    if (closed) {
+      return false;
+    }
+    queue.push(record);
+    wake?.();
+    return true;
+  };
+
+  return { stream, release, push };
 }
 
 /**
@@ -1053,10 +1221,13 @@ async function loadMcpConfig(cwd: string | undefined): Promise<AnyRecord | null>
 async function queryClaudeSDK(
   command: string,
   options: AnyRecord = {},
-  ws: ClaudeRuntimeWriter,
+  initialWriter: ClaudeRuntimeWriter,
   context: ProviderRuntimeContext,
 ): Promise<void> {
   const { sessionId, sessionSummary } = options;
+  // Swapped when a later user turn is handed to this run's held process (see
+  // `continueHeldSession`): that turn streams to its own run's writer.
+  let ws = initialWriter;
   // Callers pass the stable app session id; the SDK only understands the
   // provider-native id recorded on the session row.
   const providerSessionId = context.resolveProviderSessionId(sessionId);
@@ -1105,6 +1276,14 @@ async function queryClaudeSDK(
   let mainThreadModel: string | null = null;
   let lastSentTokenBudget: TokenBudget | null = null;
 
+  // A session whose last turn is over but whose process is still held open for
+  // background work (agents, commands, monitors) takes this turn in that same
+  // process, as the CLI does when you type while background agents run.
+  // Starting a new process instead would stop that work.
+  if (sessionKey() && await continueHeldSession(sessionKey()!, command, options, ws)) {
+    return;
+  }
+
   // A new turn supersedes any earlier one still holding this session's process
   // open, so held runs cannot stack up across a conversation.
   if (sessionKey()) {
@@ -1128,6 +1307,93 @@ async function queryClaudeSDK(
   // Hoisted above the try so the catch's cleanup can tell whether this run
   // still owns the activeSessions entry (or was superseded by a newer run).
   let queryInstance: ClaudeQuery | null = null;
+  // Pushes records onto the held stdin once the process exists (set below).
+  let pushPrompt: (record: unknown) => boolean = () => false;
+  // This run's SDK options, once built: the permission check reads them on
+  // every tool call, so a handed-over turn rewrites the fields it changes.
+  let liveSdkOptions: AnyRecord | null = null;
+  // Resolves the run that handed a turn to this process, once that turn ends.
+  let finishContinuation: (() => void) | null = null;
+  // A handed-over turn waiting for the CLI's own turn (relaying a finished
+  // background task) to end first, so the next `result` is surely its own.
+  let pendingHandover: { records: unknown[]; writer: ClaudeRuntimeWriter; settings: HandoverSettings } | null = null;
+  // Since the last `result`: the CLI streamed a turn of its own, or a task
+  // settled and the CLI is about to start one to relay it.
+  let cliTurnActive = false;
+  let relayExpected = false;
+  const settleContinuation = () => {
+    pendingHandover = null;
+    const finish = finishContinuation;
+    finishContinuation = null;
+    finish?.();
+  };
+
+  // Points this process at the handed-over turn: its prompt goes on stdin, and
+  // what the CLI streams from now on goes to that turn's writer. False when
+  // stdin has already closed.
+  const startHandover = (records: unknown[], writer: ClaudeRuntimeWriter, settings: HandoverSettings): boolean => {
+    const key = sessionKey();
+    const owned = key ? getSession(key) : undefined;
+    if (!owned || owned.instance !== queryInstance || owned.status !== 'active') {
+      return false;
+    }
+    if (liveSdkOptions) {
+      liveSdkOptions.permissionMode = settings.permissionMode;
+      liveSdkOptions.allowedTools = settings.allowedTools;
+      liveSdkOptions.disallowedTools = settings.disallowedTools;
+    }
+    for (const record of records) {
+      if (!pushPrompt(record)) {
+        return false;
+      }
+    }
+    ws = writer;
+    owned.writer = writer;
+    owned.turnCompleted = false;
+    if (capturedSessionId && typeof writer.setSessionId === 'function') {
+      writer.setSessionId(capturedSessionId);
+    }
+    turnCompleteSent = false;
+    assistantBudgetSent = false;
+    // The turn runs like any other: no hold, no idle countdown, until its own
+    // `result` decides again whether the process stays open.
+    heldForBackgroundWork = false;
+    if (idleReleaseTimer) {
+      clearTimeout(idleReleaseTimer);
+      idleReleaseTimer = null;
+    }
+    return true;
+  };
+
+  // Takes a new user turn into this run's held process: only while this run's
+  // own turn is over and no other handed-over turn is still going. Returns
+  // null otherwise, and the caller starts a process of its own as before.
+  const continueWith = (records: unknown[], writer: ClaudeRuntimeWriter, settings: HandoverSettings): Promise<void> | null => {
+    const key = sessionKey();
+    const owned = key ? getSession(key) : undefined;
+    if (
+      !turnCompleteSent
+      || finishContinuation
+      || !owned
+      || owned.instance !== queryInstance
+      || owned.status !== 'active'
+      || (key && abortedSessionIds.has(key))
+    ) {
+      return null;
+    }
+    const finished = new Promise<void>((resolve) => { finishContinuation = resolve; });
+    if (cliTurnActive || relayExpected) {
+      // The CLI is relaying a finished task (or about to): its `result` must
+      // not end this turn. Hand over right after it.
+      pendingHandover = { records, writer, settings };
+      return finished;
+    }
+    if (!startHandover(records, writer, settings)) {
+      finishContinuation = null;
+      return null;
+    }
+    return finished;
+  };
 
   try {
     const resolvedModel = await context.resolveResumeModel(sessionId, options.model);
@@ -1144,6 +1410,7 @@ async function queryClaudeSDK(
       model: resolvedModel || options.model,
       effortModels,
     });
+    liveSdkOptions = sdkOptions;
 
     const mcpServers = await loadMcpConfig(options.cwd);
     if (mcpServers) {
@@ -1346,9 +1613,15 @@ async function queryClaudeSDK(
       });
     }
 
+    pushPrompt = heldPrompt.push;
+
     // Track the query instance for abort capability
     if (sessionKey()) {
-      addSession(sessionKey()!, queryInstance, ws, releasePromptStream);
+      addSession(sessionKey()!, queryInstance, ws, releasePromptStream, heldPrompt.push);
+      const owned = getSession(sessionKey()!);
+      if (owned && owned.instance === queryInstance) {
+        owned.continueWith = continueWith;
+      }
     }
 
     // Process streaming messages
@@ -1359,7 +1632,7 @@ async function queryClaudeSDK(
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(sessionKey()!, queryInstance, ws, releasePromptStream);
+        addSession(sessionKey()!, queryInstance, ws, releasePromptStream, heldPrompt.push);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -1441,7 +1714,42 @@ async function queryClaudeSDK(
       if (message.type === 'system' && message.subtype === 'task_started') {
         sawTaskEventThisTurn = true;
       }
+
+      // The CLI confirms it folded a steered message into the running turn
+      // by echoing the pushed record's uuid on the assistant reply that
+      // absorbed it — `user_message_uuid` for the single fold, and every
+      // folded uuid (including that same one) in `user_message_uuids` when
+      // more than one steer lands at the same tool boundary. Both are
+      // undeclared on the pinned SDK's `SDKAssistantMessage` type (the real
+      // CLI emits them regardless), so `settlePendingSteers` reads both
+      // defensively.
+      // A superseding run may already own this session key (see the same
+      // guard on `turnCompleted` below) — settle steers only against the
+      // entry this run still owns, never a newer run's entry.
+      const ownedSteerSession = (() => {
+        const candidate = getSession(sessionKey()!);
+        return candidate && candidate.instance === queryInstance ? candidate : undefined;
+      })();
+      if (message.type === 'assistant') {
+        settlePendingSteers(ownedSteerSession, message);
+      }
+      // Second fold-confirmation signal — see `settlePendingSteerByMarker`
+      // and the CLI-version note above `STEER_FOLD_MARKER`.
+      settlePendingSteerByMarker(ownedSteerSession, message);
       backgroundWork.apply(sessionKey()!, message);
+
+      // After this run's turn has ended, anything but task bookkeeping means
+      // the CLI is running a turn of its own (relaying a finished task), and a
+      // task that settled other than by a stop is about to get one.
+      if (turnCompleteSent && message.type !== 'result') {
+        if (message.type === 'system' && message.subtype === 'task_notification') {
+          if (message.status !== 'stopped') {
+            relayExpected = true;
+          }
+        } else if (!(message.type === 'system' && message.subtype === 'task_started')) {
+          cliTurnActive = true;
+        }
+      }
 
       // A task the user stopped gets no follow-up turn from the CLI — only its
       // `stopped` notification — so when that was the last outstanding task
@@ -1451,6 +1759,7 @@ async function queryClaudeSDK(
       // its own, which closing stdin now would cut short.
       if (
         heldForBackgroundWork
+        && !finishContinuation
         && message.type === 'system'
         && message.subtype === 'task_notification'
         && message.status === 'stopped'
@@ -1461,10 +1770,37 @@ async function queryClaudeSDK(
       }
 
       if (message.type === 'result') {
+        // A `result` can itself carry the fold-confirmation uuid(s) (not
+        // just the `assistant` frame that preceded it), so settle against
+        // this message first — same helper, same defensive reads — before
+        // deciding whether any steer is still unconfirmed.
+        // Same ownership guard as above: a superseding run may already own
+        // this session key, and this (old) run must not settle or read that
+        // run's pending steers.
+        const rawSession = getSession(sessionKey()!);
+        const session: ActiveSession | undefined = rawSession && rawSession.instance === queryInstance ? rawSession : undefined;
+        settlePendingSteers(session, message);
+
+        // A steer pushed onto this turn that the CLI never confirmed folding
+        // (no `user_message_uuid`/`user_message_uuids` echo seen above) means
+        // the CLI is about to run it as a turn of its own instead — the "if
+        // the turn ends first" case `steerClaudeSDKSession` documents. Clear
+        // here so only this one `result` is deferred for it: the follow-up
+        // `result` the CLI is guaranteed to push for that turn then
+        // completes normally below. If the CLI ever drops a steered message
+        // without folding or following up, the idle ceiling still releases
+        // stdin and the post-loop `!turnCompleteSent` branch sends the
+        // (late) terminal complete.
+        const pendingSteers = session?.pendingSteers;
+        const steersPending = Boolean(pendingSteers && pendingSteers.size > 0);
+        if (steersPending) {
+          pendingSteers?.clear();
+        }
+
         // The turn is done as far as the client is concerned.
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
         const stillOutstanding = backgroundWork.hasOutstanding(sessionKey()!);
-        if (!turnCompleteSent && !abortPending) {
+        if (!turnCompleteSent && !abortPending && !steersPending) {
           turnCompleteSent = true;
           ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
           notifyRunStopped({
@@ -1474,6 +1810,19 @@ async function queryClaudeSDK(
             sessionName: sessionSummary,
             stopReason: 'completed'
           });
+          // Record on the live session entry that this turn is done, even
+          // though the process may stay held open for background work below.
+          // `steerClaudeSDKSession` checks this to refuse folding a message
+          // into a process that only looks steerable (`status === 'active'`,
+          // `pushInput` still set) — see the race note on its docstring.
+          // Guarded the same way the end-of-run cleanup below guards
+          // `removeSession`: a superseding run may already own this session
+          // key, and this (old) run must not stamp that run's entry.
+          if (session && session.instance === queryInstance) {
+            session.turnCompleted = true;
+          }
+          // A turn handed to this process is over: its run can finish.
+          settleContinuation();
         } else if (heldForBackgroundWork && !abortPending && !stillOutstanding) {
           // A result after the turn already reported complete means the work we
           // held the process open for has finished and pushed a follow-up turn
@@ -1501,10 +1850,21 @@ async function queryClaudeSDK(
         // `startsBackgroundWork`, but the CLI runs it in the foreground and
         // it has settled before this `result` — holding for it kept a process
         // alive for the full ceiling with nothing outstanding.
-        const holdForTurn = sawTaskEventThisTurn ? stillOutstanding : backgroundWorkPending || stillOutstanding;
+        const holdForTurn = steersPending
+          || (sawTaskEventThisTurn ? stillOutstanding : backgroundWorkPending || stillOutstanding);
         backgroundWorkPending = false;
         sawTaskEventThisTurn = false;
-        if (holdForTurn) {
+        cliTurnActive = false;
+        relayExpected = false;
+        if (pendingHandover) {
+          // The CLI's own turn is over: the waiting user turn goes in now.
+          const handover = pendingHandover;
+          pendingHandover = null;
+          if (!startHandover(handover.records, handover.writer, handover.settings)) {
+            handover.writer.send(createNormalizedMessage({ kind: 'error', content: 'The message could not be delivered: Claude had already stopped. Send it again.', sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+            settleContinuation();
+          }
+        } else if (holdForTurn) {
           heldForBackgroundWork = true;
           scheduleRelease();
         } else {
@@ -1603,6 +1963,8 @@ async function queryClaudeSDK(
       error
     });
   } finally {
+    // A turn handed to this process ends with it, however it ends.
+    settleContinuation();
     // Always close stdin — otherwise an aborted or failed run leaves the CLI
     // process (and its MCP servers) alive until the server exits.
     if (idleReleaseTimer) {
@@ -1611,6 +1973,149 @@ async function queryClaudeSDK(
     }
     releasePromptStream();
   }
+}
+
+/**
+ * Hands a new user turn to the process a session's last run is holding open
+ * for background work, instead of replacing that process (which would stop
+ * the work). Resolves true once that turn has ended there; false when there is
+ * no such process, and the caller starts a new one as usual.
+ *
+ * Not for an edit (it rewinds, which needs a fresh process): that starts a new
+ * process, and the background work is stopped as before. The turn's model and
+ * permission mode are applied to the running process through the SDK's
+ * controls, and its tool allow/deny lists replace the process's own.
+ */
+async function continueHeldSession(
+  sessionKey: string,
+  command: string,
+  options: AnyRecord,
+  writer: ClaudeRuntimeWriter,
+): Promise<boolean> {
+  // An edit rewinds the conversation, which only a fresh process can do.
+  if (options.resumeAnchorId || options.resumeFromScratch) {
+    return false;
+  }
+  const held = getSession(sessionKey);
+  if (!held || held.status !== 'active' || !held.turnCompleted || !held.continueWith) {
+    return false;
+  }
+  const records = await buildPromptMessages(command, options.images, options.files, options.cwd ?? process.cwd());
+  // Re-read: the hold may have ended while the prompt was being built.
+  const live = getSession(sessionKey);
+  if (!live || live.instance !== held.instance || live.status !== 'active' || !live.turnCompleted || !live.continueWith) {
+    return false;
+  }
+  // The turn's own permission settings, as a fresh process would get them.
+  const mapped = mapCliOptionsToSDK(options);
+  const settings: HandoverSettings = {
+    permissionMode: mapped.permissionMode,
+    allowedTools: mapped.allowedTools,
+    disallowedTools: mapped.disallowedTools,
+  };
+  const instance = live.instance as unknown as AnyRecord;
+  // Each setting separately, and a refusal never replaces the process: that
+  // would stop the work it holds. A process launched without
+  // --dangerously-skip-permissions refuses bypassPermissions; it then keeps
+  // asking, and the permission check (which reads the turn's own mode) answers
+  // those asks as that mode says.
+  const applyLive = async (label: string, apply: () => unknown) => {
+    try {
+      await apply();
+    } catch (error) {
+      console.warn(`[Claude SDK] Held process kept its own ${label} for the next turn:`, (error as Error)?.message || error);
+    }
+  };
+  if (typeof instance.setPermissionMode === 'function') {
+    await applyLive('permission mode', () => instance.setPermissionMode(mapped.permissionMode ?? 'default'));
+  }
+  if (typeof options.model === 'string' && options.model.trim() && typeof instance.setModel === 'function') {
+    await applyLive('model', () => instance.setModel(options.model));
+  }
+  const turn = live.continueWith(records, writer, settings);
+  if (!turn) {
+    return false;
+  }
+  await turn;
+  return true;
+}
+
+/**
+ * Pushes a user message into a running turn's stdin so the CLI folds it in at
+ * its next tool boundary — the CLI's own "queued message" behaviour, driven
+ * here instead of by the CLI's own interactive prompt. If the turn ends
+ * before the CLI gets to fold it, the CLI runs the pushed record as a turn of
+ * its own instead (see the run loop's `result` handling); either way the
+ * message reaches the conversation exactly once.
+ *
+ * @param {string} sessionId - App session id (steering rides an existing
+ *   run's process, so there is no provider-native id to key on)
+ * @param {string} command - User prompt to push
+ * @param {Object} [options] - Same option shape `queryClaudeSDK` accepts for a turn
+ * @param {Array} [options.images] - Image descriptors
+ * @param {Array} [options.files] - Non-image attachment descriptors
+ * @param {string} [options.cwd] - Project working directory attachment paths resolve against
+ * @returns {Promise<{ uuid: string } | null>} The pushed record's uuid, or
+ *   null when there is no live, steerable process for this session (no
+ *   session, a session that already ended, a process winding down, or one
+ *   whose turn has already reported complete and is only being held open for
+ *   background work — including when that happens while this call's
+ *   `buildPromptMessages` await is still resolving, or when a newer run has
+ *   superseded this session in the meantime)
+ */
+async function steerClaudeSDKSession(
+  sessionId: string,
+  command: string,
+  options: { images?: unknown[]; files?: unknown[]; cwd?: string } = {},
+): Promise<{ uuid: string } | null> {
+  const session = getSession(sessionId);
+  if (!session || session.status !== 'active' || !session.pushInput || session.turnCompleted) {
+    return null;
+  }
+
+  const [record] = await buildPromptMessages(command, options.images, options.files, options.cwd ?? process.cwd());
+
+  // The turn can send its terminal `complete` and settle into its post-turn
+  // background-work hold while the await above is still resolving (slower
+  // with image/file attachments) — re-check against the live session rather
+  // than trusting the snapshot captured above. A different `instance` means a
+  // newer run has replaced this session entirely (this run was superseded);
+  // `turnCompleted` means this same run's turn finished while we were
+  // building the message. Either way there is no live turn left to fold this
+  // message into. Returning null here is safe for the caller
+  // (`handleChatSteer` in chat-websocket.service.ts): once the run registry
+  // also agrees the run is no longer processing, it delivers the message as
+  // an ordinary new run instead of dropping it.
+  const liveSession = getSession(sessionId);
+  if (
+    !liveSession
+    || liveSession.instance !== session.instance
+    || liveSession.status !== 'active'
+    || !liveSession.pushInput
+    || liveSession.turnCompleted
+  ) {
+    return null;
+  }
+
+  const uuid = crypto.randomUUID();
+  // Stamped so the history reader (claude-sessions.provider.ts) can tell a
+  // real human steer apart from a `queued_command` transcript row the CLI
+  // wrote for something else it folds the same way (a background agent's or
+  // peer session's own message) — those must not render as a plain user
+  // bubble. Round-trips through the persisted transcript the same way `uuid`
+  // already does (it comes back as the row's `source_uuid`).
+  const pushed = liveSession.pushInput({ ...record, uuid, origin: { kind: 'human' } });
+  if (!pushed) {
+    // The process closed its stdin between the status check above and here.
+    return null;
+  }
+
+  // Keyed on the raw command text (not the file-tag-wrapped `record.message
+  // .content`) — that's what `settlePendingSteerByMarker` needs to find
+  // inside the CLI's echoed banner, and it's a substring of the wrapped
+  // content in the common (no-attachment) case too.
+  liveSession.pendingSteers.set(uuid, command);
+  return { uuid };
 }
 
 /**
@@ -1639,6 +2144,10 @@ async function abortClaudeSDKSession(sessionId: string) {
     // Release the held stdin stream; without this the CLI stays up for the rest
     // of the post-turn hold even though the user cancelled.
     session.releaseInput?.();
+
+    // Whatever steer was pending dies with the interrupted process — the
+    // closed stdin means the CLI will never fold it or run it as its own turn.
+    session.pendingSteers?.clear();
 
     // Update session status
     session.status = 'aborted';
@@ -1682,6 +2191,33 @@ async function stopClaudeSDKTask(sessionId: string, taskId: string) {
   }
   await session.instance.stopTask!(taskId);
   return true;
+}
+
+/**
+ * The terminal's Ctrl+B: asks the CLI to move the running turn's foreground
+ * tasks (Bash commands, subagents) to the background, or only the one that
+ * `toolUseId` started. Each returns a "running in the background" result at
+ * once, the turn carries on, and the task reports when it settles.
+ * @returns {Promise<boolean>} False when no live turn can be asked
+ */
+async function backgroundClaudeSDKTasks(sessionId: string, toolUseId?: string) {
+  const session = getSession(sessionId);
+  const instance = session?.instance as unknown as AnyRecord | undefined;
+  if (!session || session.status !== 'active' || session.turnCompleted || typeof instance?.backgroundTasks !== 'function') {
+    return false;
+  }
+  try {
+    return Boolean(await instance.backgroundTasks(toolUseId));
+  } catch (error) {
+    console.error(`Error moving tasks to the background for session ${sessionId}:`, (error as Error)?.message || error);
+    return false;
+  }
+}
+
+/** Whether a new message for the session would go to its held process (see `continueHeldSession`). */
+function canContinueClaudeSDKSession(sessionId: string) {
+  const session = getSession(sessionId);
+  return Boolean(session && session.status === 'active' && session.turnCompleted && session.continueWith);
 }
 
 /**
@@ -1757,20 +2293,26 @@ function reconnectSessionWriter(sessionId: string, newRawWs: unknown) {
 export const claudeRuntime = {
   run: queryClaudeSDK,
   abort: abortClaudeSDKSession,
+  steer: steerClaudeSDKSession,
   permissions: {
     resolve: resolveToolApproval,
     listPending: getPendingApprovalsForSession,
   },
   listBackgroundWork: listClaudeSDKBackgroundWork,
   stopBackgroundTask: stopClaudeSDKTask,
+  backgroundTasks: backgroundClaudeSDKTasks,
+  canContinueOverBackgroundWork: canContinueClaudeSDKSession,
 };
 
 // Export public API
 export {
   queryClaudeSDK,
   abortClaudeSDKSession,
+  steerClaudeSDKSession,
   listClaudeSDKBackgroundWork,
   stopClaudeSDKTask,
+  backgroundClaudeSDKTasks,
+  canContinueClaudeSDKSession,
   isClaudeSDKSessionActive,
   getClaudeSDKSessionStartTime,
   getActiveClaudeSDKSessions,

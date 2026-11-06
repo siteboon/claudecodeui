@@ -427,3 +427,32 @@ test('an unreadable registry never fails the running-sessions poll', { concurren
     );
   });
 });
+
+test('background work held by CloudCLI\'s own process is not listed again as a CLI turn', { concurrency: false }, async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('held-busy', 'claude', '/tmp/running-project');
+    sessionsDb.assignProviderSessionId('held-busy', 'claude-native-held');
+    const run = chatRunRegistry.startRun({
+      appSessionId: 'held-busy', provider: 'claude', providerSessionId: 'claude-native-held', connection: null, userId: null,
+    });
+    assert.ok(run);
+    run.writer.sendComplete({ exitCode: 0 });
+
+    // Seen live 11-06: a background subagent running a foreground command
+    // makes the held process report itself busy, and the page showed the
+    // chat as "Running in the Claude CLI" instead of background work.
+    const tasks = [task('agent', 1_000)];
+    await withClaudeCliRegistry(
+      [{ pid: process.pid, sessionId: 'claude-native-held', status: 'busy', startedAt: 3_000 }],
+      async () => await withProviders(
+        { claude: { run: async () => undefined, abort: () => false, listBackgroundWork: () => [{ sessionId: 'held-busy', tasks }] } },
+        async () => {
+          const sessions = await sessionsService.listRunningSessions();
+          assert.equal(sessions.length, 1, 'listed once');
+          assert.equal(sessions[0].background, true, 'as background work');
+          assert.equal(sessions[0].statusText, undefined);
+        },
+      ),
+    );
+  });
+});

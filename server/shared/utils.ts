@@ -498,6 +498,10 @@ export function createNormalizedMessage(fields: NormalizedMessageInput): Normali
  *                     is reported as failure
  * - `success`       — exitCode === 0 and not aborted
  * - `aborted`       — run was cancelled by the user
+ * - `replaced`      — the abort behind this `aborted` was caused by
+ *                      `chat.send { options.interrupt: true }`, i.e. a
+ *                      replacement run is about to start; unset for an
+ *                      ordinary `chat.abort` or a runtime crash
  */
 export function createCompleteMessage(opts: {
   provider: NormalizedMessage['provider'];
@@ -505,6 +509,7 @@ export function createCompleteMessage(opts: {
   actualSessionId?: string | null;
   exitCode?: number | null;
   aborted?: boolean;
+  replaced?: boolean;
 }): NormalizedMessage {
   const exitCode = typeof opts.exitCode === 'number' ? opts.exitCode : 1;
   const aborted = Boolean(opts.aborted);
@@ -517,6 +522,7 @@ export function createCompleteMessage(opts: {
     exitCode,
     success: exitCode === 0 && !aborted,
     aborted,
+    replaced: Boolean(opts.replaced),
   });
 }
 

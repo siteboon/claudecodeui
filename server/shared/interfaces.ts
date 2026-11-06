@@ -38,6 +38,18 @@ export interface IProviderRuntime {
     context: ProviderRuntimeContext,
   ): Promise<unknown>;
   abort(sessionId: string): boolean | Promise<boolean>;
+  /**
+   * Pushes a message into an already-running turn's stdin instead of queuing
+   * it for a turn of its own. Only implemented by runtimes that keep stdin
+   * held open across a turn (today: Claude's SDK runtime). Resolves `null`
+   * when there is no live process for the session, or it cannot accept more
+   * input (already winding down).
+   */
+  steer?(
+    sessionId: string,
+    command: string,
+    options: { images?: unknown[]; files?: unknown[]; cwd?: string },
+  ): Promise<{ uuid: string } | null>;
   permissions?: ProviderRuntimePermissionGateway;
   /**
    * Sessions with background tasks still outstanding, whether or not their
@@ -52,6 +64,18 @@ export interface IProviderRuntime {
    * settled, or the id was never one of its own.
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
+  /**
+   * Moves the running turn's foreground tasks (commands, subagents) to the
+   * background, like Ctrl+B in the terminal: each returns at once and the turn
+   * carries on. With `toolUseId`, only the task that tool call started.
+   * Resolves false when there is no live process to ask.
+   */
+  backgroundTasks?(sessionId: string, toolUseId?: string): Promise<boolean>;
+  /**
+   * Whether a new message for the session would be taken by the process its
+   * last turn left running for background work, so sending it stops nothing.
+   */
+  canContinueOverBackgroundWork?(sessionId: string): boolean;
 }
 
 /**

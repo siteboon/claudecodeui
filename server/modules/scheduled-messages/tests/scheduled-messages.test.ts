@@ -538,3 +538,69 @@ test('a socket that cannot be written to does not stop a claimed message from be
     assert.equal(closedTab.frames.length, 0);
   });
 });
+
+test('a long queued turn in one session does not hold back another session\'s queued message', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const OTHER_SESSION_ID = 'other-session';
+    sessionsDb.createAppSession(OTHER_SESSION_ID, 'claude', tmpdir(), 'Other session');
+    sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'a very long task', attachments: [] });
+
+    // The first queued turn never finishes while this test looks.
+    const started: string[] = [];
+    let finishLongTurn: () => void = () => {};
+    const runtime = {
+      ...(createRuntime([]) as Record<string, unknown>),
+      run: (_provider: string, command: string) => {
+        started.push(command);
+        return command === 'a very long task'
+          ? new Promise<void>((resolve) => { finishLongTurn = resolve; })
+          : Promise.resolve();
+      },
+    } as never;
+
+    const withinOneSecond = <T>(promise: Promise<T>) => Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => { setTimeout(() => reject(new Error('the pass waited for the turn to finish')), 1_000); }),
+    ]);
+
+    // The timer's pass returns once the turn has started, not when it ends...
+    assert.equal(await withinOneSecond(dispatchQueuedMessages(runtime, { waitForTurns: false })), 1);
+    // ...so the next pass can send a message queued in another session meanwhile.
+    sessionDraftsDb.appendQueuedMessage(userId, OTHER_SESSION_ID, { content: 'a quick question', attachments: [] });
+    assert.equal(await withinOneSecond(dispatchQueuedMessages(runtime, { waitForTurns: false })), 1);
+    assert.deepEqual(started, ['a very long task', 'a quick question']);
+
+    finishLongTurn();
+  });
+});
+
+test('a queued message that could not be sent stays queued instead of vanishing', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'do not lose me', attachments: [] });
+    const runs: RunCall[] = [];
+    // The session's provider is briefly unavailable (e.g. still starting up).
+    const runtime = { ...(createRuntime(runs) as Record<string, unknown>), hasRuntime: () => false } as never;
+
+    await dispatchQueuedMessages(runtime);
+
+    assert.equal(runs.length, 0);
+    assert.equal((sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage as { content?: string } | null)?.content, 'do not lose me');
+    // It goes once the provider is back.
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    assert.deepEqual(runs.map((run) => run.command), ['do not lose me']);
+  });
+});
+
+test('a queued message does not wait for background work when the runtime hands the turn to that work\'s process', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'how is the agent doing?', attachments: [] });
+    const runs: RunCall[] = [];
+    const runtime = {
+      ...(createRuntime(runs, 'ok', [], () => true) as Record<string, unknown>),
+      canContinueOverBackgroundWork: () => true,
+    } as never;
+
+    assert.equal(await dispatchQueuedMessages(runtime), 1);
+    assert.deepEqual(runs.map((run) => run.command), ['how is the agent doing?']);
+  });
+});

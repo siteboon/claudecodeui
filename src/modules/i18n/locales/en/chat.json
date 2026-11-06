@@ -174,6 +174,11 @@
       "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "queue": "Enter to queue your next message",
+      "updateQueued": "Enter to update queued message",
+      "sendModes": "Enter · after turn — Ctrl+Enter · after next tool call — Ctrl+Shift+Enter · now",
+      "sendModesCtrlEnter": "Ctrl+Enter · after turn — Ctrl+Shift+Enter · after next tool call — Ctrl+Alt+Enter · now",
+      "sendModesNoSteer": "Enter · after turn — Ctrl+Shift+Enter · now",
+      "sendModesNoSteerCtrlEnter": "Ctrl+Enter · after turn — Ctrl+Alt+Enter · now",
       "appendQueued": "Enter to add to the queued message"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
@@ -186,8 +191,15 @@
       "notCombinable": "Failed to queue message: A slash command runs as a turn of its own, so it cannot be combined with the queued message. Send it after the queued message has gone.",
       "label": "Queued",
       "willSend": "Will send when this finishes",
+      "waitingOnBackground": "Will send when the background work finishes",
       "edit": "Edit queued message",
       "delete": "Delete queued message"
+    },
+    "sendMode": {
+      "menuLabel": "Send mode",
+      "queue": "After turn",
+      "steer": "After next tool call",
+      "interrupt": "Now"
     }
   },
   "composer": {
@@ -284,6 +296,8 @@
     "defaultCommand": "command"
   },
   "claudeStatus": {
+    "background": "Background",
+    "backgroundHint": "Move running commands and agents to the background, so you can keep talking to Claude",
     "actions": {
       "thinking": "Thinking",
       "processing": "Processing",
