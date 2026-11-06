@@ -31,6 +31,9 @@ type ShellProps = {
   initialCommand?: string | null;
   isPlainShell?: boolean;
   onProcessComplete?: ((exitCode: number) => void) | null;
+  // Called when the Claude CLI in this shell moves to another session
+  // (`/clear`, `/resume`), so the host can show that session instead.
+  onSessionChange?: ((sessionId: string) => void) | null;
   minimal?: boolean;
   autoConnect?: boolean;
   isActive?: boolean;
@@ -43,6 +46,7 @@ export default function Shell({
   initialCommand = null,
   isPlainShell = false,
   onProcessComplete = null,
+  onSessionChange = null,
   minimal = false,
   autoConnect = false,
   isActive = true,
@@ -80,6 +84,7 @@ export default function Shell({
     autoConnect,
     isRestarting,
     onProcessComplete,
+    onSessionChange,
     onOutputRef,
   });
 

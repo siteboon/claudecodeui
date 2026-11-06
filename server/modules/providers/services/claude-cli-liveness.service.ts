@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -129,6 +130,109 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
 
   const startedAt = typeof record.startedAt === 'number' ? record.startedAt : Date.now();
   return { providerSessionId, startedAt };
+}
+
+/**
+ * The Claude CLI process a pty runs and the session it is in now.
+ *
+ * `pid` is the CLI's own pid, which callers pass back as `knownPid` so later
+ * lookups read a single registry file.
+ */
+type ClaudeCliProcessSession = {
+  pid: number;
+  providerSessionId: string;
+};
+
+/** The live registry entry Claude Code wrote for `pid`, if any. */
+function readLiveProcessSession(pid: number): ClaudeCliProcessSession | null {
+  let record: Record<string, unknown> | null;
+  try {
+    record = JSON.parse(fs.readFileSync(path.join(registryDirectory(), `${pid}.json`), 'utf8'));
+  } catch {
+    return null;
+  }
+  if (
+    !record ||
+    typeof record !== 'object' ||
+    record.pid !== pid ||
+    typeof record.sessionId !== 'string' ||
+    !record.sessionId ||
+    !isRecordedProcessAlive(pid, record.procStart)
+  ) {
+    return null;
+  }
+  return { pid, providerSessionId: record.sessionId };
+}
+
+/**
+ * Parent pid of `pid`, or null where it cannot be read. Linux has procfs;
+ * macOS and the BSDs answer through `ps`. Windows is not supported, so only a
+ * CLI that is the pty process itself is found there.
+ */
+function readParentPid(pid: number): number | null {
+  try {
+    if (process.platform === 'linux') {
+      // Fields after the parenthesised comm field: state, then ppid.
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+      const parentPid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+      return Number.isInteger(parentPid) ? parentPid : null;
+    }
+    if (process.platform === 'win32') {
+      return null;
+    }
+    const output = execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8', timeout: 2000 });
+    const parentPid = Number(output.trim());
+    return Number.isInteger(parentPid) && parentPid > 0 ? parentPid : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Finds the Claude CLI that a pty started and the session it is in now.
+ *
+ * Claude Code rewrites its registry entry when `/clear` or `/resume` moves the
+ * CLI to another session, so this is how the Shell gateway learns about the
+ * switch. The CLI is the pty process itself when the shell execs it, or one of
+ * its children otherwise.
+ *
+ * Used by the websocket module's Shell gateway, polled per open Claude pty.
+ * Synchronous because it runs on a timer and reads a handful of small files.
+ */
+export function findClaudeCliProcessSession(
+  rootPid: number,
+  knownPid: number | null,
+): ClaudeCliProcessSession | null {
+  if (knownPid !== null) {
+    const known = readLiveProcessSession(knownPid);
+    if (known) {
+      return known;
+    }
+  }
+
+  const direct = readLiveProcessSession(rootPid);
+  if (direct) {
+    return direct;
+  }
+
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(registryDirectory());
+  } catch {
+    return null;
+  }
+  for (const entry of entries.slice(0, MAX_REGISTRY_FILES)) {
+    const match = /^(\d+)\.json$/.exec(entry);
+    const pid = match ? Number(match[1]) : NaN;
+    if (!Number.isInteger(pid) || pid === rootPid || pid === knownPid) {
+      continue;
+    }
+    const candidate = readLiveProcessSession(pid);
+    if (candidate && readParentPid(pid) === rootPid) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 /**

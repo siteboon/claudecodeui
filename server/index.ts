@@ -13,6 +13,7 @@ import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, termina
 import {
     closeSessionsWatcher,
     findBackgroundClaudeJobId,
+    findClaudeCliProcessSession,
     initializeSessionsWatcher,
     providerRuntimeService,
     reapOrphanedOpenCodeServers,
@@ -123,6 +124,9 @@ createWebSocketServer(server, {
             return null;
         },
         findBackgroundClaudeJobId,
+        findClaudeCliProcessSession,
+        resolveAppSessionId: (providerSessionId) =>
+            sessionsDb.getSessionByProviderSessionId(providerSessionId)?.session_id ?? null,
     },
     getPluginPort,
 });

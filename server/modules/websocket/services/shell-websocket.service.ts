@@ -36,6 +36,12 @@ type PtySessionEntry = {
   // program. A running CLI keeps its launch-time colours, so a reattaching
   // client needs this, not its own current theme, to know if they differ.
   claudeColorScheme: ShellColorScheme | null;
+  // Claude's own id for the conversation the CLI in this pty is in, and the
+  // CLI's pid once the Claude process registry lists it. Both stay null for
+  // other programs. `/clear` and `/resume` move the CLI to another session.
+  providerSessionId: string | null;
+  claudePid: number | null;
+  followTimer: NodeJS.Timeout | null;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
@@ -44,6 +50,7 @@ const ptySessionsMap = new Map<string, PtySessionEntry>();
 // reattaching, so the socket that opened the session last keeps its output.
 const latestInitByKey = new Map<string, symbol>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
+const CLAUDE_SESSION_FOLLOW_INTERVAL_MS = 2000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
 
@@ -129,6 +136,18 @@ type ShellWebSocketDependencies = {
    * plain `--resume` launch.
    */
   findBackgroundClaudeJobId?: (providerSessionId: string) => Promise<string | null> | string | null;
+  /**
+   * The Claude CLI process started by the pty whose pid is `rootPid` (the pty
+   * process itself or one of its children) and the Claude session it is in
+   * now. `knownPid` is the CLI pid a previous call found. Null while the CLI
+   * is not running or not registered yet.
+   */
+  findClaudeCliProcessSession?: (
+    rootPid: number,
+    knownPid: number | null,
+  ) => { pid: number; providerSessionId: string } | null;
+  /** The app session id indexed for a Claude session id, or null until it is indexed. */
+  resolveAppSessionId?: (providerSessionId: string) => string | null;
   spawnPty?: typeof pty.spawn;
 };
 
@@ -568,6 +587,72 @@ function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; valu
   return { key: pathKey, value };
 }
 
+/** The key `entry` is stored under, or null once it has been dropped. */
+function findPtySessionKey(entry: PtySessionEntry): string | null {
+  for (const [key, candidate] of ptySessionsMap) {
+    if (candidate === entry) {
+      return key;
+    }
+  }
+  return null;
+}
+
+/** Drops `entry` from the map and stops following its Claude session. */
+function forgetPtySession(entry: PtySessionEntry): void {
+  const key = findPtySessionKey(entry);
+  if (key !== null) {
+    ptySessionsMap.delete(key);
+  }
+  if (entry.followTimer) {
+    clearInterval(entry.followTimer);
+    entry.followTimer = null;
+  }
+}
+
+/**
+ * Re-files a Claude pty under the session its CLI moved to (`/clear` starts a
+ * new session, `/resume` opens another one) and tells the attached client.
+ *
+ * Without this the pty stays filed under the session it was opened for:
+ * reopening that session reattached to a terminal now showing another
+ * conversation, and opening the new session started a second CLI on it.
+ */
+function followClaudeSessionSwitch(
+  entry: PtySessionEntry,
+  dependencies: ShellWebSocketDependencies,
+): void {
+  const found = dependencies.findClaudeCliProcessSession?.(entry.pty.pid, entry.claudePid);
+  if (!found) {
+    return;
+  }
+  entry.claudePid = found.pid;
+  if (found.providerSessionId === entry.providerSessionId) {
+    return;
+  }
+
+  // A brand-new session appears in the sessions index a moment after the CLI
+  // writes it; until then this is retried on the next tick.
+  const appSessionId = dependencies.resolveAppSessionId?.(found.providerSessionId);
+  const currentKey = findPtySessionKey(entry);
+  if (!appSessionId || currentKey === null) {
+    return;
+  }
+  const nextKey = `${entry.projectPath}_${appSessionId}`;
+  const occupant = ptySessionsMap.get(nextKey);
+  if (occupant && occupant !== entry) {
+    // Another terminal already has that session open; leave both alone.
+    return;
+  }
+
+  ptySessionsMap.delete(currentKey);
+  ptySessionsMap.set(nextKey, entry);
+  entry.sessionId = appSessionId;
+  entry.providerSessionId = found.providerSessionId;
+  if (entry.ws && entry.ws.readyState === WebSocket.OPEN) {
+    entry.ws.send(JSON.stringify({ type: 'session_changed', sessionId: appSessionId }));
+  }
+}
+
 /**
  * Used by this module's websocket gateway to connect the standalone Shell UI
  * to a retained PTY while keeping process lifecycle ownership on the server.
@@ -579,7 +664,9 @@ export function handleShellConnection(
   console.log('[INFO] Shell websocket connected');
 
   let shellProcess: IPty | null = null;
-  let ptySessionKey: string | null = null;
+  // The pty this socket shows. Callbacks hold the entry itself rather than its
+  // key, because a Claude pty is re-filed when its CLI switches sessions.
+  let attachedEntry: PtySessionEntry | null = null;
   let urlDetectionBuffer = '';
   const announcedAuthUrls = new Set<string>();
 
@@ -642,7 +729,7 @@ export function handleShellConnection(
           isPlainShell && initialCommand
             ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
             : '';
-        ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+        const ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
         const initKey = ptySessionKey;
         // Any later init for this key, from any socket, supersedes this one.
         const initToken = Symbol('shell-init');
@@ -655,7 +742,7 @@ export function handleShellConnection(
               clearTimeout(oldSession.timeoutId);
             }
             oldSession.pty.kill();
-            ptySessionsMap.delete(ptySessionKey);
+            forgetPtySession(oldSession);
           }
         }
 
@@ -715,6 +802,7 @@ export function handleShellConnection(
           }
 
           existingSession.ws = ws;
+          attachedEntry = existingSession;
           sendClaudeColorScheme(ws, existingSession.claudeColorScheme);
           return;
         }
@@ -769,7 +857,7 @@ export function handleShellConnection(
           },
         });
 
-        ptySessionsMap.set(ptySessionKey, {
+        const entry: PtySessionEntry = {
           pty: shellProcess,
           ws,
           buffer: [],
@@ -777,15 +865,28 @@ export function handleShellConnection(
           projectPath,
           sessionId,
           claudeColorScheme,
-        });
+          providerSessionId: resumeSessionId || null,
+          claudePid: null,
+          followTimer: null,
+        };
+        ptySessionsMap.set(ptySessionKey, entry);
+        attachedEntry = entry;
+
+        // Only a pty opened for a session is re-filed; a new-session pty keeps
+        // its `default` slot as before.
+        if (!isPlainShell && provider === 'claude' && sessionId && dependencies.findClaudeCliProcessSession) {
+          entry.followTimer = setInterval(
+            () => followClaudeSessionSwitch(entry, dependencies),
+            CLAUDE_SESSION_FOLLOW_INTERVAL_MS,
+          );
+          entry.followTimer.unref?.();
+        }
 
         shellProcess.onData((chunk) => {
-          if (!ptySessionKey) {
-            return;
-          }
-
-          const session = ptySessionsMap.get(ptySessionKey);
-          if (!session) {
+          const session = entry;
+          // Output a replaced or exited pty still flushes must not reach the
+          // terminal that took its place.
+          if (findPtySessionKey(session) === null) {
             return;
           }
 
@@ -856,12 +957,10 @@ export function handleShellConnection(
         });
 
         shellProcess.onExit((exitCode) => {
-          if (!ptySessionKey) {
-            return;
-          }
-
-          const session = ptySessionsMap.get(ptySessionKey);
-          if (session && session.pty !== shellProcess) {
+          // A force restart already dropped this entry and started its replacement.
+          const session = findPtySessionKey(entry) === null ? null : entry;
+          if (!session) {
+            forgetPtySession(entry);
             return;
           }
 
@@ -876,11 +975,11 @@ export function handleShellConnection(
             );
           }
 
-          if (session?.timeoutId) {
+          if (session.timeoutId) {
             clearTimeout(session.timeoutId);
           }
 
-          ptySessionsMap.delete(ptySessionKey);
+          forgetPtySession(session);
           shellProcess = null;
         });
 
@@ -936,12 +1035,8 @@ export function handleShellConnection(
   }
 
   ws.on('close', () => {
-    if (!ptySessionKey) {
-      return;
-    }
-
-    const session = ptySessionsMap.get(ptySessionKey);
-    if (!session) {
+    const session = attachedEntry;
+    if (!session || findPtySessionKey(session) === null) {
       return;
     }
 
@@ -958,12 +1053,12 @@ export function handleShellConnection(
     session.timeoutId = setTimeout(() => {
       // A reconnect may win just as this timer becomes runnable. Re-check the
       // active socket so a queued cleanup can never kill a reattached PTY.
-      if (ptySessionsMap.get(ptySessionKey as string) !== session || session.ws !== null) {
+      if (findPtySessionKey(session) === null || session.ws !== null) {
         return;
       }
 
       session.pty.kill();
-      ptySessionsMap.delete(ptySessionKey as string);
+      forgetPtySession(session);
     }, PTY_SESSION_TIMEOUT);
   });
 

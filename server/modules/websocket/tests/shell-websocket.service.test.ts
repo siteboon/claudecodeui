@@ -835,6 +835,141 @@ test('a socket that closes during the background lookup starts no pty', async ()
   assert.equal(calls.length, 0);
 });
 
+/**
+ * A Claude pty whose CLI reports `cliSession()` as its current Claude session,
+ * with app session ids equal to Claude's own once `indexed` lists them.
+ */
+function claudeFollowRecorder(cliSession: () => string | null, indexed: Set<string>) {
+  const ptys: Array<ReturnType<typeof createFakePty>> = [];
+  const dependencies = {
+    resolveProviderSessionId: (sessionId: string) => sessionId,
+    findClaudeCliProcessSession: () => {
+      const providerSessionId = cliSession();
+      return providerSessionId ? { pid: 4242, providerSessionId } : null;
+    },
+    resolveAppSessionId: (providerSessionId: string) => (indexed.has(providerSessionId) ? providerSessionId : null),
+    spawnPty: () => {
+      const fakePty = createFakePty();
+      ptys.push(fakePty);
+      return fakePty as never;
+    },
+  };
+  return { ptys, dependencies };
+}
+
+function openClaudeSession(dependencies: Parameters<typeof handleShellConnection>[1], sessionId: string | null) {
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, dependencies);
+  socket.emit(
+    'message',
+    JSON.stringify({ type: 'init', projectPath: process.cwd(), sessionId, hasSession: Boolean(sessionId), provider: 'claude' })
+  );
+  return socket;
+}
+
+const framesOfType = (socket: ReturnType<typeof createFakeSocket>, type: string) =>
+  socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>).filter((frame) => frame.type === type);
+
+const reattached = (socket: ReturnType<typeof createFakeSocket>) =>
+  framesOfType(socket, 'output').some((frame) => String(frame.data).includes('Reconnected to existing session'));
+
+// `/clear` (or `/resume`) moves the CLI to another session. The pty must
+// follow it, or reopening the old session shows the new conversation and
+// opening the new one starts a second CLI on it.
+test('a Claude pty follows its CLI to the session /clear started', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const oldSession = `follow-old-${Date.now()}`;
+  const newSession = `follow-new-${Date.now()}`;
+  let current = oldSession;
+  const indexed = new Set([oldSession]);
+  const { ptys, dependencies } = claudeFollowRecorder(() => current, indexed);
+
+  const first = openClaudeSession(dependencies, oldSession);
+  t.mock.timers.tick(2000);
+  assert.deepEqual(framesOfType(first, 'session_changed'), [], 'nothing moves while the CLI stays put');
+
+  current = newSession;
+  t.mock.timers.tick(2000);
+  assert.deepEqual(framesOfType(first, 'session_changed'), [], 'waits until the new session is indexed');
+
+  indexed.add(newSession);
+  t.mock.timers.tick(2000);
+  assert.deepEqual(framesOfType(first, 'session_changed'), [{ type: 'session_changed', sessionId: newSession }]);
+
+  // The client follows: the new session reattaches to the same pty.
+  first.emit('close');
+  const followed = openClaudeSession(dependencies, newSession);
+  assert.ok(reattached(followed));
+  assert.equal(ptys.length, 1);
+
+  // The old session is free again and resumes in a pty of its own.
+  const reopened = openClaudeSession(dependencies, oldSession);
+  assert.ok(!reattached(reopened));
+  assert.equal(ptys.length, 2);
+
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('a Claude pty does not take over a session another terminal already has open', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const sessionA = `occupied-a-${Date.now()}`;
+  const sessionB = `occupied-b-${Date.now()}`;
+  // A's CLI ran `/resume` into B, which a second terminal already shows.
+  const { ptys, dependencies } = claudeFollowRecorder(() => sessionB, new Set([sessionA, sessionB]));
+
+  const socketA = openClaudeSession(dependencies, sessionA);
+  const socketB = openClaudeSession(dependencies, sessionB);
+  t.mock.timers.tick(2000);
+
+  assert.deepEqual(framesOfType(socketA, 'session_changed'), []);
+  assert.deepEqual(framesOfType(socketB, 'session_changed'), []);
+  socketA.emit('close');
+  socketB.emit('close');
+  assert.ok(reattached(openClaudeSession(dependencies, sessionA)), 'A keeps its pty');
+  assert.ok(reattached(openClaudeSession(dependencies, sessionB)), 'B keeps its pty');
+  assert.equal(ptys.length, 2);
+
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('new-session and plain-shell ptys are not followed', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let lookups = 0;
+  const { ptys, dependencies } = claudeFollowRecorder(() => {
+    lookups += 1;
+    return 'somewhere-else';
+  }, new Set(['somewhere-else']));
+
+  const fresh = openClaudeSession(dependencies, null);
+  const plain = createFakeSocket();
+  handleShellConnection(plain as never, dependencies);
+  plain.emit(
+    'message',
+    JSON.stringify({ type: 'init', projectPath: process.cwd(), provider: 'plain-shell', initialCommand: 'ls' })
+  );
+  t.mock.timers.tick(10000);
+
+  assert.equal(lookups, 0);
+  assert.deepEqual(framesOfType(fresh, 'session_changed'), []);
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('an exited Claude pty stops being followed', (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let lookups = 0;
+  const { ptys, dependencies } = claudeFollowRecorder(() => {
+    lookups += 1;
+    return null;
+  }, new Set());
+
+  openClaudeSession(dependencies, `exits-${Date.now()}`);
+  t.mock.timers.tick(2000);
+  assert.equal(lookups, 1);
+  ptys[0].emitExit();
+  t.mock.timers.tick(10000);
+  assert.equal(lookups, 1);
+});
+
 /** A launch whose background-job lookup waits until the test settles it. */
 function pendingLookupRecorder() {
   const ptys: Array<ReturnType<typeof createFakePty>> = [];

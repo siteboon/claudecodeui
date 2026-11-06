@@ -23,6 +23,7 @@ type UseShellConnectionOptions = {
   bypassPermissionsRef: MutableRefObject<boolean>;
   isDarkModeRef: MutableRefObject<boolean>;
   onProcessCompleteRef: MutableRefObject<((exitCode: number) => void) | null | undefined>;
+  onSessionChangeRef?: MutableRefObject<((sessionId: string) => void) | null | undefined>;
   isInitialized: boolean;
   autoConnect: boolean;
   closeSocket: () => void;
@@ -50,6 +51,7 @@ export function useShellConnection({
   bypassPermissionsRef,
   isDarkModeRef,
   onProcessCompleteRef,
+  onSessionChangeRef,
   isInitialized,
   autoConnect,
   closeSocket,
@@ -124,9 +126,17 @@ export function useShellConnection({
       if (message.type === 'claude_theme') {
         const { colorScheme } = message;
         setClaudeLaunchColorScheme(colorScheme === 'light' || colorScheme === 'dark' ? colorScheme : null);
+        return;
+      }
+
+      if (message.type === 'session_changed') {
+        const { sessionId } = message;
+        if (typeof sessionId === 'string' && sessionId && sessionId !== selectedSessionRef.current?.id) {
+          onSessionChangeRef?.current?.(sessionId);
+        }
       }
     },
-    [handleProcessCompletion, onOutputRef, terminalRef],
+    [handleProcessCompletion, onOutputRef, onSessionChangeRef, selectedSessionRef, terminalRef],
   );
 
   const connectWebSocket = useCallback(

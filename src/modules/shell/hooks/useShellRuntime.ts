@@ -18,6 +18,7 @@ type UseShellRuntimeOptions = {
   autoConnect: boolean;
   isRestarting: boolean;
   onProcessComplete?: ((exitCode: number) => void) | null;
+  onSessionChange?: ((sessionId: string) => void) | null;
   onOutputRef?: MutableRefObject<(() => void) | null>;
 };
 
@@ -45,6 +46,7 @@ export function useShellRuntime({
   autoConnect,
   isRestarting,
   onProcessComplete,
+  onSessionChange,
   onOutputRef,
 }: UseShellRuntimeOptions): UseShellRuntimeResult {
   const { isDarkMode } = useTheme();
@@ -60,6 +62,7 @@ export function useShellRuntime({
   const bypassPermissionsRef = useRef(bypassPermissions);
   const isDarkModeRef = useRef(isDarkMode);
   const onProcessCompleteRef = useRef(onProcessComplete);
+  const onSessionChangeRef = useRef(onSessionChange);
   const lastSessionIdRef = useRef<string | null>(selectedSession?.id ?? null);
 
   // Keep mutable values in refs so websocket handlers always read current data.
@@ -71,7 +74,17 @@ export function useShellRuntime({
     bypassPermissionsRef.current = bypassPermissions;
     isDarkModeRef.current = isDarkMode;
     onProcessCompleteRef.current = onProcessComplete;
-  }, [selectedProject, selectedSession, initialCommand, isPlainShell, bypassPermissions, isDarkMode, onProcessComplete]);
+    onSessionChangeRef.current = onSessionChange;
+  }, [
+    selectedProject,
+    selectedSession,
+    initialCommand,
+    isPlainShell,
+    bypassPermissions,
+    isDarkMode,
+    onProcessComplete,
+    onSessionChange,
+  ]);
 
   const closeSocket = useCallback(() => {
     const activeSocket = wsRef.current;
@@ -117,6 +130,7 @@ export function useShellRuntime({
     bypassPermissionsRef,
     isDarkModeRef,
     onProcessCompleteRef,
+    onSessionChangeRef,
     isInitialized,
     autoConnect,
     closeSocket,

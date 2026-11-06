@@ -66,6 +66,12 @@ function WorkspaceMain({
   const browserUseEnabled = useBrowserUseEnabled();
 
   useTaskMasterProjectSync(selectedProject);
+  // `/clear` or `/resume` in the Shell tab moved its Claude CLI to another
+  // session. Replace the URL rather than push it: the page was showing a
+  // session the terminal had already left.
+  const handleShellSessionChange = useCallback((sessionId: string) => {
+    onNavigateToSession(sessionId, { replace: true });
+  }, [onNavigateToSession]);
   // The folder an in-chat `path/` reference asked to reveal. Held as an object
   // so that re-clicking the same folder is a new request the tree acts on.
   const [revealDirectory, setRevealDirectory] = useState<DirectoryRevealRequest | null>(null);
@@ -196,6 +202,7 @@ function WorkspaceMain({
                 session={selectedSession}
                 showHeader={false}
                 isActive={activeTab === 'shell'}
+                onSessionChange={handleShellSessionChange}
               />
             </div>
           )}
