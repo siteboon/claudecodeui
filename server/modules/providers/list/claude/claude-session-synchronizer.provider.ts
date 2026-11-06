@@ -19,13 +19,14 @@ const LAST_MESSAGE_MAX_WINDOW_BYTES = 8 * 1024 * 1024;
 
 /**
  * Reads `length` bytes from `position`, repeating short reads. Stops early if
- * the file got shorter, and decodes only the bytes actually read.
+ * the file got shorter (`complete` is then false), and decodes only the bytes
+ * actually read.
  */
 async function readRange(
   handle: Awaited<ReturnType<typeof open>>,
   position: number,
   length: number
-): Promise<string> {
+): Promise<{ text: string; complete: boolean }> {
   const buffer = Buffer.alloc(length);
   let filled = 0;
   while (filled < length) {
@@ -35,7 +36,7 @@ async function readRange(
     }
     filled += bytesRead;
   }
-  return buffer.toString('utf8', 0, filled);
+  return { text: buffer.toString('utf8', 0, filled), complete: filled === length };
 }
 
 type ParsedSession = {
@@ -180,51 +181,72 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     let handle: Awaited<ReturnType<typeof open>> | undefined;
     try {
       handle = await open(filePath, 'r');
-      const { size } = await handle.stat();
-      let windowSize = Math.min(LAST_MESSAGE_FIRST_WINDOW_BYTES, size);
-      for (;;) {
-        const start = size - windowSize;
-        // One byte more than the window, so a row that starts exactly at the
-        // window is known to be complete (the byte before it is a newline).
-        const readStart = Math.max(0, start - 1);
-        const text = await readRange(handle, readStart, size - readStart);
-        const lines = text.split('\n');
-        if (readStart > 0) {
-          lines.shift(); // the part before the first newline: a partial row, or empty
+      // A transcript truncated between stat() and the reads leaves them past
+      // its new end; scan again once against its current size.
+      for (let attempt = 0; ; attempt += 1) {
+        const { size } = await handle.stat();
+        const result = await this.scanTailForLastMessage(handle, size);
+        if (result !== 'shrunk') {
+          return result;
         }
-        for (let index = lines.length - 1; index >= 0; index -= 1) {
-          const line = lines[index]?.trim();
-          if (!line) {
-            continue;
-          }
-          let row: Record<string, unknown>;
-          try {
-            row = JSON.parse(line) as Record<string, unknown>;
-          } catch {
-            continue; // a row still being written
-          }
-          if (
-            (row.type === 'user' || row.type === 'assistant') &&
-            !row.isSidechain &&
-            !row.isMeta &&
-            typeof row.timestamp === 'string' &&
-            !Number.isNaN(Date.parse(row.timestamp))
-          ) {
-            return { timestamp: row.timestamp, capped: false };
-          }
-        }
-        if (windowSize >= size) {
+        if (attempt > 0) {
           return { capped: false };
         }
-        if (windowSize >= LAST_MESSAGE_MAX_WINDOW_BYTES) {
-          return { capped: true };
-        }
-        windowSize = Math.min(windowSize * 4, size, LAST_MESSAGE_MAX_WINDOW_BYTES);
       }
     } catch {
       return { capped: false };
     } finally {
       await handle?.close();
+    }
+  }
+
+  /** One backwards scan of the first `size` bytes; 'shrunk' when the file got shorter meanwhile. */
+  private async scanTailForLastMessage(
+    handle: Awaited<ReturnType<typeof open>>,
+    size: number
+  ): Promise<{ timestamp?: string; capped: boolean } | 'shrunk'> {
+    let windowSize = Math.min(LAST_MESSAGE_FIRST_WINDOW_BYTES, size);
+    for (;;) {
+      const start = size - windowSize;
+      // One byte more than the window, so a row that starts exactly at the
+      // window is known to be complete (the byte before it is a newline).
+      const readStart = Math.max(0, start - 1);
+      const { text, complete } = await readRange(handle, readStart, size - readStart);
+      if (!complete) {
+        return 'shrunk';
+      }
+      const lines = text.split('\n');
+      if (readStart > 0) {
+        lines.shift(); // the part before the first newline: a partial row, or empty
+      }
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index]?.trim();
+        if (!line) {
+          continue;
+        }
+        let row: Record<string, unknown>;
+        try {
+          row = JSON.parse(line) as Record<string, unknown>;
+        } catch {
+          continue; // a row still being written
+        }
+        if (
+          (row.type === 'user' || row.type === 'assistant') &&
+          !row.isSidechain &&
+          !row.isMeta &&
+          typeof row.timestamp === 'string' &&
+          !Number.isNaN(Date.parse(row.timestamp))
+        ) {
+          return { timestamp: row.timestamp, capped: false };
+        }
+      }
+      if (windowSize >= size) {
+        return { capped: false };
+      }
+      if (windowSize >= LAST_MESSAGE_MAX_WINDOW_BYTES) {
+        return { capped: true };
+      }
+      windowSize = Math.min(windowSize * 4, size, LAST_MESSAGE_MAX_WINDOW_BYTES);
     }
   }
 

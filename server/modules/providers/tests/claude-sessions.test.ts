@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import nodeFs from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -2445,4 +2445,32 @@ test('a session whose last message is beyond the scan cap keeps its stored time'
     restoreHomeDir();
     await rm(tmp, { recursive: true, force: true });
   }
+});
+
+test('a transcript that shrank after it was measured is scanned again at its new size', { concurrency: false }, async (t) => {
+  const lastMessage = JSON.stringify({
+    parentUuid: 'msg-1',
+    isSidechain: false,
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    uuid: 'msg-2',
+    timestamp: '2026-07-10T00:05:00.000Z',
+    sessionId: 'test-session-1',
+  });
+  // The first stat() reports the file 9 MiB longer than it is, as if it was
+  // truncated right after: every read of that scan starts past the real end.
+  const probe = await open(process.execPath, 'r');
+  const fileHandlePrototype = Object.getPrototypeOf(probe) as { stat: (...args: unknown[]) => Promise<nodeFs.Stats> };
+  await probe.close();
+  const realStat = fileHandlePrototype.stat;
+  let stats = 0;
+  t.mock.method(fileHandlePrototype, 'stat', async function (this: unknown, ...args: unknown[]) {
+    const real = await realStat.apply(this, args);
+    stats += 1;
+    return stats === 1 ? Object.assign(Object.create(Object.getPrototypeOf(real)), real, { size: real.size + 9 * 1024 * 1024 }) : real;
+  });
+
+  await synchronizeTranscript([lastMessage, ...nonMessageRows(2)], (sessionId) => {
+    assert.equal(updatedAtOf(sessionId), '2026-07-10T00:05:00.000Z');
+  });
 });
