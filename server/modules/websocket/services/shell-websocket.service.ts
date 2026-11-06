@@ -39,6 +39,10 @@ type PtySessionEntry = {
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
+// The newest `init` for each pty key that is still waiting on a lookup. An
+// older one that finishes its wait later gives up instead of spawning or
+// reattaching, so the socket that opened the session last keeps its output.
+const latestInitByKey = new Map<string, symbol>();
 const PTY_SESSION_TIMEOUT = 30 * 60 * 1000;
 const SHELL_URL_PARSE_BUFFER_LIMIT = 32768;
 const TRAILING_URL_PUNCTUATION_REGEX = /[)\]}>.,;:!?]+$/;
@@ -119,6 +123,12 @@ type ShellWebSocketDependencies = {
     sessionId: string,
     provider: string,
   ) => string | null | undefined;
+  /**
+   * Job id of a live background Claude process holding this Claude session id,
+   * or null. Optional so callers without access to the CLI registry keep the
+   * plain `--resume` launch.
+   */
+  findBackgroundClaudeJobId?: (providerSessionId: string) => Promise<string | null> | string | null;
   spawnPty?: typeof pty.spawn;
 };
 
@@ -209,7 +219,8 @@ type ShellLaunch = {
 function buildShellCommand(
   message: ShellIncomingMessage,
   dependencies: ShellWebSocketDependencies,
-  projectPath: string
+  projectPath: string,
+  backgroundJobId: string | null = null,
 ): ShellLaunch {
   const hasSession = readBoolean(message.hasSession);
   const initialCommand = readString(message.initialCommand);
@@ -258,6 +269,13 @@ function buildShellCommand(
     : '';
   const theme = buildClaudeThemeLaunch(readColorScheme(message.colorScheme), projectPath);
   const launchFlags = `${bypassFlag}${theme.flag}`;
+  // A session that is running in the background (`claude --bg`, or sent there
+  // when its terminal closed) cannot be resumed: the CLI refuses and asks for
+  // `claude attach <job id>`. Attaching opens the live session; it takes no
+  // launch flags, and leaving the tab leaves the session running.
+  if (resumeSessionId && backgroundJobId) {
+    return { command: `claude attach "${backgroundJobId}"`, claudeFollowsAppTheme: false };
+  }
   if (resumeSessionId) {
     const command = os.platform() === 'win32'
       ? `claude --resume "${resumeSessionId}"${launchFlags}; if ($LASTEXITCODE -ne 0) { claude${launchFlags} }`
@@ -269,6 +287,33 @@ function buildShellCommand(
     return otherProgram(initialCommand);
   }
   return { command: `claude${launchFlags}`, claudeFollowsAppTheme: theme.followsAppTheme };
+}
+
+/**
+ * Looks up the background job to attach to instead of resuming, for a Claude
+ * launch that resumes a session. Null, without a lookup, for every other
+ * launch, which therefore starts without yielding.
+ */
+function findBackgroundJobForLaunch(
+  message: ShellIncomingMessage,
+  dependencies: ShellWebSocketDependencies,
+): Promise<string | null> | null {
+  const initialCommand = readString(message.initialCommand);
+  const provider = readString(message.provider, 'claude');
+  const isPlainShell =
+    readBoolean(message.isPlainShell) ||
+    (!!initialCommand && !readBoolean(message.hasSession)) ||
+    provider === 'plain-shell';
+  const findJobId = dependencies.findBackgroundClaudeJobId;
+  const resumeSessionId = isPlainShell || provider !== 'claude' || !findJobId
+    ? null
+    : resolveResumeSessionId(message, dependencies);
+  if (!findJobId || !resumeSessionId) {
+    return null;
+  }
+  return Promise.resolve()
+    .then(() => findJobId(resumeSessionId))
+    .then((jobId) => jobId ?? null, () => null);
 }
 
 // Claude Code's built-in theme ids (the `/theme` picker of CLI 2.1.280). A
@@ -538,7 +583,33 @@ export function handleShellConnection(
   let urlDetectionBuffer = '';
   const announcedAuthUrls = new Set<string>();
 
-  ws.on('message', async (rawMessage) => {
+  // While an `init` waits for the registry, later messages (input, resize)
+  // queue behind it and are applied once the pty exists, instead of being
+  // dropped. Otherwise each message is handled as it arrives.
+  let initWaiting = false;
+  let messageQueue: Promise<void> | null = null;
+  const settleQueue = (tail: Promise<void>) => {
+    void tail.then(() => {
+      if (messageQueue === tail) {
+        messageQueue = null;
+      }
+    });
+  };
+  ws.on('message', (rawMessage) => {
+    if (messageQueue) {
+      const tail = messageQueue.then(() => handleMessage(rawMessage));
+      messageQueue = tail;
+      settleQueue(tail);
+      return;
+    }
+    const handled = handleMessage(rawMessage);
+    if (initWaiting) {
+      messageQueue = handled;
+      settleQueue(handled);
+    }
+  });
+
+  async function handleMessage(rawMessage: RawData): Promise<void> {
     try {
       const data = parseShellMessage(rawMessage);
       if (!data?.type) {
@@ -572,6 +643,10 @@ export function handleShellConnection(
             ? `_cmd_${Buffer.from(initialCommand).toString('base64').slice(0, 16)}`
             : '';
         ptySessionKey = `${projectPath}_${sessionId ?? 'default'}${commandSuffix}`;
+        const initKey = ptySessionKey;
+        // Any later init for this key, from any socket, supersedes this one.
+        const initToken = Symbol('shell-init');
+        latestInitByKey.set(initKey, initToken);
 
         if (isLoginCommand || forceRestart) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
@@ -584,8 +659,36 @@ export function handleShellConnection(
           }
         }
 
-        const existingSession =
-          isLoginCommand || forceRestart ? null : ptySessionsMap.get(ptySessionKey);
+        let existingSession =
+          isLoginCommand || forceRestart ? null : ptySessionsMap.get(initKey);
+        let backgroundJobId: string | null = null;
+        // Only a launch that resumes a session waits for the registry, and
+        // only when no pty is there to reattach to.
+        const backgroundJobLookup = existingSession ? null : findBackgroundJobForLaunch(data, dependencies);
+        if (backgroundJobLookup) {
+          initWaiting = true;
+          try {
+            backgroundJobId = await backgroundJobLookup;
+          } finally {
+            initWaiting = false;
+          }
+          const superseded = latestInitByKey.get(initKey) !== initToken;
+          // The socket may have closed meanwhile: its close handler found no pty
+          // to schedule cleanup for, so none may be started now. And another
+          // socket may have opened this session since; the newer one wins.
+          if (superseded || ws.readyState !== WebSocket.OPEN) {
+            if (!superseded) {
+              latestInitByKey.delete(initKey);
+            }
+            return;
+          }
+          // Another socket may have started this session's pty meanwhile.
+          existingSession = isLoginCommand || forceRestart ? null : ptySessionsMap.get(initKey);
+        }
+        // Nothing below yields, so this init can no longer be overtaken.
+        if (latestInitByKey.get(initKey) === initToken) {
+          latestInitByKey.delete(initKey);
+        }
         if (existingSession) {
           shellProcess = existingSession.pty;
           if (existingSession.timeoutId) {
@@ -637,6 +740,7 @@ export function handleShellConnection(
           data,
           dependencies,
           resolvedProjectPath,
+          backgroundJobId,
         );
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const claudeColorScheme = claudeFollowsAppTheme ? colorScheme : null;
@@ -829,7 +933,7 @@ export function handleShellConnection(
         );
       }
     }
-  });
+  }
 
   ws.on('close', () => {
     if (!ptySessionKey) {
