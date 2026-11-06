@@ -19,7 +19,12 @@ import type {
   WorkflowInfo,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
-import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/message-unification.js';
+import {
+  capToolResultContent,
+  omitImageData,
+  prepareTranscriptMessages,
+  truncateNestedOutput,
+} from '@/shared/message-unification.js';
 import {
   createNormalizedMessage,
   generateMessageId,
@@ -1382,7 +1387,12 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               provider: PROVIDER,
               kind: 'tool_result',
               toolId: part.tool_use_id,
-              content: typeof part.content === 'string' ? part.content : JSON.stringify(part.content),
+              // Capped here as well as in the transcript pass: the live stream
+              // sends this row straight to the client, so an uncapped MCP
+              // screenshot arrives as a full-size base64 string.
+              content: capToolResultContent(
+                typeof part.content === 'string' ? part.content : JSON.stringify(part.content),
+              ),
               isError: Boolean(part.is_error),
               // `toolUseResult` on disk, `tool_use_result` on the live SDK
               // stream. Reading only the transcript key meant a live agent
@@ -1391,7 +1401,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               // value is the tool's whole structured output — an Edit carries
               // the file it edited — so it gets the same per-string cap the
               // transcript path applies before anything is sent or buffered.
-              toolUseResult: truncateNestedOutput(raw.toolUseResult ?? raw.tool_use_result),
+              toolUseResult: truncateNestedOutput(omitImageData(raw.toolUseResult ?? raw.tool_use_result)),
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
