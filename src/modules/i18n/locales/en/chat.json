@@ -296,6 +296,8 @@
     "defaultCommand": "command"
   },
   "claudeStatus": {
+    "background": "Background",
+    "backgroundHint": "Move running commands and agents to the background, so you can keep talking to Claude",
     "actions": {
       "thinking": "Thinking",
       "processing": "Processing",

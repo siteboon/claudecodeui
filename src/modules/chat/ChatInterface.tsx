@@ -236,6 +236,7 @@ function ChatInterface({
     syncInputOverlayScroll,
     handleClearInput,
     handleAbortSession,
+    handleBackgroundTasks,
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
@@ -365,6 +366,39 @@ function ChatInterface({
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
   }, [canAbortSession, handleAbortSession]);
+
+  // Ctrl+B, as in the terminal: move the running commands and subagents to the
+  // background so the main agent can be talked to while they keep running.
+  useEffect(() => {
+    // Only for the chat on screen: hidden tabs stay mounted.
+    if (!isActive || !isProcessing || !canSteer) {
+      return;
+    }
+    const handleBackgroundKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.defaultPrevented || !event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== 'b') {
+        return;
+      }
+      // Ctrl+B means something else in a terminal (tmux, readline) or another
+      // editor; leave it alone anywhere but this chat's own composer.
+      const target = event.target as HTMLElement | null;
+      const editable = target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+      if (target?.closest?.('.xterm, .cm-editor, .monaco-editor')) {
+        return;
+      }
+      if (editable && target !== textareaRef.current) {
+        return;
+      }
+      event.preventDefault();
+      handleBackgroundTasks();
+    };
+    document.addEventListener('keydown', handleBackgroundKey, { capture: true });
+    return () => {
+      document.removeEventListener('keydown', handleBackgroundKey, { capture: true });
+    };
+  }, [canSteer, handleBackgroundTasks, isActive, isProcessing, textareaRef]);
 
   useEffect(() => {
     return () => {
@@ -562,6 +596,7 @@ function ChatInterface({
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
+          onBackgroundTasks={canSteer ? handleBackgroundTasks : undefined}
           permissionMode={permissionMode}
           availablePermissionModes={availablePermissionModes}
           onSelectPermissionMode={selectPermissionMode}

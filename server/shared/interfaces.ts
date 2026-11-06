@@ -64,6 +64,18 @@ export interface IProviderRuntime {
    * settled, or the id was never one of its own.
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
+  /**
+   * Moves the running turn's foreground tasks (commands, subagents) to the
+   * background, like Ctrl+B in the terminal: each returns at once and the turn
+   * carries on. With `toolUseId`, only the task that tool call started.
+   * Resolves false when there is no live process to ask.
+   */
+  backgroundTasks?(sessionId: string, toolUseId?: string): Promise<boolean>;
+  /**
+   * Whether a new message for the session would be taken by the process its
+   * last turn left running for background work, so sending it stops nothing.
+   */
+  canContinueOverBackgroundWork?(sessionId: string): boolean;
 }
 
 /**

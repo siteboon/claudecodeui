@@ -88,7 +88,13 @@ function sendClaimedQueuedMessage(
  * turn was promised to go "when this finishes", so it waits for that work too.
  */
 function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
-  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
+  if (chatRunRegistry.isProcessing(sessionId)) {
+    return true;
+  }
+  // Background work only blocks a queued turn when sending would replace the
+  // process it runs in. A runtime that hands the turn to that process keeps
+  // the work going, so the turn need not wait for it.
+  return runtime.hasBackgroundWork(sessionId) && !runtime.canContinueOverBackgroundWork?.(sessionId);
 }
 
 /**

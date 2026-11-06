@@ -52,14 +52,17 @@ const backgroundOnly: SessionActivityMap = new Map([[
 
 const uploads = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/assets/files'));
 
-const render = (processingSessions: SessionActivityMap) => {
+// The question is for providers whose next turn replaces the process the
+// background work runs in. Claude hands the turn to that process instead (see
+// the last test), so these use a provider that cannot.
+const render = (processingSessions: SessionActivityMap, provider: 'codex' | 'claude' = 'codex') => {
   const sent: Array<{ type: string }> = [];
   const view = renderHook(() =>
     useChatComposerState({
       selectedProject: PROJECT,
       selectedSession: SESSION,
       currentSessionId: SESSION.id,
-      provider: 'claude',
+      provider,
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
@@ -215,4 +218,13 @@ test('a session with nothing in the background sends without asking', async () =
 
   assert.equal(view.result.current.backgroundSendPrompt, null);
   assert.equal(sends().length, 1);
+});
+
+test('Claude sends over background work without asking: the turn goes to the process the work runs in', async () => {
+  const { view, sends } = render(backgroundOnly, 'claude');
+  await act(async () => { view.result.current.setInput('how is the audit going?'); });
+  await act(async () => { await view.result.current.handleSubmit({ preventDefault: () => undefined } as never); });
+
+  assert.equal(view.result.current.backgroundSendPrompt, null, 'no question');
+  assert.equal(sends().length, 1, 'sent at once');
 });

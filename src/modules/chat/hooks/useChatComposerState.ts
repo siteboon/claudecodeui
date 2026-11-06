@@ -1276,8 +1276,10 @@ export function useChatComposerState({
       // A replayed interrupt-mode `queuedSubmission` already cleared this
       // with the user in `sendQueuedDraft`, before it cleared the draft —
       // asking again here would double-prompt for the same background work.
+      // A provider that can steer (Claude) hands a new turn to the process the
+      // background work runs in, so sending stops nothing and needs no question.
       const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
-      if (backgroundActivity?.background && !(queuedSubmission && mode === 'interrupt')) {
+      if (backgroundActivity?.background && !canSteer && !(queuedSubmission && mode === 'interrupt')) {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
           .map((task) => describeBackgroundTask(task, t));
         const choice = await askBeforeSendingOverBackgroundWork(work);
@@ -1889,6 +1891,17 @@ export function useChatComposerState({
     });
   }, [canAbortSession, currentSessionId, selectedSession?.id, sendMessage]);
 
+  // The terminal's Ctrl+B: moves the running turn's foreground commands and
+  // subagents to the background, so the turn carries on and the main agent is
+  // free to answer while they keep running. Claude only.
+  const handleBackgroundTasks = useCallback(() => {
+    const targetSessionId = selectedSession?.id || currentSessionId || null;
+    if (!canSteer || !isLoading || !targetSessionId) {
+      return;
+    }
+    sendMessage({ type: 'chat.background-tasks', sessionId: targetSessionId });
+  }, [canSteer, currentSessionId, isLoading, selectedSession?.id, sendMessage]);
+
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
       if (!suggestion || provider !== 'claude') {
@@ -2004,6 +2017,7 @@ export function useChatComposerState({
     syncInputOverlayScroll,
     handleClearInput,
     handleAbortSession,
+    handleBackgroundTasks,
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,

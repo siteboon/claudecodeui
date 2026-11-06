@@ -97,6 +97,16 @@ export function createProviderRuntimeService(
       return Boolean(await runtime.stopBackgroundTask?.(sessionId, taskId));
     },
 
+    async backgroundTasks(providerName: LLMProvider, sessionId: string, toolUseId?: string): Promise<boolean> {
+      const { runtime } = dependencies.resolveProvider(providerName);
+      return Boolean(await runtime.backgroundTasks?.(sessionId, toolUseId));
+    },
+
+    canContinueOverBackgroundWork(sessionId: string): boolean {
+      return dependencies.listProviders().some((provider) =>
+        Boolean(provider.runtime.canContinueOverBackgroundWork?.(sessionId)));
+    },
+
     canSteer(providerName: string): boolean {
       try {
         return typeof dependencies.resolveProvider(providerName).runtime.steer === 'function';

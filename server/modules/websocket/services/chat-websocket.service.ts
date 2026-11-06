@@ -78,6 +78,10 @@ export type ProviderRuntimeGateway = {
   stopBackgroundTask(provider: LLMProvider, sessionId: string, taskId: string): Promise<boolean>;
   /** Whether a provider runtime still holds background work for the session after its turn ended. */
   hasBackgroundWork(sessionId: string): boolean;
+  /** Moves a running turn's foreground tasks to the background (Ctrl+B). */
+  backgroundTasks?(provider: LLMProvider, sessionId: string, toolUseId?: string): Promise<boolean>;
+  /** Whether a new message would be taken by the process holding the session's background work. */
+  canContinueOverBackgroundWork?(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
   getPendingApprovalsForSession(sessionId: string): unknown[];
   /** Whether the provider's runtime can deliver a message into an already-running turn. */
@@ -139,7 +143,7 @@ function sendJson(ws: WebSocket, payload: unknown): void {
  * Used only within this file today; move to `server/shared/types.ts` if a
  * second module needs it.
  */
-type ChatRequestType = 'chat.send' | 'chat.steer' | 'chat.edit-send' | 'chat.stop-task';
+type ChatRequestType = 'chat.send' | 'chat.steer' | 'chat.edit-send' | 'chat.stop-task' | 'chat.background-tasks';
 
 /**
  * Reports a protocol-level failure to the requesting client.
@@ -785,6 +789,41 @@ async function handleChatStopTask(
 }
 
 /**
+ * Handles `chat.background-tasks`: the terminal's Ctrl+B. Moves the running
+ * turn's foreground commands and subagents to the background (or only the one
+ * a `toolUseId` names), so the turn carries on and a new message can reach the
+ * main agent while they keep running. The provider reports the moved tasks on
+ * the session's stream; only a refusal is answered here.
+ */
+async function handleChatBackgroundTasks(
+  ws: WebSocket,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const sessionId = readRequiredSessionId(data);
+  if (!sessionId) {
+    sendProtocolError(ws, 'SESSION_ID_REQUIRED', 'chat.background-tasks requires a sessionId.');
+    return;
+  }
+  const session = sessionsDb.getSessionById(sessionId);
+  if (!session) {
+    sendProtocolError(ws, 'SESSION_NOT_FOUND', `Session "${sessionId}" was not found.`, sessionId);
+    return;
+  }
+  const toolUseId = typeof data.toolUseId === 'string' && data.toolUseId.trim() ? data.toolUseId.trim() : undefined;
+  const moved = await dependencies.runtime.backgroundTasks?.(session.provider as LLMProvider, sessionId, toolUseId);
+  if (!moved) {
+    sendProtocolError(
+      ws,
+      'NOTHING_TO_BACKGROUND',
+      `Session "${sessionId}" has no running task that can be moved to the background.`,
+      sessionId,
+      'chat.background-tasks',
+    );
+  }
+}
+
+/**
  * Handles `chat.subscribe`: for each requested session, reports whether a run
  * is processing, re-attaches the live stream to this socket, replays missed
  * events (seq > lastSeq), and includes pending permission requests.
@@ -882,6 +921,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *                               message into it instead of queuing/refusing; idle sessions behave like `chat.send`.
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
+ * - `chat.background-tasks`    { sessionId, toolUseId? } — Ctrl+B: move running foreground tasks to the background
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
  * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
  *
@@ -994,6 +1034,9 @@ export function handleChatConnection(
           return;
         case 'chat.stop-task':
           await handleChatStopTask(ws, data, dependencies);
+          return;
+        case 'chat.background-tasks':
+          await handleChatBackgroundTasks(ws, data, dependencies);
           return;
         case 'chat.subscribe':
           handleChatSubscribe(ws, data, dependencies);

@@ -590,3 +590,17 @@ test('a queued message that could not be sent stays queued instead of vanishing'
     assert.deepEqual(runs.map((run) => run.command), ['do not lose me']);
   });
 });
+
+test('a queued message does not wait for background work when the runtime hands the turn to that work\'s process', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'how is the agent doing?', attachments: [] });
+    const runs: RunCall[] = [];
+    const runtime = {
+      ...(createRuntime(runs, 'ok', [], () => true) as Record<string, unknown>),
+      canContinueOverBackgroundWork: () => true,
+    } as never;
+
+    assert.equal(await dispatchQueuedMessages(runtime), 1);
+    assert.deepEqual(runs.map((run) => run.command), ['how is the agent doing?']);
+  });
+});
