@@ -190,9 +190,25 @@ test('bypassPermissions carries through to resumed claude sessions', () => {
   if (os.platform() !== 'win32') {
     assert.equal(
       spawnedCommands[0],
-      'claude --resume "resumed-session-id" --dangerously-skip-permissions || claude --dangerously-skip-permissions'
+      'claude --resume "resumed-session-id" --dangerously-skip-permissions'
     );
   }
+});
+
+// A resume that fails (unknown session, or one still running in the background)
+// must leave Claude's error on screen instead of quietly opening a new
+// conversation under the session the user picked.
+test('a claude resume has no fallback to a new session on bash or PowerShell', (t) => {
+  const { calls, dependencies } = spawnRecorder('resumed-session-id');
+
+  launch(dependencies, { provider: 'claude', hasSession: true });
+  t.mock.method(os, 'platform', () => 'win32');
+  launch(dependencies, { provider: 'claude', hasSession: true });
+
+  assert.deepEqual(
+    calls.map((call) => call.command),
+    ['claude --resume "resumed-session-id"', 'claude --resume "resumed-session-id"']
+  );
 });
 
 test('a missing project directory is reported as an error frame and starts no pty', () => {
@@ -343,7 +359,7 @@ test('a dark Shell tab launches claude exactly as before, whatever the user them
         [
           'claude',
           'claude --dangerously-skip-permissions',
-          'claude --resume "resumed-session-id" || claude',
+          'claude --resume "resumed-session-id"',
           'claude',
           'claude',
         ]
@@ -557,7 +573,7 @@ test('the light theme rides along with bypass and resume launches', () => {
     assert.equal(calls.length, 1);
     if (os.platform() !== 'win32') {
       const flags = ` --dangerously-skip-permissions${themeFlag('light')}`;
-      assert.equal(calls[0].command, `claude --resume "resumed-session-id"${flags} || claude${flags}`);
+      assert.equal(calls[0].command, `claude --resume "resumed-session-id"${flags}`);
     }
   });
 });
@@ -615,13 +631,9 @@ test('the settings file path is quoted for bash and for PowerShell', (t) => {
     assert.ok(settingsPath.includes("it's a \u2019quoted\u2019 home"), settingsPath);
     assert.deepEqual(calls.map((call) => [call.shell, ...call.args]), [
       ['bash', '-c', `claude${bashFlag}`],
-      ['bash', '-c', `claude --resume "resumed-session-id"${bashFlag} || claude${bashFlag}`],
+      ['bash', '-c', `claude --resume "resumed-session-id"${bashFlag}`],
       ['powershell.exe', '-Command', `claude${powerShellFlag}`],
-      [
-        'powershell.exe',
-        '-Command',
-        `claude --resume "resumed-session-id"${powerShellFlag}; if ($LASTEXITCODE -ne 0) { claude${powerShellFlag} }`,
-      ],
+      ['powershell.exe', '-Command', `claude --resume "resumed-session-id"${powerShellFlag}`],
     ]);
     // Spelled out once, so the escaping above is not only checked against itself.
     assert.ok(calls[0].command.endsWith(`/it'\\''s a \u2019quoted\u2019 home/.cloudcli/claude-shell-theme-light.json'`));

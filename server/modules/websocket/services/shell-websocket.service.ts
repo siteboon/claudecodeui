@@ -259,10 +259,14 @@ function buildShellCommand(
   const theme = buildClaudeThemeLaunch(readColorScheme(message.colorScheme), projectPath);
   const launchFlags = `${bypassFlag}${theme.flag}`;
   if (resumeSessionId) {
-    const command = os.platform() === 'win32'
-      ? `claude --resume "${resumeSessionId}"${launchFlags}; if ($LASTEXITCODE -ne 0) { claude${launchFlags} }`
-      : `claude --resume "${resumeSessionId}"${launchFlags} || claude${launchFlags}`;
-    return { command, claudeFollowsAppTheme: theme.followsAppTheme };
+    // No fallback to a fresh `claude` when the resume fails: the tab stays on
+    // the session the user opened, so a new conversation there would look like
+    // the old one, and Claude's own error (e.g. a session that is still running
+    // in the background) would be wiped by the new one's full-screen UI.
+    return {
+      command: `claude --resume "${resumeSessionId}"${launchFlags}`,
+      claudeFollowsAppTheme: theme.followsAppTheme,
+    };
   }
   if (initialCommand) {
     // A caller's own command (e.g. `claude /login`) is launched as given.
