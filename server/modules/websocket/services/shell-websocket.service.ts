@@ -124,7 +124,7 @@ type ShellWebSocketDependencies = {
    * or null. Optional so callers without access to the CLI registry keep the
    * plain `--resume` launch.
    */
-  findBackgroundClaudeJobId?: (providerSessionId: string) => string | null;
+  findBackgroundClaudeJobId?: (providerSessionId: string) => Promise<string | null> | string | null;
   spawnPty?: typeof pty.spawn;
 };
 
@@ -215,7 +215,8 @@ type ShellLaunch = {
 function buildShellCommand(
   message: ShellIncomingMessage,
   dependencies: ShellWebSocketDependencies,
-  projectPath: string
+  projectPath: string,
+  backgroundJobId: string | null = null,
 ): ShellLaunch {
   const hasSession = readBoolean(message.hasSession);
   const initialCommand = readString(message.initialCommand);
@@ -268,10 +269,7 @@ function buildShellCommand(
   // when its terminal closed) cannot be resumed: the CLI refuses and asks for
   // `claude attach <job id>`. Attaching opens the live session; it takes no
   // launch flags, and leaving the tab leaves the session running.
-  const backgroundJobId = resumeSessionId
-    ? dependencies.findBackgroundClaudeJobId?.(resumeSessionId)
-    : null;
-  if (backgroundJobId) {
+  if (resumeSessionId && backgroundJobId) {
     return { command: `claude attach "${backgroundJobId}"`, claudeFollowsAppTheme: false };
   }
   if (resumeSessionId) {
@@ -285,6 +283,33 @@ function buildShellCommand(
     return otherProgram(initialCommand);
   }
   return { command: `claude${launchFlags}`, claudeFollowsAppTheme: theme.followsAppTheme };
+}
+
+/**
+ * Looks up the background job to attach to instead of resuming, for a Claude
+ * launch that resumes a session. Null, without a lookup, for every other
+ * launch, which therefore starts without yielding.
+ */
+function findBackgroundJobForLaunch(
+  message: ShellIncomingMessage,
+  dependencies: ShellWebSocketDependencies,
+): Promise<string | null> | null {
+  const initialCommand = readString(message.initialCommand);
+  const provider = readString(message.provider, 'claude');
+  const isPlainShell =
+    readBoolean(message.isPlainShell) ||
+    (!!initialCommand && !readBoolean(message.hasSession)) ||
+    provider === 'plain-shell';
+  const findJobId = dependencies.findBackgroundClaudeJobId;
+  const resumeSessionId = isPlainShell || provider !== 'claude' || !findJobId
+    ? null
+    : resolveResumeSessionId(message, dependencies);
+  if (!findJobId || !resumeSessionId) {
+    return null;
+  }
+  return Promise.resolve()
+    .then(() => findJobId(resumeSessionId))
+    .then((jobId) => jobId ?? null, () => null);
 }
 
 // Claude Code's built-in theme ids (the `/theme` picker of CLI 2.1.280). A
@@ -562,6 +587,11 @@ export function handleShellConnection(
       }
 
       if (data.type === 'init') {
+        // Looked up first, so the rest of the launch runs without yielding:
+        // nothing else can take this pty key between the check for an
+        // existing pty and the spawn.
+        const backgroundJobLookup = findBackgroundJobForLaunch(data, dependencies);
+        const backgroundJobId = backgroundJobLookup ? await backgroundJobLookup : null;
         const projectPath = readString(data.projectPath, process.cwd());
         const sessionId = readString(data.sessionId) || null;
         const hasSession = readBoolean(data.hasSession);
@@ -653,6 +683,7 @@ export function handleShellConnection(
           data,
           dependencies,
           resolvedProjectPath,
+          backgroundJobId,
         );
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const claudeColorScheme = claudeFollowsAppTheme ? colorScheme : null;

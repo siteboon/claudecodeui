@@ -230,15 +230,22 @@ test('a missing project directory is reported as an error frame and starts no pt
 
 type SpawnCall = { shell: string; args: string[]; command: string; env: Record<string, string | undefined> };
 
-function spawnRecorder(resumeSessionId: string | null = null, backgroundJobId: string | null = null) {
+/**
+ * `backgroundJobId` adds a background-job lookup answering it; without one
+ * the gateway has no lookup and resume launches start synchronously.
+ */
+function spawnRecorder(resumeSessionId: string | null = null, backgroundJobId?: string | null) {
   const calls: SpawnCall[] = [];
   const backgroundLookups: string[] = [];
-  const dependencies = {
-    resolveProviderSessionId: () => resumeSessionId,
-    findBackgroundClaudeJobId: (providerSessionId: string) => {
+  const findBackgroundClaudeJobId = backgroundJobId === undefined
+    ? undefined
+    : async (providerSessionId: string) => {
       backgroundLookups.push(providerSessionId);
       return backgroundJobId;
-    },
+    };
+  const dependencies = {
+    resolveProviderSessionId: () => resumeSessionId,
+    findBackgroundClaudeJobId,
     spawnPty: (shell: string, args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
       calls.push({
         shell,
@@ -287,7 +294,7 @@ type ClaudeConfigFixture = {
  * so the user's real Claude config and app data folder never leak into (or
  * out of) the tests. `homeName` names the HOME folder, to test awkward paths.
  */
-function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void, homeName = 'home') {
+function setUpClaudeConfig(homeName: string): { fixture: ClaudeConfigFixture; restore: () => void } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-claude-theme-'));
   const configHome = path.join(root, 'config');
   const home = path.join(root, homeName);
@@ -309,9 +316,7 @@ function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void, homeName
     fs.writeFileSync(filePath, typeof contents === 'string' ? contents : JSON.stringify(contents));
   };
 
-  try {
-    body({ configHome, home, projectPath, write });
-  } finally {
+  const restore = () => {
     for (const [key, value] of Object.entries(savedEnv)) {
       if (value === undefined) {
         delete process.env[key];
@@ -320,8 +325,30 @@ function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void, homeName
       }
     }
     fs.rmSync(root, { recursive: true, force: true });
+  };
+  return { fixture: { configHome, home, projectPath, write }, restore };
+}
+
+function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void, homeName = 'home') {
+  const { fixture, restore } = setUpClaudeConfig(homeName);
+  try {
+    body(fixture);
+  } finally {
+    restore();
   }
 }
+
+async function withClaudeConfigAsync(body: (fixture: ClaudeConfigFixture) => Promise<void>, homeName = 'home') {
+  const { fixture, restore } = setUpClaudeConfig(homeName);
+  try {
+    await body(fixture);
+  } finally {
+    restore();
+  }
+}
+
+/** Lets an `init` that awaited a lookup finish its launch. */
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 // The server-owned settings file a light launch points `--settings` at. The
 // default fixture HOME has no quote in it, so bash quoting is a plain wrap.
@@ -754,8 +781,8 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
 
 // The CLI refuses `--resume` for a session a background process holds and asks
 // for `claude attach <job id>`, which takes no launch flags.
-test('a session running in the background is attached instead of resumed', () => {
-  withClaudeConfig(({ projectPath }) => {
+test('a session running in the background is attached instead of resumed', async () => {
+  await withClaudeConfigAsync(async ({ projectPath }) => {
     const { calls, backgroundLookups, dependencies } = spawnRecorder('resumed-session-id', 'a1b2c3d4');
 
     const socket = launch(
@@ -764,8 +791,10 @@ test('a session running in the background is attached instead of resumed', () =>
       projectPath
     );
     launch(dependencies, { provider: 'claude', hasSession: false }, projectPath);
+    await settle();
 
-    assert.equal(calls[0].command, 'claude attach "a1b2c3d4"');
+    const attach = calls.find((call) => call.command.startsWith('claude attach'));
+    assert.equal(attach?.command, 'claude attach "a1b2c3d4"');
     assert.deepEqual(backgroundLookups, ['resumed-session-id'], 'only resumes look the session up');
     assert.ok(
       !socket.frames.some((frame) => (JSON.parse(frame) as { type?: string }).type === 'claude_theme'),
@@ -774,10 +803,11 @@ test('a session running in the background is attached instead of resumed', () =>
   });
 });
 
-test('a session with no background process is resumed as before', () => {
+test('a session with no background process is resumed as before', async () => {
   const { calls, dependencies } = spawnRecorder('resumed-session-id', null);
 
   launch(dependencies, { provider: 'claude', hasSession: true });
+  await settle();
 
   assert.match(calls[0].command, /^claude --resume "resumed-session-id"/);
 });

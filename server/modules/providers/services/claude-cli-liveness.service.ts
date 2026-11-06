@@ -15,10 +15,18 @@ type LiveClaudeCliSession = {
 };
 
 /**
- * Claude Code keeps one file per running session here, named `<pid>.json`.
- * The directory belongs to the CLI, not to CloudCLI: it is only ever read.
+ * Claude Code keeps one file per running session here, named `<pid>.json`,
+ * under its config directory: `CLAUDE_CONFIG_DIR` when that is set (the server
+ * forwards its env to every CLI it spawns), `~/.claude` otherwise. The
+ * directory belongs to the CLI, not to CloudCLI: it is only ever read.
  */
-const registryDirectory = () => path.join(os.homedir(), '.claude', 'sessions');
+const registryDirectory = () => {
+  const configDirectory = process.env.CLAUDE_CONFIG_DIR?.trim();
+  const baseDirectory = configDirectory && path.isAbsolute(configDirectory)
+    ? configDirectory
+    : path.join(os.homedir(), '.claude');
+  return path.join(baseDirectory, 'sessions');
+};
 
 /**
  * Upper bound on registry files inspected per poll.
@@ -28,6 +36,39 @@ const registryDirectory = () => path.join(os.homedir(), '.claude', 'sessions');
  * unbounded filesystem work. Real installations hold a handful of entries.
  */
 const MAX_REGISTRY_FILES = 256;
+
+/** Whether a process with this pid exists (EPERM: it does, owned by someone else). */
+function pidExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException)?.code === 'EPERM';
+  }
+}
+
+/**
+ * The registry's `.json` entries worth reading. An entry named after a pid
+ * that no longer exists is left out without being read, so crash leftovers
+ * neither cost a read nor count towards `MAX_REGISTRY_FILES`.
+ */
+async function listRegistryEntries(): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await fsp.readdir(registryDirectory());
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => {
+      if (!entry.endsWith('.json')) {
+        return false;
+      }
+      const pidName = /^(\d+)\.json$/.exec(entry);
+      return !pidName || pidExists(Number(pidName[1]));
+    })
+    .slice(0, MAX_REGISTRY_FILES);
+}
 
 /**
  * Whether `pid` is still the process the registry recorded.
@@ -39,12 +80,8 @@ const MAX_REGISTRY_FILES = 256;
  * reused pid cannot be mistaken for the original process.
  */
 function isRecordedProcessAlive(pid: number, procStart: unknown): boolean {
-  try {
-    process.kill(pid, 0);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code !== 'EPERM') {
-      return false;
-    }
+  if (!pidExists(pid)) {
+    return false;
   }
 
   if (process.platform !== 'linux' || typeof procStart !== 'string' || !procStart) {
@@ -104,16 +141,9 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
  * is recomputed on every read instead of being cached or persisted.
  */
 export async function listBusyClaudeCliSessions(): Promise<LiveClaudeCliSession[]> {
-  let entries: string[];
-  try {
-    entries = await fsp.readdir(registryDirectory());
-  } catch {
-    // No registry directory at all is the normal case for an install that has
-    // never run the CLI, and an unreadable one is not worth failing a poll for.
-    return [];
-  }
-
-  const registryFiles = entries.filter((entry) => entry.endsWith('.json')).slice(0, MAX_REGISTRY_FILES);
+  // No registry directory at all is the normal case for an install that has
+  // never run the CLI, and an unreadable one is not worth failing a poll for.
+  const registryFiles = await listRegistryEntries();
   const sessions = await Promise.all(
     registryFiles.map((entry) => readLiveBusySession(path.join(registryDirectory(), entry))),
   );
@@ -131,28 +161,22 @@ const SAFE_JOB_ID = /^[A-Za-z0-9_.:-]+$/;
  * The CLI refuses `claude --resume` for such a session and asks for
  * `claude attach <job id>` instead, so the Shell view launches that.
  *
- * Used by the websocket module's Shell gateway when it builds a launch
- * command. It is synchronous because the launch command is built
- * synchronously; the registry holds a handful of small files.
+ * Used by the websocket module's Shell gateway before it builds a launch
+ * command. Reads are asynchronous so a slow config directory cannot stall the
+ * server while a Shell tab opens.
  */
-export function findBackgroundClaudeJobId(providerSessionId: string): string | null {
+export async function findBackgroundClaudeJobId(providerSessionId: string): Promise<string | null> {
   if (!providerSessionId) {
     return null;
   }
 
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(registryDirectory());
-  } catch {
-    return null;
-  }
-
-  for (const entry of entries.filter((name) => name.endsWith('.json')).slice(0, MAX_REGISTRY_FILES)) {
+  const entries = await listRegistryEntries();
+  const jobIds = await Promise.all(entries.map(async (entry) => {
     let record: Record<string, unknown> | null;
     try {
-      record = JSON.parse(fs.readFileSync(path.join(registryDirectory(), entry), 'utf8'));
+      record = JSON.parse(await fsp.readFile(path.join(registryDirectory(), entry), 'utf8'));
     } catch {
-      continue;
+      return null;
     }
     if (
       !record ||
@@ -162,13 +186,13 @@ export function findBackgroundClaudeJobId(providerSessionId: string): string | n
       typeof record.jobId !== 'string' ||
       !SAFE_JOB_ID.test(record.jobId)
     ) {
-      continue;
+      return null;
     }
     const pid = typeof record.pid === 'number' ? record.pid : NaN;
-    if (Number.isInteger(pid) && pid > 0 && isRecordedProcessAlive(pid, record.procStart)) {
-      return record.jobId;
-    }
-  }
+    return Number.isInteger(pid) && pid > 0 && isRecordedProcessAlive(pid, record.procStart)
+      ? record.jobId
+      : null;
+  }));
 
-  return null;
+  return jobIds.find((jobId): jobId is string => jobId !== null) ?? null;
 }
