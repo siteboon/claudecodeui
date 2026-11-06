@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -37,7 +38,7 @@ const MAX_REGISTRY_FILES = 256;
  * `procStart` is compared against the kernel's start-time for that pid so a
  * reused pid cannot be mistaken for the original process.
  */
-async function isRecordedProcessAlive(pid: number, procStart: unknown): Promise<boolean> {
+function isRecordedProcessAlive(pid: number, procStart: unknown): boolean {
   try {
     process.kill(pid, 0);
   } catch (error) {
@@ -51,7 +52,7 @@ async function isRecordedProcessAlive(pid: number, procStart: unknown): Promise<
   }
 
   try {
-    const stat = await fsp.readFile(`/proc/${pid}/stat`, 'utf8');
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
     // The comm field is parenthesised and may itself contain spaces, so the
     // fields are counted from the last ')'. starttime is the 22nd field
     // overall, i.e. the 20th of what follows the comm field.
@@ -85,7 +86,7 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
     return null;
   }
 
-  if (!(await isRecordedProcessAlive(pid, record.procStart))) {
+  if (!isRecordedProcessAlive(pid, record.procStart)) {
     return null;
   }
 
@@ -118,4 +119,56 @@ export async function listBusyClaudeCliSessions(): Promise<LiveClaudeCliSession[
   );
 
   return sessions.filter((session): session is LiveClaudeCliSession => session !== null);
+}
+
+/** Job ids end up in a shell command line, so only plain id characters pass. */
+const SAFE_JOB_ID = /^[A-Za-z0-9_.:-]+$/;
+
+/**
+ * The job id of the live background Claude process (`claude --bg`, or a
+ * session sent to the background) that holds `providerSessionId`, or null.
+ *
+ * The CLI refuses `claude --resume` for such a session and asks for
+ * `claude attach <job id>` instead, so the Shell view launches that.
+ *
+ * Used by the websocket module's Shell gateway when it builds a launch
+ * command. It is synchronous because the launch command is built
+ * synchronously; the registry holds a handful of small files.
+ */
+export function findBackgroundClaudeJobId(providerSessionId: string): string | null {
+  if (!providerSessionId) {
+    return null;
+  }
+
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(registryDirectory());
+  } catch {
+    return null;
+  }
+
+  for (const entry of entries.filter((name) => name.endsWith('.json')).slice(0, MAX_REGISTRY_FILES)) {
+    let record: Record<string, unknown> | null;
+    try {
+      record = JSON.parse(fs.readFileSync(path.join(registryDirectory(), entry), 'utf8'));
+    } catch {
+      continue;
+    }
+    if (
+      !record ||
+      typeof record !== 'object' ||
+      record.kind !== 'bg' ||
+      record.sessionId !== providerSessionId ||
+      typeof record.jobId !== 'string' ||
+      !SAFE_JOB_ID.test(record.jobId)
+    ) {
+      continue;
+    }
+    const pid = typeof record.pid === 'number' ? record.pid : NaN;
+    if (Number.isInteger(pid) && pid > 0 && isRecordedProcessAlive(pid, record.procStart)) {
+      return record.jobId;
+    }
+  }
+
+  return null;
 }

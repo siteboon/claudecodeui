@@ -230,10 +230,15 @@ test('a missing project directory is reported as an error frame and starts no pt
 
 type SpawnCall = { shell: string; args: string[]; command: string; env: Record<string, string | undefined> };
 
-function spawnRecorder(resumeSessionId: string | null = null) {
+function spawnRecorder(resumeSessionId: string | null = null, backgroundJobId: string | null = null) {
   const calls: SpawnCall[] = [];
+  const backgroundLookups: string[] = [];
   const dependencies = {
     resolveProviderSessionId: () => resumeSessionId,
+    findBackgroundClaudeJobId: (providerSessionId: string) => {
+      backgroundLookups.push(providerSessionId);
+      return backgroundJobId;
+    },
     spawnPty: (shell: string, args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
       calls.push({
         shell,
@@ -244,7 +249,7 @@ function spawnRecorder(resumeSessionId: string | null = null) {
       return createFakePty() as never;
     },
   };
-  return { calls, dependencies };
+  return { calls, backgroundLookups, dependencies };
 }
 
 let launchCount = 0;
@@ -745,4 +750,34 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
       ['0;15', '0;15', '0;15', '15;0']
     );
   });
+});
+
+// The CLI refuses `--resume` for a session a background process holds and asks
+// for `claude attach <job id>`, which takes no launch flags.
+test('a session running in the background is attached instead of resumed', () => {
+  withClaudeConfig(({ projectPath }) => {
+    const { calls, backgroundLookups, dependencies } = spawnRecorder('resumed-session-id', 'a1b2c3d4');
+
+    const socket = launch(
+      dependencies,
+      { provider: 'claude', hasSession: true, bypassPermissions: true, colorScheme: 'light' },
+      projectPath
+    );
+    launch(dependencies, { provider: 'claude', hasSession: false }, projectPath);
+
+    assert.equal(calls[0].command, 'claude attach "a1b2c3d4"');
+    assert.deepEqual(backgroundLookups, ['resumed-session-id'], 'only resumes look the session up');
+    assert.ok(
+      !socket.frames.some((frame) => (JSON.parse(frame) as { type?: string }).type === 'claude_theme'),
+      'an attached session did not start in the app theme'
+    );
+  });
+});
+
+test('a session with no background process is resumed as before', () => {
+  const { calls, dependencies } = spawnRecorder('resumed-session-id', null);
+
+  launch(dependencies, { provider: 'claude', hasSession: true });
+
+  assert.match(calls[0].command, /^claude --resume "resumed-session-id"/);
 });

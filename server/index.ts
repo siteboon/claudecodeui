@@ -12,6 +12,7 @@ import cors from 'cors';
 import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
+    findBackgroundClaudeJobId,
     initializeSessionsWatcher,
     providerRuntimeService,
     reapOrphanedOpenCodeServers,
@@ -121,6 +122,7 @@ createWebSocketServer(server, {
 
             return null;
         },
+        findBackgroundClaudeJobId,
     },
     getPluginPort,
 });

@@ -119,6 +119,12 @@ type ShellWebSocketDependencies = {
     sessionId: string,
     provider: string,
   ) => string | null | undefined;
+  /**
+   * Job id of a live background Claude process holding this Claude session id,
+   * or null. Optional so callers without access to the CLI registry keep the
+   * plain `--resume` launch.
+   */
+  findBackgroundClaudeJobId?: (providerSessionId: string) => string | null;
   spawnPty?: typeof pty.spawn;
 };
 
@@ -258,6 +264,16 @@ function buildShellCommand(
     : '';
   const theme = buildClaudeThemeLaunch(readColorScheme(message.colorScheme), projectPath);
   const launchFlags = `${bypassFlag}${theme.flag}`;
+  // A session that is running in the background (`claude --bg`, or sent there
+  // when its terminal closed) cannot be resumed: the CLI refuses and asks for
+  // `claude attach <job id>`. Attaching opens the live session; it takes no
+  // launch flags, and leaving the tab leaves the session running.
+  const backgroundJobId = resumeSessionId
+    ? dependencies.findBackgroundClaudeJobId?.(resumeSessionId)
+    : null;
+  if (backgroundJobId) {
+    return { command: `claude attach "${backgroundJobId}"`, claudeFollowsAppTheme: false };
+  }
   if (resumeSessionId) {
     const command = os.platform() === 'win32'
       ? `claude --resume "${resumeSessionId}"${launchFlags}; if ($LASTEXITCODE -ne 0) { claude${launchFlags} }`
