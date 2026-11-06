@@ -416,6 +416,10 @@ export const api = {
 
   // Provider (coding agent) endpoints — models, capabilities, sessions, MCP, skills.
   providers: {
+    codexApiConnection: () => get('/api/providers/codex/api-connection'),
+    saveCodexApiConnection: (input: { provider?: string; baseUrl: string; apiKey?: string }) =>
+      put('/api/providers/codex/api-connection', input),
+    clearCodexApiConnection: () => del('/api/providers/codex/api-connection'),
     capabilities: () => get('/api/providers/capabilities'),
     authStatus: (provider: string) =>
       get(`/api/providers/${encodeURIComponent(provider)}/auth/status`),

@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
+import { codexApiConnectionService } from '@/modules/providers/services/codex-api-connection.service.js';
 import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerCliService } from '@/modules/providers/services/provider-cli.service.js';
@@ -623,6 +624,34 @@ const parseCustomModelsOnlyPayload = (payload: unknown): boolean => {
 
   return enabled;
 };
+
+router.get('/codex/api-connection', (_req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(createApiSuccessResponse(codexApiConnectionService.getPublic()));
+});
+
+router.put('/codex/api-connection', asyncHandler(async (req: Request, res: Response) => {
+  const body: unknown = req.body;
+  if (!body || typeof body !== 'object'
+    || !('baseUrl' in body) || typeof body.baseUrl !== 'string' || body.baseUrl.length > 2048
+    || ('provider' in body && (typeof body.provider !== 'string' || body.provider.length > 64))
+    || ('apiKey' in body && (typeof body.apiKey !== 'string' || body.apiKey.length > 8192))) {
+    throw new AppError('Expected baseUrl and optional apiKey strings.', {
+      code: 'INVALID_CODEX_API_CONNECTION', statusCode: 400,
+    });
+  }
+  res.set('Cache-Control', 'no-store');
+  res.json(createApiSuccessResponse(codexApiConnectionService.save({
+    baseUrl: body.baseUrl,
+    provider: 'provider' in body ? body.provider as string : undefined,
+    apiKey: 'apiKey' in body ? body.apiKey as string : undefined,
+  })));
+}));
+
+router.delete('/codex/api-connection', (_req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(createApiSuccessResponse(codexApiConnectionService.clear()));
+});
 
 router.get(
   '/:provider/auth/status',
