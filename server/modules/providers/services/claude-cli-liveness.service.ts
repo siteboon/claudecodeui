@@ -53,9 +53,12 @@ function pidExists(pid: number): boolean {
 /**
  * The registry's `.json` entries worth reading. An entry named after a pid
  * that no longer exists is left out without being read, so crash leftovers
- * neither cost a read nor count towards `MAX_REGISTRY_FILES`.
+ * neither cost a read nor count towards `limit`. `pidNamedOnly` also leaves
+ * out entries not named `<pid>.json`.
  */
-async function listRegistryEntries(): Promise<string[]> {
+async function listRegistryEntries(
+  { limit = MAX_REGISTRY_FILES, pidNamedOnly = false }: { limit?: number; pidNamedOnly?: boolean } = {},
+): Promise<string[]> {
   let entries: string[];
   try {
     entries = await fsp.readdir(registryDirectory());
@@ -68,9 +71,9 @@ async function listRegistryEntries(): Promise<string[]> {
         return false;
       }
       const pidName = /^(\d+)\.json$/.exec(entry);
-      return !pidName || pidExists(Number(pidName[1]));
+      return pidName ? pidExists(Number(pidName[1])) : !pidNamedOnly;
     })
-    .slice(0, MAX_REGISTRY_FILES);
+    .slice(0, limit);
 }
 
 /**
@@ -232,9 +235,12 @@ export async function findClaudeCliProcessSession(
     return direct;
   }
 
-  // Entries of pids that are gone are skipped unread (see listRegistryEntries),
-  // so the cap only ever counts live processes.
-  const candidates = (await listRegistryEntries())
+  // Only live pids are listed (see listRegistryEntries), and every one of them
+  // is a candidate, so no cap can hide the CLI. A poll reads only the entries
+  // of the pty's own children, after one `ps` for all candidates; an attached
+  // job's search reads live entries until it is found, and later polls read
+  // its known pid directly.
+  const candidates = (await listRegistryEntries({ limit: Infinity, pidNamedOnly: true }))
     .map((entry) => /^(\d+)\.json$/.exec(entry))
     .map((match) => (match ? Number(match[1]) : NaN))
     .filter((pid) => Number.isInteger(pid) && pid !== rootPid && pid !== knownPid);

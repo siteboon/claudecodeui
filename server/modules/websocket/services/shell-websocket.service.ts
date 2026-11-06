@@ -49,6 +49,10 @@ type PtySessionEntry = {
   // A poll is still reading the registry; the next tick skips instead of
   // starting a second one.
   following: boolean;
+  // Where the pty was filed before its last move, until a client attaches to
+  // it under its new key. A client can lose its socket after the move but
+  // before `session_changed` reaches it; reconnecting, it asks for this key.
+  unconfirmedMove: { fromKey: string; fromSessionId: string | null } | null;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
@@ -609,6 +613,20 @@ function findPtySessionKey(entry: PtySessionEntry): string | null {
   return null;
 }
 
+/**
+ * The detached pty that moved away from `key` without a client confirming
+ * the move, or null. Only a pty with no client attached qualifies: while its
+ * client is still connected, another open of the old session is intentional.
+ */
+function findUnconfirmedMove(key: string): PtySessionEntry | null {
+  for (const entry of ptySessionsMap.values()) {
+    if (entry.ws === null && entry.unconfirmedMove?.fromKey === key) {
+      return entry;
+    }
+  }
+  return null;
+}
+
 /** Drops `entry` from the map and stops following its Claude session. */
 function forgetPtySession(entry: PtySessionEntry): void {
   const key = findPtySessionKey(entry);
@@ -632,7 +650,9 @@ function forgetPtySession(entry: PtySessionEntry): void {
  * A switch is only applied while a client is attached to hear about it. A
  * client that reconnects after missing one asks for the session it last
  * knew, so the pty stays filed there until the client is back, and the next
- * poll moves it and tells that client.
+ * poll moves it and tells that client. If the socket drops after the move but
+ * before the notification arrives, the reconnect still finds the pty through
+ * `unconfirmedMove` and is told again.
  */
 async function followClaudeSessionSwitch(
   entry: PtySessionEntry,
@@ -681,6 +701,7 @@ async function followClaudeSessionSwitch(
   const previousSessionId = entry.sessionId;
   ptySessionsMap.delete(currentKey);
   ptySessionsMap.set(nextKey, entry);
+  entry.unconfirmedMove = { fromKey: currentKey, fromSessionId: previousSessionId };
   entry.projectPath = projectPath;
   entry.sessionId = appSession.sessionId;
   entry.providerSessionId = found.providerSessionId;
@@ -780,12 +801,23 @@ export function handleShellConnection(
           }
         }
 
-        let existingSession =
-          isLoginCommand || forceRestart ? null : ptySessionsMap.get(initKey);
+        // The pty filed under this key, or else one that moved away from it
+        // without its client hearing (a reconnect that missed
+        // `session_changed` still asks for the old key).
+        const findExisting = () => {
+          if (isLoginCommand || forceRestart) {
+            return { filed: null, moved: null };
+          }
+          const filed = ptySessionsMap.get(initKey) ?? null;
+          return { filed, moved: filed ? null : findUnconfirmedMove(initKey) };
+        };
+        let { filed: filedSession, moved: movedSession } = findExisting();
         let backgroundJobId: string | null = null;
         // Only a launch that resumes a session waits for the registry, and
         // only when no pty is there to reattach to.
-        const backgroundJobLookup = existingSession ? null : findBackgroundJobForLaunch(data, dependencies);
+        const backgroundJobLookup = filedSession || movedSession
+          ? null
+          : findBackgroundJobForLaunch(data, dependencies);
         if (backgroundJobLookup) {
           initWaiting = true;
           try {
@@ -803,13 +835,14 @@ export function handleShellConnection(
             }
             return;
           }
-          // Another socket may have started this session's pty meanwhile.
-          existingSession = isLoginCommand || forceRestart ? null : ptySessionsMap.get(initKey);
+          // Another socket may have started or freed this session's pty meanwhile.
+          ({ filed: filedSession, moved: movedSession } = findExisting());
         }
         // Nothing below yields, so this init can no longer be overtaken.
         if (latestInitByKey.get(initKey) === initToken) {
           latestInitByKey.delete(initKey);
         }
+        const existingSession = filedSession ?? movedSession;
         if (existingSession) {
           shellProcess = existingSession.pty;
           if (existingSession.timeoutId) {
@@ -838,6 +871,17 @@ export function handleShellConnection(
           existingSession.ws = ws;
           attachedEntry = existingSession;
           sendClaudeColorScheme(ws, existingSession.claudeColorScheme);
+          if (movedSession) {
+            // Repeat the notification this client missed.
+            ws.send(JSON.stringify({
+              type: 'session_changed',
+              sessionId: movedSession.sessionId,
+              previousSessionId: movedSession.unconfirmedMove?.fromSessionId ?? null,
+            }));
+          } else {
+            // Attached under its current key: the move, if any, has been followed.
+            existingSession.unconfirmedMove = null;
+          }
           return;
         }
 
@@ -904,6 +948,7 @@ export function handleShellConnection(
           backgroundJobId: shellCommand.startsWith('claude attach ') ? backgroundJobId : null,
           followTimer: null,
           following: false,
+          unconfirmedMove: null,
         };
         ptySessionsMap.set(ptySessionKey, entry);
         attachedEntry = entry;

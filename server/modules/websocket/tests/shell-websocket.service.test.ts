@@ -1069,6 +1069,42 @@ test('a switch while no client is attached waits for the client to come back', a
   ptys.forEach((fakePty) => fakePty.emitExit());
 });
 
+// The socket can drop after the move but before `session_changed` arrives.
+// The client then reconnects to the old session and must get its own pty
+// back, and be told again where it went, rather than a second terminal.
+test('a reconnect that missed session_changed reattaches to the moved pty', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const oldSession = `missed-old-${Date.now()}`;
+  const newSession = `missed-new-${Date.now()}`;
+  let current = oldSession;
+  const { ptys, dependencies } = claudeFollowRecorder(() => current, new Set([oldSession, newSession]));
+
+  try {
+    const first = openClaudeSession(dependencies, oldSession);
+    current = newSession;
+    await followTick(t);
+    assert.equal(framesOfType(first, 'session_changed').length, 1, 'moved while the socket was open');
+    first.emit('close'); // ...but the frame never reached the client
+
+    const back = openClaudeSession(dependencies, oldSession);
+    assert.ok(reattached(back));
+    assert.equal(ptys.length, 1);
+    assert.deepEqual(framesOfType(back, 'session_changed'), [
+      { type: 'session_changed', sessionId: newSession, previousSessionId: oldSession },
+    ]);
+
+    // Once the client follows, opening the old session again is intentional.
+    back.emit('close');
+    const followed = openClaudeSession(dependencies, newSession);
+    assert.ok(reattached(followed));
+    followed.emit('close');
+    assert.ok(!reattached(openClaudeSession(dependencies, oldSession)));
+    assert.equal(ptys.length, 2);
+  } finally {
+    ptys.forEach((fakePty) => fakePty.emitExit());
+  }
+});
+
 // `claude attach` shows a background process the pty did not start, so the
 // follower looks it up by job id rather than among the pty's children.
 test('an attached background job is followed by its job id', async (t) => {
