@@ -173,6 +173,10 @@ export function useSidebarController({
   const [isRecentConversationsLoading, setIsRecentConversationsLoading] = useState(false);
   const [isLoadingMoreRecentConversations, setIsLoadingMoreRecentConversations] = useState(false);
   const [recentConversationsError, setRecentConversationsError] = useState(false);
+  // When the first page of the Conversations list last arrived (client clock),
+  // or null before it has. A session active after that is new to the list,
+  // which is how an empty list still picks up sessions that start later.
+  const [recentConversationsLoadedAt, setRecentConversationsLoadedAt] = useState<number | null>(null);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
   const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
@@ -313,6 +317,9 @@ export function useSidebarController({
         return;
       }
 
+      if (!append) {
+        setRecentConversationsLoadedAt(Date.now());
+      }
       setRecentConversations((previous) => {
         if (!append) {
           return conversations;
@@ -396,40 +403,35 @@ export function useSidebarController({
 
   // The Conversations list is only fetched when its tab opens, while `projects`
   // is kept live: sessions are patched in as they are renamed, get new
-  // messages, start, or go away. Fold that into the rows already loaded, or the
-  // list keeps the order, times and titles it had when the tab opened:
+  // messages or start. Fold that into the rows already loaded, or the list
+  // keeps the order, times and titles it had when the tab opened:
   // - a newer title or last activity replaces the row's own;
-  // - a session newer than every loaded row, which therefore started or woke up
-  //   after the fetch, is added;
-  // - a row whose project's loaded sessions cover its time, yet no longer list
-  //   it, was archived or deleted elsewhere and is dropped;
+  // - a session active after every loaded row (after the fetch, for an empty
+  //   list) started or woke up since, and is added;
   // - the rows are re-sorted newest first, as the server sorts them.
-  // The loaded rows are returned as-is when none of that changes anything, so
-  // unrelated `projects` updates do not re-render the list, and an empty
-  // summary never overwrites the id the server shows for an unnamed session.
-  const recentConversationsWithLiveSessions = useMemo(() => {
-    if (recentConversations.length === 0) {
-      return recentConversations;
+  // Rows are never dropped here: `projects` is not told when a session is
+  // archived or deleted elsewhere, so a session missing from it is not gone.
+  // The loaded rows are returned as-is when nothing changes, so unrelated
+  // `projects` updates do not re-render the list, and an empty summary never
+  // overwrites the id the server shows for an unnamed session.
+  const liveRecentConversations = useMemo(() => {
+    const unchanged = { rows: recentConversations, added: 0 };
+    if (recentConversationsLoadedAt === null) {
+      return unchanged;
     }
 
     const timeOf = (value: string | null | undefined) => {
       const time = Date.parse(value ?? '');
       return Number.isNaN(time) ? 0 : time;
     };
-    const newestLoaded = Math.max(...recentConversations.map((conversation) => timeOf(conversation.lastActivity)));
+    const addedAfter = recentConversations.length > 0
+      ? Math.max(...recentConversations.map((conversation) => timeOf(conversation.lastActivity)))
+      : recentConversationsLoadedAt;
 
     const liveSessions = new Map<string, { session: ProjectSession; project: Project }>();
-    // Per project, the oldest activity its loaded sessions reach back to:
-    // a row at least that recent would be among them if it still existed.
-    const coveredSince = new Map<string, number>();
     for (const project of projects) {
-      let oldest = Infinity;
       for (const session of project.sessions ?? []) {
         liveSessions.set(session.id, { session, project });
-        oldest = Math.min(oldest, timeOf(session.lastActivity));
-      }
-      if (oldest !== Infinity) {
-        coveredSince.set(project.projectId, project.sessionMeta?.hasMore ? oldest : -Infinity);
       }
     }
 
@@ -445,19 +447,9 @@ export function useSidebarController({
       seen.add(conversation.sessionId);
 
       const live = liveSessions.get(conversation.sessionId);
-      if (!live) {
-        const since = conversation.projectId === null ? undefined : coveredSince.get(conversation.projectId);
-        if (since !== undefined && timeOf(conversation.lastActivity) >= since) {
-          changed = true;
-          continue;
-        }
-        next.push(conversation);
-        continue;
-      }
-
       // Trimmed, because that is how the server derives a row's `sessionTitle`.
-      const summary = typeof live.session.summary === 'string' ? live.session.summary.trim() : '';
-      const lastActivity = live.session.lastActivity;
+      const summary = typeof live?.session.summary === 'string' ? live.session.summary.trim() : '';
+      const lastActivity = live?.session.lastActivity;
       const newerActivity = Boolean(lastActivity) && timeOf(lastActivity) > timeOf(conversation.lastActivity);
       if ((summary && summary !== conversation.sessionTitle) || newerActivity) {
         changed = true;
@@ -471,15 +463,17 @@ export function useSidebarController({
       next.push(conversation);
     }
 
+    let added = 0;
     for (const [sessionId, { session, project }] of liveSessions) {
-      if (seen.has(sessionId) || timeOf(session.lastActivity) <= newestLoaded) {
+      if (seen.has(sessionId) || timeOf(session.lastActivity) <= addedAfter) {
         continue;
       }
       const summary = typeof session.summary === 'string' ? session.summary.trim() : '';
       changed = true;
+      added += 1;
       next.push({
         sessionId,
-        provider: session.__provider ?? 'claude',
+        provider: session.__provider ?? session.provider ?? 'claude',
         projectId: project.projectId,
         projectDisplayName: project.displayName || project.path || '',
         // The server shows the id for a session with no title.
@@ -489,10 +483,11 @@ export function useSidebarController({
     }
 
     if (!changed) {
-      return recentConversations;
+      return unchanged;
     }
-    return next.sort((left, right) => timeOf(right.lastActivity) - timeOf(left.lastActivity));
-  }, [projects, recentConversations]);
+    next.sort((left, right) => timeOf(right.lastActivity) - timeOf(left.lastActivity));
+    return { rows: next, added };
+  }, [projects, recentConversations, recentConversationsLoadedAt]);
 
   useEffect(() => {
     if (searchMode !== 'archived') {
@@ -1387,8 +1382,9 @@ export function useSidebarController({
     archivedSessions: filteredArchivedSessions,
     archivedSessionsCount: archivedProjects.length + archivedSessions.length,
     isArchivedSessionsLoading,
-    recentConversations: recentConversationsWithLiveSessions,
-    recentConversationsTotal,
+    recentConversations: liveRecentConversations.rows,
+    // Sessions added live are not in the fetched total yet.
+    recentConversationsTotal: recentConversationsTotal + liveRecentConversations.added,
     recentConversationsHasMore,
     isRecentConversationsLoading,
     isLoadingMoreRecentConversations,

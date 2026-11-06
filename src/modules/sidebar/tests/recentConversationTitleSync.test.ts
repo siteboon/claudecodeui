@@ -174,21 +174,51 @@ test('a session that started after the list was fetched is added at the top', as
   assert.equal(result.current.recentConversations[0].projectId, 'project-1');
 });
 
-test('a session that went away is dropped only where the project list covers it', async () => {
+// `projects` is not told when a session is archived or deleted elsewhere, so
+// a session missing from it may still exist (e.g. on a later page).
+test('a row whose session is missing from the project list is kept', async () => {
   const { result, rerender } = await openWithRows([buildLiveProject(asLoaded)]);
 
-  // Every session of the project is loaded and session-2 is gone: archived or deleted.
   rerender({ projects: [buildLiveProject({ 'session-1': asLoaded['session-1'] })] });
-  assert.deepEqual(result.current.recentConversations.map((row) => row.sessionId), ['session-1']);
+  assert.deepEqual(result.current.recentConversations.map((row) => row.sessionId), ['session-1', 'session-2']);
 });
 
-test('a row older than the sessions a project has loaded so far is kept', async () => {
-  const { result, rerender } = await openWithRows([buildLiveProject(asLoaded)]);
+test('an empty list picks up a session that starts after it was fetched', async () => {
+  recentConversationsResponse.mockResolvedValue({
+    ok: true,
+    json: async () => ({ data: { conversations: [], total: 0, hasMore: false } }),
+  });
+  const rendered = renderController([buildLiveProject({})]);
+  act(() => {
+    rendered.result.current.setSearchMode('conversations');
+  });
+  await waitFor(() => {
+    assert.equal(recentConversationsResponse.mock.calls.length, 1);
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
 
-  // Only the newest session is loaded and more exist: session-2 may simply be
-  // on a later page of the project list.
-  rerender({ projects: [buildLiveProject({ 'session-1': asLoaded['session-1'] }, true)] });
-  assert.deepEqual(result.current.recentConversations.map((row) => row.sessionId), ['session-1', 'session-2']);
+  const startedAt = new Date(Date.now() + 60_000).toISOString();
+  rendered.rerender({ projects: [buildLiveProject({ 'session-new': { summary: 'New', lastActivity: startedAt } })] });
+
+  assert.deepEqual(rendered.result.current.recentConversations.map((row) => row.sessionId), ['session-new']);
+  assert.equal(rendered.result.current.recentConversationsTotal, 1);
+});
+
+test('an added session keeps its provider and counts towards the total', async () => {
+  const { result, rerender } = await openWithRows([buildLiveProject(asLoaded)]);
+  const project = buildLiveProject(asLoaded);
+  project.sessions = [
+    ...(project.sessions ?? []),
+    { id: 'session-codex', summary: 'Codex run', lastActivity: '2026-09-22T11:00:00.000Z', provider: 'codex' },
+  ];
+
+  rerender({ projects: [project] });
+
+  assert.equal(result.current.recentConversations[0].sessionId, 'session-codex');
+  assert.equal(result.current.recentConversations[0].provider, 'codex');
+  assert.equal(result.current.recentConversationsTotal, 3);
 });
 
 test('rows keep their identity when the live sessions match them', async () => {
