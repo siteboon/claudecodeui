@@ -171,7 +171,7 @@ export const sessionsService = {
           running.tasks = tasks;
           continue;
         }
-        entries.push({
+        const backgroundEntry: RunningSessionEntry = {
           sessionId,
           provider: provider.id,
           startedAt: Math.min(...tasks.map((task) => task.startedAt)),
@@ -181,7 +181,13 @@ export const sessionsService = {
           background: true,
           canInterrupt: false,
           tasks,
-        });
+        };
+        entries.push(backgroundEntry);
+        // The process holding this work is CloudCLI's own, and it reports
+        // itself busy in the CLI registry while a subagent or command runs:
+        // the CLI check below must not list the session a second time as a
+        // turn "Running in the Claude CLI", which the page would show instead.
+        runningById.set(sessionId, backgroundEntry);
       }
     }
 

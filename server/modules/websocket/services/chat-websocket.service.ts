@@ -269,6 +269,7 @@ async function handleChatSend(
   if (clientOptions.interrupt === true && chatRunRegistry.isProcessing(resolved.sessionId)) {
     const activeRun = chatRunRegistry.getRun(resolved.sessionId);
     if (activeRun) {
+      console.log(`[Chat] ${new Date().toISOString()} stop requested (send with "Now") for session ${resolved.sessionId}`);
       carryOverConnections = activeRun.writer.listConnections();
       await abortRunningRun(dependencies, activeRun, resolved.sessionId, { replaced: true });
     }
@@ -729,6 +730,7 @@ async function handleChatAbort(
     return;
   }
 
+  console.log(`[Chat] ${new Date().toISOString()} stop requested (chat.abort) for session ${sessionId}`);
   const success = await dependencies.runtime.abort(run.provider, sessionId);
 
   // Scoped to the run that was stopped: a stop can take a round trip, and a
