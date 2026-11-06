@@ -6,6 +6,32 @@ import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/we
 import type { SessionUpsertedEvent } from '@/shared/types.js';
 
 /**
+ * The last `session_upserted` content sent for each app session, without its
+ * send time.
+ *
+ * The sessions watcher re-announces a session on every write to its
+ * transcript, and Claude Code also writes rows that are not conversation
+ * (cost and tool-usage state, titles, mode changes), e.g. when a session is
+ * merely opened or closed. Clients treat every upsert as new activity: a
+ * session in the background gets the "needs attention" dot, and the one being
+ * viewed reloads its messages. An upsert identical to the last one sent for
+ * that session therefore is not sent again.
+ */
+const lastAnnouncedContent = new Map<string, string>();
+
+/** True when `event` repeats what the clients were last told about its session. */
+function isRepeatedAnnouncement(event: SessionUpsertedEvent): boolean {
+  const content: Partial<SessionUpsertedEvent> = { ...event };
+  delete content.timestamp;
+  const signature = JSON.stringify(content);
+  if (lastAnnouncedContent.get(event.sessionId) === signature) {
+    return true;
+  }
+  lastAnnouncedContent.set(event.sessionId, signature);
+  return false;
+}
+
+/**
  * The single producer of the `session_upserted` delta.
  *
  * The event carries everything a sidebar needs to upsert a session in place
@@ -28,6 +54,11 @@ async function buildSessionUpsertedEvent(
   const row = sessionsDb.getSessionByProviderSessionId(sessionIdOrProviderSessionId)
     ?? sessionsDb.getSessionById(sessionIdOrProviderSessionId);
   if (!row || row.isArchived) {
+    // Forget an archived session, so un-archiving announces it again even if
+    // nothing else about it changed.
+    if (row) {
+      lastAnnouncedContent.delete(row.session_id);
+    }
     return null;
   }
 
@@ -80,7 +111,7 @@ function sendToConnectedClients(payloads: string[]): void {
 /** Announces one session. Used by the chat run registry when a run reports its provider-native id. */
 export async function broadcastSessionUpserted(sessionIdOrProviderSessionId: string): Promise<void> {
   const event = await buildSessionUpsertedEvent(sessionIdOrProviderSessionId);
-  if (event) {
+  if (event && !isRepeatedAnnouncement(event)) {
     sendToConnectedClients([JSON.stringify(event)]);
   }
 }
@@ -96,7 +127,7 @@ export async function broadcastSessionUpsertedBatch(
   const payloads: string[] = [];
   for (const sessionId of sessionIds) {
     const event = await buildSessionUpsertedEvent(sessionId);
-    if (event) {
+    if (event && !isRepeatedAnnouncement(event)) {
       payloads.push(JSON.stringify(event));
     }
   }

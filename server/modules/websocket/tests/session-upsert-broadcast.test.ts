@@ -136,3 +136,55 @@ test('a closed socket is skipped', async () => {
     assert.deepEqual(closing.frames, []);
   });
 });
+
+// The watcher re-announces a session on every transcript write, including
+// rows that are not conversation. Clients take each upsert as new activity
+// (attention dot, message reload), so a repeat of the last one is not sent.
+test('an upsert identical to the last one sent for that session is not sent again', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createSession('repeat-1', 'claude', '/workspace/demo', 'First title', undefined, '2026-07-10T00:00:00.000Z');
+
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+
+    await broadcastSessionUpsertedBatch(['repeat-1']);
+    await broadcastSessionUpsertedBatch(['repeat-1']);
+    await broadcastSessionUpserted('repeat-1');
+    assert.equal(connection.frames.length, 1);
+
+    // A new message (later update time) and a new title are both announced.
+    sessionsDb.createSession('repeat-1', 'claude', '/workspace/demo', 'First title', undefined, '2026-07-10T00:05:00.000Z');
+    await broadcastSessionUpsertedBatch(['repeat-1']);
+    sessionsDb.updateSessionCustomName('repeat-1', 'Renamed');
+    await broadcastSessionUpsertedBatch(['repeat-1']);
+
+    assert.deepEqual(
+      connection.frames.map((frame) => [
+        (frame.session as { lastActivity: string }).lastActivity,
+        (frame.session as { summary: string }).summary,
+      ]),
+      [
+        ['2026-07-10T00:00:00.000Z', 'First title'],
+        ['2026-07-10T00:05:00.000Z', 'First title'],
+        ['2026-07-10T00:05:00.000Z', 'Renamed'],
+      ],
+    );
+  });
+});
+
+test('an un-archived session is announced again even if nothing else changed', async () => {
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createSession('archive-1', 'claude', '/workspace/demo', 'Title', undefined, '2026-07-10T00:00:00.000Z');
+
+    const connection = new FakeConnection();
+    connectedClients.add(connection as never);
+
+    await broadcastSessionUpserted('archive-1');
+    sessionsDb.updateSessionIsArchived('archive-1', true);
+    await broadcastSessionUpserted('archive-1');
+    sessionsDb.updateSessionIsArchived('archive-1', false);
+    await broadcastSessionUpserted('archive-1');
+
+    assert.equal(connection.frames.length, 2);
+  });
+});
