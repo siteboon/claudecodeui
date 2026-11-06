@@ -54,16 +54,19 @@ test('bundles a Codex CLI new enough to know the GPT-6.1 Sol and Terra models', 
   assert.ok(major > 0 || minor >= 160, `bundled @openai/codex ${version} predates 0.160.0`);
 });
 
-test('drops the models ChatGPT-account Codex no longer serves', () => {
-  // The Responses backend rejects GPT-5.5-and-below for ChatGPT-account auth
-  // ("The 'gpt-5.5' model is not supported when using Codex with a ChatGPT
-  // account"), and no bundled CLI catalog still ships metadata for
-  // gpt-5.4 / gpt-5.4-mini. Keeping them in the picker only offered turns
-  // that fail outright or run on fallback metadata.
+test('drops GPT-5.4 and Mini but keeps GPT-5.5 for API-key sessions', () => {
+  // gpt-5.4 / gpt-5.4-mini have no catalog metadata on any CLI release that
+  // knows the GPT-6.1 models, so every auth mode runs them on fallback
+  // metadata — they are dropped. gpt-5.5 is kept: the Responses backend only
+  // rejects it for ChatGPT-account auth ("The 'gpt-5.5' model is not
+  // supported when using Codex with a ChatGPT account"), while API-key
+  // sessions still serve it (the 0.166.0 catalog lists it with
+  // supported_in_api: true).
   const values = CODEX_PREDEFINED_MODELS.OPTIONS.map((option) => option.value);
-  for (const retired of ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']) {
+  for (const retired of ['gpt-5.4', 'gpt-5.4-mini']) {
     assert.ok(!values.includes(retired), `${retired} should no longer be listed`);
   }
+  assert.ok(values.includes('gpt-5.5'), 'gpt-5.5 should stay listed for API-key sessions');
 });
 
 test('bundles a Codex CLI new enough to know the GPT-6 Sol and Luna models', () => {

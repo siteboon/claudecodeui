@@ -144,6 +144,15 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
         ],
       },
     },
+    {
+      value: 'gpt-5.5',
+      label: 'GPT-5.5',
+      description: 'Frontier model for complex coding, research, and real-world work.',
+      effort: {
+        default: 'medium',
+        values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
+      },
+    },
   ],
   DEFAULT: 'gpt-5.6-sol',
 };
