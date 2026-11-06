@@ -20,6 +20,7 @@ vi.mock('@/shared/api', () => ({
     recentConversations: () => recentConversationsResponse(),
     archivedProjects: () => Promise.resolve({ ok: true, json: async () => ({ data: { projects: [] } }) }),
     getArchivedSessions: () => Promise.resolve({ ok: true, json: async () => ({ data: { sessions: [] } }) }),
+    deleteSession: () => Promise.resolve({ ok: true, text: async () => '' }),
   },
 }));
 
@@ -228,4 +229,45 @@ test('rows keep their identity when the live sessions match them', async () => {
   rerender({ projects: [buildLiveProject(asLoaded)] });
 
   assert.equal(result.current.recentConversations, rowsBefore);
+});
+
+test('rows without a readable time do not make every live session look new', async () => {
+  recentConversationsResponse.mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      data: {
+        conversations: [
+          { ...conversation('session-1', 'First'), lastActivity: null },
+          { ...conversation('session-2', 'Second'), lastActivity: 'not a time' },
+        ],
+        total: 2,
+        hasMore: false,
+      },
+    }),
+  });
+  const { result, rerender } = await openConversationsTab([buildLiveProject(asLoaded)]);
+  // No loaded row has a readable time, so only activity after the fetch is new.
+  rerender({ projects: [buildLiveProject({ ...asLoaded, 'session-old': { summary: 'Old', lastActivity: '2020-01-01T00:00:00.000Z' } })] });
+
+  assert.ok(!result.current.recentConversations.some((row) => row.sessionId === 'session-old'));
+  assert.equal(result.current.recentConversationsTotal, 2);
+});
+
+test('a session deleted here is not brought back by a stale project refresh', async () => {
+  const newest = { ...asLoaded, 'session-3': { summary: 'Third', lastActivity: '2026-09-22T11:00:00.000Z' } };
+  const { result, rerender } = await openWithRows([buildLiveProject(asLoaded)]);
+  rerender({ projects: [buildLiveProject(newest)] });
+  assert.equal(result.current.recentConversations[0].sessionId, 'session-3');
+
+  act(() => {
+    result.current.showDeleteSessionConfirmation('session-3', 'Third');
+  });
+  await act(async () => {
+    await result.current.confirmDeleteSession(false);
+  });
+  assert.ok(!result.current.recentConversations.some((row) => row.sessionId === 'session-3'));
+
+  // A refresh that started before the delete still lists the session.
+  rerender({ projects: [buildLiveProject(newest)] });
+  assert.ok(!result.current.recentConversations.some((row) => row.sessionId === 'session-3'));
 });

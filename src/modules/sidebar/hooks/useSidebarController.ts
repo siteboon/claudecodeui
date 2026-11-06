@@ -177,6 +177,10 @@ export function useSidebarController({
   // or null before it has. A session active after that is new to the list,
   // which is how an empty list still picks up sessions that start later.
   const [recentConversationsLoadedAt, setRecentConversationsLoadedAt] = useState<number | null>(null);
+  // Sessions this sidebar archived or deleted since the list was fetched. A
+  // project refresh already in flight can still bring them back into
+  // `projects`, and the live merge must not re-add them from there.
+  const [removedRecentSessionIds, setRemovedRecentSessionIds] = useState<ReadonlySet<string>>(() => new Set());
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
   const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
@@ -319,6 +323,8 @@ export function useSidebarController({
 
       if (!append) {
         setRecentConversationsLoadedAt(Date.now());
+        // A fresh list is the server's word on what exists.
+        setRemovedRecentSessionIds(new Set());
       }
       setRecentConversations((previous) => {
         if (!append) {
@@ -424,8 +430,12 @@ export function useSidebarController({
       const time = Date.parse(value ?? '');
       return Number.isNaN(time) ? 0 : time;
     };
-    const addedAfter = recentConversations.length > 0
-      ? Math.max(...recentConversations.map((conversation) => timeOf(conversation.lastActivity)))
+    // Rows without a readable time say nothing about how recent the list is.
+    const loadedActivityTimes = recentConversations
+      .map((conversation) => Date.parse(conversation.lastActivity ?? ''))
+      .filter((time) => !Number.isNaN(time));
+    const addedAfter = loadedActivityTimes.length > 0
+      ? Math.max(...loadedActivityTimes)
       : recentConversationsLoadedAt;
 
     const liveSessions = new Map<string, { session: ProjectSession; project: Project }>();
@@ -465,7 +475,7 @@ export function useSidebarController({
 
     let added = 0;
     for (const [sessionId, { session, project }] of liveSessions) {
-      if (seen.has(sessionId) || timeOf(session.lastActivity) <= addedAfter) {
+      if (seen.has(sessionId) || removedRecentSessionIds.has(sessionId) || timeOf(session.lastActivity) <= addedAfter) {
         continue;
       }
       const summary = typeof session.summary === 'string' ? session.summary.trim() : '';
@@ -487,7 +497,7 @@ export function useSidebarController({
     }
     next.sort((left, right) => timeOf(right.lastActivity) - timeOf(left.lastActivity));
     return { rows: next, added };
-  }, [projects, recentConversations, recentConversationsLoadedAt]);
+  }, [projects, recentConversations, recentConversationsLoadedAt, removedRecentSessionIds]);
 
   useEffect(() => {
     if (searchMode !== 'archived') {
@@ -996,6 +1006,7 @@ export function useSidebarController({
         // Same gap as rename: nothing refetched the recents feed, so the row the
         // user just archived stayed in the list. Archiving keeps the session, so
         // only the non-archived total moves.
+        setRemovedRecentSessionIds((previous) => new Set(previous).add(sessionId));
         setRecentConversations((previous) => {
           const remaining = previous.filter((conversation) => conversation.sessionId !== sessionId);
           if (remaining.length !== previous.length) {
@@ -1115,6 +1126,7 @@ export function useSidebarController({
       // Counted outside the updater so both updaters stay pure: React may run an
       // updater twice, which would take the rows off the total twice.
       const removed = recentConversations.filter((conversation) => deletedIdSet.has(conversation.sessionId)).length;
+      setRemovedRecentSessionIds((previous) => new Set([...previous, ...deletedIdSet]));
       setRecentConversations((previous) =>
         previous.filter((conversation) => !deletedIdSet.has(conversation.sessionId)),
       );
