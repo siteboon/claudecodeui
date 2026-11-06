@@ -42,7 +42,10 @@ function createFakePty() {
     emitExit() {
       exitListener?.({ exitCode: 0 });
     },
-    write() {},
+    writes: [] as string[],
+    write(data: string) {
+      this.writes.push(data);
+    },
     resize() {},
     kill() {
       this.killed = true;
@@ -230,10 +233,22 @@ test('a missing project directory is reported as an error frame and starts no pt
 
 type SpawnCall = { shell: string; args: string[]; command: string; env: Record<string, string | undefined> };
 
-function spawnRecorder(resumeSessionId: string | null = null) {
+/**
+ * `backgroundJobId` adds a background-job lookup answering it; without one
+ * the gateway has no lookup and resume launches start synchronously.
+ */
+function spawnRecorder(resumeSessionId: string | null = null, backgroundJobId?: string | null) {
   const calls: SpawnCall[] = [];
+  const backgroundLookups: string[] = [];
+  const findBackgroundClaudeJobId = backgroundJobId === undefined
+    ? undefined
+    : async (providerSessionId: string) => {
+      backgroundLookups.push(providerSessionId);
+      return backgroundJobId;
+    };
   const dependencies = {
     resolveProviderSessionId: () => resumeSessionId,
+    findBackgroundClaudeJobId,
     spawnPty: (shell: string, args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
       calls.push({
         shell,
@@ -244,7 +259,7 @@ function spawnRecorder(resumeSessionId: string | null = null) {
       return createFakePty() as never;
     },
   };
-  return { calls, dependencies };
+  return { calls, backgroundLookups, dependencies };
 }
 
 let launchCount = 0;
@@ -282,7 +297,7 @@ type ClaudeConfigFixture = {
  * so the user's real Claude config and app data folder never leak into (or
  * out of) the tests. `homeName` names the HOME folder, to test awkward paths.
  */
-function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void, homeName = 'home') {
+function setUpClaudeConfig(homeName: string): { fixture: ClaudeConfigFixture; restore: () => void } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-claude-theme-'));
   const configHome = path.join(root, 'config');
   const home = path.join(root, homeName);
@@ -304,9 +319,7 @@ function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void, homeName
     fs.writeFileSync(filePath, typeof contents === 'string' ? contents : JSON.stringify(contents));
   };
 
-  try {
-    body({ configHome, home, projectPath, write });
-  } finally {
+  const restore = () => {
     for (const [key, value] of Object.entries(savedEnv)) {
       if (value === undefined) {
         delete process.env[key];
@@ -315,8 +328,30 @@ function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void, homeName
       }
     }
     fs.rmSync(root, { recursive: true, force: true });
+  };
+  return { fixture: { configHome, home, projectPath, write }, restore };
+}
+
+function withClaudeConfig(body: (fixture: ClaudeConfigFixture) => void, homeName = 'home') {
+  const { fixture, restore } = setUpClaudeConfig(homeName);
+  try {
+    body(fixture);
+  } finally {
+    restore();
   }
 }
+
+async function withClaudeConfigAsync(body: (fixture: ClaudeConfigFixture) => Promise<void>, homeName = 'home') {
+  const { fixture, restore } = setUpClaudeConfig(homeName);
+  try {
+    await body(fixture);
+  } finally {
+    restore();
+  }
+}
+
+/** Lets an `init` that awaited a lookup finish its launch. */
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 // The server-owned settings file a light launch points `--settings` at. The
 // default fixture HOME has no quote in it, so bash quoting is a plain wrap.
@@ -745,4 +780,453 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
       ['0;15', '0;15', '0;15', '15;0']
     );
   });
+});
+
+// The CLI refuses `--resume` for a session a background process holds and asks
+// for `claude attach <job id>`, which takes no launch flags.
+test('a session running in the background is attached instead of resumed', async () => {
+  await withClaudeConfigAsync(async ({ projectPath }) => {
+    const { calls, backgroundLookups, dependencies } = spawnRecorder('resumed-session-id', 'a1b2c3d4');
+
+    const socket = launch(
+      dependencies,
+      { provider: 'claude', hasSession: true, bypassPermissions: true, colorScheme: 'light' },
+      projectPath
+    );
+    launch(dependencies, { provider: 'claude', hasSession: false }, projectPath);
+    await settle();
+
+    const attach = calls.find((call) => call.command.startsWith('claude attach'));
+    assert.equal(attach?.command, 'claude attach "a1b2c3d4"');
+    assert.deepEqual(backgroundLookups, ['resumed-session-id'], 'only resumes look the session up');
+    assert.ok(
+      !socket.frames.some((frame) => (JSON.parse(frame) as { type?: string }).type === 'claude_theme'),
+      'an attached session did not start in the app theme'
+    );
+  });
+});
+
+test('a session with no background process is resumed as before', async () => {
+  const { calls, dependencies } = spawnRecorder('resumed-session-id', null);
+
+  launch(dependencies, { provider: 'claude', hasSession: true });
+  await settle();
+
+  assert.match(calls[0].command, /^claude --resume "resumed-session-id"/);
+});
+
+type FollowLookup = { rootPid: number; knownPid: number | null; backgroundJobId: string | null };
+
+/**
+ * A Claude pty whose CLI reports `cliSession()` as its current Claude session,
+ * with app session ids equal to Claude's own once `indexed` lists them.
+ * `appSession` overrides how a Claude session id maps to an app session.
+ */
+function claudeFollowRecorder(
+  cliSession: () => string | null | Promise<string | null>,
+  indexed: Set<string>,
+  appSession?: (providerSessionId: string) => { sessionId: string; projectPath: string | null } | null,
+) {
+  const ptys: Array<ReturnType<typeof createFakePty>> = [];
+  const lookups: FollowLookup[] = [];
+  const dependencies = {
+    resolveProviderSessionId: (sessionId: string) => sessionId,
+    findClaudeCliProcessSession: async (rootPid: number, knownPid: number | null, backgroundJobId: string | null) => {
+      lookups.push({ rootPid, knownPid, backgroundJobId });
+      const providerSessionId = await cliSession();
+      return providerSessionId ? { pid: 4242, providerSessionId } : null;
+    },
+    resolveAppSession: appSession
+      ?? ((providerSessionId: string) =>
+        (indexed.has(providerSessionId) ? { sessionId: providerSessionId, projectPath: null } : null)),
+    spawnPty: () => {
+      const fakePty = createFakePty();
+      ptys.push(fakePty);
+      return fakePty as never;
+    },
+  };
+  return { ptys, lookups, dependencies };
+}
+
+function openClaudeSession(
+  dependencies: Parameters<typeof handleShellConnection>[1],
+  sessionId: string | null,
+  projectPath = process.cwd(),
+) {
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, dependencies);
+  socket.emit(
+    'message',
+    JSON.stringify({ type: 'init', projectPath, sessionId, hasSession: Boolean(sessionId), provider: 'claude' })
+  );
+  return socket;
+}
+
+const framesOfType = (socket: ReturnType<typeof createFakeSocket>, type: string) =>
+  socket.frames.map((frame) => JSON.parse(frame) as Record<string, unknown>).filter((frame) => frame.type === type);
+
+const reattached = (socket: ReturnType<typeof createFakeSocket>) =>
+  framesOfType(socket, 'output').some((frame) => String(frame.data).includes('Reconnected to existing session'));
+
+/** Fires the follow timer once and lets the asynchronous lookup finish. */
+async function followTick(t: { mock: { timers: { tick: (ms: number) => void } } }) {
+  t.mock.timers.tick(2000);
+  await settle();
+}
+
+// `/clear` (or `/resume`) moves the CLI to another session. The pty must
+// follow it, or reopening the old session shows the new conversation and
+// opening the new one starts a second CLI on it.
+test('a Claude pty follows its CLI to the session /clear started', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const oldSession = `follow-old-${Date.now()}`;
+  const newSession = `follow-new-${Date.now()}`;
+  let current = oldSession;
+  const indexed = new Set([oldSession]);
+  const { ptys, dependencies } = claudeFollowRecorder(() => current, indexed);
+
+  const first = openClaudeSession(dependencies, oldSession);
+  await followTick(t);
+  assert.deepEqual(framesOfType(first, 'session_changed'), [], 'nothing moves while the CLI stays put');
+
+  current = newSession;
+  await followTick(t);
+  assert.deepEqual(framesOfType(first, 'session_changed'), [], 'waits until the new session is indexed');
+
+  indexed.add(newSession);
+  await followTick(t);
+  assert.deepEqual(framesOfType(first, 'session_changed'), [
+    { type: 'session_changed', sessionId: newSession, previousSessionId: oldSession },
+  ]);
+
+  // The client follows: the new session reattaches to the same pty.
+  first.emit('close');
+  const followed = openClaudeSession(dependencies, newSession);
+  assert.ok(reattached(followed));
+  assert.equal(ptys.length, 1);
+
+  // The old session is free again and resumes in a pty of its own.
+  const reopened = openClaudeSession(dependencies, oldSession);
+  assert.ok(!reattached(reopened));
+  assert.equal(ptys.length, 2);
+
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('a Claude pty does not take over a session another terminal already has open', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const sessionA = `occupied-a-${Date.now()}`;
+  const sessionB = `occupied-b-${Date.now()}`;
+  // A's CLI ran `/resume` into B, which a second terminal already shows.
+  const { ptys, dependencies } = claudeFollowRecorder(() => sessionB, new Set([sessionA, sessionB]));
+
+  const socketA = openClaudeSession(dependencies, sessionA);
+  const socketB = openClaudeSession(dependencies, sessionB);
+  await followTick(t);
+
+  assert.deepEqual(framesOfType(socketA, 'session_changed'), []);
+  assert.deepEqual(framesOfType(socketB, 'session_changed'), []);
+  socketA.emit('close');
+  socketB.emit('close');
+  assert.ok(reattached(openClaudeSession(dependencies, sessionA)), 'A keeps its pty');
+  assert.ok(reattached(openClaudeSession(dependencies, sessionB)), 'B keeps its pty');
+  assert.equal(ptys.length, 2);
+
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('new-session and plain-shell ptys are not followed', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const { ptys, lookups, dependencies } = claudeFollowRecorder(() => 'somewhere-else', new Set(['somewhere-else']));
+
+  const fresh = openClaudeSession(dependencies, null);
+  const plain = createFakeSocket();
+  handleShellConnection(plain as never, dependencies);
+  plain.emit(
+    'message',
+    JSON.stringify({ type: 'init', projectPath: process.cwd(), provider: 'plain-shell', initialCommand: 'ls' })
+  );
+  t.mock.timers.tick(10000);
+  await settle();
+
+  assert.equal(lookups.length, 0);
+  assert.deepEqual(framesOfType(fresh, 'session_changed'), []);
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('an exited Claude pty stops being followed', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const { ptys, lookups, dependencies } = claudeFollowRecorder(() => null, new Set());
+
+  openClaudeSession(dependencies, `exits-${Date.now()}`);
+  await followTick(t);
+  assert.equal(lookups.length, 1);
+  ptys[0].emitExit();
+  t.mock.timers.tick(10000);
+  await settle();
+  assert.equal(lookups.length, 1);
+});
+
+// The registry lookup reads files and may run `ps`; a slow one must not pile
+// up a second lookup for the same pty on the next tick.
+test('a follow lookup still running makes the next tick skip', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let release: (value: string | null) => void = () => undefined;
+  const { ptys, lookups, dependencies } = claudeFollowRecorder(
+    () => new Promise<string | null>((resolve) => { release = resolve; }),
+    new Set(),
+  );
+
+  openClaudeSession(dependencies, `slow-${Date.now()}`);
+  t.mock.timers.tick(2000);
+  t.mock.timers.tick(2000);
+  t.mock.timers.tick(2000);
+  assert.equal(lookups.length, 1);
+
+  release(null);
+  await settle();
+  await followTick(t);
+  assert.equal(lookups.length, 2);
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('a pty follows to an app session whose id differs from the Claude session id', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const oldSession = `distinct-old-${Date.now()}`;
+  const newProviderSession = `distinct-provider-${Date.now()}`;
+  const newAppSession = `distinct-app-${Date.now()}`;
+  let current = oldSession;
+  const { ptys, dependencies } = claudeFollowRecorder(() => current, new Set(), (providerSessionId) => {
+    if (providerSessionId === oldSession) {
+      return { sessionId: oldSession, projectPath: null };
+    }
+    return providerSessionId === newProviderSession ? { sessionId: newAppSession, projectPath: null } : null;
+  });
+
+  const first = openClaudeSession(dependencies, oldSession);
+  current = newProviderSession;
+  await followTick(t);
+  assert.deepEqual(framesOfType(first, 'session_changed'), [
+    { type: 'session_changed', sessionId: newAppSession, previousSessionId: oldSession },
+  ]);
+
+  first.emit('close');
+  assert.ok(reattached(openClaudeSession(dependencies, newAppSession)));
+  assert.equal(ptys.length, 1);
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+// `/resume` can open a session of another worktree of the same repository. Its
+// Shell tab connects with that worktree's path, so the pty is filed there.
+test('a pty that resumed a session of another worktree is filed under that worktree', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const oldSession = `worktree-old-${Date.now()}`;
+  const newSession = `worktree-new-${Date.now()}`;
+  const worktree = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-follow-worktree-'));
+  let current = oldSession;
+  const { ptys, dependencies } = claudeFollowRecorder(() => current, new Set(), (providerSessionId) => ({
+    sessionId: providerSessionId,
+    projectPath: providerSessionId === newSession ? worktree : process.cwd(),
+  }));
+
+  try {
+    const first = openClaudeSession(dependencies, oldSession);
+    current = newSession;
+    await followTick(t);
+    assert.equal(framesOfType(first, 'session_changed').length, 1);
+
+    first.emit('close');
+    assert.ok(reattached(openClaudeSession(dependencies, newSession, worktree)));
+    assert.equal(ptys.length, 1);
+  } finally {
+    ptys.forEach((fakePty) => fakePty.emitExit());
+    fs.rmSync(worktree, { recursive: true, force: true });
+  }
+});
+
+// A switch no client hears about would leave the client asking for the old
+// session on reconnect, and get a second terminal. The pty stays filed under
+// the old session until a client is attached, then moves and says so.
+test('a switch while no client is attached waits for the client to come back', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const oldSession = `detached-old-${Date.now()}`;
+  const newSession = `detached-new-${Date.now()}`;
+  let current = oldSession;
+  const { ptys, dependencies } = claudeFollowRecorder(() => current, new Set([oldSession, newSession]));
+
+  const first = openClaudeSession(dependencies, oldSession);
+  first.emit('close');
+  current = newSession;
+  await followTick(t);
+
+  const back = openClaudeSession(dependencies, oldSession);
+  assert.ok(reattached(back), 'the reconnect finds its pty under the session it knew');
+  assert.equal(ptys.length, 1);
+  await followTick(t);
+  assert.deepEqual(framesOfType(back, 'session_changed'), [
+    { type: 'session_changed', sessionId: newSession, previousSessionId: oldSession },
+  ]);
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+// The socket can drop after the move but before `session_changed` arrives.
+// The client then reconnects to the old session and must get its own pty
+// back, and be told again where it went, rather than a second terminal.
+test('a reconnect that missed session_changed reattaches to the moved pty', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const oldSession = `missed-old-${Date.now()}`;
+  const newSession = `missed-new-${Date.now()}`;
+  let current = oldSession;
+  const { ptys, dependencies } = claudeFollowRecorder(() => current, new Set([oldSession, newSession]));
+
+  try {
+    const first = openClaudeSession(dependencies, oldSession);
+    current = newSession;
+    await followTick(t);
+    assert.equal(framesOfType(first, 'session_changed').length, 1, 'moved while the socket was open');
+    first.emit('close'); // ...but the frame never reached the client
+
+    const back = openClaudeSession(dependencies, oldSession);
+    assert.ok(reattached(back));
+    assert.equal(ptys.length, 1);
+    assert.deepEqual(framesOfType(back, 'session_changed'), [
+      { type: 'session_changed', sessionId: newSession, previousSessionId: oldSession },
+    ]);
+
+    // Once the client follows, opening the old session again is intentional.
+    back.emit('close');
+    const followed = openClaudeSession(dependencies, newSession);
+    assert.ok(reattached(followed));
+    followed.emit('close');
+    assert.ok(!reattached(openClaudeSession(dependencies, oldSession)));
+    assert.equal(ptys.length, 2);
+  } finally {
+    ptys.forEach((fakePty) => fakePty.emitExit());
+  }
+});
+
+// `claude attach` shows a background process the pty did not start, so the
+// follower looks it up by job id rather than among the pty's children.
+test('an attached background job is followed by its job id', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const { ptys, lookups, dependencies } = claudeFollowRecorder(() => null, new Set());
+  const withJob = { ...dependencies, findBackgroundClaudeJobId: async () => 'a1b2c3d4' };
+
+  openClaudeSession(withJob, `attached-${Date.now()}`);
+  await settle();
+  await followTick(t);
+
+  assert.equal(lookups.length, 1);
+  assert.equal(lookups[0].backgroundJobId, 'a1b2c3d4');
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('a socket that closes during the background lookup starts no pty', async () => {
+  let finishLookup: (jobId: string | null) => void = () => undefined;
+  let lookupStarted: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => { lookupStarted = resolve; });
+  const { calls, dependencies } = spawnRecorder('resumed-session-id', null);
+  dependencies.findBackgroundClaudeJobId = () => new Promise<string | null>((resolve) => {
+    finishLookup = resolve;
+    lookupStarted();
+  });
+
+  const socket = launch(dependencies, { provider: 'claude', hasSession: true });
+  await started;
+  socket.readyState = WebSocket.CLOSED;
+  socket.emit('close');
+  finishLookup(null);
+  await settle();
+
+  assert.equal(calls.length, 0);
+});
+
+/** A launch whose background-job lookup waits until the test settles it. */
+function pendingLookupRecorder() {
+  const ptys: Array<ReturnType<typeof createFakePty>> = [];
+  const lookups: Array<(jobId: string | null) => void> = [];
+  let lookupStarted: () => void = () => undefined;
+  let started = new Promise<void>((resolve) => { lookupStarted = resolve; });
+  const dependencies = {
+    resolveProviderSessionId: (sessionId: string) => sessionId,
+    findBackgroundClaudeJobId: () => new Promise<string | null>((resolve) => {
+      lookups.push(resolve);
+      lookupStarted();
+    }),
+    spawnPty: () => {
+      const fakePty = createFakePty();
+      ptys.push(fakePty);
+      return fakePty as never;
+    },
+  };
+  const nextLookup = async () => {
+    await started;
+    started = new Promise<void>((resolve) => { lookupStarted = resolve; });
+  };
+  return { ptys, lookups, dependencies, nextLookup };
+}
+
+function openSession(dependencies: Parameters<typeof handleShellConnection>[1], sessionId: string) {
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, dependencies);
+  socket.emit('message', JSON.stringify({ type: 'init', projectPath: process.cwd(), sessionId, hasSession: true, provider: 'claude' }));
+  return socket;
+}
+
+const hasOutput = (socket: ReturnType<typeof createFakeSocket>, text: string) =>
+  socket.frames.some((frame) => {
+    const parsed = JSON.parse(frame) as { type?: string; data?: unknown };
+    return parsed.type === 'output' && String(parsed.data).includes(text);
+  });
+
+test('a reconnect to a running pty does not wait for the background lookup', async () => {
+  const { ptys, lookups, dependencies, nextLookup } = pendingLookupRecorder();
+  const sessionId = `no-wait-${Date.now()}`;
+
+  const first = openSession(dependencies, sessionId);
+  await nextLookup();
+  lookups[0](null);
+  await settle();
+  assert.equal(ptys.length, 1);
+  first.emit('close');
+
+  // The registry lookup for this one would never settle.
+  const back = openSession(dependencies, sessionId);
+  assert.ok(hasOutput(back, 'Reconnected to existing session'));
+  assert.equal(lookups.length, 1, 'no lookup for a reattach');
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('input sent while the background lookup runs reaches the pty', async () => {
+  const { ptys, lookups, dependencies, nextLookup } = pendingLookupRecorder();
+
+  const socket = openSession(dependencies, `typed-early-${Date.now()}`);
+  await nextLookup();
+  socket.emit('message', JSON.stringify({ type: 'input', data: 'hello' }));
+  lookups[0](null);
+  await settle();
+
+  assert.equal(ptys.length, 1);
+  assert.deepEqual(ptys[0].writes, ['hello']);
+  ptys.forEach((fakePty) => fakePty.emitExit());
+});
+
+test('of two sockets opening a session, the later one keeps it when lookups finish out of order', async () => {
+  const { ptys, lookups, dependencies, nextLookup } = pendingLookupRecorder();
+  const sessionId = `racing-${Date.now()}`;
+
+  const older = openSession(dependencies, sessionId);
+  await nextLookup();
+  const newer = openSession(dependencies, sessionId);
+  await nextLookup();
+  lookups[1](null);
+  await settle();
+  lookups[0](null);
+  await settle();
+
+  assert.equal(ptys.length, 1);
+  ptys[0].emitData('from the cli');
+  assert.ok(hasOutput(newer, 'from the cli'), 'the later socket gets the output');
+  assert.ok(!hasOutput(older, 'from the cli'));
+  ptys.forEach((fakePty) => fakePty.emitExit());
 });
