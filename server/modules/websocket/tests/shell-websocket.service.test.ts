@@ -811,3 +811,23 @@ test('a session with no background process is resumed as before', async () => {
 
   assert.match(calls[0].command, /^claude --resume "resumed-session-id"/);
 });
+
+test('a socket that closes during the background lookup starts no pty', async () => {
+  let finishLookup: (jobId: string | null) => void = () => undefined;
+  let lookupStarted: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => { lookupStarted = resolve; });
+  const { calls, dependencies } = spawnRecorder('resumed-session-id', null);
+  dependencies.findBackgroundClaudeJobId = () => new Promise<string | null>((resolve) => {
+    finishLookup = resolve;
+    lookupStarted();
+  });
+
+  const socket = launch(dependencies, { provider: 'claude', hasSession: true });
+  await started;
+  socket.readyState = WebSocket.CLOSED;
+  socket.emit('close');
+  finishLookup(null);
+  await settle();
+
+  assert.equal(calls.length, 0);
+});

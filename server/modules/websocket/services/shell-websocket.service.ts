@@ -592,6 +592,11 @@ export function handleShellConnection(
         // existing pty and the spawn.
         const backgroundJobLookup = findBackgroundJobForLaunch(data, dependencies);
         const backgroundJobId = backgroundJobLookup ? await backgroundJobLookup : null;
+        // The socket may have closed while the lookup ran. Its close handler
+        // found no pty to schedule cleanup for, so none may be started now.
+        if (backgroundJobLookup && ws.readyState !== WebSocket.OPEN) {
+          return;
+        }
         const projectPath = readString(data.projectPath, process.cwd());
         const sessionId = readString(data.sessionId) || null;
         const hasSession = readBoolean(data.hasSession);
