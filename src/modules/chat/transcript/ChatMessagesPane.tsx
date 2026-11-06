@@ -311,6 +311,7 @@ function ChatMessagesPane({
                   <LazyMessageRow
                     key={`tool-group-${getMessageKey(item.messages[0])}`}
                     lazyRows={lazyRows}
+                    scrollContainerRef={scrollContainerRef}
                     timestamp={item.timestamp}
                     initiallyNearViewport={initiallyNearViewport}
                   >
@@ -338,6 +339,7 @@ function ChatMessagesPane({
                 <LazyMessageRow
                   key={getMessageKey(item)}
                   lazyRows={lazyRows}
+                  scrollContainerRef={scrollContainerRef}
                   timestamp={item.timestamp}
                   initiallyNearViewport={initiallyNearViewport}
                 >

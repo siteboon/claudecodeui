@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 
 import type { ChatMessage } from '@/shared/types';
 import type { LazyRowObserver } from '@/modules/chat/hooks/useLazyRowObserver';
@@ -26,6 +26,12 @@ const ESTIMATED_ROW_HEIGHT_PX = 100;
 
 type LazyMessageRowProps = {
   lazyRows: LazyRowObserver | null;
+  /**
+   * The scrolling transcript container, used to emulate scroll anchoring on
+   * browsers that lack it (Safari): height changes above the viewport shift
+   * its scrollTop so the reading position does not jump.
+   */
+  scrollContainerRef: RefObject<HTMLDivElement>;
   /** Mirrors the row's own `data-message-timestamp`, present even while unmounted. */
   timestamp: ChatMessage['timestamp'] | undefined;
   /**
@@ -39,10 +45,33 @@ type LazyMessageRowProps = {
 
 export default function LazyMessageRow({
   lazyRows,
+  scrollContainerRef,
   timestamp,
   initiallyNearViewport,
   children,
 }: LazyMessageRowProps) {
+  /**
+   * Touch devices and browsers without scroll anchoring mount every row
+   * unconditionally. The placeholder↔content swap shifts scroll geometry;
+   * without native anchoring to absorb it — and with momentum scrolling that
+   * JS scrollTop writes would only interrupt — the reading position jumps
+   * and flickers. The windowed message list still bounds how many rows exist.
+   *
+   * The same flag gates the ResizeObserver compensation below. It must NOT
+   * trust the overflowAnchor style probe alone: WebKit exposes the property
+   * without performing anchoring (iOS Safari drifts with the compensation
+   * off). Coarse-pointer devices are always compensated; desktop Chrome
+   * (fine pointer, real anchoring) is not, so the emulation never stacks on
+   * the native mechanism there.
+   */
+  const [needsAnchorCompensation] = useState(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+    const coarsePointer = typeof window.matchMedia === 'function'
+      && window.matchMedia('(pointer: coarse)').matches;
+    const noScrollAnchoring = !('overflowAnchor' in document.documentElement.style);
+    return coarsePointer || noScrollAnchoring;
+  });
+  const alwaysMounted = needsAnchorCompensation;
   const [isNearViewport, setIsNearViewport] = useState(initiallyNearViewport);
   const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
   const elementRef = useRef<HTMLDivElement | null>(null);
@@ -68,11 +97,43 @@ export default function LazyMessageRow({
 
   useEffect(() => {
     const element = elementRef.current;
-    if (!lazyRows || !element) return undefined;
+    if (!lazyRows || !element || alwaysMounted) return undefined;
     return lazyRows.observe(element, handleNearViewportChange);
-  }, [lazyRows, handleNearViewportChange]);
+  }, [lazyRows, handleNearViewportChange, alwaysMounted]);
 
-  const isMounted = lazyRows === null || isNearViewport;
+  /**
+   * Emulates scroll anchoring where the browser has none (Safari) — and only
+   * there, because stacking it on Chrome's native anchoring double-compensates
+   * every height change. When this row's height changes while the whole row
+   * sits above the viewport's top edge (media settling), everything below it
+   * is pushed down and the reading position jumps; shifting scrollTop by the
+   * height delta keeps the same content on screen. The pre-change bottom
+   * (rect.bottom - delta) decides, so a row straddling the top edge never
+   * yanks the view. A 0x0 rect means a hidden tab, not a resize; the baseline
+   * is kept.
+   */
+  useEffect(() => {
+    const element = elementRef.current;
+    const container = scrollContainerRef.current;
+    if (!element || !container || !needsAnchorCompensation) return undefined;
+    if (typeof ResizeObserver === 'undefined') return undefined;
+
+    let lastHeight = element.getBoundingClientRect().height;
+    const observer = new ResizeObserver(() => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
+      const delta = rect.height - lastHeight;
+      lastHeight = rect.height;
+      if (delta === 0) return;
+      if (rect.bottom - delta <= container.getBoundingClientRect().top) {
+        container.scrollTop += delta;
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [scrollContainerRef, needsAnchorCompensation]);
+
+  const isMounted = alwaysMounted || lazyRows === null || isNearViewport;
 
   return (
     <div
