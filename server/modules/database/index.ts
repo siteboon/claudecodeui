@@ -19,6 +19,8 @@ export type {
   SessionDraftRecord,
 } from '@/modules/database/repositories/session-drafts.db.js';
 export { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
+// unrecordedPromptsDb: used by the Providers module's Codex runtime to keep a prompt Codex never wrote to its rollout, and by its history reader to put that prompt back.
+export { unrecordedPromptsDb } from '@/modules/database/repositories/unrecorded-prompts.db.js';
 export { userDb } from '@/modules/database/repositories/users.js';
 // userPreferencesDb: used by the User module to persist the settings that used to live in browser localStorage.
 export { userPreferencesDb } from '@/modules/database/repositories/user-preferences.db.js';
