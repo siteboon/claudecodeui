@@ -774,7 +774,9 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
    */
   private scrollByWheel(pixels: number, point: TouchCoords): boolean {
     const element = this.terminal.element;
-    if (!element) {
+    // A terminal removed mid-flick gets no more wheel events, not even from
+    // the frame that notices it is gone.
+    if (!element?.isConnected) {
       return false;
     }
     this.updateCellDimensions();

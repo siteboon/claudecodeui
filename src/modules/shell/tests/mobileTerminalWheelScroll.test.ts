@@ -113,6 +113,19 @@ describe('one-finger scrolling on a full-screen terminal program', () => {
     expect(new Set(wheelDeltas)).toEqual(new Set([1]));
   });
 
+  it('stops coasting as soon as the terminal is removed', () => {
+    const { element, wheelDeltas } = setup(false);
+
+    drag(element, 400, 200);
+    touch(element, 'touchend', null);
+    vi.advanceTimersByTime(32); // coast a little first
+    element.remove();
+    const afterRemoval = wheelDeltas.length;
+    vi.advanceTimersByTime(2000);
+
+    expect(wheelDeltas.length).toBe(afterRemoval);
+  });
+
   it('leaves a terminal with its own scrollback to xterm', () => {
     const { element, wheelDeltas } = setup(true);
 
