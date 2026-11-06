@@ -1,12 +1,12 @@
 import { memo, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { Check, CheckSquare, Edit2, GitBranch, Loader2, MoreHorizontal, Square, Trash2, X } from 'lucide-react';
+import { Check, CheckSquare, Edit2, FolderInput, GitBranch, Loader2, MoreHorizontal, Square, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
-import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
+import { useSessionForkingProviders, useSessionMovingProviders } from '@/shared/hooks/useProviderCapabilities';
 import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
@@ -33,6 +33,7 @@ type SidebarSessionItemProps = {
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Branches this session into an independent one; absent when its provider cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
+  onMoveSession?: (session: SessionWithProvider) => void;
   /** This project's list is in bulk-selection mode: the row acts as a checkbox and hides its options. */
   isSelecting: boolean;
   /** Ticked for the pending bulk delete. Resolved by the list, which never ticks a running row. */
@@ -42,7 +43,7 @@ type SidebarSessionItemProps = {
   t: TFunction;
 };
 
-/** Rendered by SidebarProjectSessions for one session row, including its rename, copy, fork and delete controls. */
+/** Rendered by SidebarProjectSessions for one session row, including its rename, copy, fork, move and delete controls. */
 function SidebarSessionItem({
   project,
   session,
@@ -61,6 +62,7 @@ function SidebarSessionItem({
   onSessionSelect,
   onDeleteSession,
   onForkSession,
+  onMoveSession,
   isSelecting,
   isChecked,
   onToggleSessionSelected,
@@ -82,6 +84,9 @@ function SidebarSessionItem({
       ? t('tooltips.backgroundWorkIndicator', { defaultValue: 'Background work running' })
       : t('tooltips.activeSessionIndicator');
   const providerLabel = PROVIDER_LABELS[session.__provider];
+  // Same gate as the desktop menu in SessionOptions.
+  const movableProviders = useSessionMovingProviders();
+  const canMove = Boolean(onMoveSession) && movableProviders.has(session.__provider) && !isProcessing && !hasBackgroundWork;
 
   // The desktop controls live in SessionOptions, which owns the rename panel and
   // its outside-click dismissal. The mobile rename sits inside the bottom sheet,
@@ -372,6 +377,20 @@ function SidebarSessionItem({
                   </button>
                 )}
 
+                {canMove && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileOptionsOpen(false);
+                      onMoveSession?.(session);
+                    }}
+                    className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
+                  >
+                    <FolderInput className="h-5 w-5 flex-shrink-0" />
+                    <span className="text-sm font-medium">{t('actions.moveSession')}</span>
+                  </button>
+                )}
+
                 {!isProcessing && (
                   <button
                     type="button"
@@ -502,6 +521,7 @@ function SidebarSessionItem({
             provider={session.__provider}
             projectId={project.projectId}
             isProcessing={isProcessing}
+            hasBackgroundWork={hasBackgroundWork}
             isEditing={isEditing}
             renameDraft={renameDraft}
             onRenameDraftChange={onRenameDraftChange}
@@ -510,6 +530,7 @@ function SidebarSessionItem({
             onSaveEditingSession={onSaveEditingSession}
             onDeleteSession={onDeleteSession}
             onFork={onForkSession ? () => onForkSession(session) : undefined}
+            onMove={onMoveSession ? () => onMoveSession(session) : undefined}
             t={t}
           />
         )}

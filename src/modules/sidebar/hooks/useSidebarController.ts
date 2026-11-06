@@ -77,6 +77,16 @@ type UseSidebarControllerArgs = {
   keepProjectsExpanded?: boolean;
 };
 
+/** Server error codes of a refused move, shown as translated reasons instead of the server's English text. */
+const MOVE_SESSION_ERROR_KEYS: Record<string, string> = {
+  SESSION_MOVE_RUNNING: 'messages.moveSessionRunning',
+  SESSION_MOVE_NOT_SUPPORTED: 'messages.moveSessionNotSupported',
+  SESSION_ALREADY_IN_PROJECT: 'messages.moveSessionAlreadyInProject',
+  SESSION_MOVE_FAILED: 'messages.moveSessionFailed',
+  SESSION_NOT_FOUND: 'messages.moveSessionNotFound',
+  PROJECT_NOT_FOUND: 'messages.moveSessionProjectNotFound',
+};
+
 /** Used by Sidebar to coordinate project navigation, expansion and session actions. */
 export function useSidebarController({
   projects,
@@ -160,6 +170,8 @@ export function useSidebarController({
   // same rows (still on screen until the first settles) from sending them again.
   const sessionIdsBeingDeletedRef = useRef<Set<string>>(new Set());
   const [showVersionModal, setShowVersionModal] = useState(false);
+  // The session whose move-to-project picker is open.
+  const [pendingMove, setPendingMove] = useState<SessionWithProvider | null>(null);
   const [searchMode, setSearchMode] = useState<SidebarSearchMode>('projects');
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -187,6 +199,12 @@ export function useSidebarController({
   const starToggleSequenceByProjectRef = useRef<Map<string, number>>(new Map());
   const migrationStartedRef = useRef(false);
   const onRefreshRef = useRef(onRefresh);
+  // The folder the project pointed at when its editor opened. saveProjectName
+  // compares the folder draft against it so a name-only save never calls the
+  // path endpoint. A ref rather than a field on activeRename: reading that
+  // state would give saveProjectName a new identity on every keystroke and
+  // re-render every memoized project row.
+  const projectRenameOriginalPathRef = useRef<string | null>(null);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
   const activeSessionIds = activeSessions;
@@ -866,7 +884,13 @@ export function useSidebarController({
   // Keyed by projectId so the rename survives display-name mutations that arrive
   // while the input is open.
   const startEditingProject = useCallback((project: Project) => {
-    setActiveRename({ target: 'project', id: project.projectId, draft: project.displayName });
+    projectRenameOriginalPathRef.current = project.fullPath;
+    setActiveRename({
+      target: 'project',
+      id: project.projectId,
+      draft: project.displayName,
+      pathDraft: project.fullPath,
+    });
   }, []);
 
   const startEditingSession = useCallback(
@@ -880,6 +904,12 @@ export function useSidebarController({
     setActiveRename((previous) => (previous ? { ...previous, draft } : previous));
   }, []);
 
+  const updateRenamePathDraft = useCallback((pathDraft: string) => {
+    setActiveRename((previous) =>
+      previous?.target === 'project' ? { ...previous, pathDraft } : previous,
+    );
+  }, []);
+
   const cancelRename = useCallback(() => {
     setActiveRename(null);
   }, []);
@@ -887,21 +917,49 @@ export function useSidebarController({
   const saveProjectName = useCallback(
     // `projectId` is the DB primary key; the rename API resolves the path
     // through the `projects` table before writing the new display name.
-    async (projectId: string, nextName: string) => {
+    //
+    // The folder is saved first: it is the change that can legitimately fail
+    // (missing directory, path already taken), and applying the display name
+    // anyway would leave the row half-updated.
+    async (projectId: string, nextName: string, nextPath: string) => {
+      // Set by either save that goes through: a folder that moved has to show
+      // up in the sidebar even when the display name then fails to save.
+      let savedAnyChange = false;
       try {
+        const trimmedPath = nextPath.trim();
+        // Only a folder the user actually edited is sent. The path endpoint
+        // validates the folder, which a project discovered outside the
+        // workspace root would fail even though it is not being moved.
+        if (trimmedPath.length > 0 && trimmedPath !== projectRenameOriginalPathRef.current) {
+          const pathResponse = await api.updateProjectPath(projectId, trimmedPath);
+          if (!pathResponse.ok) {
+            const failure = (await pathResponse.json().catch(() => null)) as
+              | { error?: { message?: string; details?: string } }
+              | null;
+            alert(failure?.error?.details || failure?.error?.message || t('messages.updateProjectPathError'));
+            // The editor stays open so the rejected folder can be corrected
+            // instead of silently discarded.
+            return;
+          }
+          savedAnyChange = true;
+        }
+
         const response = await api.renameProject(projectId, nextName);
         if (response.ok) {
-          await paletteOps.refreshProjects();
+          savedAnyChange = true;
         } else {
           console.error('Failed to rename project');
         }
       } catch (error) {
         console.error('Error renaming project:', error);
-      } finally {
-        setActiveRename(null);
       }
+
+      if (savedAnyChange) {
+        await paletteOps.refreshProjects();
+      }
+      setActiveRename(null);
     },
-    [paletteOps],
+    [paletteOps, t],
   );
 
   const showDeleteSessionConfirmation = useCallback(
@@ -1288,6 +1346,48 @@ export function useSidebarController({
     [onSessionSelect, t],
   );
 
+  /**
+   * Files the pending session under another project. The project lists follow
+   * through the broadcast `session_upserted` (see useProjectsState); only the
+   * separately fetched recent list is reloaded here.
+   */
+  const confirmMoveSession = useCallback(
+    async (projectId: string) => {
+      const session = pendingMove;
+      if (!session) {
+        return;
+      }
+      setPendingMove(null);
+
+      let payload: { data?: { warning?: string }; error?: { code?: string } } | null = null;
+      try {
+        const response = await api.moveSession(session.id, projectId);
+        payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          const reasonKey = MOVE_SESSION_ERROR_KEYS[payload?.error?.code ?? ''];
+          console.error('[Sidebar] Error moving session:', payload?.error ?? response.status);
+          alert(reasonKey ? t(reasonKey) : t('messages.moveSessionError'));
+          return;
+        }
+      } catch (error) {
+        console.error('[Sidebar] Error moving session:', error);
+        alert(t('messages.moveSessionError'));
+        return;
+      }
+
+      // The server broadcasts the moved row as a `session_upserted`; the
+      // projects state moves it between projects and, if it is open, points
+      // the workspace (and the chat's cwd) at the new project. Nothing is
+      // refetched here, as with a fork. The recent list is fetched separately.
+      reloadRecentConversations();
+      if (payload?.data?.warning === 'SESSION_MOVE_TRANSCRIPT_PENDING') {
+        // Moved, but its transcript path is not saved yet; history follows once indexed.
+        alert(t('messages.moveSessionTranscriptPending'));
+      }
+    },
+    [pendingMove, reloadRecentConversations, t],
+  );
+
   const collapseSidebar = useCallback(() => {
     setSidebarVisible(false);
   }, [setSidebarVisible]);
@@ -1333,6 +1433,9 @@ export function useSidebarController({
     toggleProject,
     handleSessionClick,
     forkSession,
+    pendingMove,
+    setPendingMove,
+    confirmMoveSession,
     toggleStarProject,
     isProjectStarred,
     getProjectSessions,
@@ -1340,6 +1443,7 @@ export function useSidebarController({
     startEditingProject,
     startEditingSession,
     updateRenameDraft,
+    updateRenamePathDraft,
     cancelRename,
     saveProjectName,
     showDeleteSessionConfirmation,

@@ -215,6 +215,7 @@ export default function SidebarRecentConversations({
                 provider={conversation.provider}
                 projectId={conversation.projectId}
                 isProcessing={isProcessing}
+                hasBackgroundWork={hasBackgroundWork}
                 isEditing={sessionRename !== null}
                 renameDraft={sessionRename?.draft ?? ''}
                 onRenameDraftChange={sessionActions.onRenameDraftChange}
@@ -226,6 +227,14 @@ export default function SidebarRecentConversations({
                 // which is all a recents row knows about the session.
                 onFork={sessionActions.onForkSession
                   ? () => sessionActions.onForkSession?.({
+                    id: conversation.sessionId,
+                    summary: conversation.sessionTitle,
+                    __provider: conversation.provider,
+                    __projectId: conversation.projectId ?? undefined,
+                  })
+                  : undefined}
+                onMove={sessionActions.onMoveSession
+                  ? () => sessionActions.onMoveSession?.({
                     id: conversation.sessionId,
                     summary: conversation.sessionTitle,
                     __provider: conversation.provider,

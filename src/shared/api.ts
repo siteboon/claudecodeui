@@ -234,6 +234,10 @@ export const api = {
     get(`/api/projects/${encodeURIComponent(projectId)}/taskmaster`),
   renameProject: (projectId: string, displayName: string) =>
     put(`/api/projects/${projectId}/rename`, { displayName }),
+  // Repoints a project at a folder renamed or moved outside the app; the server
+  // moves its sessions and Claude transcripts along with it.
+  updateProjectPath: (projectId: string, projectPath: string) =>
+    put(`/api/projects/${encodeURIComponent(projectId)}/path`, { projectPath }),
   restoreProject: (projectId: string) =>
     post(`/api/projects/${encodeURIComponent(projectId)}/restore`),
   // `hardDelete` => server `?force=true` (remove DB row + Claude *.jsonl + sessions rows for path).
@@ -286,6 +290,10 @@ export const api = {
   // `upToAnchorId` (all of it when omitted). The source is left untouched.
   forkSession: (sessionId: string, body: { upToAnchorId?: string; title?: string } = {}) =>
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
+  // Files the session under another project; its next run works in that
+  // project's directory.
+  moveSession: (sessionId: string, projectId: string) =>
+    post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/move`, { projectId }),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
   // What one agent of a workflow run did, read from its transcript on demand

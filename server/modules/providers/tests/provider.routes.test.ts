@@ -8,7 +8,7 @@ import test from 'node:test';
 
 import express, { type NextFunction, type Request, type Response } from 'express';
 
-import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
@@ -594,5 +594,51 @@ test('the workflow agent route reads an agent\'s timeline and status from its ru
     const missing = await missingResponse.json() as { error: { code: string } };
     assert.equal(missingResponse.status, 404);
     assert.equal(missing.error.code, 'WORKFLOW_AGENT_NOT_FOUND');
+  });
+});
+
+test('the session move route validates its input and returns the new project', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    const move = (sessionId: string, body: unknown) => fetch(
+      `${baseUrl}/api/providers/sessions/${sessionId}/move`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) },
+    );
+    const errorCode = async (response: globalThis.Response) => ((await response.json()) as { error: { code: string } }).error.code;
+    const target = path.join(workspacePath, 'target');
+    const created = projectsDb.createProjectPath(target).project;
+    assert.ok(created, 'the target project must exist');
+    assert.equal(created.project_path, target);
+    const targetId = created.project_id;
+    // Never ran, so it moves without touching any provider transcript.
+    sessionsDb.createAppSession('route-move', 'claude', path.join(workspacePath, 'source'), 'Route move');
+
+    const invalidId = await move('bad%20id!', { projectId: targetId });
+    assert.equal(invalidId.status, 400);
+    assert.equal(await errorCode(invalidId), 'INVALID_SESSION_ID');
+
+    for (const body of [{}, { projectId: '   ' }, { projectId: 42 }]) {
+      const response = await move('route-move', body);
+      assert.equal(response.status, 400, JSON.stringify(body));
+      assert.equal(await errorCode(response), 'INVALID_PROJECT_ID');
+    }
+    const unknownProject = await move('route-move', { projectId: 'no-such-project' });
+    assert.equal(unknownProject.status, 404);
+    assert.equal(await errorCode(unknownProject), 'PROJECT_NOT_FOUND');
+    const unknownSession = await move('no-such-session', { projectId: targetId });
+    assert.equal(unknownSession.status, 404);
+    assert.equal(await errorCode(unknownSession), 'SESSION_NOT_FOUND');
+    assert.equal(sessionsDb.getSessionById('route-move')?.project_path, path.join(workspacePath, 'source'));
+
+    const moved = await move('route-move', { projectId: ` ${targetId} ` });
+    assert.equal(moved.status, 200);
+    assert.deepEqual(await moved.json(), {
+      success: true,
+      data: { sessionId: 'route-move', projectId: targetId, projectPath: created.project_path },
+    });
+    assert.equal(sessionsDb.getSessionById('route-move')?.project_path, created.project_path);
+
+    const again = await move('route-move', { projectId: targetId });
+    assert.equal(again.status, 409);
+    assert.equal(await errorCode(again), 'SESSION_ALREADY_IN_PROJECT');
   });
 });

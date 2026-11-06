@@ -8,6 +8,8 @@
     "loadingProjects": "Projekte werden geladen...",
     "searchPlaceholder": "Projekte durchsuchen...",
     "projectNamePlaceholder": "Projektname",
+    "projectPathPlaceholder": "Projektordner",
+    "projectPathHint": "Der Ordner, auf den dieses Projekt verweist. Aktualisiere ihn, nachdem du den Ordner umbenannt oder verschoben hast.",
     "starred": "Favoriten",
     "all": "Alle",
     "untitledSession": "Unbenannte Sitzung",
@@ -76,7 +78,8 @@
     "rename": "Umbenennen",
     "joinCommunity": "Community beitreten",
     "reportIssue": "Problem melden",
-    "starOnGithub": "Stern auf GitHub"
+    "starOnGithub": "Stern auf GitHub",
+    "moveSession": "In Projekt verschieben"
   },
   "branding": {
     "openSource": "Open Source"
@@ -115,6 +118,7 @@
     "createProjectFailed": "Projekt konnte nicht erstellt werden. Bitte erneut versuchen.",
     "createProjectError": "Fehler beim Erstellen des Projekts. Bitte erneut versuchen.",
     "updateProjectError": "Fehler beim Aktualisieren des Projekts. Bitte erneut versuchen.",
+    "updateProjectPathError": "Projektordner konnte nicht aktualisiert werden. Bitte erneut versuchen.",
     "refreshError": "Aktualisierung fehlgeschlagen. Bitte erneut versuchen.",
     "restoreProjectFailed": "Projekt konnte nicht wiederhergestellt werden. Bitte erneut versuchen.",
     "restoreProjectError": "Fehler beim Wiederherstellen des Projekts. Bitte erneut versuchen.",
@@ -122,7 +126,15 @@
     "restoreSessionError": "Fehler beim Wiederherstellen der Sitzung. Bitte erneut versuchen.",
     "forkSessionError": "Diese Sitzung konnte nicht verzweigt werden. Bitte erneut versuchen.",
     "deleteSessionsPartialFailure_one": "{{count}} Sitzung von {{total}} konnte nicht gelöscht werden. Bitte erneut versuchen.",
-    "deleteSessionsPartialFailure_other": "{{count}} von {{total}} Sitzungen konnten nicht gelöscht werden. Bitte erneut versuchen."
+    "deleteSessionsPartialFailure_other": "{{count}} von {{total}} Sitzungen konnten nicht gelöscht werden. Bitte erneut versuchen.",
+    "moveSessionError": "Diese Sitzung konnte nicht verschoben werden.",
+    "moveSessionTranscriptPending": "Die Sitzung wurde verschoben, ihr Verlauf erscheint aber eventuell erst nach einem Moment.",
+    "moveSessionRunning": "Beende die Sitzung, bevor du sie in ein anderes Projekt verschiebst.",
+    "moveSessionNotSupported": "Diese Sitzung kann nicht in ein anderes Projekt verschoben werden.",
+    "moveSessionAlreadyInProject": "Die Sitzung gehört bereits zu diesem Projekt.",
+    "moveSessionFailed": "Die Sitzung konnte nicht verschoben werden; sie bleibt in ihrem Projekt.",
+    "moveSessionNotFound": "Diese Sitzung existiert nicht mehr.",
+    "moveSessionProjectNotFound": "Das Zielprojekt existiert nicht mehr."
   },
   "version": {
     "updateAvailable": "Update verfügbar",
@@ -167,5 +179,10 @@
     "archiveSessions_other": "{{count}} Sitzungen archivieren",
     "archiveSessionsNotice_one": "Beim Archivieren verschwindet die Sitzung aus der aktiven Liste, ihr Verlauf bleibt erhalten.",
     "archiveSessionsNotice_other": "Beim Archivieren verschwinden die Sitzungen aus der aktiven Liste, ihr Verlauf bleibt erhalten."
+  },
+  "moveSession": {
+    "title": "Sitzung in Projekt verschieben",
+    "description": "Die Unterhaltung läuft im Ordner des gewählten Projekts weiter.",
+    "noProjects": "Es gibt kein anderes Projekt, in das diese Sitzung verschoben werden kann."
   }
 }
