@@ -145,9 +145,10 @@ export interface IProviderAuth {
    * Runs `--version` on the CLI this provider's chats use: the same check
    * `getStatus()` reports as `installed` and `installedVersion`, without the
    * credential lookup (which can take seconds). The providers module's CLI
-   * update service reads versions through it.
+   * update service reads versions through it. May be asynchronous so providers
+   * such as Kiro can probe without blocking other requests; callers must await it.
    */
-  checkInstalled(): CliVersionProbe;
+  checkInstalled(): CliVersionProbe | Promise<CliVersionProbe>;
 }
 
 // ---------------------------
