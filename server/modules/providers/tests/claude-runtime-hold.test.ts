@@ -37,6 +37,8 @@ type Scripted = {
   backgrounded: Array<string | undefined>;
   /** Each live permission-mode change. */
   modes: string[];
+  /** Makes the live permission-mode change fail, as a process launched without the skip flag does. */
+  refuseModes: boolean;
 };
 
 /** A stand-in for the SDK query: yields what the test emits, and reads the held prompt to notice its release. */
@@ -57,6 +59,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     prompts,
     backgrounded,
     modes,
+    refuseModes: false,
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
@@ -84,7 +87,12 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
       interrupt: async () => {},
       stopTask: async (taskId: string) => { stopped.push(taskId); },
       backgroundTasks: async (toolUseId?: string) => { backgrounded.push(toolUseId); return true; },
-      setPermissionMode: async (mode: string) => { modes.push(mode); },
+      setPermissionMode: async (mode: string) => {
+        modes.push(mode);
+        if (script.refuseModes) {
+          throw new Error(`Cannot set permission mode to ${mode} because the session was not launched with --dangerously-skip-permissions`);
+        }
+      },
     });
   };
 
@@ -484,6 +492,30 @@ test('a handed-over turn uses its own permission mode, not the one the process s
     modes.push(...script.modes);
     assert.deepEqual(modes, ['default']);
     script.emit(result());
+    script.emit(taskNotification('a1', 'toolu_agent', 'completed'));
+    script.emit(result());
+    script.end();
+    await Promise.all([firstRun, secondRun]);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('a refused permission-mode change still hands the turn over, so the background work survives', async () => {
+  const { cwd, script, context, firstRun } = await startHeldForAgent();
+  try {
+    // Seen live 11-06: the process was started without the skip flag and the
+    // composer asked for bypassPermissions. That used to replace the process.
+    script.refuseModes = true;
+    const secondWriter = { send: () => {}, userId: null };
+    let secondDone = false;
+    const secondRun = queryClaudeSDK('is the agent still running?', { sessionId: SESSION_ID, cwd, model: 'opus', permissionMode: 'bypassPermissions' }, secondWriter as never, context)
+      .then(() => { secondDone = true; });
+    await waitFor(() => script.prompts.length === 2);
+    assert.deepEqual(script.stopped, [], 'the agent is not stopped');
+    assert.equal(script.released(), false);
+    script.emit(result());
+    await waitFor(() => secondDone);
     script.emit(taskNotification('a1', 'toolu_agent', 'completed'));
     script.emit(result());
     script.end();

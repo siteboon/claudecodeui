@@ -2014,18 +2014,23 @@ async function continueHeldSession(
     disallowedTools: mapped.disallowedTools,
   };
   const instance = live.instance as unknown as AnyRecord;
-  try {
-    if (typeof instance.setPermissionMode === 'function') {
-      await instance.setPermissionMode(mapped.permissionMode ?? 'default');
+  // Each setting separately, and a refusal never replaces the process: that
+  // would stop the work it holds. A process launched without
+  // --dangerously-skip-permissions refuses bypassPermissions; it then keeps
+  // asking, and the permission check (which reads the turn's own mode) answers
+  // those asks as that mode says.
+  const applyLive = async (label: string, apply: () => unknown) => {
+    try {
+      await apply();
+    } catch (error) {
+      console.warn(`[Claude SDK] Held process kept its own ${label} for the next turn:`, (error as Error)?.message || error);
     }
-    if (typeof options.model === 'string' && options.model.trim() && typeof instance.setModel === 'function') {
-      await instance.setModel(options.model);
-    }
-  } catch (error) {
-    // A process that cannot take the turn's settings must not run it under
-    // the old ones: let the caller start a fresh process.
-    console.warn('[Claude SDK] Held process refused the next turn\'s settings:', (error as Error)?.message || error);
-    return false;
+  };
+  if (typeof instance.setPermissionMode === 'function') {
+    await applyLive('permission mode', () => instance.setPermissionMode(mapped.permissionMode ?? 'default'));
+  }
+  if (typeof options.model === 'string' && options.model.trim() && typeof instance.setModel === 'function') {
+    await applyLive('model', () => instance.setModel(options.model));
   }
   const turn = live.continueWith(records, writer, settings);
   if (!turn) {
