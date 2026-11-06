@@ -33,7 +33,7 @@ type ShellProps = {
   onProcessComplete?: ((exitCode: number) => void) | null;
   // Called when the Claude CLI in this shell moves to another session
   // (`/clear`, `/resume`), so the host can show that session instead.
-  onSessionChange?: ((sessionId: string) => void) | null;
+  onSessionChange?: ((sessionId: string, previousSessionId: string | null) => void) | null;
   minimal?: boolean;
   autoConnect?: boolean;
   isActive?: boolean;

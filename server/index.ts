@@ -125,8 +125,10 @@ createWebSocketServer(server, {
         },
         findBackgroundClaudeJobId,
         findClaudeCliProcessSession,
-        resolveAppSessionId: (providerSessionId) =>
-            sessionsDb.getSessionByProviderSessionId(providerSessionId)?.session_id ?? null,
+        resolveAppSession: (providerSessionId) => {
+            const row = sessionsDb.getSessionByProviderSessionId(providerSessionId);
+            return row ? { sessionId: row.session_id, projectPath: row.project_path ?? null } : null;
+        },
     },
     getPluginPort,
 });

@@ -25,18 +25,23 @@ async function withRegistry(
     fs.writeFileSync(path.join(registry, `${record.pid}.json`), JSON.stringify(record));
   }
   const realHomedir = os.homedir;
+  const configDirectory = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
   (os as unknown as { homedir: () => string }).homedir = () => home;
   try {
     await runTest();
   } finally {
     (os as unknown as { homedir: () => string }).homedir = realHomedir;
+    if (configDirectory !== undefined) {
+      process.env.CLAUDE_CONFIG_DIR = configDirectory;
+    }
     fs.rmSync(home, { recursive: true, force: true });
   }
 }
 
 test('a pty that execs the CLI is found by its own pid, with the session it is in now', async () => {
-  await withRegistry([{ pid: process.pid, sessionId: 'after-clear' }], () => {
-    assert.deepEqual(findClaudeCliProcessSession(process.pid, null), {
+  await withRegistry([{ pid: process.pid, sessionId: 'after-clear' }], async () => {
+    assert.deepEqual(await findClaudeCliProcessSession(process.pid, null), {
       pid: process.pid,
       providerSessionId: 'after-clear',
     });
@@ -44,9 +49,9 @@ test('a pty that execs the CLI is found by its own pid, with the session it is i
 });
 
 test('a known CLI pid is read first, and a stale one falls back to the pty pid', async () => {
-  await withRegistry([{ pid: process.pid, sessionId: 'current' }], () => {
-    assert.equal(findClaudeCliProcessSession(DEAD_PID, process.pid)?.providerSessionId, 'current');
-    assert.equal(findClaudeCliProcessSession(process.pid, DEAD_PID)?.providerSessionId, 'current');
+  await withRegistry([{ pid: process.pid, sessionId: 'current' }], async () => {
+    assert.equal((await findClaudeCliProcessSession(DEAD_PID, process.pid))?.providerSessionId, 'current');
+    assert.equal((await findClaudeCliProcessSession(process.pid, DEAD_PID))?.providerSessionId, 'current');
   });
 });
 
@@ -56,9 +61,9 @@ test('dead, mismatched and incomplete registry entries are ignored', async () =>
       { pid: DEAD_PID, sessionId: 'dead' },
       { pid: process.pid, sessionId: '' },
     ],
-    () => {
-      assert.equal(findClaudeCliProcessSession(DEAD_PID, null), null);
-      assert.equal(findClaudeCliProcessSession(process.pid, null), null);
+    async () => {
+      assert.equal(await findClaudeCliProcessSession(DEAD_PID, null), null);
+      assert.equal(await findClaudeCliProcessSession(process.pid, null), null);
     },
   );
 });
@@ -83,15 +88,28 @@ test('a CLI the pty runs as a child process is found through its parent pid', as
         { pid: child.pid as number, sessionId: 'child-session' },
         { pid: DEAD_PID, sessionId: 'dead' },
       ],
-      () => {
-        assert.deepEqual(findClaudeCliProcessSession(process.pid, null), {
+      async () => {
+        assert.deepEqual(await findClaudeCliProcessSession(process.pid, null), {
           pid: child.pid,
           providerSessionId: 'child-session',
         });
-        assert.equal(findClaudeCliProcessSession(DEAD_PID - 1, null), null, 'not a child of an unrelated pid');
+        assert.equal(await findClaudeCliProcessSession(DEAD_PID - 1, null), null, 'not a child of an unrelated pid');
       },
     );
   } finally {
     child.kill();
   }
+});
+
+test('an attached background job is found by its job id, not as a child of the pty', async () => {
+  await withRegistry(
+    [{ pid: process.pid, sessionId: 'job-session-after-clear', kind: 'bg', jobId: 'a1b2c3d4' }],
+    async () => {
+      assert.deepEqual(await findClaudeCliProcessSession(DEAD_PID, null, 'a1b2c3d4'), {
+        pid: process.pid,
+        providerSessionId: 'job-session-after-clear',
+      });
+      assert.equal(await findClaudeCliProcessSession(DEAD_PID, null, 'another-job'), null);
+    },
+  );
 });

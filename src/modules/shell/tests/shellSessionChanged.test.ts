@@ -88,13 +88,15 @@ describe('shell session_changed frames', () => {
     vi.unstubAllGlobals();
   });
 
-  it('hands the new session to the host', () => {
+  it('hands the new session and the one it left to the host', () => {
     const { onSessionChange, receive } = renderConnection('old-session');
 
-    receive({ type: 'session_changed', sessionId: 'new-session' });
+    receive({ type: 'session_changed', sessionId: 'new-session', previousSessionId: 'old-session' });
+    receive({ type: 'session_changed', sessionId: 'newer-session' });
 
-    expect(onSessionChange).toHaveBeenCalledTimes(1);
-    expect(onSessionChange).toHaveBeenCalledWith('new-session');
+    expect(onSessionChange).toHaveBeenCalledTimes(2);
+    expect(onSessionChange).toHaveBeenNthCalledWith(1, 'new-session', 'old-session');
+    expect(onSessionChange).toHaveBeenNthCalledWith(2, 'newer-session', null);
   });
 
   it('ignores frames for the session already shown or without an id', () => {

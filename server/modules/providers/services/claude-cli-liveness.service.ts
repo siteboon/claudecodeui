@@ -1,8 +1,10 @@
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+
+import type { ClaudeCliProcessSession } from '@/shared/types.js';
 
 /**
  * One Claude CLI process that is currently producing a response.
@@ -132,60 +134,73 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
   return { providerSessionId, startedAt };
 }
 
-/**
- * The Claude CLI process a pty runs and the session it is in now.
- *
- * `pid` is the CLI's own pid, which callers pass back as `knownPid` so later
- * lookups read a single registry file.
- */
-type ClaudeCliProcessSession = {
-  pid: number;
-  providerSessionId: string;
-};
-
-/** The live registry entry Claude Code wrote for `pid`, if any. */
-function readLiveProcessSession(pid: number): ClaudeCliProcessSession | null {
+/** A registry record that is still the live process it describes, or null. */
+async function readLiveRecord(pid: number): Promise<Record<string, unknown> | null> {
   let record: Record<string, unknown> | null;
   try {
-    record = JSON.parse(fs.readFileSync(path.join(registryDirectory(), `${pid}.json`), 'utf8'));
+    record = JSON.parse(await fsp.readFile(path.join(registryDirectory(), `${pid}.json`), 'utf8'));
   } catch {
     return null;
   }
-  if (
-    !record ||
-    typeof record !== 'object' ||
-    record.pid !== pid ||
-    typeof record.sessionId !== 'string' ||
-    !record.sessionId ||
-    !isRecordedProcessAlive(pid, record.procStart)
-  ) {
+  if (!record || typeof record !== 'object' || record.pid !== pid || !isRecordedProcessAlive(pid, record.procStart)) {
+    return null;
+  }
+  return record;
+}
+
+/** The live registry entry Claude Code wrote for `pid`, if any. */
+async function readLiveProcessSession(pid: number): Promise<ClaudeCliProcessSession | null> {
+  const record = await readLiveRecord(pid);
+  if (!record || typeof record.sessionId !== 'string' || !record.sessionId) {
     return null;
   }
   return { pid, providerSessionId: record.sessionId };
 }
 
 /**
- * Parent pid of `pid`, or null where it cannot be read. Linux has procfs;
- * macOS and the BSDs answer through `ps`. Windows is not supported, so only a
- * CLI that is the pty process itself is found there.
+ * Reads the parent pid of each of `pids`, or of none where that cannot be
+ * done. Linux has procfs; macOS and the BSDs answer through one `ps` call for
+ * the whole set. Windows is not supported, so only a CLI that is the pty
+ * process itself (or a background job it attached to) is found there.
  */
-function readParentPid(pid: number): number | null {
-  try {
-    if (process.platform === 'linux') {
-      // Fields after the parenthesised comm field: state, then ppid.
-      const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
-      const parentPid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
-      return Number.isInteger(parentPid) ? parentPid : null;
-    }
-    if (process.platform === 'win32') {
-      return null;
-    }
-    const output = execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8', timeout: 2000 });
-    const parentPid = Number(output.trim());
-    return Number.isInteger(parentPid) && parentPid > 0 ? parentPid : null;
-  } catch {
-    return null;
+async function readParentPids(pids: number[]): Promise<Map<number, number>> {
+  const parents = new Map<number, number>();
+  if (pids.length === 0 || process.platform === 'win32') {
+    return parents;
   }
+  if (process.platform === 'linux') {
+    await Promise.all(pids.map(async (pid) => {
+      try {
+        // Fields after the parenthesised comm field: state, then ppid.
+        const stat = await fsp.readFile(`/proc/${pid}/stat`, 'utf8');
+        const parentPid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
+        if (Number.isInteger(parentPid)) {
+          parents.set(pid, parentPid);
+        }
+      } catch {
+        // Gone since the registry was listed.
+      }
+    }));
+    return parents;
+  }
+  const output = await new Promise<string>((resolve) => {
+    try {
+      execFile('ps', ['-o', 'pid=,ppid=', '-p', pids.join(',')], { encoding: 'utf8', timeout: 2000 }, (_error, stdout) => {
+        // ps exits non-zero when some pids are gone but still lists the others.
+        resolve(typeof stdout === 'string' ? stdout : '');
+      });
+    } catch {
+      // Spawning can fail synchronously (e.g. EPERM under a sandbox profile).
+      resolve('');
+    }
+  });
+  for (const line of output.split('\n')) {
+    const [pid, parentPid] = line.trim().split(/\s+/).map(Number);
+    if (Number.isInteger(pid) && Number.isInteger(parentPid) && parentPid > 0) {
+      parents.set(pid, parentPid);
+    }
+  }
+  return parents;
 }
 
 /**
@@ -194,41 +209,54 @@ function readParentPid(pid: number): number | null {
  * Claude Code rewrites its registry entry when `/clear` or `/resume` moves the
  * CLI to another session, so this is how the Shell gateway learns about the
  * switch. The CLI is the pty process itself when the shell execs it, or one of
- * its children otherwise.
+ * its children otherwise. A pty that runs `claude attach <job>` shows a
+ * background process it did not start, found by `backgroundJobId` instead.
  *
  * Used by the websocket module's Shell gateway, polled per open Claude pty.
- * Synchronous because it runs on a timer and reads a handful of small files.
+ * All reads are asynchronous, and one poll spawns at most one `ps`.
  */
-export function findClaudeCliProcessSession(
+export async function findClaudeCliProcessSession(
   rootPid: number,
   knownPid: number | null,
-): ClaudeCliProcessSession | null {
+  backgroundJobId: string | null = null,
+): Promise<ClaudeCliProcessSession | null> {
   if (knownPid !== null) {
-    const known = readLiveProcessSession(knownPid);
+    const known = await readLiveProcessSession(knownPid);
     if (known) {
       return known;
     }
   }
 
-  const direct = readLiveProcessSession(rootPid);
+  const direct = await readLiveProcessSession(rootPid);
   if (direct) {
     return direct;
   }
 
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(registryDirectory());
-  } catch {
+  // Entries of pids that are gone are skipped unread (see listRegistryEntries),
+  // so the cap only ever counts live processes.
+  const candidates = (await listRegistryEntries())
+    .map((entry) => /^(\d+)\.json$/.exec(entry))
+    .map((match) => (match ? Number(match[1]) : NaN))
+    .filter((pid) => Number.isInteger(pid) && pid !== rootPid && pid !== knownPid);
+
+  if (backgroundJobId) {
+    for (const pid of candidates) {
+      const record = await readLiveRecord(pid);
+      if (record?.kind === 'bg' && record.jobId === backgroundJobId
+        && typeof record.sessionId === 'string' && record.sessionId) {
+        return { pid, providerSessionId: record.sessionId };
+      }
+    }
     return null;
   }
-  for (const entry of entries.slice(0, MAX_REGISTRY_FILES)) {
-    const match = /^(\d+)\.json$/.exec(entry);
-    const pid = match ? Number(match[1]) : NaN;
-    if (!Number.isInteger(pid) || pid === rootPid || pid === knownPid) {
+
+  const parents = await readParentPids(candidates);
+  for (const pid of candidates) {
+    if (parents.get(pid) !== rootPid) {
       continue;
     }
-    const candidate = readLiveProcessSession(pid);
-    if (candidate && readParentPid(pid) === rootPid) {
+    const candidate = await readLiveProcessSession(pid);
+    if (candidate) {
       return candidate;
     }
   }

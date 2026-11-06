@@ -18,7 +18,7 @@ type UseShellRuntimeOptions = {
   autoConnect: boolean;
   isRestarting: boolean;
   onProcessComplete?: ((exitCode: number) => void) | null;
-  onSessionChange?: ((sessionId: string) => void) | null;
+  onSessionChange?: ((sessionId: string, previousSessionId: string | null) => void) | null;
   onOutputRef?: MutableRefObject<(() => void) | null>;
 };
 

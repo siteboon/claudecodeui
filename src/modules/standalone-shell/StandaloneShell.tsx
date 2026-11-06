@@ -13,7 +13,7 @@ type StandaloneShellProps = {
   isActive?: boolean;
   autoConnect?: boolean;
   onComplete?: ((exitCode: number) => void) | null;
-  onSessionChange?: ((sessionId: string) => void) | null;
+  onSessionChange?: ((sessionId: string, previousSessionId: string | null) => void) | null;
   onClose?: (() => void) | null;
   title?: string | null;
   className?: string;

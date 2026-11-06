@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import type { ClaudeCliProcessSession } from '@/shared/types.js';
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -41,7 +42,13 @@ type PtySessionEntry = {
   // other programs. `/clear` and `/resume` move the CLI to another session.
   providerSessionId: string | null;
   claudePid: number | null;
+  // The background job a `claude attach` pty shows. That process was not
+  // started by the pty, so it is found by its job id rather than as a child.
+  backgroundJobId: string | null;
   followTimer: NodeJS.Timeout | null;
+  // A poll is still reading the registry; the next tick skips instead of
+  // starting a second one.
+  following: boolean;
 };
 
 const ptySessionsMap = new Map<string, PtySessionEntry>();
@@ -145,9 +152,14 @@ type ShellWebSocketDependencies = {
   findClaudeCliProcessSession?: (
     rootPid: number,
     knownPid: number | null,
-  ) => { pid: number; providerSessionId: string } | null;
-  /** The app session id indexed for a Claude session id, or null until it is indexed. */
-  resolveAppSessionId?: (providerSessionId: string) => string | null;
+    backgroundJobId: string | null,
+  ) => Promise<ClaudeCliProcessSession | null> | ClaudeCliProcessSession | null;
+  /**
+   * The app session indexed for a Claude session id and the project path it
+   * belongs to, or null until it is indexed. `/resume` can open a session of
+   * another worktree, whose Shell tab connects with that worktree's path.
+   */
+  resolveAppSession?: (providerSessionId: string) => { sessionId: string; projectPath: string | null } | null;
   spawnPty?: typeof pty.spawn;
 };
 
@@ -616,13 +628,33 @@ function forgetPtySession(entry: PtySessionEntry): void {
  * Without this the pty stays filed under the session it was opened for:
  * reopening that session reattached to a terminal now showing another
  * conversation, and opening the new session started a second CLI on it.
+ *
+ * A switch is only applied while a client is attached to hear about it. A
+ * client that reconnects after missing one asks for the session it last
+ * knew, so the pty stays filed there until the client is back, and the next
+ * poll moves it and tells that client.
  */
-function followClaudeSessionSwitch(
+async function followClaudeSessionSwitch(
   entry: PtySessionEntry,
   dependencies: ShellWebSocketDependencies,
-): void {
-  const found = dependencies.findClaudeCliProcessSession?.(entry.pty.pid, entry.claudePid);
-  if (!found) {
+): Promise<void> {
+  if (entry.following || !entry.ws || entry.ws.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  entry.following = true;
+  let found: ClaudeCliProcessSession | null = null;
+  try {
+    found = (await dependencies.findClaudeCliProcessSession?.(
+      entry.pty.pid,
+      entry.claudePid,
+      entry.backgroundJobId,
+    )) ?? null;
+  } catch {
+    found = null;
+  } finally {
+    entry.following = false;
+  }
+  if (!found || findPtySessionKey(entry) === null) {
     return;
   }
   entry.claudePid = found.pid;
@@ -632,25 +664,27 @@ function followClaudeSessionSwitch(
 
   // A brand-new session appears in the sessions index a moment after the CLI
   // writes it; until then this is retried on the next tick.
-  const appSessionId = dependencies.resolveAppSessionId?.(found.providerSessionId);
+  const appSession = dependencies.resolveAppSession?.(found.providerSessionId);
   const currentKey = findPtySessionKey(entry);
-  if (!appSessionId || currentKey === null) {
+  const ws = entry.ws;
+  if (!appSession || currentKey === null || !ws || ws.readyState !== WebSocket.OPEN) {
     return;
   }
-  const nextKey = `${entry.projectPath}_${appSessionId}`;
+  const projectPath = appSession.projectPath || entry.projectPath;
+  const nextKey = `${projectPath}_${appSession.sessionId}`;
   const occupant = ptySessionsMap.get(nextKey);
   if (occupant && occupant !== entry) {
     // Another terminal already has that session open; leave both alone.
     return;
   }
 
+  const previousSessionId = entry.sessionId;
   ptySessionsMap.delete(currentKey);
   ptySessionsMap.set(nextKey, entry);
-  entry.sessionId = appSessionId;
+  entry.projectPath = projectPath;
+  entry.sessionId = appSession.sessionId;
   entry.providerSessionId = found.providerSessionId;
-  if (entry.ws && entry.ws.readyState === WebSocket.OPEN) {
-    entry.ws.send(JSON.stringify({ type: 'session_changed', sessionId: appSessionId }));
-  }
+  ws.send(JSON.stringify({ type: 'session_changed', sessionId: appSession.sessionId, previousSessionId }));
 }
 
 /**
@@ -867,7 +901,9 @@ export function handleShellConnection(
           claudeColorScheme,
           providerSessionId: resumeSessionId || null,
           claudePid: null,
+          backgroundJobId: shellCommand.startsWith('claude attach ') ? backgroundJobId : null,
           followTimer: null,
+          following: false,
         };
         ptySessionsMap.set(ptySessionKey, entry);
         attachedEntry = entry;
@@ -876,7 +912,7 @@ export function handleShellConnection(
         // its `default` slot as before.
         if (!isPlainShell && provider === 'claude' && sessionId && dependencies.findClaudeCliProcessSession) {
           entry.followTimer = setInterval(
-            () => followClaudeSessionSwitch(entry, dependencies),
+            () => void followClaudeSessionSwitch(entry, dependencies),
             CLAUDE_SESSION_FOLLOW_INTERVAL_MS,
           );
           entry.followTimer.unref?.();

@@ -23,7 +23,7 @@ type UseShellConnectionOptions = {
   bypassPermissionsRef: MutableRefObject<boolean>;
   isDarkModeRef: MutableRefObject<boolean>;
   onProcessCompleteRef: MutableRefObject<((exitCode: number) => void) | null | undefined>;
-  onSessionChangeRef?: MutableRefObject<((sessionId: string) => void) | null | undefined>;
+  onSessionChangeRef?: MutableRefObject<((sessionId: string, previousSessionId: string | null) => void) | null | undefined>;
   isInitialized: boolean;
   autoConnect: boolean;
   closeSocket: () => void;
@@ -130,9 +130,11 @@ export function useShellConnection({
       }
 
       if (message.type === 'session_changed') {
-        const { sessionId } = message;
+        const { sessionId, previousSessionId } = message;
         if (typeof sessionId === 'string' && sessionId && sessionId !== selectedSessionRef.current?.id) {
-          onSessionChangeRef?.current?.(sessionId);
+          // The session the terminal left, so the host can tell whether the
+          // page still shows it or the user has navigated elsewhere meanwhile.
+          onSessionChangeRef?.current?.(sessionId, typeof previousSessionId === 'string' ? previousSessionId : null);
         }
       }
     },

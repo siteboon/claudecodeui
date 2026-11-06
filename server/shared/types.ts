@@ -1652,3 +1652,21 @@ export type CliApplication = {
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
 };
+
+// ---------------------------
+//----------------- CLAUDE CLI PROCESS CONTRACTS ------------
+
+/**
+ * A running Claude CLI process and the Claude session it is in now, as its
+ * entry in the CLI's process registry reports it.
+ *
+ * Produced by the providers module's liveness service and consumed by the
+ * websocket module's Shell gateway, which polls it per open Claude pty to
+ * follow `/clear` and `/resume`. `pid` is the CLI's own pid; passing it back
+ * as the known pid lets a later lookup read a single registry file.
+ * `providerSessionId` is Claude's own session id, not an app session id.
+ */
+export type ClaudeCliProcessSession = {
+  pid: number;
+  providerSessionId: string;
+};
