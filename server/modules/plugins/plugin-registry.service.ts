@@ -90,6 +90,20 @@ export function validateManifest(manifest) {
     }
   }
 
+  // Global assets load on every page, not only when the plugin's tab opens, so
+  // they get the same path rules as `entry`: served from the plugin's own
+  // directory through the authenticated assets route and nothing else.
+  for (const field of ['scripts', 'styles']) {
+    const value = manifest[field];
+    if (value === undefined) continue;
+    if (!Array.isArray(value) || !value.every(p => typeof p === 'string' && p.length > 0)) {
+      return { valid: false, error: `${field} must be an array of relative paths` };
+    }
+    if (value.some(p => p.includes('..') || path.isAbsolute(p))) {
+      return { valid: false, error: `Every entry in ${field} must be a relative path without ".."` };
+    }
+  }
+
   if (manifest.permissions !== undefined) {
     if (!Array.isArray(manifest.permissions) || !manifest.permissions.every(p => typeof p === 'string')) {
       return { valid: false, error: 'Permissions must be an array of strings' };
@@ -215,6 +229,8 @@ export function scanPlugins() {
         slot: manifest.slot || 'tab',
         entry: manifest.entry,
         server: manifest.server || null,
+        scripts: manifest.scripts || [],
+        styles: manifest.styles || [],
         permissions: manifest.permissions || [],
         enabled: config[manifest.name]?.enabled !== false, // enabled by default
         dirName: entry.name,
