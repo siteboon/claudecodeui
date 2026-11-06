@@ -2395,3 +2395,54 @@ test('an archived session stays archived when only non-message rows are appended
     await rm(tmp, { recursive: true, force: true });
   }
 });
+
+test('synchronizeFile keeps a last message that starts exactly at the last tail window', { concurrency: false }, async () => {
+  const lastMessage = JSON.stringify({
+    parentUuid: 'msg-1',
+    isSidechain: false,
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    uuid: 'msg-2',
+    timestamp: '2026-07-10T00:05:00.000Z',
+    sessionId: 'test-session-1',
+  });
+  // Pad the rows after it so the last message starts exactly 8 MiB (the scan
+  // cap) from the end: the last window then begins with that complete row.
+  const rows = nonMessageRows(29_000);
+  const rowsLength = rows.reduce((total, row) => total + row.length + 1, 0);
+  const emptyPad = JSON.stringify({ type: 'cost-state', sessionId: 'test-session-1', padding: '' });
+  const padLength = 8 * 1024 * 1024 - (lastMessage.length + 1) - rowsLength - (emptyPad.length + 1);
+  const pad = JSON.stringify({ type: 'cost-state', sessionId: 'test-session-1', padding: 'x'.repeat(padLength) });
+  assert.equal(lastMessage.length + 1 + rowsLength + pad.length + 1, 8 * 1024 * 1024);
+
+  await synchronizeTranscript([lastMessage, ...rows, pad], (sessionId) => {
+    assert.equal(updatedAtOf(sessionId), '2026-07-10T00:05:00.000Z');
+  });
+});
+
+test('a session whose last message is beyond the scan cap keeps its stored time', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-capped-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+  try {
+    const filePath = await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', []);
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new ClaudeSessionSynchronizer();
+      const sessionId = (await synchronizer.synchronizeFile(filePath))!;
+      sessionsDb.updateSessionIsArchived(sessionId, true);
+
+      // More than the 8 MiB cap of non-message rows after the last message.
+      await writeFile(filePath, `${nonMessageRows(40_000).join('\n')}\n`, { flag: 'a' });
+      const later = new Date('2026-09-01T00:00:00.000Z');
+      nodeFs.utimesSync(filePath, later, later);
+      await synchronizer.synchronizeFile(filePath);
+
+      assert.equal(updatedAtOf(sessionId), '2026-07-10T00:00:00.000Z');
+      assert.ok(sessionsDb.getSessionById(sessionId)?.isArchived);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});

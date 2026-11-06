@@ -12,10 +12,31 @@ import {
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
-// The tail is read in growing windows until a message turns up; a transcript
-// whose last message is further back than the cap keeps the file time.
+// The tail is read in growing windows until a message turns up. A transcript
+// whose last message is further back than the cap keeps its stored time.
 const LAST_MESSAGE_FIRST_WINDOW_BYTES = 64 * 1024;
 const LAST_MESSAGE_MAX_WINDOW_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Reads `length` bytes from `position`, repeating short reads. Stops early if
+ * the file got shorter, and decodes only the bytes actually read.
+ */
+async function readRange(
+  handle: Awaited<ReturnType<typeof open>>,
+  position: number,
+  length: number
+): Promise<string> {
+  const buffer = Buffer.alloc(length);
+  let filled = 0;
+  while (filled < length) {
+    const { bytesRead } = await handle.read(buffer, filled, length - filled, position + filled);
+    if (bytesRead === 0) {
+      break;
+    }
+    filled += bytesRead;
+  }
+  return buffer.toString('utf8', 0, filled);
+}
 
 type ParsedSession = {
   sessionId: string;
@@ -69,7 +90,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const timestamps = await this.readSessionTimestamps(filePath);
+      const timestamps = await this.readSessionTimestamps(filePath, parsed.sessionId);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
@@ -102,7 +123,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
-    const timestamps = await this.readSessionTimestamps(filePath);
+    const timestamps = await this.readSessionTimestamps(filePath, parsed.sessionId);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
@@ -123,32 +144,53 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * opened or closed. Using the file time moved untouched sessions to the top
    * of the list, showed hours- or days-off "last activity", and un-archived
    * archived sessions (an update newer than the stored time un-archives).
+   *
+   * A transcript that has messages, but none within the scan cap, keeps the
+   * time already stored for it: falling back to the file time there would
+   * bring back exactly those problems. Only a session seen for the first time
+   * gets the file time in that case.
    */
   private async readSessionTimestamps(
-    filePath: string
+    filePath: string,
+    providerSessionId: string
   ): Promise<{ createdAt?: string; updatedAt?: string }> {
     const timestamps = await readFileTimestamps(filePath);
-    const lastMessageAt = await this.readLastMessageTime(filePath);
-    return lastMessageAt ? { ...timestamps, updatedAt: lastMessageAt } : timestamps;
+    const lastMessage = await this.readLastMessageTime(filePath);
+    if (lastMessage.timestamp) {
+      return { ...timestamps, updatedAt: lastMessage.timestamp };
+    }
+    if (lastMessage.capped) {
+      const stored = sessionsDb.getSessionByProviderSessionId(providerSessionId)?.updated_at;
+      if (stored) {
+        return { ...timestamps, updatedAt: stored };
+      }
+    }
+    return timestamps;
   }
 
   /**
    * Timestamp of the last user or assistant message in a transcript, reading
-   * from the end. Sidechain (subagent) and meta rows do not count. Returns
-   * undefined when there is none or the file cannot be read.
+   * from the end. Sidechain (subagent) and meta rows do not count.
+   *
+   * `timestamp` is undefined when there is no message or the file cannot be
+   * read; `capped` is true when the scan stopped at the size cap before
+   * reaching the start of the file, so an older message may still exist.
    */
-  private async readLastMessageTime(filePath: string): Promise<string | undefined> {
+  private async readLastMessageTime(filePath: string): Promise<{ timestamp?: string; capped: boolean }> {
     let handle: Awaited<ReturnType<typeof open>> | undefined;
     try {
       handle = await open(filePath, 'r');
       const { size } = await handle.stat();
       let windowSize = Math.min(LAST_MESSAGE_FIRST_WINDOW_BYTES, size);
       for (;;) {
-        const buffer = Buffer.alloc(windowSize);
-        await handle.read(buffer, 0, windowSize, size - windowSize);
-        const lines = buffer.toString('utf8').split('\n');
-        if (windowSize < size) {
-          lines.shift(); // may start mid-line
+        const start = size - windowSize;
+        // One byte more than the window, so a row that starts exactly at the
+        // window is known to be complete (the byte before it is a newline).
+        const readStart = Math.max(0, start - 1);
+        const text = await readRange(handle, readStart, size - readStart);
+        const lines = text.split('\n');
+        if (readStart > 0) {
+          lines.shift(); // the part before the first newline: a partial row, or empty
         }
         for (let index = lines.length - 1; index >= 0; index -= 1) {
           const line = lines[index]?.trim();
@@ -168,16 +210,19 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
             typeof row.timestamp === 'string' &&
             !Number.isNaN(Date.parse(row.timestamp))
           ) {
-            return row.timestamp;
+            return { timestamp: row.timestamp, capped: false };
           }
         }
-        if (windowSize >= size || windowSize >= LAST_MESSAGE_MAX_WINDOW_BYTES) {
-          return undefined;
+        if (windowSize >= size) {
+          return { capped: false };
+        }
+        if (windowSize >= LAST_MESSAGE_MAX_WINDOW_BYTES) {
+          return { capped: true };
         }
         windowSize = Math.min(windowSize * 4, size, LAST_MESSAGE_MAX_WINDOW_BYTES);
       }
     } catch {
-      return undefined;
+      return { capped: false };
     } finally {
       await handle?.close();
     }
