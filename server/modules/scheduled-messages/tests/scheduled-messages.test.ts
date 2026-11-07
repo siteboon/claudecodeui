@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionDraftsDb, sessionsDb, userDb, userPreferencesDb } from '@/modules/database/index.js';
-import { dispatchDueScheduledMessages, dispatchQueuedMessages } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
+import { dispatchDueScheduledMessages, dispatchQueuedMessages, runDispatchPass } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
 import { scheduledMessagesService } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry, connectedClients } from '@/modules/websocket/index.js';
 
@@ -618,6 +618,38 @@ test('a long turn in one session does not hold back a message due for another', 
       clearTimeout(timer);
       first.release();
       await pass;
+    }
+  });
+});
+
+test('a turn held open from an earlier pass does not hold back the next pass', async () => {
+  // A dispatched Claude turn that leaves a Monitor running stays open until
+  // the work reports back; queued turns for other sessions must still go.
+  await withIsolatedDatabase(async (userId) => {
+    sessionsDb.createAppSession('other-session', 'claude', '/tmp', 'Other session');
+    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'long', options: {}, scheduledFor: new Date(Date.now() - 1_000) });
+
+    const started: string[] = [];
+    const first = holdFirstRun();
+    const runtime = {
+      ...(createRuntime([]) as object),
+      run: (_provider: string, command: string) => {
+        started.push(command);
+        return started.length === 1 ? first.run() : Promise.resolve();
+      },
+    } as never;
+
+    const firstPass = runDispatchPass(runtime);
+    try {
+      sessionDraftsDb.appendQueuedMessage(userId, 'other-session', { content: 'queued elsewhere', attachments: [] });
+      sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'queued behind the long turn', attachments: [] });
+      await runDispatchPass(runtime);
+
+      assert.deepEqual(started, ['long', 'queued elsewhere']);
+      assert.deepEqual(sessionDraftsDb.listQueuedMessages().map((row) => row.sessionId), [SESSION_ID], 'the busy session keeps its queued turn');
+    } finally {
+      first.release();
+      await firstPass;
     }
   });
 });

@@ -29,7 +29,13 @@ const AUTO_CONTINUE_MAX_WAIT_MS = 60 * 60_000;
 const AUTO_CONTINUE_MAX_LATE_MS = 24 * 60 * 60_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
-let dispatchInFlight = false;
+/**
+ * Each session's sends still going, from this pass or an earlier one. A send
+ * waits for its whole turn, and a Claude turn that leaves background work
+ * running stays open until that work reports back (a Monitor never does), so
+ * passes must not wait on each other; a queued turn just skips such a session.
+ */
+const sendsInFlight = new Map<string, Promise<void>>();
 
 function readOptions(raw: string): Record<string, unknown> {
   try {
@@ -67,16 +73,32 @@ function describeError(error: unknown): string {
  * session failing is logged as it happens and must neither end the pass early,
  * while another session's turn still runs, nor go unseen. (Scheduled sends
  * record their own failures on the row; this mostly catches queued ones.)
+ *
+ * With `skipBusy`, a session that still has a send in flight is left for a
+ * later pass (its row stays unclaimed). A scheduled send does not wait for
+ * one: it interrupts a running turn anyway, and waiting would hold it behind
+ * a turn kept open for background work.
  */
 async function settleEach(
   sends: { sessionId: string; userId: number; run: () => Promise<void> }[],
+  { skipBusy = false }: { skipBusy?: boolean } = {},
 ): Promise<void> {
-  await Promise.all(sends.map(async ({ sessionId, userId, run }) => {
-    try {
-      await run();
-    } catch (error) {
-      console.error('[ScheduledMessages] Send failed for one session', { sessionId, userId, error: describeError(error) });
+  await Promise.all(sends.map(({ sessionId, userId, run }) => {
+    if (skipBusy && sendsInFlight.has(sessionId)) {
+      return undefined;
     }
+    const current: Promise<void> = Promise.resolve()
+      .then(run)
+      .catch((error: unknown) => {
+        console.error('[ScheduledMessages] Send failed for one session', { sessionId, userId, error: describeError(error) });
+      })
+      .finally(() => {
+        if (sendsInFlight.get(sessionId) === current) {
+          sendsInFlight.delete(sessionId);
+        }
+      });
+    sendsInFlight.set(sessionId, current);
+    return current;
   }));
 }
 
@@ -140,7 +162,7 @@ export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): P
       claimed += 1;
       await sendClaimedQueuedMessage(candidate, runtime);
     },
-  })));
+  })), { skipBusy: true });
 
   return claimed;
 }
@@ -318,6 +340,24 @@ export async function dispatchDueScheduledMessages(
 }
 
 /**
+ * One poll: claims what is due and starts sending it. Resolves once those
+ * sends finish, but the next pass never waits for it: claims are transactional,
+ * a session's due rows go one at a time, and a queued turn skips a session
+ * with a send in flight, so a long or held-open turn holds back only its own
+ * session. The scheduled sends are registered (synchronously, in settleEach)
+ * before the queued pass looks, so a queued turn never races a scheduled one
+ * for the same session.
+ */
+export function runDispatchPass(runtime: ProviderRuntimeGateway): Promise<void> {
+  const logFailure = (error: unknown) => {
+    console.error('[ScheduledMessages] Dispatch pass failed', { error: describeError(error) });
+  };
+  const scheduled = dispatchDueScheduledMessages(runtime).catch(logFailure);
+  const queued = dispatchQueuedMessages(runtime).catch(logFailure);
+  return Promise.all([scheduled, queued]).then(() => undefined);
+}
+
+/**
  * Starts the poll that sends scheduled messages.
  *
  * The schedule lives in the database, so a message stays scheduled across a
@@ -330,20 +370,7 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   }
 
   const poll = () => {
-    // A pass that overruns the interval must not be started again underneath
-    // itself; the claim is transactional but the runs are not.
-    if (dispatchInFlight) {
-      return;
-    }
-    dispatchInFlight = true;
-    void dispatchDueScheduledMessages(runtime)
-      .then(() => dispatchQueuedMessages(runtime))
-      .catch((error: unknown) => {
-        console.error('[ScheduledMessages] Dispatch pass failed', { error: describeError(error) });
-      })
-      .finally(() => {
-        dispatchInFlight = false;
-      });
+    void runDispatchPass(runtime);
   };
 
   pollTimer = setInterval(poll, POLL_INTERVAL_MS);
