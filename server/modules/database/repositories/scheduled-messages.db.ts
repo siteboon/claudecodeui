@@ -76,7 +76,8 @@ export const scheduledMessagesDb = {
    * message up instead of skipping it. Doing it in one transaction is what
    * stops two overlapping polls from sending the same message twice.
    */
-  claimDue(now: Date): ScheduledMessageRow[] {
+  /** Rows of `skipSessionIds` stay pending for a later pass. */
+  claimDue(now: Date, skipSessionIds: ReadonlySet<string> = new Set()): ScheduledMessageRow[] {
     const db = getConnection();
     const nowIso = now.toISOString();
 
@@ -88,14 +89,15 @@ export const scheduledMessagesDb = {
            ORDER BY scheduled_for ASC`
         )
         .all(nowIso) as ScheduledMessageRow[];
+      const claimed = due.filter((row) => !skipSessionIds.has(row.session_id));
 
-      for (const row of due) {
+      for (const row of claimed) {
         db.prepare(
           `UPDATE scheduled_messages SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
         ).run(row.id);
       }
 
-      return due;
+      return claimed;
     })();
   },
 

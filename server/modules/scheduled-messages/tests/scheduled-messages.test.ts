@@ -615,11 +615,11 @@ test('due messages for different sessions go side by side within one pass', asyn
   });
 });
 
-test('a session\'s due messages keep their order across passes', async () => {
-  // A later pass must neither overtake nor interrupt the earlier pass's turn.
+test('a session\'s next due message stays pending while its earlier send is going', async () => {
+  // A later pass must neither overtake nor interrupt the earlier pass's turn,
+  // and a message that has not gone must not be recorded as sent.
   await withIsolatedDatabase(async (userId) => {
-    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'first', options: {}, scheduledFor: new Date(Date.now() - 3_000) });
-    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'second', options: {}, scheduledFor: new Date(Date.now() - 2_000) });
+    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'first', options: {}, scheduledFor: new Date(Date.now() - 2_000) });
 
     const started: string[] = [];
     const first = holdFirstRun();
@@ -632,13 +632,18 @@ test('a session\'s due messages keep their order across passes', async () => {
     } as never;
 
     const firstPass = dispatchDueScheduledMessages(runtime);
-    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'third', options: {}, scheduledFor: new Date(Date.now() - 1_000) });
-    const secondPass = dispatchDueScheduledMessages(runtime);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.deepEqual(started, ['first']);
+    try {
+      scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'second', options: {}, scheduledFor: new Date(Date.now() - 1_000) });
+      assert.equal(await dispatchDueScheduledMessages(runtime), 0);
+      assert.deepEqual(started, ['first']);
+      const statuses = scheduledMessagesDb.listForSession(userId, SESSION_ID).map((row) => `${row.content}:${row.status}`).sort();
+      assert.deepEqual(statuses, ['first:sent', 'second:pending']);
+    } finally {
+      first.release();
+      await firstPass;
+    }
 
-    first.release();
-    await Promise.all([firstPass, secondPass]);
-    assert.deepEqual(started, ['first', 'second', 'third']);
+    assert.equal(await dispatchDueScheduledMessages(runtime), 1);
+    assert.deepEqual(started, ['first', 'second']);
   });
 });
