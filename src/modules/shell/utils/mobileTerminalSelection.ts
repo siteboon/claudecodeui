@@ -52,6 +52,8 @@ const SCROLL_INERTIA_FRICTION = 0.95; // velocity multiplier per ~16ms frame
 const SCROLL_INERTIA_MIN_VELOCITY = 0.02; // px/ms below which coasting stops
 const SCROLL_INERTIA_MAX_VELOCITY = 5; // px/ms cap to avoid runaway flings
 const SCROLL_INERTIA_MAX_IDLE_MS = 90; // ignore a flick if the finger paused before lifting
+// Used when the cell height is not measured yet.
+const FALLBACK_WHEEL_LINE_PX = 20;
 
 type ContextMenuItem = {
   label: string;
@@ -120,6 +122,13 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   private lastScrollTouchTime = 0;
   private scrollVelocity = 0;
   private inertiaFrame: number | null = null;
+  // Full-screen programs (Claude Code, vim, less, htop) leave xterm with no
+  // scrollback of its own and read the wheel instead, and with mouse tracking
+  // on xterm ignores touch entirely. For such a screen a one-finger drag is
+  // turned into wheel events, one per line of travel, which xterm forwards the
+  // way the program asked for (mouse report or arrow keys).
+  private isWheelScrolling = false;
+  private pendingWheelPixels = 0;
 
   constructor(
     terminal: Terminal,
@@ -302,6 +311,8 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
   private onTerminalTouchStart = (event: TouchEvent): void => {
     this.cancelInertia();
     this.resetScrollTracking();
+    this.isWheelScrolling = !this.hasOwnScrollback();
+    this.pendingWheelPixels = 0;
 
     if (event.touches.length === 2) {
       event.preventDefault();
@@ -367,6 +378,15 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     if (this.isSelecting && !this.isHandleDragging) {
       event.preventDefault();
       this.extendSelection(touch);
+      return;
+    }
+
+    if (this.isWheelScrolling) {
+      // The browser must not start a pan of its own, or it cancels the touch.
+      event.preventDefault();
+      const previousY = this.lastScrollTouchY ?? touchStart.clientY;
+      this.recordScrollSample(touch);
+      this.scrollByWheel(previousY - touch.clientY, touch);
       return;
     }
 
@@ -741,6 +761,44 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     return this.viewportElement;
   }
 
+  /** Whether xterm has lines of its own to scroll through. */
+  private hasOwnScrollback(): boolean {
+    const viewport = this.getViewportElement();
+    return Boolean(viewport) && viewport!.scrollHeight > viewport!.clientHeight + 1;
+  }
+
+  /**
+   * Sends `pixels` of finger travel (positive = finger up = later content) as
+   * wheel events at `point`, one per terminal line; the remainder carries
+   * over to the next call.
+   */
+  private scrollByWheel(pixels: number, point: TouchCoords): boolean {
+    const element = this.terminal.element;
+    // A terminal removed mid-flick gets no more wheel events, not even from
+    // the frame that notices it is gone.
+    if (!element?.isConnected) {
+      return false;
+    }
+    this.updateCellDimensions();
+    const lineHeight = this.cellDimensions.height || FALLBACK_WHEEL_LINE_PX;
+    this.pendingWheelPixels += pixels;
+    const lines = Math.trunc(this.pendingWheelPixels / lineHeight);
+    this.pendingWheelPixels -= lines * lineHeight;
+    for (let index = 0; index < Math.abs(lines); index += 1) {
+      element.dispatchEvent(
+        new WheelEvent('wheel', {
+          deltaY: lines > 0 ? 1 : -1,
+          deltaMode: WheelEvent.DOM_DELTA_LINE,
+          clientX: point.clientX,
+          clientY: point.clientY,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    }
+    return element.isConnected;
+  }
+
   private resetScrollTracking(): void {
     this.lastScrollTouchY = null;
     this.lastScrollTouchTime = 0;
@@ -788,6 +846,7 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     }
 
     this.cancelInertia();
+    const wheelPoint = this.isWheelScrolling ? this.getWheelPoint(viewport) : null;
 
     let velocity = clamp(
       initialVelocity,
@@ -806,6 +865,16 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
         return;
       }
 
+      if (wheelPoint) {
+        // No scrollback to move: keep coasting through the program's wheel.
+        if (!this.scrollByWheel(velocity * dt, wheelPoint)) {
+          this.inertiaFrame = null;
+          return;
+        }
+        this.inertiaFrame = window.requestAnimationFrame(step);
+        return;
+      }
+
       const before = viewport.scrollTop;
       viewport.scrollTop = before + velocity * dt;
       if (viewport.scrollTop === before) {
@@ -818,6 +887,12 @@ class ShellMobileSelectionCore implements MobileTerminalSelectionManager {
     };
 
     this.inertiaFrame = window.requestAnimationFrame(step);
+  }
+
+  /** Where coasting wheel events land: the middle of the terminal. */
+  private getWheelPoint(viewport: HTMLElement): TouchCoords {
+    const rect = viewport.getBoundingClientRect();
+    return { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
   }
 
   private cancelInertia(): void {
