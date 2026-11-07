@@ -15,7 +15,6 @@ import { readQueuedChatMessage } from '@/shared/utils.js';
 const POLL_INTERVAL_MS = 30_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
-let dispatchInFlight = false;
 
 function readOptions(raw: string): Record<string, unknown> {
   try {
@@ -149,13 +148,40 @@ export async function dispatchDueScheduledMessages(
     announceScheduledMessagesChanged(sessionId);
   }
 
-  // Sequentially: a session can only have one run at a time, and two due
-  // messages for the same session must not race each other into it.
+  // Sequentially per session: a session can only have one run at a time, and
+  // two due messages for it must not race each other into it. Sessions go side
+  // by side, since a turn can stay open for a long time (see runDispatchPass).
+  const bySession = new Map<string, ScheduledMessageRow[]>();
   for (const row of due) {
-    await sendClaimedMessage(row, runtime);
+    bySession.set(row.session_id, [...(bySession.get(row.session_id) ?? []), row]);
   }
+  await Promise.all([...bySession.values()].map(async (rows) => {
+    for (const row of rows) {
+      await sendClaimedMessage(row, runtime);
+    }
+  }));
 
   return due.length;
+}
+
+function logPassFailure(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('[ScheduledMessages] Dispatch pass failed', { error: message });
+}
+
+/**
+ * One poll's work. A send waits for its whole turn, and a Claude turn that
+ * leaves background work running (a Monitor, say) stays open until that work
+ * reports back, so passes must not wait on each other: claims are
+ * transactional, and a queued turn skips a session that is still busy.
+ *
+ * Exported so a test can drive overlapping passes.
+ */
+export function runDispatchPass(runtime: ProviderRuntimeGateway): Promise<void> {
+  return Promise.all([
+    dispatchDueScheduledMessages(runtime).catch(logPassFailure),
+    dispatchQueuedMessages(runtime).catch(logPassFailure),
+  ]).then(() => undefined);
 }
 
 /**
@@ -171,21 +197,7 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   }
 
   const poll = () => {
-    // A pass that overruns the interval must not be started again underneath
-    // itself; the claim is transactional but the runs are not.
-    if (dispatchInFlight) {
-      return;
-    }
-    dispatchInFlight = true;
-    void dispatchDueScheduledMessages(runtime)
-      .then(() => dispatchQueuedMessages(runtime))
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        console.error('[ScheduledMessages] Dispatch pass failed', { error: message });
-      })
-      .finally(() => {
-        dispatchInFlight = false;
-      });
+    void runDispatchPass(runtime);
   };
 
   pollTimer = setInterval(poll, POLL_INTERVAL_MS);
