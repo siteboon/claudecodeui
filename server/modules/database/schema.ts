@@ -111,6 +111,9 @@ CREATE TABLE IF NOT EXISTS scheduled_messages (
     scheduled_for DATETIME NOT NULL,
     -- pending | sent | failed | cancelled
     status TEXT NOT NULL DEFAULT 'pending',
+    -- Non-null only while a dispatcher owns this row but has not started its
+    -- provider. Startup can recover it without replaying a turn that ran.
+    dispatch_token TEXT,
     -- Why a failed one failed, shown next to it in the composer.
     failure_reason TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

@@ -550,7 +550,7 @@
                                         <td><code>cleanup</code></td>
                                         <td>boolean</td>
                                         <td><span class="badge badge-optional">Optional</span></td>
-                                        <td>Auto-cleanup after completion (default: <code>true</code>). Only applies when cloning via <code>githubUrl</code>. Existing projects specified via <code>projectPath</code> are never cleaned up.</td>
+                                        <td>Auto-cleanup after completion (default: <code>true</code>). Only newly cloned repositories under <code>~/.claude/external-projects</code> are deleted. Clones at caller-specified destinations outside that directory are retained, including during shutdown. Existing projects are never cleaned up.</td>
                                     </tr>
                                     <tr>
                                         <td><code>githubToken</code></td>

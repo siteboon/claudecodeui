@@ -16,6 +16,10 @@ const POLL_INTERVAL_MS = 30_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let dispatchInFlight = false;
+// Claims waiting for run registration, including an interrupt's pending abort,
+// must be persisted again before shutdown can finish draining and exit.
+type WaitingClaim = { row: ScheduledMessageRow; controller: AbortController };
+const waitingClaims = new Map<string, WaitingClaim>();
 
 function readOptions(raw: string): Record<string, unknown> {
   try {
@@ -50,7 +54,7 @@ async function sendClaimedQueuedMessage(
 
   // The registry check and run reservation are separate operations. If a run
   // wins that tiny race, put the turn back so the next poll tries again.
-  if (!result.started && result.error === 'A run was already in progress for this session.') {
+  if (!result.started && (result.retryable || result.error === 'A run was already in progress for this session.')) {
     sessionDraftsDb.restoreQueuedMessage(candidate);
     return;
   }
@@ -72,6 +76,9 @@ function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): bool
 
 /** Sends every persisted queued turn whose session is currently idle. */
 export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
+  if (chatRunRegistry.isDraining()) {
+    return 0;
+  }
   const candidates = sessionDraftsDb.listQueuedMessages();
   let claimed = 0;
 
@@ -91,14 +98,26 @@ export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): P
 
 /** Records why a claimed message did not go, and shows it on its session's banner. */
 function recordFailure(row: ScheduledMessageRow, reason: string): void {
-  scheduledMessagesDb.markFailed(row.id, reason);
+  scheduledMessagesDb.markFailed(row.id, reason, row.dispatch_token);
   announceScheduledMessagesChanged(row.session_id);
 }
 
+/** Failed restoration retains its durable token for recovery at the next startup. */
+function restoreUnstartedClaim(row: ScheduledMessageRow): void {
+  try {
+    scheduledMessagesDb.releaseClaim(row.id, row.dispatch_token);
+    announceScheduledMessagesChanged(row.session_id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[ScheduledMessages] Failed to release claim; retained for startup recovery', { id: row.id, error: message });
+  }
+}
+
 async function sendClaimedMessage(
-  row: ScheduledMessageRow,
+  claim: WaitingClaim,
   runtime: ProviderRuntimeGateway,
 ): Promise<void> {
+  const { row, controller } = claim;
   try {
     const result = await runDetachedChatTurn(
       {
@@ -110,18 +129,44 @@ async function sendClaimedMessage(
         // is aborted so the scheduled message lands when it was due, instead
         // of being recorded as "not sent — session was busy".
         interruptActiveRun: true,
+        signal: controller.signal,
+        // Registration and this ownership transfer are synchronous. Shutdown
+        // may restore only claims whose provider turn has not been registered.
+        onStarted: () => {
+          if (!scheduledMessagesDb.startClaim(row.id, row.dispatch_token)) {
+            waitingClaims.delete(row.id);
+            controller.abort();
+            throw new Error('The scheduled claim is no longer owned by this dispatcher.');
+          }
+          row.dispatch_token = null;
+          waitingClaims.delete(row.id);
+        },
       },
       { runtime },
     );
 
-    // Recorded rather than retried, and recorded whether the run never started
-    // (deleted session, unavailable provider) or started and then failed.
-    // Silently dropping a message the user scheduled is worse than telling
-    // them it did not go.
-    if (!result.started || result.error) {
+    // Close already restored this row. A new process may now own it: neither
+    // a late abort result nor a rejection may release/fail that process's claim.
+    if (controller.signal.aborted) {
+      return;
+    }
+    waitingClaims.delete(row.id);
+
+    // Shutdown is temporary, so an unstarted turn remains pending. Permanent
+    // admission failures and errors after a run started remain visible failures:
+    // retrying a turn that already ran could repeat its side effects.
+    if ((!result.started && result.retryable) || (result.started && row.dispatch_token !== null)) {
+      // A failed durable handoff also means the provider never ran. Preserve
+      // recovery even though the registry briefly registered that turn.
+      restoreUnstartedClaim(row);
+    } else if (!result.started || result.error) {
       recordFailure(row, result.error ?? 'The session was unavailable when this was due.');
     }
   } catch (error) {
+    if (controller.signal.aborted) {
+      return;
+    }
+    waitingClaims.delete(row.id);
     const message = error instanceof Error ? error.message : String(error);
     recordFailure(row, message);
   }
@@ -136,11 +181,17 @@ export async function dispatchDueScheduledMessages(
   runtime: ProviderRuntimeGateway,
   now: Date = new Date(),
 ): Promise<number> {
+  if (chatRunRegistry.isDraining()) {
+    return 0;
+  }
   // Claimed before any of them runs, so a long turn cannot let the next poll
   // pick the same message up again.
   const due = scheduledMessagesDb.claimDue(now);
   if (due.length === 0) {
     return 0;
+  }
+  for (const row of due) {
+    waitingClaims.set(row.id, { row, controller: new AbortController() });
   }
 
   // The claim already recorded them as sent, so their banners come down now,
@@ -152,7 +203,11 @@ export async function dispatchDueScheduledMessages(
   // Sequentially: a session can only have one run at a time, and two due
   // messages for the same session must not race each other into it.
   for (const row of due) {
-    await sendClaimedMessage(row, runtime);
+    const claim = waitingClaims.get(row.id);
+    if (claim?.row !== row) {
+      continue;
+    }
+    await sendClaimedMessage(claim, runtime);
   }
 
   return due.length;
@@ -169,6 +224,7 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   if (pollTimer) {
     return;
   }
+  scheduledMessagesDb.recoverUnstartedClaims();
 
   const poll = () => {
     // A pass that overruns the interval must not be started again underneath
@@ -196,9 +252,18 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   poll();
 }
 
+/** Used by server shutdown to stop polling and restore claims that have not started. */
 export function closeScheduledMessageDispatcher(): void {
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  for (const [id, claim] of waitingClaims) {
+    waitingClaims.delete(id);
+    // Revoke the admission before touching persistence. A failed write leaves
+    // the token available for startup recovery without permitting a late send.
+    claim.controller.abort();
+    restoreUnstartedClaim(claim.row);
+  }
+  waitingClaims.clear();
 }
