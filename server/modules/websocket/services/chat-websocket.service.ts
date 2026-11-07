@@ -717,11 +717,18 @@ async function handleChatStopTask(
     return;
   }
 
-  const stopped = await dependencies.runtime.stopBackgroundTask(
-    session.provider as LLMProvider,
-    sessionId,
-    taskId,
-  );
+  let stopped: boolean;
+  try {
+    stopped = await dependencies.runtime.stopBackgroundTask(
+      session.provider as LLMProvider,
+      sessionId,
+      taskId,
+    );
+  } catch (error) {
+    // The task is still running: say so instead of leaving the ✕ silent.
+    sendProtocolError(ws, 'TASK_STOP_FAILED', error instanceof Error ? error.message : String(error), sessionId, { taskId });
+    return;
+  }
   if (!stopped) {
     sendProtocolError(
       ws,

@@ -147,13 +147,33 @@ test('stopping the last outstanding task releases the held process', async () =>
 
     // The user stops it. The CLI answers with a `stopped` notification and
     // pushes no follow-up turn, so nothing else would ever end the hold.
-    assert.equal(await stopClaudeSDKTask(SESSION_ID, 'wf1'), true);
+    const stopping = stopClaudeSDKTask(SESSION_ID, 'wf1');
+    await settle();
     assert.deepEqual(script.stopped, ['wf1']);
     script.emit(taskNotification('wf1', 'toolu_wf', 'stopped'));
+    assert.equal(await stopping, true, 'the stop counts once the task has settled');
     await settle();
 
     assert.deepEqual(listClaudeSDKBackgroundWork(), []);
     assert.equal(script.released(), true, 'the process is let go once nothing is outstanding');
+    void done;
+  });
+});
+
+test('a stop the CLI acknowledges without ending the task fails', async () => {
+  await withRun(async ({ script, done }) => {
+    script.emit(init());
+    script.emit(toolUse('toolu_mon', 'Monitor', { command: 'tail -f log', description: 'watch' }));
+    script.emit(taskStarted('m1', 'toolu_mon', 'local_bash'));
+    script.emit(result());
+    await settle();
+
+    await assert.rejects(stopClaudeSDKTask(SESSION_ID, 'm1', 50), /still running/);
+    assert.deepEqual(script.stopped, ['m1']);
+    assert.equal(listClaudeSDKBackgroundWork().length, 1, 'the task is still tracked');
+
+    script.emit(taskNotification('m1', 'toolu_mon', 'stopped'));
+    await settle();
     void done;
   });
 });

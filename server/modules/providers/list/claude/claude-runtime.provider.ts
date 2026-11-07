@@ -1955,14 +1955,28 @@ function listClaudeSDKBackgroundWork(): Array<{ sessionId: string; tasks: Backgr
  * task from the tracker and settles its card.
  * @param {string} sessionId - Session identifier
  * @param {string} taskId - The task's `task_id` as reported on `task_started`
+ *
+ * The CLI acknowledges `stop_task` even when it stops nothing (seen with a
+ * Monitor task, CLI 2.1.318), so the stop only counts once the task has left
+ * the tracker; otherwise this throws and the user hears the stop failed.
+ * @param {string} sessionId - Session identifier
+ * @param {string} taskId - The task's `task_id` as reported on `task_started`
+ * @param {number} confirmMs - How long to wait for the task to settle
  * @returns {Promise<boolean>} False when no live process is tracking the task
  */
-async function stopClaudeSDKTask(sessionId: string, taskId: string) {
+async function stopClaudeSDKTask(sessionId: string, taskId: string, confirmMs = 5000) {
   const session = getSession(sessionId);
   if (!session || !backgroundWork.has(sessionId, taskId)) {
     return false;
   }
   await session.instance.stopTask!(taskId);
+  const deadline = Date.now() + confirmMs;
+  while (backgroundWork.has(sessionId, taskId)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`Claude Code acknowledged the stop, but background task "${taskId}" is still running.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
   return true;
 }
 
