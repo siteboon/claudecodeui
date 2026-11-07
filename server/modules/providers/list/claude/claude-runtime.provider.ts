@@ -1981,11 +1981,24 @@ async function runClaudeSDKTaskStop(sessionId: string, taskId: string, confirmMs
   if (!session || !stopTask || !backgroundWork.has(sessionId, taskId)) {
     return false;
   }
-  await stopTask.call(session.instance, taskId);
+  // Not awaited: the CLI may answer late or never, and the task leaving the
+  // tracker is what counts, so one deadline covers both waits.
+  let answered = false;
+  let failed = false;
+  let failure: unknown;
+  stopTask.call(session.instance, taskId).then(
+    () => { answered = true; },
+    (error: unknown) => { answered = true; failed = true; failure = error; },
+  );
   const deadline = Date.now() + confirmMs;
   while (backgroundWork.has(sessionId, taskId)) {
+    if (failed) {
+      throw failure;
+    }
     if (Date.now() >= deadline) {
-      throw new Error(`Claude Code acknowledged the stop, but background task "${taskId}" is still running.`);
+      throw new Error(answered
+        ? `Claude Code acknowledged the stop, but background task "${taskId}" is still running.`
+        : `Claude Code did not answer the stop of background task "${taskId}".`);
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
