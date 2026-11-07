@@ -20,7 +20,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "הגדרות כלים",
@@ -181,6 +182,7 @@
       "cursor": "Cursor מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
       "codex": "Codex מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
       "opencode": "OpenCode מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
+      "antigravity": "Antigravity מוכן לשימוש עם {{model}}. אפשר להתחיל להקליד הודעה למטה.",
       "default": "יש לבחור ספק למעלה כדי להתחיל"
     },
     "pressToSearch": "<kbd>{{shortcut}}</kbd> לחיפוש סשנים, קבצים ו-commits",

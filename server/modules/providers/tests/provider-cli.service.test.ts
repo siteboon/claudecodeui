@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import spawn from 'cross-spawn';
 
+import { AntigravityProviderAuth } from '@/modules/providers/list/antigravity/antigravity-auth.provider.js';
 import { ClaudeProviderAuth } from '@/modules/providers/list/claude/claude-auth.provider.js';
 import { CodexProviderAuth } from '@/modules/providers/list/codex/codex-auth.provider.js';
 import { CursorProviderAuth } from '@/modules/providers/list/cursor/cursor-auth.provider.js';
@@ -206,6 +207,29 @@ const rejectsWithAppError = async (promise: Promise<unknown>, code: string, stat
 };
 
 // ----------------- installed version in the auth status ------------
+
+test('Antigravity reports its configured CLI version without claiming it is bundled or running an updater', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const agy = await createFakeCli(binDir, 'agy');
+    await agy.set('version', '1.2.3\n');
+    const before = process.env.AGY_CLI_PATH;
+    try {
+      process.env.AGY_CLI_PATH = path.join(binDir, process.platform === 'win32' ? 'agy.cmd' : 'agy');
+      const service = createService({
+        resolveProvider: () => ({ id: 'antigravity', auth: new AntigravityProviderAuth() }) as never,
+      });
+      const status = await service.getCliStatus('antigravity');
+      assert.equal(status.installedVersion, '1.2.3');
+      assert.equal(status.updateUnavailableReason, 'manual');
+      assert.equal(status.updateCommand, null);
+      await rejectsWithAppError(service.updateCli('antigravity'), 'PROVIDER_CLI_UPDATE_UNAVAILABLE', 400);
+      assert.equal(await agy.read('update-count'), null);
+    } finally {
+      if (before === undefined) delete process.env.AGY_CLI_PATH;
+      else process.env.AGY_CLI_PATH = before;
+    }
+  });
+});
 
 test('each provider reports the version its CLI prints for --version', async () => {
   await withIsolatedCliEnv(async (binDir) => {

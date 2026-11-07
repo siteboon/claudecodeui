@@ -45,7 +45,6 @@ const store = {
 
 async function renderWith(processingSessions: SessionActivityMap) {
   const { useChatSessionState } = await import('@/modules/chat/hooks/useChatSessionState');
-  const resetStreamingState = vi.fn();
   const hook = renderHook(
     ({ selectedSession }: { selectedSession: ProjectSession | null }) =>
       useChatSessionState({
@@ -54,7 +53,6 @@ async function renderWith(processingSessions: SessionActivityMap) {
         selectedSession,
         ws: null,
         sendMessage: vi.fn(),
-        resetStreamingState,
         statusCheckSentAtRef: { current: new Map() },
         lastSeqRef: { current: new Map() },
         sessionStore: store as never,
@@ -63,11 +61,10 @@ async function renderWith(processingSessions: SessionActivityMap) {
     { initialProps: { selectedSession: session as ProjectSession | null } },
   );
   assert.equal(hook.result.current.currentSessionId, 'session-a');
-  resetStreamingState.mockClear();
   await act(async () => {
     hook.rerender({ selectedSession: null });
   });
-  return { hook, resetStreamingState };
+  return { hook };
 }
 
 beforeEach(() => {
@@ -81,19 +78,17 @@ afterEach(() => {
 });
 
 test('leaving a session whose turn has ended, with its background work running, resets the pane', async () => {
-  const { hook, resetStreamingState } = await renderWith(new Map([
+  const { hook } = await renderWith(new Map([
     ['session-a', { statusText: null, canInterrupt: false, startedAt: 1, background: true, tasks: [] }],
   ]));
 
   assert.equal(hook.result.current.currentSessionId, null);
-  assert.equal(resetStreamingState.mock.calls.length, 1);
 });
 
 test('a session mid-response keeps its view while the selection catches up', async () => {
-  const { hook, resetStreamingState } = await renderWith(new Map([
+  const { hook } = await renderWith(new Map([
     ['session-a', { statusText: null, canInterrupt: true, startedAt: 1 }],
   ]));
 
   assert.equal(hook.result.current.currentSessionId, 'session-a');
-  assert.equal(resetStreamingState.mock.calls.length, 0);
 });

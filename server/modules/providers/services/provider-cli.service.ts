@@ -65,8 +65,8 @@ const CLI_UPDATERS: Partial<Record<LLMProvider, CliUpdater>> = {
   },
 };
 
-/** Why the settings page offers no update: the CLI ships with CloudCLI, or the hosting platform manages the CLIs. */
-type CliUpdateUnavailableReason = 'bundled' | 'platform';
+/** Why the settings page offers no update: bundled, platform-managed, or an external CLI without a configured updater. */
+type CliUpdateUnavailableReason = 'bundled' | 'platform' | 'manual';
 
 /** Why an update run went wrong, as read from its exit code and output. */
 type CliUpdateFailure = 'permission_denied' | 'timed_out' | 'failed';
@@ -181,6 +181,7 @@ function getProviderLabel(provider: LLMProvider): string {
     codex: 'Codex',
     cursor: 'Cursor CLI',
     opencode: 'OpenCode',
+    antigravity: 'Antigravity',
   };
   return labels[provider];
 }
@@ -403,7 +404,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       const update = resolveUpdateCommand(provider.id);
       const updateUnavailableReason: CliUpdateUnavailableReason | null = dependencies.platformMode
         ? 'platform'
-        : update ? null : 'bundled';
+        : update ? null : provider.id === 'antigravity' ? 'manual' : 'bundled';
 
       // The registry is only worth asking when the answer can lead to an update
       // of a CLI that is there.
@@ -451,7 +452,10 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       const provider = dependencies.resolveProvider(providerName);
       const update = resolveUpdateCommand(provider.id);
       if (!update) {
-        throw new AppError(`${getProviderLabel(provider.id)} ships with CloudCLI and is updated together with it.`, {
+        const message = provider.id === 'antigravity'
+          ? 'Manage Antigravity CLI updates outside CloudCLI.'
+          : `${getProviderLabel(provider.id)} ships with CloudCLI and is updated together with it.`;
+        throw new AppError(message, {
           code: 'PROVIDER_CLI_UPDATE_UNAVAILABLE',
           statusCode: 400,
         });

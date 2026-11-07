@@ -17,7 +17,8 @@
     "tool": "Araç",
     "claude": "Claude",
     "cursor": "Cursor",
-    "codex": "Codex"
+    "codex": "Codex",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "Araç Ayarları",
@@ -159,6 +160,7 @@
       "claude": "Claude'u {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "cursor": "Cursor'ı {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "codex": "Codex'i {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
+      "antigravity": "Antigravity ile {{model}} kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "default": "Başlamak için yukarıdan bir sağlayıcı seç"
     },
     "pressToSearch": "Oturumlarda, dosyalarda ve commit'lerde arama yapmak için <kbd>{{shortcut}}</kbd> tuşlarına bas",

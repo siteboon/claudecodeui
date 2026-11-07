@@ -451,6 +451,9 @@
       },
       "opencode": {
         "description": "Asisten CLI OpenCode"
+      },
+      "antigravity": {
+        "description": "Asisten CLI Antigravity"
       }
     },
     "connectionStatus": "Status Koneksi",
@@ -596,7 +599,8 @@
       "claude": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Claude",
       "cursor": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Cursor",
       "codex": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Codex",
-      "opencode": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk OpenCode"
+      "opencode": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk OpenCode",
+      "antigravity": "Server Model Context Protocol menyediakan tool dan sumber data tambahan untuk Antigravity"
     },
     "addButton": "Tambah Server MCP",
     "empty": "Belum ada server MCP yang dikonfigurasi",

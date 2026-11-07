@@ -1,3 +1,54 @@
 export { appendFilesInputTag, buildCodexInputItems, normalizeImageDescriptors } from './image-attachments.js';
-export { createCompleteMessage, createNormalizedMessage } from './utils.js';
-export type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from './types.js';
+
+// Providers, Agent response collection, and Websocket Shell launches consume these shared contracts.
+export type {
+  IProviderAuth,
+  IProviderModels,
+  IProviderRuntime,
+  IProviderSessions,
+  IProviderSessionSynchronizer,
+  IProviderSkills,
+} from './interfaces.js';
+export type {
+  AnyRecord,
+  CliVersionProbe,
+  FetchHistoryOptions,
+  FetchHistoryResult,
+  McpScope,
+  NormalizedMessage,
+  ProviderAuthStatus,
+  ProviderCurrentActiveModel,
+  ProviderMcpServer,
+  ProviderModelsDefinition,
+  ProviderRunFunction,
+  ProviderRuntimeContext,
+  ProviderRuntimeWriter,
+  ProviderSkillSource,
+  UpsertProviderMcpServerInput,
+} from './types.js';
+export {
+  AppError,
+  buildDefaultProviderCurrentActiveModel,
+  buildProviderCliEnv,
+  createCompleteMessage,
+  createNormalizedMessage,
+  findFilesRecursivelyCreatedAfter,
+  generateMessageId,
+  normalizeProjectPath,
+  normalizeSessionName,
+  parseIncomingJsonObject,
+  probeCliVersion,
+  readFileTimestamps,
+  readJsonConfig,
+  readObjectRecord,
+  readOptionalString,
+  readStringArray,
+  readStringRecord,
+  resolveConfiguredCliExecutable,
+  runProviderCliCommand,
+  sanitizeLeafDirectoryName,
+  sliceTailPage,
+  stripAnsiSequences,
+  stripAntigravityTags,
+  writeJsonConfig,
+} from './utils.js';

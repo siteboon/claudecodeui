@@ -11,8 +11,8 @@ import express from 'express';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { chatRunRegistry, connectedClients } from '@/modules/websocket/index.js';
-import type { NormalizedMessage } from '@/shared/types.js';
-import { createNormalizedMessage } from '@/shared/utils.js';
+import type { NormalizedMessage } from '@/shared/index.js';
+import { createNormalizedMessage } from '@/shared/index.js';
 
 import { createAgentRouter } from '../agent.routes.js';
 
@@ -76,6 +76,7 @@ function createDependencies(queryClaude: RunFunction): AgentDependencies {
     queryCursor: unexpected as RunFunction,
     queryCodex: unexpected as RunFunction,
     queryOpenCode: unexpected as RunFunction,
+    queryAntigravity: unexpected as RunFunction,
     GithubClient: class {} as unknown as AgentDependencies['GithubClient'],
   };
 }
@@ -102,6 +103,51 @@ const readEvents = async (response: Response): Promise<Array<Record<string, unkn
     .split('\n\n')
     .filter((frame) => frame.startsWith('data: '))
     .map((frame) => JSON.parse(frame.slice('data: '.length)) as Record<string, unknown>);
+
+test('Antigravity API runs use the registered app session and resume its native conversation', async () => {
+  await withIsolatedDatabase(async () => {
+    const dependencies = createDependencies(async () => { throw new Error('unexpected Claude run'); });
+    const calls: Array<{ sessionId: unknown; nativeId: string | null; model: unknown; effort: unknown }> = [];
+    const catalogs: string[] = [];
+    dependencies.models = {
+      getProviderModels: async (provider: string) => {
+        catalogs.push(provider);
+        return { OPTIONS: [], DEFAULT: 'agy-catalog-default' };
+      },
+    } as unknown as AgentDependencies['models'];
+    dependencies.queryAntigravity = async (_prompt, options, writer) => {
+      const [running] = chatRunRegistry.listRunningRuns();
+      assert.equal(running.provider, 'antigravity');
+      assert.equal(running.sessionId, options.sessionId);
+      assert.equal(writer.isWebSocketWriter, true);
+      const gatewayWriter = writer as typeof writer & { getSessionId(): string | null };
+      calls.push({ sessionId: options.sessionId, nativeId: gatewayWriter.getSessionId(), model: options.model, effort: options.effort });
+      writer.send(createNormalizedMessage({ kind: 'session_created', provider: 'antigravity', sessionId: 'native-agy', newSessionId: 'native-agy' }));
+      writer.send(createNormalizedMessage({ kind: 'stream_delta', provider: 'antigravity', sessionId: 'native-agy', role: 'assistant', content: 'AGY reply' }));
+      writer.send(createNormalizedMessage({ kind: 'complete', provider: 'antigravity', sessionId: 'native-agy', exitCode: 0 }));
+    };
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const first = await post(baseUrl, { projectPath: '/home/test/project', message: 'Run it', provider: 'antigravity', effort: 'high', stream: false });
+      assert.equal(first.status, 200);
+      const body = await first.json() as { sessionId: string; providerSessionId: string; messages: Array<{ content: string }> };
+      assert.match(body.sessionId, /^app-/);
+      assert.equal(body.providerSessionId, 'native-agy');
+      assert.deepEqual(body.messages.map((message) => message.content), ['AGY reply']);
+      assert.equal(sessionsDb.getSessionById(body.sessionId)?.provider, 'antigravity');
+      assert.deepEqual(chatRunRegistry.listRunningRuns(), []);
+
+      const resumed = await post(baseUrl, { projectPath: '/home/test/project', message: 'Continue', sessionId: 'native-agy', stream: false });
+      assert.equal(resumed.status, 200);
+      assert.equal((await resumed.json() as { sessionId: string }).sessionId, body.sessionId);
+      assert.deepEqual(calls, [
+        { sessionId: body.sessionId, nativeId: null, model: 'agy-catalog-default', effort: 'high' },
+        { sessionId: body.sessionId, nativeId: 'native-agy', model: 'agy-catalog-default', effort: undefined },
+      ]);
+      assert.deepEqual(catalogs, ['antigravity', 'antigravity']);
+      assert.deepEqual(chatRunRegistry.listRunningRuns(), []);
+    });
+  });
+});
 
 /** A runtime that announces its native session id, streams one text event, and waits to be released before completing. */
 function createHeldRuntime(nativeSessionId = 'native-1') {
@@ -346,3 +392,27 @@ test('a non-streaming run answers with the assistant\'s replies, its token usage
     });
   });
 });
+
+for (const provider of ['cursor', 'opencode'] as const) {
+  test(`${provider} non-streaming Agent API returns normalized assistant output`, async () => {
+    await withIsolatedDatabase(async () => {
+      const dependencies = createDependencies(async () => { throw new Error('unexpected Claude call'); });
+      const query: RunFunction = async (_prompt, _options, writer) => {
+        writer.send(createNormalizedMessage({ kind: 'session_created', provider, sessionId: 'native', newSessionId: 'native' }));
+        writer.send(createNormalizedMessage({ kind: 'stream_delta', provider, sessionId: 'native', role: 'assistant', content: 'partial' }));
+        writer.send(createNormalizedMessage({ kind: 'text', provider, sessionId: 'native', role: 'assistant', content: 'answer' }));
+        writer.send(createNormalizedMessage({ kind: 'tool_result', provider, sessionId: 'native', content: 'tool output' }));
+        writer.send(createNormalizedMessage({ kind: 'complete', provider, sessionId: 'native', exitCode: 0 }));
+      };
+      if (provider === 'cursor') dependencies.queryCursor = query;
+      else dependencies.queryOpenCode = query;
+      await withAgentServer(dependencies, async (baseUrl) => {
+        const response = await post(baseUrl, { projectPath: '/home/test/project', provider, message: 'Run', stream: false });
+        assert.equal(response.status, 200);
+        const body = await response.json() as { success: boolean; messages: Array<{ content: string }> };
+        assert.equal(body.success, true);
+        assert.deepEqual(body.messages.map((message) => message.content), ['partial', 'answer']);
+      });
+    });
+  });
+}

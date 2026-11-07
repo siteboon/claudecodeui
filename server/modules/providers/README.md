@@ -45,6 +45,26 @@ Current provider ids in this repo are:
 - `codex`
 - `cursor`
 - `opencode`
+- `antigravity`
+
+Antigravity runs use the CLI's [headless streaming protocol](https://antigravity.google/docs/cli/headless/):
+`--input-format stream-json --output-format stream-json`, with one JSON user
+message on stdin. The subprocess's top-level
+`conversation_id` on the `init` event binds the app session immediately; shared
+conversation files are never used to guess ownership. Fresh runs can overlap.
+A CLI that does not emit this protocol reports an explicit error. Aborts send
+SIGTERM, escalate to SIGKILL after three seconds, and retain process ownership
+until exit. Successful stderr diagnostics are excluded from assistant replies.
+
+Antigravity model discovery queries `agy models` on every backend catalog read,
+so account changes and subscription changes use the CLI's current model list.
+The fallback catalog is used only when discovery fails or returns no models;
+it is not evidence of account-specific model entitlement. Authentication status
+also retries the CLI probe on each read, reports account eligibility failures
+separately from missing authentication, and requires a nonempty model list.
+Antigravity plan quotas and shared model-group windows remain owned by the
+native CLI and external usage integrations; this provider does not infer them
+from a subscription name or from session token usage.
 
 Those ids are mirrored in backend unions and frontend provider constants. If
 adding a new provider, update every place that hardcodes this list.
@@ -65,7 +85,8 @@ server/modules/providers/list/<provider>/
   <provider>-session-synchronizer.provider.ts
 ```
 
-The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
+The existing provider folders are `claude`, `codex`, `cursor`, `opencode`, and
+`antigravity`.
 
 Each provider wrapper owns its SDK/CLI runtime alongside its auth, model, and
 session facets. Runtime adapters receive registry-backed model and session
@@ -147,6 +168,11 @@ Current MCP formats in this repo are:
 | Codex | `.codex/config.toml` | `user`, `project` | `stdio`, `http` |
 | Cursor | `.cursor/mcp.json` | `user`, `project` | `stdio`, `http` |
 | OpenCode | `~/.config/opencode/opencode.json` or `<workspace>/opencode.json` (`.jsonc` is read when present) | `user`, `project` | `stdio`, `http` |
+| Antigravity | `~/.gemini/config/mcp_config.json`, `<workspace>/.agents/mcp_config.json` | `user`, `project` | `stdio`, `http` (`serverUrl`) |
+
+The Antigravity user-level MCP path is confirmed by the official
+[migration directory mapping](https://antigravity.google/docs/cli/gcli-migration/#directory-mapping).
+It intentionally differs from the CLI's conversation/history storage root.
 
 5. Implement skills.
 
@@ -167,6 +193,7 @@ Current skill discovery roots are:
 | Codex | `~/.agents/skills`, `~/.codex/skills/.system`, `/etc/codex/skills` | `<workspace>/.agents/skills`, `path.dirname(workspacePath)/.agents/skills`, topmost git root `.agents/skills` | `$` | Overlapping roots are deduplicated before scanning. |
 | Cursor | `~/.cursor/skills` | `<workspace>/.cursor/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 | OpenCode | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | Cwd-to-topmost-git-root `.opencode/skills`, `.claude/skills`, and `.agents/skills` | `/` | Reuses OpenCode, Claude, and Agents skill locations. Overlapping roots are deduplicated before scanning. |
+| Antigravity | `~/.gemini/antigravity-cli/skills` | `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 
 Command forms currently used by the providers are:
 
@@ -175,6 +202,7 @@ Command forms currently used by the providers are:
 - Codex skills: `$skill-name`
 - Cursor skills: `/skill-name`
 - OpenCode skills: `/skill-name`
+- Antigravity skills: `/skill-name`
 
 6. Implement sessions.
 
@@ -212,6 +240,7 @@ Current session sync roots are:
 | Codex | `~/.codex/sessions/**/*.jsonl` | Uses `~/.codex/session_index.jsonl` for title lookup and the last `task_complete` message for a fallback title. |
 | Cursor | `~/.cursor/projects/**/*.jsonl` | Uses sibling `worker.log` to recover `workspacePath`, then derives the session title from the first user prompt. |
 | OpenCode | `~/.local/share/opencode/opencode.db` | Reads active sessions/messages/parts from OpenCode's shared SQLite database and stores `jsonl_path` as `null` so deleting one app session cannot remove the shared DB. |
+| Antigravity | `~/.gemini/antigravity-cli/brain/*/transcript.jsonl` | Uses `~/.gemini/antigravity-cli/history.jsonl` for workspace and title metadata. |
 
 8. Register the provider.
 
@@ -361,6 +390,8 @@ Useful tests in this repo:
 - `server/modules/providers/tests/mcp.test.ts`
 - `server/modules/providers/tests/skills.test.ts`
 - `server/modules/providers/tests/opencode-sessions.test.ts`
+- `server/modules/providers/tests/antigravity-runtime.test.ts`
+- `server/modules/providers/tests/antigravity-sessions.test.ts`
 
 If you touch sessions or session synchronization, add or update focused tests
 alongside the implementation.
@@ -380,5 +411,3 @@ alongside the implementation.
 - Forgetting that Claude plugin skills are discovered differently from normal
   user/project skill folders.
 - Assuming one provider's MCP config file format works for the others.
-
-

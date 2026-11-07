@@ -295,6 +295,38 @@ test('providerMcpService handles cursor MCP JSON config formats', { concurrency:
 });
 
 /**
+ * Antigravity config readers must ignore malformed entries whose transport
+ * selector is present but empty instead of exposing unusable MCP servers.
+ */
+test('providerMcpService ignores Antigravity MCP entries with empty command or URL', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-antigravity-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  const configDirectory = path.join(workspacePath, '.agents');
+  await fs.mkdir(configDirectory, { recursive: true });
+  await fs.writeFile(
+    path.join(configDirectory, 'mcp_config.json'),
+    JSON.stringify({
+      mcpServers: {
+        'empty-command': { command: '   ' },
+        'empty-url': { serverUrl: '' },
+        valid: { command: 'node', args: ['server.js'] },
+      },
+    }),
+    'utf8',
+  );
+
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    const grouped = await providerMcpService.listProviderMcpServers('antigravity', { workspacePath });
+    assert.deepEqual(grouped.project.map((server) => server.name), ['valid']);
+    assert.equal(grouped.project[0]?.transport, 'stdio');
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/**
  * This test covers the global MCP adder requirement: only http/stdio are allowed and
  * one payload is written to all providers.
  */
@@ -313,7 +345,7 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
-    assert.equal(globalResult.length, 4);
+    assert.equal(globalResult.length, 5);
     assert.ok(globalResult.every((entry) => entry.created === true));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
@@ -327,6 +359,9 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
 
     const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));
     assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
+
+    const antigravityProject = await readJson(path.join(workspacePath, '.agents', 'mcp_config.json'));
+    assert.ok((antigravityProject.mcpServers as Record<string, unknown>)['global-http']);
 
     await assert.rejects(
       providerMcpService.addMcpServerToAllProviders({
@@ -347,3 +382,38 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
   }
 });
 
+test('Antigravity MCP reads and writes native scoped serverUrl entries', { concurrency: false }, async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-agy-scopes-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    for (const scope of ['user', 'project'] as const) {
+      const configPath = scope === 'user'
+        ? path.join(tempRoot, '.gemini', 'config', 'mcp_config.json')
+        : path.join(workspacePath, '.agents', 'mcp_config.json');
+      await fs.mkdir(path.dirname(configPath), { recursive: true });
+      await fs.writeFile(configPath, JSON.stringify({
+        preserved: true,
+        mcpServers: { existing: { serverUrl: 'https://example.com/existing' } },
+      }));
+      await providerMcpService.upsertProviderMcpServer('antigravity', {
+        name: 'added', scope, transport: 'http', workspacePath,
+        url: 'https://example.com/new', headers: { 'X-Test': 'retained' },
+      });
+      const config = await readJson(configPath);
+      assert.equal(config.preserved, true);
+      const servers = config.mcpServers as Record<string, Record<string, unknown>>;
+      assert.deepEqual(servers.added, {
+        serverUrl: 'https://example.com/new', headers: { 'X-Test': 'retained' },
+      });
+      const grouped = await providerMcpService.listProviderMcpServers('antigravity', { workspacePath });
+      assert.equal(grouped[scope].find((server) => server.name === 'existing')?.url,
+        'https://example.com/existing');
+      assert.equal(grouped[scope].find((server) => server.name === 'added')?.url,
+        'https://example.com/new');
+    }
+  } finally {
+    restoreHomeDir();
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
