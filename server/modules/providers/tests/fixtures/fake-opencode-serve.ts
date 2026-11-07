@@ -11,8 +11,19 @@
  * a rejected permission or dismissed question ending the turn, and an abort
  * that reports MessageAbortedError.
  *
+ * For side questions it also forks a session the way OpenCode does: every
+ * parent message is copied into the fork under new ids, and those copies
+ * publish `message.updated`/`message.part.updated` for the fork's id, half
+ * before the fork's response and half only once the fork is prompted, after
+ * `prompt_async` has answered (the event stream lags the HTTP answer), so a reader that takes every text part
+ * of the fork would repeat the parent's history. Both prompt routes run the
+ * same turn (`prompt_async` answers at once, `POST /session/:id/message` when
+ * the turn ends), `GET /session/:id/message` lists a session's messages, and
+ * `DELETE /session/:id` deletes it, logging `deleteFinished` once it is done.
+ *
  * The turn is scripted through FAKE_OPENCODE_SCENARIO (JSON, see `Scenario`);
- * every request is appended to FAKE_OPENCODE_LOG as one JSON line.
+ * every request is appended to FAKE_OPENCODE_LOG as one JSON line, after the
+ * `started` line that records the server's own start environment.
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -34,14 +45,33 @@ type Step =
   /** Several requests asked at once; a reject of one rejects the rest, as OpenCode does. */
   | { type: 'parallel-permissions'; requests: Array<{ id: string; permission: string; patterns: string[]; always: string[] }> }
   | { type: 'error'; name: string; message: string }
+  /** A failure inside the loop, after the steps before it: `session.error`, then idle. */
+  | { type: 'model-error'; name: string; message: string }
   | { type: 'crash' }
   | { type: 'hang' };
+
+/** A message of a session's scripted history, which a fork copies. */
+type HistoryMessage = { role: 'user' | 'assistant'; text: string };
+
+type SessionState = { permission?: PermissionRule[]; title?: string; history?: HistoryMessage[]; fork?: boolean };
+
+type StoredMessage = { info: Record<string, unknown>; parts: Array<Record<string, unknown>> };
 
 type Scenario = {
   /** Id given to a session created through POST /session. */
   newSessionId?: string;
   /** Sessions GET /session/:id knows; any other id answers 404. */
-  sessions?: Record<string, { permission?: PermissionRule[] }>;
+  sessions?: Record<string, { permission?: PermissionRule[]; title?: string; history?: HistoryMessage[] }>;
+  /** Id of the session POST /session/:id/fork creates; a later fork gets `<id>_<n>`. */
+  forkId?: string;
+  /** How long POST /session/:id/fork takes to answer. */
+  forkDelayMs?: number;
+  /** Answered by POST /session/:id/fork instead of a fork, while the parent stays readable. */
+  forkStatus?: number;
+  /** How long DELETE /session/:id takes to answer. */
+  deleteDelayMs?: number;
+  /** How long the server takes to print its listening line; `{ spawned }` is logged at once. */
+  listenDelayMs?: number;
   agents?: Array<{ name: string; permission: PermissionRule[] }>;
   defaultAgent?: string;
   /** Answered with a status instead of 204, as OpenCode does for a bad prompt. */
@@ -80,7 +110,14 @@ if (args[0] !== 'serve') {
 }
 
 const streams = new Set<http.ServerResponse>();
-const sessions = new Map(Object.entries(scenario.sessions ?? {}));
+const sessions = new Map<string, SessionState>(Object.entries(scenario.sessions ?? {}));
+const messages = new Map<string, StoredMessage[]>();
+/** Copied-history events a fork has not published yet, flushed when it is prompted. */
+const pendingCopies = new Map<string, StoredMessage[]>();
+let forkCounter = 0;
+let messageCounter = 0;
+/** Ascending, like OpenCode's time-ordered ids. */
+const nextMessageId = () => `msg_${String(++messageCounter).padStart(6, '0')}`;
 const waiting = new Map<string, (reply: { kind: 'permission' | 'question'; value: unknown }) => void>();
 let eventCounter = 0;
 let partCounter = 0;
@@ -93,13 +130,38 @@ const emit = (type: string, properties: Record<string, unknown>) => {
   }
 };
 
-const emitPart = (sessionID: string, part: Record<string, unknown>) => {
-  emit('message.part.updated', {
-    sessionID,
-    part: { id: `prt_${++partCounter}`, sessionID, messageID: 'msg_assistant', ...part },
-    time: Date.now(),
-  });
+const publishPart = (sessionID: string, part: Record<string, unknown>) => {
+  const full = { id: `prt_${++partCounter}`, sessionID, messageID: 'msg_assistant', ...part };
+  emit('message.part.updated', { sessionID, part: full, time: Date.now() });
+  return full;
 };
+
+const storeMessage = (sessionID: string, message: StoredMessage) => {
+  const list = messages.get(sessionID) ?? [];
+  list.push(message);
+  messages.set(sessionID, list);
+};
+
+const publishMessages = (sessionID: string, list: StoredMessage[]) => {
+  for (const message of list) {
+    emit('message.updated', { sessionID, info: message.info });
+    for (const part of message.parts) {
+      emit('message.part.updated', { sessionID, part, time: Date.now() });
+    }
+  }
+};
+
+const flushCopies = (sessionID: string) => {
+  const list = pendingCopies.get(sessionID);
+  if (!list) {
+    return;
+  }
+  pendingCopies.delete(sessionID);
+  publishMessages(sessionID, list);
+  log({ publishedLateCopies: sessionID, count: list.length });
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const sendJson = (res: http.ServerResponse, status: number, body: unknown) => {
   res.writeHead(status, { 'content-type': 'application/json' });
@@ -120,29 +182,64 @@ const readBody = (req: http.IncomingMessage) => new Promise<unknown>((resolve) =
   });
 });
 
-/** Runs the scripted turn the way OpenCode's session loop reports it. */
-async function runTurn(sessionID: string): Promise<void> {
+type TurnShape = { userMessageID: string; assistantMessageID: string; userText: string };
+const DEFAULT_TURN: TurnShape = { userMessageID: 'msg_user', assistantMessageID: 'msg_assistant', userText: 'the prompt' };
+
+/** The turn a prompt starts on a fork: fresh ids after the copies, and the prompt's own text. */
+const forkTurnShape = (body: unknown): TurnShape => {
+  const payload = body as { messageID?: string; parts?: Array<{ type?: string; text?: string }> } | undefined;
+  const userMessageID = payload?.messageID ?? nextMessageId();
+  const userText = (payload?.parts ?? []).filter((part) => part.type === 'text').map((part) => part.text ?? '').join('');
+  return { userMessageID, assistantMessageID: nextMessageId(), userText };
+};
+
+/** Runs a scripted turn and returns the assistant message it produced, for the synchronous prompt route. */
+async function runTurn(sessionID: string, shape: TurnShape = DEFAULT_TURN): Promise<StoredMessage> {
+  const assistant: StoredMessage = {
+    info: { id: shape.assistantMessageID, sessionID, role: 'assistant', parentID: shape.userMessageID },
+    parts: [],
+  };
+  await playTurn(sessionID, shape, assistant);
+  return assistant;
+}
+
+/** Plays the scripted turn the way OpenCode's session loop reports it. */
+async function playTurn(sessionID: string, shape: TurnShape, assistant: StoredMessage): Promise<void> {
   const aborted = new Promise<'aborted'>((resolve) => {
     turnAborted = () => resolve('aborted');
   });
+  const emitPart = (_sessionID: string, part: Record<string, unknown>) => {
+    assistant.parts.push(publishPart(sessionID, { messageID: shape.assistantMessageID, ...part }));
+  };
   const now = Date.now();
-  emit('message.updated', { sessionID, info: { id: 'msg_user', sessionID, role: 'user' } });
-  emitPart(sessionID, { messageID: 'msg_user', type: 'text', text: 'the prompt' });
+  const userInfo = { id: shape.userMessageID, sessionID, role: 'user' };
+  emit('message.updated', { sessionID, info: userInfo });
+  const userPart = publishPart(sessionID, { messageID: shape.userMessageID, type: 'text', text: shape.userText });
+  storeMessage(sessionID, { info: userInfo, parts: [userPart] });
 
   for (const step of scenario.steps) {
     if (step.type === 'error') {
       // A prompt that fails before its loop starts never reports busy/idle.
+      assistant.info.error = { name: step.name, data: { message: step.message } };
       emit('session.error', { sessionID, error: { name: step.name, data: { message: step.message } } });
       return;
     }
   }
 
   emit('session.status', { sessionID, status: { type: 'busy' } });
-  emit('message.updated', { sessionID, info: { id: 'msg_assistant', sessionID, role: 'assistant' } });
+  emit('message.updated', { sessionID, info: assistant.info });
+  storeMessage(sessionID, assistant);
 
   for (const step of scenario.steps) {
     if (step.type === 'crash') {
       process.exit(1);
+    }
+
+    if (step.type === 'model-error') {
+      assistant.info.error = { name: step.name, data: { message: step.message } };
+      emit('session.error', { sessionID, error: assistant.info.error });
+      emit('session.status', { sessionID, status: { type: 'idle' } });
+      return;
     }
 
     if (step.type === 'hang') {
@@ -288,6 +385,17 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 404, { name: 'NotFoundError', data: { message: `Session not found: ${match[1]}` } });
       return;
     }
+    if (req.method === 'DELETE') {
+      if (scenario.deleteDelayMs) {
+        await sleep(scenario.deleteDelayMs);
+      }
+      sessions.delete(match[1]);
+      messages.delete(match[1]);
+      pendingCopies.delete(match[1]);
+      log({ deleteFinished: match[1] });
+      sendJson(res, 200, true);
+      return;
+    }
     if (req.method === 'PATCH') {
       const added = (body as { permission?: PermissionRule[] } | undefined)?.permission ?? [];
       session.permission = [...(session.permission ?? []), ...added];
@@ -318,14 +426,101 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'POST' && (match = /^\/session\/([^/]+)\/prompt_async$/.exec(path))) {
+  if (req.method === 'POST' && (match = /^\/session\/([^/]+)\/fork$/.exec(path))) {
+    const parent = sessions.get(match[1]);
+    if (!parent) {
+      sendJson(res, 404, { name: 'NotFoundError', data: { message: `Session not found: ${match[1]}` } });
+      return;
+    }
+    if (scenario.forkDelayMs) {
+      await sleep(scenario.forkDelayMs);
+    }
+    if (scenario.forkStatus) {
+      sendJson(res, scenario.forkStatus, { name: 'NotFoundError', data: { message: `The fork of ${match[1]} was refused` } });
+      return;
+    }
+    forkCounter += 1;
+    const base = scenario.forkId ?? 'ses_fake_fork';
+    const id = forkCounter === 1 ? base : `${base}_${forkCounter}`;
+    const title = `${parent.title ?? 'Session'} (fork #${forkCounter})`;
+    // OpenCode's Session.fork (1.18.30) gives the fork directory, path,
+    // workspace, title and metadata only; the parent's permission stays behind.
+    sessions.set(id, { title, fork: true });
+
+    // OpenCode copies every parent message into the fork under new ids.
+    const copies: StoredMessage[] = [];
+    let previousID: string | undefined;
+    for (const entry of parent.history ?? []) {
+      const messageID = nextMessageId();
+      const info: Record<string, unknown> = { id: messageID, sessionID: id, role: entry.role };
+      if (entry.role === 'assistant' && previousID) {
+        info.parentID = previousID;
+      }
+      if (entry.role === 'user') {
+        previousID = messageID;
+      }
+      copies.push({ info, parts: [{ id: `prt_${++partCounter}`, sessionID: id, messageID, type: 'text', text: entry.text }] });
+    }
+    messages.set(id, [...copies]);
+    const early = Math.ceil(copies.length / 2);
+    publishMessages(id, copies.slice(0, early));
+    if (copies.length > early) {
+      pendingCopies.set(id, copies.slice(early));
+      // Published once the fork is prompted, or soon anyway when it never is.
+      setTimeout(() => flushCopies(id), 200);
+    }
+    const now = Date.now();
+    sendJson(res, 200, {
+      id,
+      slug: `fork-${forkCounter}`,
+      projectID: 'prj_fake',
+      directory: url.searchParams.get('directory'),
+      title,
+      version: '1.19.5',
+      time: { created: now, updated: now },
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && (match = /^\/session\/([^/]+)\/message$/.exec(path))) {
+    if (!sessions.has(match[1])) {
+      sendJson(res, 404, { name: 'NotFoundError', data: { message: `Session not found: ${match[1]}` } });
+      return;
+    }
+    sendJson(res, 200, messages.get(match[1]) ?? []);
+    return;
+  }
+
+  if (req.method === 'POST' && (match = /^\/session\/([^/]+)\/(prompt_async|message)$/.exec(path))) {
     if (scenario.promptStatus) {
       sendJson(res, scenario.promptStatus, { name: 'BadRequest', data: { message: 'The prompt was refused' } });
       return;
     }
-    res.writeHead(204);
-    res.end();
-    void runTurn(match[1]);
+    const sessionID = match[1];
+    const isFork = sessions.get(sessionID)?.fork === true;
+    const shape = isFork ? forkTurnShape(body) : DEFAULT_TURN;
+    if (match[2] === 'prompt_async') {
+      res.writeHead(204);
+      res.end();
+      if (!isFork) {
+        void runTurn(sessionID, shape);
+        return;
+      }
+      // The rest of the copies land after the prompt was answered and before
+      // the turn's own messages, so "whatever comes after my prompt" is not
+      // a filter that keeps the history out.
+      setTimeout(() => {
+        flushCopies(sessionID);
+        void runTurn(sessionID, shape);
+      }, 20);
+      return;
+    }
+    if (isFork) {
+      flushCopies(sessionID);
+    }
+    // The synchronous route holds the response until the turn has ended.
+    const assistant = await runTurn(sessionID, shape);
+    sendJson(res, 200, assistant);
     return;
   }
 
@@ -375,9 +570,28 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { name: 'NotFoundError', data: { message: `No route for ${req.method} ${path}` } });
 });
 
-server.listen(Number(readFlag('port') ?? 0), readFlag('hostname') ?? '127.0.0.1', () => {
+if (scenario.listenDelayMs) {
+  log({ spawned: true, pid: process.pid });
+}
+
+const listen = () => server.listen(Number(readFlag('port') ?? 0), readFlag('hostname') ?? '127.0.0.1', () => {
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : 0;
-  log({ started: true, pid: process.pid, port, args, passwordSet: Boolean(password) });
+  log({
+    started: true,
+    pid: process.pid,
+    port,
+    args,
+    passwordSet: Boolean(password),
+    configContent: process.env.OPENCODE_CONFIG_CONTENT ?? null,
+    permissionEnvSet: process.env.OPENCODE_PERMISSION !== undefined,
+    ownerPid: process.env.CLOUDCLI_OPENCODE_OWNER_PID ?? null,
+  });
   console.log(`opencode server listening on http://${readFlag('hostname') ?? '127.0.0.1'}:${port}`);
 });
+
+if (scenario.listenDelayMs) {
+  setTimeout(listen, scenario.listenDelayMs);
+} else {
+  listen();
+}
