@@ -20,11 +20,16 @@ export class AntigravityMcpProvider extends McpProvider {
     super('antigravity', ['user', 'project'], ['stdio', 'http']);
   }
 
+  /** Keeps reads and writes on the standard AGY global/workspace configuration files. */
+  private resolveConfigPath(scope: McpScope, workspacePath: string): string {
+    return scope === 'user'
+      ? path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json')
+      : path.join(workspacePath, '.agents', 'mcp_config.json');
+  }
+
   /** Reads the native MCP server map for one AGY scope. */
   protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
-    const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.antigravity', 'mcp.json')
-      : path.join(workspacePath, '.antigravity', 'mcp.json');
+    const filePath = this.resolveConfigPath(scope, workspacePath);
     const config = await readJsonConfig(filePath);
     return readObjectRecord(config.mcpServers) ?? {};
   }
@@ -35,9 +40,7 @@ export class AntigravityMcpProvider extends McpProvider {
     workspacePath: string,
     servers: Record<string, unknown>,
   ): Promise<void> {
-    const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.antigravity', 'mcp.json')
-      : path.join(workspacePath, '.antigravity', 'mcp.json');
+    const filePath = this.resolveConfigPath(scope, workspacePath);
     const config = await readJsonConfig(filePath);
     config.mcpServers = servers;
     await writeJsonConfig(filePath, config);
@@ -69,7 +72,7 @@ export class AntigravityMcpProvider extends McpProvider {
     }
 
     return {
-      url: input.url,
+      serverUrl: input.url,
       headers: input.headers ?? {},
     };
   }
@@ -99,7 +102,8 @@ export class AntigravityMcpProvider extends McpProvider {
       };
     }
 
-    const url = readOptionalString(config.url);
+    // Native AGY configs use serverUrl; also accept the adapter's earlier URL key.
+    const url = readOptionalString(config.serverUrl) ?? readOptionalString(config.url);
     if (url) {
       return {
         provider: 'antigravity',

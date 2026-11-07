@@ -301,14 +301,15 @@ test('providerMcpService handles cursor MCP JSON config formats', { concurrency:
 test('providerMcpService ignores Antigravity MCP entries with empty command or URL', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-antigravity-'));
   const workspacePath = path.join(tempRoot, 'workspace');
-  const configDirectory = path.join(workspacePath, '.antigravity');
+  const configDirectory = path.join(workspacePath, '.agents');
   await fs.mkdir(configDirectory, { recursive: true });
   await fs.writeFile(
-    path.join(configDirectory, 'mcp.json'),
+    path.join(configDirectory, 'mcp_config.json'),
     JSON.stringify({
       mcpServers: {
         'empty-command': { command: '   ' },
         'empty-url': { url: '' },
+        'empty-server-url': { serverUrl: '   ' },
         valid: { command: 'node', args: ['server.js'] },
       },
     }),
@@ -360,8 +361,10 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
     const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));
     assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
 
-    const antigravityProject = await readJson(path.join(workspacePath, '.antigravity', 'mcp.json'));
-    assert.ok((antigravityProject.mcpServers as Record<string, unknown>)['global-http']);
+    const antigravityProject = await readJson(path.join(workspacePath, '.agents', 'mcp_config.json'));
+    assert.deepEqual((antigravityProject.mcpServers as Record<string, unknown>)['global-http'], {
+      serverUrl: 'https://global.example.com/mcp', headers: {},
+    });
 
     await assert.rejects(
       providerMcpService.addMcpServerToAllProviders({

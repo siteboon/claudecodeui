@@ -16,12 +16,12 @@ export class AntigravitySkillsProvider extends SkillsProvider {
     return [
       {
         scope: 'project',
-        rootDir: path.join(workspacePath, '.antigravity', 'skills'),
+        rootDir: path.join(workspacePath, '.agents', 'skills'),
         commandPrefix: '/',
       },
       {
         scope: 'user',
-        rootDir: path.join(os.homedir(), '.antigravity', 'skills'),
+        rootDir: path.join(os.homedir(), '.gemini', 'config', 'skills'),
         commandPrefix: '/',
       },
     ];
@@ -31,7 +31,7 @@ export class AntigravitySkillsProvider extends SkillsProvider {
   protected async getGlobalSkillSource(): Promise<ProviderSkillSource> {
     return {
       scope: 'user',
-      rootDir: path.join(os.homedir(), '.antigravity', 'skills'),
+      rootDir: path.join(os.homedir(), '.gemini', 'config', 'skills'),
       commandPrefix: '/',
     };
   }
