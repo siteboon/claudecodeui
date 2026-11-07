@@ -6,7 +6,7 @@ import {
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from '@/shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, stripAnsiSequences } from '@/shared/utils.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
@@ -30,22 +30,24 @@ function isWorkspaceTrustPrompt(text = '') {
 }
 
 async function spawnCursor(command, options = {}, ws, context) {
-  return new Promise(async (resolve, reject) => {
+  // Callers pass the stable app session id; the CLI resumes with the
+  // provider-native id recorded on the session row. Both lookups run before the
+  // promise is created: inside an async executor a rejected `resolveResumeModel`
+  // would be swallowed and leave the returned promise pending forever.
+  const providerSessionId = context.resolveProviderSessionId(options.sessionId);
+  const resolvedModel = await context.resolveResumeModel(options.sessionId, options.model);
+
+  return new Promise((resolve, reject) => {
     const {
       sessionId,
       projectPath,
       cwd,
       toolsSettings,
       skipPermissions,
-      model,
       sessionSummary,
       images,
       files
     } = options;
-    // Callers pass the stable app session id; the CLI resumes with the
-    // provider-native id recorded on the session row.
-    const providerSessionId = context.resolveProviderSessionId(sessionId);
-    const resolvedModel = await context.resolveResumeModel(sessionId, model);
     let capturedSessionId = providerSessionId; // Track the provider-native session id throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     let hasRetriedWithTrust = false;
@@ -121,7 +123,7 @@ async function spawnCursor(command, options = {}, ws, context) {
       let stdoutLineBuffer = '';
       let terminalNotificationSent = false;
 
-      const notifyTerminalState = ({ code = null, error = null } = {}) => {
+      const notifyTerminalState = ({ code = null, error = null, aborted = false } = {}) => {
         if (terminalNotificationSent) {
           return;
         }
@@ -130,6 +132,19 @@ async function spawnCursor(command, options = {}, ws, context) {
 
         // Notifications are app-facing, so they carry the app session id.
         const finalSessionId = sessionId || capturedSessionId || processKey;
+        // A user abort kills the CLI with SIGTERM, so it exits with code null;
+        // that is a cancellation, not a failure.
+        if (aborted) {
+          notifyRunStopped({
+            userId: ws?.userId || null,
+            provider: 'cursor',
+            sessionId: finalSessionId,
+            sessionName: sessionSummary,
+            stopReason: 'aborted'
+          });
+          return;
+        }
+
         if (code === 0 && !error) {
           notifyRunStopped({
             userId: ws?.userId || null,
@@ -275,7 +290,14 @@ async function spawnCursor(command, options = {}, ws, context) {
           return;
         }
 
-        ws.send(createNormalizedMessage({ kind: 'error', content: stderrText, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
+        // The CLI styles its stderr for a terminal; the chat renders plain
+        // text, so the escapes have to go before the text is surfaced.
+        const cleanedStderrText = stripAnsiSequences(stderrText);
+        if (!cleanedStderrText.trim()) {
+          return;
+        }
+
+        ws.send(createNormalizedMessage({ kind: 'error', content: cleanedStderrText, sessionId: capturedSessionId || sessionId || null, provider: 'cursor' }));
       });
 
       // Handle process completion
@@ -310,10 +332,10 @@ async function spawnCursor(command, options = {}, ws, context) {
         }
 
         if (code === 0) {
-          notifyTerminalState({ code });
+          notifyTerminalState({ code, aborted: Boolean(cursorProcess.aborted) });
           settleOnce(() => resolve());
         } else {
-          notifyTerminalState({ code });
+          notifyTerminalState({ code, aborted: Boolean(cursorProcess.aborted) });
           settleOnce(() => reject(new Error(`Cursor CLI exited with code ${code}`)));
         }
       });
@@ -337,7 +359,7 @@ async function spawnCursor(command, options = {}, ws, context) {
           completeSent = true;
           ws.send(createCompleteMessage({ provider: 'cursor', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
         }
-        notifyTerminalState({ error });
+        notifyTerminalState({ error, aborted: Boolean(cursorProcess.aborted) });
 
         settleOnce(() => reject(error));
       });

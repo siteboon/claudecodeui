@@ -1,0 +1,47 @@
+{
+  "toolbar": {
+    "changes": "alterações",
+    "previousChange": "Alteração anterior",
+    "nextChange": "Próxima alteração",
+    "hideDiff": "Ocultar destaque de diff",
+    "showDiff": "Mostrar destaque de diff",
+    "settings": "Configurações do editor",
+    "collapse": "Recolher editor",
+    "expand": "Expandir editor para largura total"
+  },
+  "loading": "Carregando {{fileName}}...",
+  "header": {
+    "showingChanges": "Mostrando alterações"
+  },
+  "actions": {
+    "copyPath": "Copiar caminho do arquivo",
+    "pathCopied": "Caminho do arquivo copiado",
+    "download": "Baixar arquivo",
+    "save": "Salvar",
+    "saving": "Salvando...",
+    "saved": "Salvo!",
+    "exitFullscreen": "Sair da tela cheia",
+    "fullscreen": "Tela cheia",
+    "close": "Fechar",
+    "previewMarkdown": "Visualizar markdown",
+    "editMarkdown": "Editar markdown"
+  },
+  "footer": {
+    "lines": "Linhas:",
+    "characters": "Caracteres:",
+    "shortcuts": "Pressione Ctrl+S para salvar • Esc para fechar"
+  },
+  "binaryFile": {
+    "title": "Arquivo binário",
+    "message": "O arquivo \"{{fileName}}\" não pode ser exibido no editor de texto porque é um arquivo binário."
+  },
+  "filePreview": {
+    "loading": "Carregando visualização...",
+    "error": "Não é possível exibir este arquivo.",
+    "openInNewTab": "Abrir em nova aba"
+  },
+  "unsavedChanges": {
+    "confirmClose": "Você tem alterações não salvas. Fechar este arquivo e descartá-las?",
+    "indicator": "Alterações não salvas"
+  }
+}

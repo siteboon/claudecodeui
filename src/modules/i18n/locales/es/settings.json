@@ -1,0 +1,941 @@
+{
+  "title": "Ajustes",
+  "tabs": {
+    "account": "Cuenta",
+    "permissions": "Permisos",
+    "mcpServers": "Servidores MCP",
+    "skills": "Skills",
+    "appearance": "Apariencia"
+  },
+  "account": {
+    "title": "Cuenta",
+    "language": "Idioma",
+    "languageLabel": "Idioma de la interfaz",
+    "languageDescription": "Elige tu idioma preferido para la interfaz",
+    "username": "Usuario",
+    "email": "Correo electrónico",
+    "profile": "Perfil",
+    "changePassword": "Cambiar contraseña"
+  },
+  "mcp": {
+    "title": "Servidores MCP",
+    "addServer": "Añadir servidor",
+    "editServer": "Editar servidor",
+    "deleteServer": "Eliminar servidor",
+    "serverName": "Nombre del servidor",
+    "serverType": "Tipo de servidor",
+    "config": "Configuración",
+    "testConnection": "Probar conexión",
+    "status": "Estado",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "scope": {
+      "label": "Ámbito",
+      "user": "Usuario",
+      "project": "Proyecto"
+    }
+  },
+  "appearance": {
+    "title": "Apariencia",
+    "theme": "Tema",
+    "codeEditor": "Editor de código",
+    "editorTheme": "Tema del editor",
+    "wordWrap": "Ajuste de línea",
+    "showMinimap": "Mostrar minimapa",
+    "lineNumbers": "Números de línea",
+    "fontSize": "Tamaño de fuente"
+  },
+  "actions": {
+    "saveChanges": "Guardar cambios",
+    "resetToDefaults": "Restablecer valores por defecto",
+    "cancelChanges": "Cancelar cambios"
+  },
+  "voiceSettings": {
+    "title": "Voz",
+    "description": "Entrada de voz a texto y lectura en voz alta, mediante un backend de audio compatible con OpenAI.",
+    "enable": "Activar voz",
+    "enableDescription": "Muestra el botón del micrófono y el botón de lectura en voz alta en los mensajes.",
+    "backendTitle": "Backend",
+    "backendDescription": "Apunta a OpenAI, Groq o un servidor local (LocalAI, Speaches, Kokoro-FastAPI). Déjalo en blanco para usar el valor por defecto del servidor.",
+    "baseUrl": "URL base",
+    "apiKey": "Clave API",
+    "sttModel": "Modelo de voz a texto",
+    "ttsModel": "Modelo de texto a voz",
+    "voice": "Voz",
+    "format": "Formato de audio",
+    "note": "Una URL base personalizada la llama directamente tu navegador y debe permitir solicitudes CORS. Déjala en blanco para usar el backend configurado en el servidor."
+  },
+  "quickSettings": {
+    "title": "Ajustes rápidos",
+    "sections": {
+      "appearance": "Apariencia",
+      "toolDisplay": "Visualización de herramientas",
+      "inputSettings": "Ajustes de entrada"
+    },
+    "darkMode": "Modo oscuro",
+    "showRawParameters": "Mostrar parámetros sin procesar",
+    "showThinking": "Mostrar razonamiento",
+    "sendByCtrlEnter": "Enviar con Ctrl+Enter",
+    "voiceEnabled": "Voz (micro + lectura en voz alta)",
+    "sendByCtrlEnterDescription": "Si está activado, Ctrl+Enter envía el mensaje en lugar de solo Enter. Útil para usuarios de IME y evitar envíos accidentales.",
+    "dragHandle": {
+      "dragging": "Arrastrando el control",
+      "closePanel": "Cerrar panel de ajustes",
+      "openPanel": "Abrir panel de ajustes",
+      "draggingStatus": "Arrastrando...",
+      "toggleAndMove": "Clic para alternar, arrastra para mover"
+    },
+    "tabs": {
+      "settings": "Ajustes",
+      "commands": "Comandos"
+    },
+    "pin": "Fijar el panel abierto",
+    "unpin": "Desfijar el panel",
+    "close": "Cerrar el panel",
+    "commands": {
+      "searchPlaceholder": "Buscar comandos…",
+      "noProject": "Selecciona un proyecto para ver sus comandos.",
+      "loading": "Cargando comandos…",
+      "empty": "No hay comandos disponibles para este proyecto.",
+      "noMatches": "Ningún comando coincide con tu búsqueda.",
+      "loadError": "No se pudieron cargar los comandos.",
+      "groups": {
+        "builtIn": "Integrados",
+        "custom": "Personalizados",
+        "skills": "Skills"
+      },
+      "insertTitle": "Insertar {{command}} en el chat"
+    }
+  },
+  "terminalShortcuts": {
+    "title": "Atajos de terminal",
+    "sectionKeys": "Teclas",
+    "sectionNavigation": "Navegación",
+    "paste": "Pegar",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "Flecha arriba",
+    "arrowDown": "Flecha abajo",
+    "scrollDown": "Desplazar hacia abajo",
+    "handle": {
+      "closePanel": "Cerrar panel de atajos",
+      "openPanel": "Abrir panel de atajos"
+    }
+  },
+  "mainTabs": {
+    "label": "Ajustes",
+    "agents": "Agentes",
+    "appearance": "Apariencia",
+    "git": "Git",
+    "apiTokens": "API y tokens",
+    "voice": "Voz",
+    "tasks": "Tareas",
+    "browser": "Navegador",
+    "notifications": "Notificaciones",
+    "plugins": "Plugins",
+    "about": "Acerca de"
+  },
+  "notifications": {
+    "title": "Notificaciones",
+    "description": "Controla qué eventos de notificación recibes.",
+    "webPush": {
+      "title": "Notificar en este navegador",
+      "enable": "Activar notificaciones",
+      "disable": "Desactivar notificaciones",
+      "enabled": "Las notificaciones están activadas en este navegador",
+      "loading": "Actualizando...",
+      "unsupported": "Las notificaciones push no son compatibles con este navegador.",
+      "denied": "Las notificaciones push están bloqueadas. Permítelas en los ajustes de tu navegador."
+    },
+    "desktop": {
+      "title": "Notificar en esta app de escritorio",
+      "enable": "Activar notificaciones",
+      "disable": "Desactivar notificaciones",
+      "enabled": "Las notificaciones están activadas en esta app de escritorio",
+      "unsupported": "Las notificaciones de escritorio no son compatibles con este sistema."
+    },
+    "sound": {
+      "title": "Sonido",
+      "description": "Reproduce un tono corto cuando una ejecución del chat termina o necesita aprobación de una herramienta.",
+      "enabled": "Activado",
+      "test": "Probar sonido"
+    },
+    "events": {
+      "title": "Tipos de evento",
+      "actionRequired": "Acción requerida",
+      "stop": "Ejecución detenida",
+      "error": "Ejecución fallida"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Envía los eventos de ejecución a tu propio endpoint HTTP (por ejemplo n8n, Home Assistant o un relé de chat), incluso sin ningún navegador abierto.",
+      "urlLabel": "URL de destino",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Permitir HTTP sin cifrar (solo para este equipo o tu red local)",
+      "enabled": "Activado",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saved": "Guardado",
+      "remove": "Eliminar",
+      "confirmRemove": "¿Eliminar este webhook? Se borrarán su URL y su secreto de firma.",
+      "payloadNote": "Cada evento solo incluye su tipo, el proveedor, el ID de sesión y el resultado. Nunca se envían prompts, mensajes ni salidas.",
+      "eventsNote": "Los webhooks siguen las opciones \"Ejecución detenida\" y \"Ejecución fallida\" de Tipos de evento.",
+      "secret": {
+        "title": "Secreto de firma",
+        "description": "Permite que tu receptor verifique cada solicitud (firma Standard Webhooks).",
+        "none": "Sin definir",
+        "set": "Definido",
+        "generate": "Generar",
+        "rotate": "Rotar",
+        "remove": "Eliminar secreto",
+        "showOnce": "Copia este secreto ahora. No se volverá a mostrar.",
+        "copy": "Copiar secreto",
+        "copied": "Copiado",
+        "dismiss": "Ya lo guardé"
+      },
+      "test": {
+        "send": "Enviar evento de prueba",
+        "sending": "Enviando..."
+      },
+      "status": {
+        "never": "Todavía no hay entregas.",
+        "ok": "Última entrega correcta ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Última entrega fallida ({{type}}, {{time}}, intentos: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "La URL guardada no es válida.",
+        "insecureUrl": "No se permite HTTP sin cifrar para esta URL.",
+        "blockedAddress": "La dirección de destino no está permitida.",
+        "timeout": "Sin respuesta en 5 segundos.",
+        "redirect": "El receptor respondió con una redirección (HTTP {{status}}), que no se sigue.",
+        "httpStatus": "El receptor respondió HTTP {{status}}.",
+        "network": "No se pudo conectar con el receptor.",
+        "tls": "Se rechazó el certificado TLS del receptor.",
+        "dropped": "Omitido porque ya había demasiadas entregas en curso."
+      },
+      "errors": {
+        "invalidUrl": "Introduce una URL http:// o https:// válida.",
+        "insecureUrl": "Las URL http:// necesitan \"Permitir HTTP sin cifrar\".",
+        "blockedAddress": "Esta dirección no puede ser un destino de webhook (enlace local, metadatos de la nube, multidifusión o reservada).",
+        "notConfigured": "Primero guarda una URL de webhook.",
+        "requestFailed": "La solicitud falló. Inténtalo de nuevo."
+      }
+    }
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "Modo oscuro",
+      "description": "Alterna entre el tema claro y el oscuro"
+    },
+    "theme": {
+      "label": "Tema",
+      "description": "Elige una apariencia clara u oscura, o sigue la de tu sistema operativo",
+      "light": "Claro",
+      "dark": "Oscuro",
+      "system": "Seguir la apariencia del sistema"
+    },
+    "projectSorting": {
+      "label": "Orden de proyectos",
+      "description": "Cómo se ordenan los proyectos en la barra lateral",
+      "alphabetical": "Alfabético",
+      "recentActivity": "Actividad reciente"
+    },
+    "codeEditor": {
+      "title": "Editor de código",
+      "theme": {
+        "label": "Tema del editor",
+        "description": "Tema por defecto del editor de código"
+      },
+      "wordWrap": {
+        "label": "Ajuste de línea",
+        "description": "Activa el ajuste de línea por defecto en el editor"
+      },
+      "showMinimap": {
+        "label": "Mostrar minimapa",
+        "description": "Muestra un minimapa para navegar más fácil en la vista de diff"
+      },
+      "lineNumbers": {
+        "label": "Mostrar números de línea",
+        "description": "Muestra los números de línea en el editor"
+      },
+      "fontSize": {
+        "label": "Tamaño de fuente",
+        "description": "Tamaño de fuente del editor en píxeles"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "Añadir servidor MCP",
+      "edit": "Editar servidor MCP"
+    },
+    "importMode": {
+      "form": "Formulario",
+      "json": "Importar JSON"
+    },
+    "scope": {
+      "label": "Ámbito",
+      "userGlobal": "Usuario (global)",
+      "projectLocal": "Proyecto (local)",
+      "userDescription": "Ámbito de usuario: disponible en todos los proyectos de tu máquina",
+      "projectDescription": "Ámbito local: solo disponible en el proyecto seleccionado",
+      "cannotChange": "El ámbito no se puede cambiar al editar un servidor existente"
+    },
+    "fields": {
+      "serverName": "Nombre del servidor",
+      "transportType": "Tipo de transporte",
+      "command": "Comando",
+      "arguments": "Argumentos (uno por línea)",
+      "jsonConfig": "Configuración JSON",
+      "url": "URL",
+      "envVars": "Variables de entorno (CLAVE=valor, una por línea)",
+      "headers": "Cabeceras (CLAVE=valor, una por línea)",
+      "selectProject": "Selecciona un proyecto..."
+    },
+    "placeholders": {
+      "serverName": "mi-servidor"
+    },
+    "validation": {
+      "missingType": "Falta el campo obligatorio: type",
+      "stdioRequiresCommand": "El tipo stdio requiere un campo command",
+      "httpRequiresUrl": "El tipo {{type}} requiere un campo url",
+      "invalidJson": "Formato JSON no válido",
+      "jsonHelp": "Pega la configuración de tu servidor MCP en formato JSON. Formatos de ejemplo:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "Detalles de configuración (de {{configFile}})",
+    "projectPath": "Ruta: {{path}}",
+    "actions": {
+      "cancel": "Cancelar",
+      "saving": "Guardando...",
+      "addServer": "Añadir servidor",
+      "updateServer": "Actualizar servidor"
+    },
+    "scopes": {
+      "userGlobal": "Usuario (global)",
+      "userAllProviders": "Usuario (todos los proveedores)",
+      "local": "Local de Claude",
+      "project": "Proyecto",
+      "projectAllProviders": "Proyecto (todos los proveedores)",
+      "userGlobalDesc": "Disponible en todos los proyectos de tu equipo",
+      "userAllProvidersDesc": "Se escribe en la configuración de usuario de cada proveedor y está disponible en los proyectos de este equipo",
+      "localDesc": "Se guarda en los ajustes de usuario de Claude del proyecto seleccionado",
+      "projectDesc": "Se guarda en el espacio de trabajo del proyecto seleccionado",
+      "projectAllProvidersDesc": "Se escribe en el espacio de trabajo del proyecto seleccionado para cada proveedor"
+    },
+    "unsupportedTransport": "Añadir servidor MCP solo admite stdio y http en todos los proveedores, no {{transport}}.",
+    "addToProvider": "{{action}} a {{provider}}",
+    "workingDirectory": "Directorio de trabajo",
+    "envVarNames": "Nombres de variables de entorno",
+    "bearerTokenEnvVar": "Variable de entorno del token Bearer"
+  },
+  "saveStatus": {
+    "success": "¡Ajustes guardados correctamente!",
+    "error": "No se pudieron guardar los ajustes",
+    "saving": "Guardando..."
+  },
+  "footerActions": {
+    "save": "Guardar ajustes",
+    "cancel": "Cancelar"
+  },
+  "git": {
+    "title": "Configuración de Git",
+    "description": "Configura tu identidad de git para los commits. Estos ajustes se aplicarán globalmente mediante git config --global",
+    "name": {
+      "label": "Nombre para Git",
+      "help": "Tu nombre para los commits de git"
+    },
+    "email": {
+      "label": "Correo para Git",
+      "help": "Tu correo para los commits de git"
+    },
+    "actions": {
+      "save": "Guardar configuración",
+      "saving": "Guardando..."
+    },
+    "status": {
+      "success": "Guardado correctamente"
+    }
+  },
+  "apiKeys": {
+    "title": "Claves API",
+    "description": "Genera claves API para acceder a la API externa desde otras aplicaciones.",
+    "newKey": {
+      "alertTitle": "⚠️ Guarda tu clave API",
+      "alertMessage": "Esta es la única vez que verás esta clave. Guárdala en un lugar seguro.",
+      "iveSavedIt": "Ya la guardé"
+    },
+    "form": {
+      "placeholder": "Nombre de la clave API (p. ej., Servidor de producción)",
+      "createButton": "Crear",
+      "cancelButton": "Cancelar"
+    },
+    "newButton": "Nueva clave API",
+    "empty": "Aún no se han creado claves API.",
+    "list": {
+      "created": "Creada:",
+      "lastUsed": "Último uso:"
+    },
+    "confirmDelete": "¿Seguro que quieres eliminar esta clave API?",
+    "status": {
+      "active": "Activa",
+      "inactive": "Inactiva"
+    },
+    "github": {
+      "title": "Tokens de GitHub",
+      "description": "Añade tokens de acceso personal de GitHub para clonar repositorios privados mediante la API externa.",
+      "descriptionAlt": "Añade tokens de acceso personal de GitHub para clonar repositorios privados. También puedes pasar tokens directamente en las solicitudes de API sin guardarlos.",
+      "addButton": "Añadir token",
+      "form": {
+        "namePlaceholder": "Nombre del token (p. ej., Repos personales)",
+        "tokenPlaceholder": "Token de acceso personal de GitHub (ghp_...)",
+        "descriptionPlaceholder": "Descripción (opcional)",
+        "addButton": "Añadir token",
+        "cancelButton": "Cancelar",
+        "howToCreate": "Cómo crear un token de acceso personal de GitHub →"
+      },
+      "empty": "Aún no se han añadido tokens de GitHub.",
+      "added": "Añadido:",
+      "confirmDelete": "¿Seguro que quieres eliminar este token de GitHub?"
+    },
+    "apiDocsLink": "Documentación de la API",
+    "documentation": {
+      "title": "Documentación de la API externa",
+      "description": "Aprende a usar la API externa para lanzar sesiones de Claude/Cursor desde tus aplicaciones.",
+      "viewLink": "Ver documentación de la API →"
+    },
+    "loading": "Cargando...",
+    "version": {
+      "updateAvailable": "Actualización disponible: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "Comprobando la instalación de TaskMaster...",
+    "notInstalled": {
+      "title": "La CLI de TaskMaster AI no está instalada",
+      "description": "La CLI de TaskMaster es necesaria para usar las funciones de gestión de tareas. Instálala para empezar:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "Ver en GitHub",
+      "afterInstallation": "Después de la instalación:",
+      "steps": {
+        "restart": "Reinicia esta aplicación",
+        "autoAvailable": "Las funciones de TaskMaster estarán disponibles automáticamente",
+        "initCommand": "Usa task-master init en el directorio de tu proyecto"
+      }
+    },
+    "settings": {
+      "enableLabel": "Activar integración con TaskMaster",
+      "enableDescription": "Muestra tareas, banners e indicadores de TaskMaster en la barra lateral y el resto de la interfaz"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "Comprobando...",
+      "connected": "Conectado",
+      "notConnected": "No conectado",
+      "disconnected": "Desconectado",
+      "checkingAuth": "Comprobando el estado de autenticación...",
+      "loggedInAs": "Sesión iniciada como {{email}}",
+      "authenticatedUser": "usuario autenticado"
+    },
+    "account": {
+      "claude": {
+        "description": "Asistente de IA Claude de Anthropic"
+      },
+      "cursor": {
+        "description": "Editor de código con IA Cursor"
+      },
+      "codex": {
+        "description": "Asistente de IA Codex de OpenAI"
+      },
+      "opencode": {
+        "description": "Asistente CLI OpenCode"
+      }
+    },
+    "connectionStatus": "Estado de la conexión",
+    "cli": {
+      "title": "Versión de la CLI",
+      "checking": "Comprobando la versión…",
+      "installed": "Instalada: v{{version}}",
+      "installedUnknown": "Instalada (versión desconocida)",
+      "versionUnavailable": "No se pudo leer la versión",
+      "updateAvailable": "Actualización disponible: v{{version}}",
+      "upToDate": "Actualizada",
+      "bundled": "Se incluye con CloudCLI y se actualiza junto con él.",
+      "platform": "La gestiona la plataforma de alojamiento.",
+      "updateTo": "Actualizar a v{{version}}",
+      "runUpdater": "Ejecutar actualizador",
+      "updating": "Actualizando…",
+      "updatingHint": "Ejecutando {{command}} en el servidor. Puede tardar unos minutos.",
+      "runsCommand": "Ejecuta {{command}} en el servidor",
+      "output": "Salida de {{command}}",
+      "result": {
+        "updated": "Actualizada a v{{version}}.",
+        "alreadyUpToDate": "Ya está actualizada (v{{version}}).",
+        "unchanged": "El actualizador terminó, pero la versión sigue siendo v{{version}}. Su salida, más abajo, explica por qué.",
+        "unchangedUnknown": "El actualizador terminó. Su salida está más abajo.",
+        "permissionDenied": "El usuario del servidor no tiene permiso para escribir donde está instalada esta CLI. Ejecuta {{command}} en el servidor como propietario de esa instalación (por ejemplo, con sudo).",
+        "timedOut": "La actualización no terminó a tiempo y se detuvo. Ejecuta {{command}} en el servidor para completarla.",
+        "failed": "La actualización falló (código de salida {{exitCode}}). Su salida está más abajo.",
+        "failedQuietly": "El actualizador informó de un error. Su salida está más abajo.",
+        "notStarted": "No se pudo iniciar el actualizador.",
+        "busy": "Este agente está trabajando en una sesión. Espera a que termine o detenlo y luego actualiza.",
+        "requestFailed": "La actualización no se ejecutó: {{error}}",
+        "unconfirmed": "No llegó ninguna respuesta del servidor ({{error}}). Es posible que la actualización se haya ejecutado igualmente; la versión de arriba es la última que informó el servidor."
+      }
+    },
+    "subscriptionOverride": {
+      "title": "No se está usando el inicio de sesión de tu suscripción",
+      "description": "{{variable}} está definida en {{source}}, así que Claude Code factura cada solicitud a esa clave como uso de API de pago por uso, en lugar del inicio de sesión de tu suscripción.",
+      "descriptionWithEmail": "{{variable}} está definida en {{source}}, así que Claude Code factura cada solicitud a esa clave como uso de API de pago por uso, en lugar del inicio de sesión de tu suscripción ({{email}}).",
+      "source": {
+        "process_env": "el entorno del servidor",
+        "settings_file": "~/.claude/settings.json"
+      },
+      "fix": {
+        "process_env": "Para usar la suscripción, quita {{variable}} donde se inicia el servidor (.env, perfil de la shell, unidad de servicio) y reinicia el servidor.",
+        "settings_file": "Para usar la suscripción, quita {{variable}} del bloque \"env\" de ~/.claude/settings.json."
+      }
+    },
+    "login": {
+      "title": "Iniciar sesión",
+      "reAuthenticate": "Volver a autenticar",
+      "description": "Inicia sesión en tu cuenta de {{agent}} para activar las funciones de IA",
+      "reAuthDescription": "Inicia sesión con otra cuenta o actualiza las credenciales",
+      "button": "Iniciar sesión",
+      "reLoginButton": "Volver a iniciar sesión"
+    },
+    "error": "Error: {{error}}"
+  },
+  "permissions": {
+    "title": "Ajustes de permisos",
+    "skipPermissions": {
+      "label": "Omitir avisos de permisos (usar con precaución)",
+      "claudeDescription": "Equivalente al flag --dangerously-skip-permissions",
+      "cursorDescription": "Equivalente al flag -f en la CLI de Cursor"
+    },
+    "allowedTools": {
+      "title": "Herramientas permitidas",
+      "description": "Herramientas que se permiten automáticamente sin pedir permiso",
+      "placeholder": "p. ej., \"Bash(git log:*)\" o \"Write\"",
+      "quickAdd": "Añadir rápido herramientas comunes:",
+      "empty": "No hay herramientas permitidas configuradas"
+    },
+    "blockedTools": {
+      "title": "Herramientas bloqueadas",
+      "description": "Herramientas que se bloquean automáticamente sin pedir permiso",
+      "placeholder": "p. ej., \"Bash(rm:*)\"",
+      "empty": "No hay herramientas bloqueadas configuradas"
+    },
+    "settingsFiles": {
+      "title": "Reglas de los archivos de configuración de Claude",
+      "description": "La CLI de Claude también aplica estas reglas, además de las listas de arriba. Una regla de denegación prevalece donde sea que esté definida, pero una regla de preguntar no pide confirmación para una herramienta que ya está en Herramientas permitidas. Aquí las reglas son de solo lectura; edítalas en los archivos.",
+      "sources": {
+        "user": "Tu configuración",
+        "managed": "Configuración administrada (administrador)"
+      },
+      "groups": {
+        "allow": "Permitir",
+        "ask": "Preguntar",
+        "deny": "Denegar"
+      },
+      "missing": "Archivo no encontrado, así que no añade reglas.",
+      "invalid": "No se pudo leer este archivo. Comprueba que sea JSON válido.",
+      "empty": "No hay reglas de permisos en este archivo.",
+      "loading": "Cargando reglas…",
+      "loadFailed": "No se pudieron cargar las reglas de los archivos de configuración de Claude.",
+      "projectNote": "Los archivos .claude/settings.json y .claude/settings.local.json propios de un proyecto también se aplican a los chats de ese proyecto. La CLI de Claude ignora las reglas de permitir de .claude/settings.json hasta que confíes en la carpeta: ejecuta Claude Code allí una vez en modo interactivo y acepta el diálogo de confianza."
+    },
+    "allowedCommands": {
+      "title": "Comandos de shell permitidos",
+      "description": "Comandos de shell que se permiten automáticamente sin preguntar",
+      "placeholder": "p. ej., \"Shell(ls)\" o \"Shell(git status)\"",
+      "quickAdd": "Añadir rápido comandos comunes:",
+      "empty": "No hay comandos permitidos configurados"
+    },
+    "blockedCommands": {
+      "title": "Comandos de shell bloqueados",
+      "description": "Comandos de shell que se bloquean automáticamente",
+      "placeholder": "p. ej., \"Shell(rm -rf)\" o \"Shell(sudo)\"",
+      "empty": "No hay comandos bloqueados configurados"
+    },
+    "toolExamples": {
+      "title": "Ejemplos de patrones de herramientas:",
+      "bashGitLog": "- Permitir todos los comandos git log",
+      "bashGitDiff": "- Permitir todos los comandos git diff",
+      "write": "- Permitir todo uso de la herramienta Write",
+      "bashRm": "- Bloquear todos los comandos rm (peligroso)"
+    },
+    "shellExamples": {
+      "title": "Ejemplos de comandos de shell:",
+      "ls": "- Permitir el comando ls",
+      "gitStatus": "- Permitir git status",
+      "npmInstall": "- Permitir npm install",
+      "rmRf": "- Bloquear el borrado recursivo"
+    },
+    "codex": {
+      "permissionMode": "Modo de permisos",
+      "description": "Controla cómo Codex gestiona las modificaciones de archivos y la ejecución de comandos",
+      "modes": {
+        "default": {
+          "title": "Por defecto",
+          "description": "Ejecuta comandos en el entorno aislado del espacio de trabajo. Codex decide cuándo se necesita aprobación; las solicitudes no pueden aprobarse en esta integración no interactiva."
+        },
+        "acceptEdits": {
+          "title": "Aceptar ediciones",
+          "description": "Todos los comandos se ejecutan automáticamente dentro del espacio de trabajo. Modo automático completo con ejecución en sandbox."
+        },
+        "bypassPermissions": {
+          "title": "Omitir permisos",
+          "description": "Acceso completo al sistema sin restricciones. Todos los comandos se ejecutan automáticamente con acceso total a disco y red. Úsalo con precaución."
+        }
+      },
+      "technicalDetails": "Detalles técnicos",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. Ejecuta comandos en el entorno aislado del espacio de trabajo. Codex decide cuándo se necesita aprobación; las solicitudes no pueden aprobarse en esta integración no interactiva.",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never. Todos los comandos se autoejecutan dentro del directorio del proyecto.",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never. Acceso completo al sistema; úsalo solo en entornos de confianza.",
+        "overrideNote": "Puedes cambiar esto por sesión con el botón de modo en la interfaz del chat."
+      }
+    },
+    "actions": {
+      "add": "Añadir"
+    }
+  },
+  "mcpServers": {
+    "title": "Servidores MCP",
+    "description": {
+      "claude": "Los servidores del Model Context Protocol proporcionan herramientas y fuentes de datos adicionales a Claude",
+      "cursor": "Los servidores del Model Context Protocol proporcionan herramientas y fuentes de datos adicionales a Cursor",
+      "codex": "Los servidores del Model Context Protocol proporcionan herramientas y fuentes de datos adicionales a Codex",
+      "opencode": "Los servidores del Model Context Protocol proporcionan herramientas y fuentes de datos adicionales a OpenCode"
+    },
+    "addButton": "Añadir servidor MCP",
+    "empty": "No hay servidores MCP configurados",
+    "serverType": "Tipo",
+    "scope": {
+      "local": "local",
+      "user": "usuario"
+    },
+    "config": {
+      "command": "Comando",
+      "url": "URL",
+      "args": "Argumentos",
+      "environment": "Entorno"
+    },
+    "tools": {
+      "title": "Herramientas",
+      "count": "({{count}}):",
+      "more": "+{{count}} más"
+    },
+    "actions": {
+      "edit": "Editar servidor",
+      "delete": "Eliminar servidor"
+    },
+    "managed": {
+      "badge": "Gestionado",
+      "hint": "Gestionado por CloudCLI."
+    },
+    "help": {
+      "title": "Acerca de MCP en Codex",
+      "description": "Codex admite servidores MCP basados en stdio. Puedes añadir servidores que amplíen las capacidades de Codex con herramientas y recursos adicionales."
+    }
+  },
+  "pluginSettings": {
+    "title": "Plugins",
+    "description": "Amplía la interfaz con plugins personalizados. Instala desde git o suelta una carpeta en ~/.claude-code-ui/plugins/",
+    "installPlaceholder": "https://github.com/usuario/mi-plugin",
+    "installButton": "Instalar",
+    "installing": "Instalando…",
+    "securityWarning": "Instala solo plugins cuyo código fuente hayas revisado o de autores en los que confíes.",
+    "scanningPlugins": "Buscando plugins…",
+    "noPluginsInstalled": "No hay plugins instalados",
+    "pullLatest": "Traer lo último desde git",
+    "noGitRemote": "Sin remoto de git — actualización no disponible",
+    "uninstallPlugin": "Desinstalar plugin",
+    "confirmUninstall": "Haz clic de nuevo para confirmar",
+    "confirmUninstallMessage": "¿Quitar {{name}}? Esto no se puede deshacer.",
+    "cancel": "Cancelar",
+    "remove": "Quitar",
+    "updateFailed": "La actualización falló",
+    "installFailed": "La instalación falló",
+    "uninstallFailed": "La desinstalación falló",
+    "toggleFailed": "El cambio de estado falló",
+    "starterPluginLabel": "Plugin de inicio",
+    "starter": "Inicio",
+    "docs": "Docs",
+    "sections": {
+      "officialTitle": "Plugins oficiales",
+      "officialDescription": "Mantenidos por el equipo de CloudCLI y listos para instalar directamente.",
+      "unofficialTitle": "Otros plugins",
+      "unofficialDescription": "Plugins e integraciones no oficiales de otros usuarios. Revisa el código fuente antes de instalar."
+    },
+    "starterPlugin": {
+      "name": "Estadísticas del proyecto",
+      "badge": "inicio",
+      "description": "Recuento de archivos, líneas de código, desglose por tipo de archivo y actividad reciente de tu proyecto.",
+      "install": "Instalar"
+    },
+    "terminalPlugin": {
+      "name": "Terminal",
+      "badge": "oficial",
+      "description": "Terminal integrada con acceso completo a la shell directamente en la interfaz.",
+      "install": "Instalar"
+    },
+    "scheduledPromptPlugin": {
+      "name": "Prompts programados",
+      "badge": "no oficial",
+      "description": "Programa prompts del espacio de trabajo, revisa el historial de ejecuciones y gestiona tareas locales recurrentes.",
+      "install": "Instalar"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "no oficial",
+      "description": "Inteligencia de sesiones para Claude Code, dentro de CloudCLI. Descubre por qué tus sesiones queman tokens sin salir del navegador.",
+      "install": "Instalar"
+    },
+    "sessionManagerPlugin": {
+      "name": "Sesiones",
+      "badge": "no oficial",
+      "description": "Ver, gestionar y terminar sesiones activas de Claude Code.",
+      "install": "Instalar"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "Calculadora de costes de tokens",
+      "badge": "no oficial",
+      "description": "Calcula costes de API a partir de precios de modelos y uso de tokens, con precios de modelos predefinidos.",
+      "install": "Instalar"
+    },
+    "taskQueuePlugin": {
+      "name": "Cola de tareas",
+      "badge": "no oficial",
+      "description": "Panel de cola de tareas para ver, filtrar y lanzar tareas de agentes.",
+      "install": "Instalar"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "Tablero de GitHub Issues",
+      "badge": "no oficial",
+      "description": "Tablero Kanban para GitHub Issues con sincronización bidireccional con TaskMaster e instalación automática de la skill CLI /github-task",
+      "install": "Instalar"
+    },
+    "claudeUsagePlugin": {
+      "name": "Uso de Claude",
+      "badge": "no oficial",
+      "description": "Sigue en vivo los límites del plan de Claude Code y explora el historial de tokens y costes de 30 días.",
+      "install": "Instalar"
+    },
+    "codexUsagePlugin": {
+      "name": "Uso de Codex",
+      "badge": "no oficial",
+      "description": "Sigue en vivo los límites del plan de Codex, cuándo se reinician y la actividad de tokens de la cuenta en 30 días.",
+      "install": "Instalar"
+    },
+    "glmUsagePlugin": {
+      "name": "Uso de GLM",
+      "badge": "no oficial",
+      "description": "Sigue en vivo las cuotas del plan de programación de GLM/Zhipu y el historial de tokens de 30 días.",
+      "install": "Instalar"
+    },
+    "agentMonitorPlugin": {
+      "name": "Monitor de agentes",
+      "badge": "no oficial",
+      "description": "Ve los subagentes y las shells en segundo plano que siguen en ejecución al terminar un chat, y deténlos.",
+      "install": "Instalar"
+    },
+    "morePlugins": "Más",
+    "enable": "Activar",
+    "disable": "Desactivar",
+    "installAriaLabel": "URL del repositorio git del plugin",
+    "tab": "pestaña",
+    "runningStatus": "en ejecución"
+  },
+  "skillsPage": {
+    "description": "Gestiona las skills de {{provider}} desde archivos locales, carpetas completas y ubicaciones según el proyecto.",
+    "searchPlaceholder": "Buscar skills...",
+    "searchAriaLabel": "Buscar skills",
+    "clearSearch": "Limpiar la búsqueda de skills",
+    "addSkill": "Añadir skill",
+    "refresh": "Actualizar",
+    "scanningProjectSkills": "Buscando skills del proyecto...",
+    "addDialogTitle": "Añadir skill de {{provider}}",
+    "addDialogDescription": "Sube un archivo SKILL.md o una carpeta de skill completa.",
+    "closeDialog": "Cerrar el diálogo de añadir skill",
+    "savedSuccessfully": "Skills guardadas correctamente.",
+    "footerHint": "Las carpetas conservan el nombre elegido; los archivos sueltos usan el `name` de `SKILL.md`.",
+    "installWithCount_one": "Instalar {{count}} skill",
+    "installWithCount_other": "Instalar {{count}} skills",
+    "installWithCount_many": "Instalar {{count}} skills",
+    "installPlain": "Instalar skill",
+    "loading": "Cargando skills de {{provider}}…",
+    "emptyTitle": "Aún no hay skills",
+    "emptyDescription": "Añade una skill global arriba o crea carpetas de skills del proyecto en tu espacio de trabajo.",
+    "noMatchTitle": "Ninguna skill coincide",
+    "noMatchDescription": "Prueba con otro comando, nombre, ámbito, proyecto o ruta de origen.",
+    "count_one": "{{count}} skill",
+    "count_other": "{{count}} skills",
+    "count_many": "{{count}} skills",
+    "noDescription": "La skill no incluye descripción en su encabezado.",
+    "pluginBadge": "Plugin: {{name}}",
+    "projectBadge": "Proyecto: {{name}}",
+    "source": "Origen",
+    "upload": {
+      "dropTitle": "Suelta una carpeta de skill o un SKILL.md",
+      "dropHint": "Las carpetas pueden incluir scripts, referencias y recursos.",
+      "chooseFiles": "Elegir archivos",
+      "chooseFolder": "Elegir carpeta",
+      "readyToInstall": "Listo para instalar",
+      "filesCount_one": "{{count}} archivo",
+      "filesCount_other": "{{count}} archivos",
+      "filesCount_many": "{{count}} archivos",
+      "markdownFile": "Archivo Markdown",
+      "removeFile": "Quitar {{name}}",
+      "hideInstallLocation": "Ocultar la ubicación de instalación",
+      "whereToInstall": "¿Dónde se instalará?"
+    },
+    "errors": {
+      "tooManyFiles": "Una carpeta de skill puede contener hasta {{max}} archivos.",
+      "tooLarge": "Las carpetas de skill elegidas deben ocupar menos de 30 MB en total.",
+      "noSkillMd": "La carpeta elegida no contiene un archivo SKILL.md.",
+      "couldNotReadSkillMd": "No se pudo leer SKILL.md de {{folder}}.",
+      "readFailed": "No se pudo leer la carpeta de la skill",
+      "dropMarkdown": "Suelta uno o más archivos markdown o una carpeta que contenga SKILL.md.",
+      "addFirst": "Añade primero uno o más archivos markdown.",
+      "importFailed": "No se pudieron importar las skills"
+    },
+    "scopes": {
+      "user": "Usuario",
+      "plugin": "Plugin",
+      "repo": "Repositorio",
+      "project": "Proyecto",
+      "admin": "Administrador",
+      "system": "Sistema"
+    }
+  },
+  "browserUse": {
+    "title": "Navegador",
+    "subtitle": "Supervisa las sesiones de navegador que abren los agentes de IA.",
+    "openSettings": "Abrir ajustes del navegador",
+    "refreshSessions": "Actualizar sesiones del navegador",
+    "runtimeDisabled": "Desactivado",
+    "runtimeReady": "Listo",
+    "runtimeInstalling": "Instalando",
+    "runtimeSetupRequired": "Configuración necesaria",
+    "loadFailed": "No se pudo cargar el navegador",
+    "actionFailed": "La acción del navegador falló",
+    "requestFailed": "La solicitud falló ({{status}})",
+    "never": "Nunca",
+    "unknown": "Desconocido",
+    "justNow": "Justo ahora",
+    "secondsAgo": "hace {{n}} s",
+    "minutesAgo": "hace {{n}} min",
+    "hoursAgo": "hace {{n}} h",
+    "daysAgo": "hace {{n}} d",
+    "noPageLoaded": "Ninguna página cargada",
+    "waitingAction": "En espera",
+    "emptyTitleEnabled": "Aún no hay sesiones de navegador",
+    "emptyTitleDisabled": "El navegador está desactivado",
+    "emptyDescEnabled": "Las sesiones de navegador del agente aparecen aquí mientras una tarea de IA usa el navegador.",
+    "emptyDescDisabled": "Activa el navegador en Ajustes para que los agentes abran sesiones supervisadas.",
+    "runtimeSetupTitle": "Hay que configurar el runtime",
+    "installing": "Instalando...",
+    "installRuntime": "Instalar runtime",
+    "promptLabel": "Prompt",
+    "prompt1": "Usa el navegador para revisar el flujo de compra e informa de cualquier estado de la interfaz que esté roto.",
+    "prompt2": "Abre <url> con el navegador, interactúa con la página y resume qué cambió después de cada paso.",
+    "screenshotAlt": "Captura de la sesión del navegador",
+    "waitingScreenshot": "Esperando la captura",
+    "waitingScreenshotHint": "La próxima instantánea del navegador del agente se mostrará aquí.",
+    "activeCount": "Activas: {{n}}",
+    "totalCount": "{{n}} en total",
+    "updated": "Actualizado {{time}}",
+    "statusEmpty": "vacío",
+    "fullScreen": "Pantalla completa",
+    "stopSession": "Detener sesión",
+    "deleteSession": "Eliminar sesión",
+    "sessions": "Sesiones",
+    "noSessions": "No hay sesiones de navegador del agente.",
+    "selected": "Seleccionada",
+    "statusLabel": "Estado",
+    "none": "Ninguno",
+    "lastAction": "Última acción",
+    "profileLabel": "Perfil",
+    "temporaryProfile": "Temporal",
+    "stop": "Detener",
+    "delete": "Eliminar",
+    "sessionFallback": "Sesión del navegador",
+    "close": "Cerrar",
+    "statusReadySession": "lista",
+    "statusStoppedSession": "detenida",
+    "statusUnavailableSession": "no disponible",
+    "installFailed": "No se pudo instalar el runtime del navegador"
+  },
+  "browserUseSettings": {
+    "sectionTitle": "Navegador",
+    "sectionDescription": "Permite que los agentes creen sesiones de navegador Playwright supervisadas, que puedes seguir desde la pestaña Navegador.",
+    "enableLabel": "Activar navegador",
+    "enableDescription": "Registra el navegador para los agentes compatibles. Los agentes pueden crear sesiones; tú puedes verlas, detenerlas y eliminarlas.",
+    "enableAriaLabel": "Activar navegador",
+    "playwrightLabel": "Playwright",
+    "chromiumLabel": "Chromium",
+    "statusPrefix": "Estado",
+    "checking": "comprobando...",
+    "installed": "instalado",
+    "missing": "falta",
+    "ready": "listo",
+    "setupRequired": "configuración necesaria",
+    "disabled": "desactivado",
+    "runtimeRequiredTitle": "Se necesita el runtime del navegador",
+    "runtimeRequiredFallback": "Instala el runtime del navegador antes de que los agentes puedan crear sesiones.",
+    "installing": "Instalando...",
+    "installRuntime": "Instalar runtime",
+    "loadSettingsFailed": "No se pudieron cargar los ajustes del navegador",
+    "loadStatusFailed": "No se pudo cargar el estado del navegador",
+    "saveFailed": "No se pudieron guardar los ajustes del navegador",
+    "installFailed": "No se pudo instalar el runtime del navegador"
+  },
+  "mcpServersAdd": {
+    "menuLabel": "Añadir servidor MCP",
+    "globalButtonLabel": "Añadir servidor MCP global",
+    "providerButtonLabel": "Añadir servidor MCP de {{provider}}",
+    "globalAddDescription": "Añadir servidor MCP global escribe un servidor stdio o HTTP común en Claude, Cursor, Codex y OpenCode.",
+    "providerAddDescription": "{{button}} solo cambia {{provider}}.",
+    "globalModalDescription": "Añade este servidor MCP a todos los proveedores: Claude, Cursor, Codex y OpenCode. Solo se admiten los transportes stdio y HTTP, porque la misma configuración debe funcionar en todos los proveedores.",
+    "refreshingScopes": "Actualizando los ámbitos del proyecto...",
+    "loadingServers": "Cargando servidores MCP...",
+    "configCwd": "Directorio",
+    "configEnvVars": "Variables"
+  },
+  "mcpTeamCard": {
+    "title": "Configuraciones MCP del equipo",
+    "description": "Comparte la configuración de los servidores MCP con tu equipo. Todos se mantienen sincronizados.",
+    "proLink": "Disponible con CloudCLI Pro"
+  },
+  "mcpServersAddErrors": {
+    "loadFailedProvider": "No se pudieron cargar los servidores MCP de {{provider}}",
+    "deleteFailed": "No se pudo eliminar el servidor MCP",
+    "saveFailed": "No se pudo guardar el servidor MCP",
+    "saveGlobalFailed": "No se pudo guardar el servidor MCP en todos los proveedores",
+    "selectProjectRequired": "Elige un proyecto para los servidores MCP con ámbito de proyecto",
+    "globalScopeUnsupported": "Añadir servidor MCP solo admite el ámbito de usuario o de proyecto en todos los proveedores.",
+    "globalAddFailed": "No se pudo añadir el servidor MCP a todos los proveedores. {{details}}",
+    "deleteConfirm": "¿Seguro que quieres eliminar este servidor MCP?",
+    "unknownError": "Error desconocido"
+  },
+  "about": {
+    "tagline": "Interfaz de código abierto para asistentes de programación con IA",
+    "starOnGitHub": "Dar estrella en GitHub",
+    "docs": "Docs",
+    "hostedTitle": "Prueba CloudCLI Hosted",
+    "hostedDescription": "Colaboración en equipo, configuraciones MCP compartidas, sincronización de ajustes entre entornos e infraestructura gestionada.",
+    "learnMore": "Más información",
+    "proFeaturesTitle": "Funciones de CloudCLI Pro",
+    "syncSettingsTitle": "Sincronizar ajustes",
+    "syncSettingsDescription": "Mantén tus preferencias, configuraciones MCP y el tema sincronizados en todos tus entornos.",
+    "teamManagementTitle": "Gestión del equipo",
+    "teamManagementDescription": "Varios usuarios, acceso por roles y proyectos compartidos para tu equipo.",
+    "licensed": "Con licencia AGPL-3.0",
+    "proCta": "Disponible con CloudCLI Pro"
+  }
+}

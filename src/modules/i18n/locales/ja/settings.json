@@ -1,0 +1,617 @@
+{
+  "title": "設定",
+  "tabs": {
+    "account": "アカウント",
+    "permissions": "権限",
+    "mcpServers": "MCPサーバー",
+    "appearance": "外観"
+  },
+  "account": {
+    "title": "アカウント",
+    "language": "言語",
+    "languageLabel": "表示言語",
+    "languageDescription": "インターフェースの表示言語を選択してください",
+    "username": "ユーザー名",
+    "email": "メールアドレス",
+    "profile": "プロフィール",
+    "changePassword": "パスワードを変更"
+  },
+  "mcp": {
+    "title": "MCPサーバー",
+    "addServer": "サーバーを追加",
+    "editServer": "サーバーを編集",
+    "deleteServer": "サーバーを削除",
+    "serverName": "サーバー名",
+    "serverType": "サーバーの種類",
+    "config": "設定",
+    "testConnection": "接続テスト",
+    "status": "状態",
+    "connected": "接続済み",
+    "disconnected": "未接続",
+    "scope": {
+      "label": "スコープ",
+      "user": "ユーザー",
+      "project": "プロジェクト"
+    }
+  },
+  "appearance": {
+    "title": "外観",
+    "theme": "テーマ",
+    "codeEditor": "コードエディタ",
+    "editorTheme": "エディタのテーマ",
+    "wordWrap": "折り返し",
+    "showMinimap": "ミニマップを表示",
+    "lineNumbers": "行番号",
+    "fontSize": "フォントサイズ"
+  },
+  "actions": {
+    "saveChanges": "変更を保存",
+    "resetToDefaults": "デフォルトに戻す",
+    "cancelChanges": "変更をキャンセル"
+  },
+  "quickSettings": {
+    "title": "クイック設定",
+    "sections": {
+      "appearance": "外観",
+      "toolDisplay": "ツール表示",
+      "inputSettings": "入力設定"
+    },
+    "darkMode": "ダークモード",
+    "showRawParameters": "生パラメータを表示",
+    "showThinking": "思考を表示",
+    "sendByCtrlEnter": "Ctrl+Enterで送信",
+    "sendByCtrlEnterDescription": "有効にすると、Enterではなく Ctrl+Enter でメッセージを送信します。IMEユーザーの誤送信防止に便利です。",
+    "dragHandle": {
+      "dragging": "ドラッグ中",
+      "closePanel": "設定パネルを閉じる",
+      "openPanel": "設定パネルを開く",
+      "draggingStatus": "ドラッグ中...",
+      "toggleAndMove": "クリックで切替、ドラッグで移動"
+    },
+    "tabs": {
+      "settings": "設定",
+      "commands": "コマンド"
+    },
+    "pin": "パネルを固定",
+    "unpin": "パネルの固定を解除",
+    "close": "パネルを閉じる",
+    "commands": {
+      "searchPlaceholder": "コマンドを検索…",
+      "noProject": "プロジェクトを選択するとコマンドが表示されます。",
+      "loading": "コマンドを読み込み中…",
+      "empty": "このプロジェクトで利用できるコマンドはありません。",
+      "noMatches": "検索に一致するコマンドはありません。",
+      "loadError": "コマンドを読み込めませんでした。",
+      "groups": {
+        "builtIn": "組み込み",
+        "custom": "カスタム",
+        "skills": "スキル"
+      },
+      "insertTitle": "{{command}} をチャットに挿入"
+    }
+  },
+  "terminalShortcuts": {
+    "title": "ターミナルショートカット",
+    "sectionKeys": "キー",
+    "sectionNavigation": "ナビゲーション",
+    "escape": "Escape",
+    "tab": "Tab",
+    "shiftTab": "Shift+Tab",
+    "arrowUp": "上矢印",
+    "arrowDown": "下矢印",
+    "scrollDown": "下にスクロール",
+    "handle": {
+      "closePanel": "ショートカットパネルを閉じる",
+      "openPanel": "ショートカットパネルを開く"
+    }
+  },
+  "mainTabs": {
+    "label": "設定",
+    "agents": "エージェント",
+    "appearance": "外観",
+    "git": "Git",
+    "apiTokens": "API & トークン",
+    "tasks": "タスク",
+    "notifications": "通知",
+    "plugins": "プラグイン",
+    "about": "概要"
+  },
+  "notifications": {
+    "title": "通知",
+    "description": "受信する通知イベントを設定します。",
+    "webPush": {
+      "title": "Webプッシュ通知",
+      "enable": "プッシュ通知を有効にする",
+      "disable": "プッシュ通知を無効にする",
+      "enabled": "プッシュ通知は有効です",
+      "loading": "更新中...",
+      "unsupported": "このブラウザではプッシュ通知がサポートされていません。",
+      "denied": "プッシュ通知がブロックされています。ブラウザの設定で許可してください。"
+    },
+    "sound": {
+      "title": "サウンド",
+      "description": "チャット実行が完了したときに短い音を再生します。",
+      "enabled": "有効",
+      "test": "サウンドをテスト"
+    },
+    "events": {
+      "title": "イベント種別",
+      "actionRequired": "対応が必要",
+      "stop": "実行停止",
+      "error": "実行失敗"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "実行イベントを自分の HTTP エンドポイント（n8n、Home Assistant、チャット中継など）に送信します。ブラウザーを開いていなくても届きます。",
+      "urlLabel": "送信先 URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "暗号化されていない HTTP を許可する（このマシンまたはローカルネットワーク専用）",
+      "enabled": "有効",
+      "save": "保存",
+      "saving": "保存中...",
+      "saved": "保存しました",
+      "remove": "削除",
+      "confirmRemove": "この Webhook を削除しますか？URL と署名シークレットが削除されます。",
+      "payloadNote": "各イベントに含まれるのは種別、プロバイダー、セッション ID、結果のみです。プロンプト、メッセージ、出力は送信されません。",
+      "eventsNote": "Webhook は「イベント種別」の「実行停止」と「実行失敗」の設定に従います。",
+      "secret": {
+        "title": "署名シークレット",
+        "description": "受信側で各リクエストを検証できます（Standard Webhooks 署名）。",
+        "none": "未設定",
+        "set": "設定済み",
+        "generate": "生成",
+        "rotate": "再生成",
+        "remove": "シークレットを削除",
+        "showOnce": "このシークレットを今すぐコピーしてください。再表示はできません。",
+        "copy": "シークレットをコピー",
+        "copied": "コピーしました",
+        "dismiss": "保存しました"
+      },
+      "test": {
+        "send": "テストイベントを送信",
+        "sending": "送信中..."
+      },
+      "status": {
+        "never": "まだ配信はありません。",
+        "ok": "前回の配信は成功しました（{{type}}、{{time}}）: HTTP {{status}}",
+        "failed": "前回の配信は失敗しました（{{type}}、{{time}}、試行回数: {{attempts}}）: {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "保存された URL が無効です。",
+        "insecureUrl": "この URL では暗号化されていない HTTP は許可されていません。",
+        "blockedAddress": "送信先アドレスは許可されていません。",
+        "timeout": "5 秒以内に応答がありませんでした。",
+        "redirect": "受信側がリダイレクト（HTTP {{status}}）を返しました。リダイレクトはたどりません。",
+        "httpStatus": "受信側が HTTP {{status}} を返しました。",
+        "network": "受信側に接続できませんでした。",
+        "tls": "受信側の TLS 証明書が拒否されました。",
+        "dropped": "進行中の配信が多すぎるためスキップしました。"
+      },
+      "errors": {
+        "invalidUrl": "有効な http:// または https:// の URL を入力してください。",
+        "insecureUrl": "http:// の URL を使うには「暗号化されていない HTTP を許可する」をオンにしてください。",
+        "blockedAddress": "このアドレスは Webhook の送信先にできません（リンクローカル、クラウドメタデータ、マルチキャスト、または予約済み）。",
+        "notConfigured": "先に Webhook の URL を保存してください。",
+        "requestFailed": "リクエストに失敗しました。もう一度お試しください。"
+      }
+    }
+  },
+  "appearanceSettings": {
+    "darkMode": {
+      "label": "ダークモード",
+      "description": "ライトテーマとダークテーマを切り替えます"
+    },
+    "theme": {
+      "label": "テーマ",
+      "description": "ライトまたはダークの外観を選ぶか、OS の設定に合わせます",
+      "light": "ライト",
+      "dark": "ダーク",
+      "system": "システムの外観に合わせる"
+    },
+    "projectSorting": {
+      "label": "プロジェクトの並び順",
+      "description": "サイドバーでのプロジェクトの並び順を設定します",
+      "alphabetical": "アルファベット順",
+      "recentActivity": "最近のアクティビティ順"
+    },
+    "codeEditor": {
+      "title": "コードエディタ",
+      "theme": {
+        "label": "エディタのテーマ",
+        "description": "コードエディタのデフォルトテーマ"
+      },
+      "wordWrap": {
+        "label": "折り返し",
+        "description": "エディタでデフォルトで折り返しを有効にします"
+      },
+      "showMinimap": {
+        "label": "ミニマップを表示",
+        "description": "差分ビューでナビゲーション用のミニマップを表示します"
+      },
+      "lineNumbers": {
+        "label": "行番号を表示",
+        "description": "エディタに行番号を表示します"
+      },
+      "fontSize": {
+        "label": "フォントサイズ",
+        "description": "エディタのフォントサイズ（ピクセル）"
+      }
+    }
+  },
+  "mcpForm": {
+    "title": {
+      "add": "MCPサーバーを追加",
+      "edit": "MCPサーバーを編集"
+    },
+    "importMode": {
+      "form": "フォーム入力",
+      "json": "JSONインポート"
+    },
+    "scope": {
+      "label": "スコープ",
+      "userGlobal": "ユーザー（グローバル）",
+      "projectLocal": "プロジェクト（ローカル）",
+      "userDescription": "ユーザースコープ: すべてのプロジェクトで利用可能",
+      "projectDescription": "ローカルスコープ: 選択したプロジェクトでのみ利用可能",
+      "cannotChange": "既存のサーバーを編集する場合、スコープは変更できません"
+    },
+    "fields": {
+      "serverName": "サーバー名",
+      "transportType": "トランスポートの種類",
+      "command": "コマンド",
+      "arguments": "引数（1行に1つ）",
+      "jsonConfig": "JSON設定",
+      "url": "URL",
+      "envVars": "環境変数（KEY=value、1行に1つ）",
+      "headers": "ヘッダー（KEY=value、1行に1つ）",
+      "selectProject": "プロジェクトを選択..."
+    },
+    "placeholders": {
+      "serverName": "my-server"
+    },
+    "validation": {
+      "missingType": "必須フィールドがありません: type",
+      "stdioRequiresCommand": "stdioタイプにはcommandフィールドが必要です",
+      "httpRequiresUrl": "{{type}}タイプにはurlフィールドが必要です",
+      "invalidJson": "無効なJSON形式です",
+      "jsonHelp": "MCPサーバー設定をJSON形式で貼り付けてください。例:",
+      "jsonExampleStdio": "• stdio: {\"type\":\"stdio\",\"command\":\"npx\",\"args\":[\"@upstash/context7-mcp\"]}",
+      "jsonExampleHttp": "• http/sse: {\"type\":\"http\",\"url\":\"https://api.example.com/mcp\"}"
+    },
+    "configDetails": "設定の詳細（{{configFile}}より）",
+    "projectPath": "パス: {{path}}",
+    "actions": {
+      "cancel": "キャンセル",
+      "saving": "保存中...",
+      "addServer": "サーバーを追加",
+      "updateServer": "サーバーを更新"
+    }
+  },
+  "saveStatus": {
+    "success": "設定を保存しました！",
+    "error": "設定の保存に失敗しました",
+    "saving": "保存中..."
+  },
+  "footerActions": {
+    "save": "設定を保存",
+    "cancel": "キャンセル"
+  },
+  "git": {
+    "title": "Git設定",
+    "description": "コミット用のGit IDを設定します。この設定は git config --global で適用されます",
+    "name": {
+      "label": "Git名前",
+      "help": "コミットに使用する名前"
+    },
+    "email": {
+      "label": "Gitメールアドレス",
+      "help": "コミットに使用するメールアドレス"
+    },
+    "actions": {
+      "save": "設定を保存",
+      "saving": "保存中..."
+    },
+    "status": {
+      "success": "保存しました"
+    }
+  },
+  "apiKeys": {
+    "title": "APIキー",
+    "description": "外部APIにアクセスするためのAPIキーを生成します。",
+    "newKey": {
+      "alertTitle": "⚠️ APIキーを保存してください",
+      "alertMessage": "このキーが表示されるのは今回限りです。安全な場所に保管してください。",
+      "iveSavedIt": "保存しました"
+    },
+    "form": {
+      "placeholder": "APIキーの名前（例: 本番サーバー）",
+      "createButton": "作成",
+      "cancelButton": "キャンセル"
+    },
+    "newButton": "新しいAPIキー",
+    "empty": "APIキーはまだ作成されていません。",
+    "list": {
+      "created": "作成日:",
+      "lastUsed": "最終使用日:"
+    },
+    "confirmDelete": "このAPIキーを削除してもよろしいですか？",
+    "status": {
+      "active": "有効",
+      "inactive": "無効"
+    },
+    "github": {
+      "title": "GitHubトークン",
+      "description": "外部APIからプライベートリポジトリをクローンするためのGitHubパーソナルアクセストークンを追加します。",
+      "descriptionAlt": "プライベートリポジトリをクローンするためのGitHubパーソナルアクセストークンを追加します。保存せずにAPIリクエストで直接トークンを渡すこともできます。",
+      "addButton": "トークンを追加",
+      "form": {
+        "namePlaceholder": "トークンの名前（例: 個人リポジトリ）",
+        "tokenPlaceholder": "GitHubパーソナルアクセストークン（ghp_...）",
+        "descriptionPlaceholder": "説明（任意）",
+        "addButton": "トークンを追加",
+        "cancelButton": "キャンセル",
+        "howToCreate": "GitHubパーソナルアクセストークンの作成方法 →"
+      },
+      "empty": "GitHubトークンはまだ追加されていません。",
+      "added": "追加日:",
+      "confirmDelete": "このGitHubトークンを削除してもよろしいですか？"
+    },
+    "apiDocsLink": "APIドキュメント",
+    "documentation": {
+      "title": "外部APIドキュメント",
+      "description": "外部APIを使用してアプリケーションからClaude/Cursorセッションを起動する方法を学びます。",
+      "viewLink": "APIドキュメントを見る →"
+    },
+    "loading": "読み込み中...",
+    "version": {
+      "updateAvailable": "アップデートあり: v{{version}}"
+    }
+  },
+  "tasks": {
+    "checking": "TaskMasterのインストールを確認しています...",
+    "notInstalled": {
+      "title": "TaskMaster AI CLIがインストールされていません",
+      "description": "タスク管理機能を使用するにはTaskMaster CLIが必要です。以下のコマンドでインストールしてください:",
+      "installCommand": "npm install -g task-master-ai",
+      "viewOnGitHub": "GitHubで見る",
+      "afterInstallation": "インストール後:",
+      "steps": {
+        "restart": "このアプリケーションを再起動してください",
+        "autoAvailable": "TaskMaster機能が自動的に利用可能になります",
+        "initCommand": "プロジェクトディレクトリで task-master init を実行してください"
+      }
+    },
+    "settings": {
+      "enableLabel": "TaskMaster統合を有効にする",
+      "enableDescription": "インターフェース全体でTaskMasterのタスク、バナー、サイドバーインジケータを表示します"
+    }
+  },
+  "agents": {
+    "authStatus": {
+      "checking": "確認中...",
+      "connected": "接続済み",
+      "notConnected": "未接続",
+      "disconnected": "切断",
+      "checkingAuth": "認証状態を確認しています...",
+      "loggedInAs": "{{email}}でログイン中",
+      "authenticatedUser": "認証済みユーザー"
+    },
+    "account": {
+      "claude": {
+        "description": "Anthropic Claude AIアシスタント"
+      },
+      "cursor": {
+        "description": "Cursor AI搭載コードエディタ"
+      },
+      "codex": {
+        "description": "OpenAI Codex AIアシスタント"
+      }
+    },
+    "connectionStatus": "接続状態",
+    "cli": {
+      "title": "CLI のバージョン",
+      "checking": "バージョンを確認中…",
+      "installed": "インストール済み: v{{version}}",
+      "installedUnknown": "インストール済み (バージョン不明)",
+      "versionUnavailable": "バージョンを取得できませんでした",
+      "updateAvailable": "アップデートあり: v{{version}}",
+      "upToDate": "最新です",
+      "bundled": "CloudCLI に同梱されており、CloudCLI と一緒に更新されます。",
+      "platform": "ホスティングプラットフォームが管理しています。",
+      "updateTo": "v{{version}} に更新",
+      "runUpdater": "アップデーターを実行",
+      "updating": "更新中…",
+      "updatingHint": "サーバーで {{command}} を実行しています。数分かかる場合があります。",
+      "runsCommand": "サーバーで {{command}} を実行します",
+      "output": "{{command}} の出力",
+      "result": {
+        "updated": "v{{version}} に更新しました。",
+        "alreadyUpToDate": "すでに最新です (v{{version}})。",
+        "unchanged": "アップデーターは終了しましたが、バージョンは v{{version}} のままです。理由は下の出力を確認してください。",
+        "unchangedUnknown": "アップデーターが終了しました。出力は下にあります。",
+        "permissionDenied": "サーバーのユーザーには、この CLI のインストール先に書き込む権限がありません。そのインストールの所有者としてサーバーで {{command}} を実行してください (例: sudo を使用)。",
+        "timedOut": "アップデートが時間内に終わらなかったため停止しました。完了するにはサーバーで {{command}} を実行してください。",
+        "failed": "アップデートに失敗しました (終了コード {{exitCode}})。出力は下にあります。",
+        "failedQuietly": "アップデーターが失敗を報告しました。出力は下にあります。",
+        "notStarted": "アップデーターを起動できませんでした。",
+        "busy": "このエージェントはセッションで作業中です。終了するまで待つか停止してから更新してください。",
+        "requestFailed": "アップデートは実行されませんでした: {{error}}",
+        "unconfirmed": "サーバーから応答がありませんでした ({{error}})。アップデートは実行された可能性があります。上のバージョンはサーバーが最後に報告したものです。"
+      }
+    },
+    "login": {
+      "title": "ログイン",
+      "reAuthenticate": "再認証",
+      "description": "{{agent}}アカウントにサインインしてAI機能を有効にします",
+      "reAuthDescription": "別のアカウントでサインインするか、認証情報を更新します",
+      "button": "ログイン",
+      "reLoginButton": "再ログイン"
+    },
+    "error": "エラー: {{error}}"
+  },
+  "permissions": {
+    "title": "権限設定",
+    "skipPermissions": {
+      "label": "権限プロンプトをスキップ（注意して使用）",
+      "claudeDescription": "--dangerously-skip-permissions フラグに相当",
+      "cursorDescription": "Cursor CLIの -f フラグに相当"
+    },
+    "allowedTools": {
+      "title": "許可されたツール",
+      "description": "権限の確認なしに自動的に許可されるツール",
+      "placeholder": "例: \"Bash(git log:*)\" または \"Write\"",
+      "quickAdd": "よく使うツールを追加:",
+      "empty": "許可されたツールはありません"
+    },
+    "blockedTools": {
+      "title": "ブロックされたツール",
+      "description": "権限の確認なしに自動的にブロックされるツール",
+      "placeholder": "例: \"Bash(rm:*)\"",
+      "empty": "ブロックされたツールはありません"
+    },
+    "settingsFiles": {
+      "title": "Claude 設定ファイルのルール",
+      "description": "Claude CLI は上のリストに加えてこれらのルールも適用します。拒否ルールはどこで設定されていても優先されますが、「許可されたツール」で既に許可されているツールには、確認ルールがあっても確認は求められません。ここでは読み取り専用です。編集はファイルで行ってください。",
+      "sources": {
+        "user": "ユーザー設定",
+        "managed": "管理対象の設定（管理者）"
+      },
+      "groups": {
+        "allow": "許可",
+        "ask": "確認",
+        "deny": "拒否"
+      },
+      "missing": "ファイルが見つからないため、ルールは追加されません。",
+      "invalid": "このファイルを読み込めませんでした。有効な JSON か確認してください。",
+      "empty": "このファイルには権限ルールがありません。",
+      "loading": "ルールを読み込み中…",
+      "loadFailed": "Claude 設定ファイルのルールを読み込めませんでした。",
+      "projectNote": "プロジェクト内の .claude/settings.json と .claude/settings.local.json も、そのプロジェクトのチャットに適用されます。ただし、フォルダーが信頼されるまで Claude CLI は .claude/settings.json の許可ルールを無視します。そのフォルダーで Claude Code を一度対話モードで起動し、信頼ダイアログを承認してください。"
+    },
+    "allowedCommands": {
+      "title": "許可されたシェルコマンド",
+      "description": "権限の確認なしに自動的に許可されるシェルコマンド",
+      "placeholder": "例: \"Shell(ls)\" または \"Shell(git status)\"",
+      "quickAdd": "よく使うコマンドを追加:",
+      "empty": "許可されたコマンドはありません"
+    },
+    "blockedCommands": {
+      "title": "ブロックされたシェルコマンド",
+      "description": "自動的にブロックされるシェルコマンド",
+      "placeholder": "例: \"Shell(rm -rf)\" または \"Shell(sudo)\"",
+      "empty": "ブロックされたコマンドはありません"
+    },
+    "toolExamples": {
+      "title": "ツールパターンの例:",
+      "bashGitLog": "- すべてのgit logコマンドを許可",
+      "bashGitDiff": "- すべてのgit diffコマンドを許可",
+      "write": "- すべてのWriteツールの使用を許可",
+      "bashRm": "- すべてのrmコマンドをブロック（危険）"
+    },
+    "shellExamples": {
+      "title": "シェルコマンドの例:",
+      "ls": "- lsコマンドを許可",
+      "gitStatus": "- git statusを許可",
+      "npmInstall": "- npm installを許可",
+      "rmRf": "- 再帰的削除をブロック"
+    },
+    "codex": {
+      "permissionMode": "権限モード",
+      "description": "Codexがファイルの変更やコマンドの実行を処理する方法を制御します",
+      "modes": {
+        "default": {
+          "title": "デフォルト",
+          "description": "ワークスペースのサンドボックス内でコマンドを実行します。承認が必要かどうかはCodexが判断します。この非対話型の連携では承認リクエストを許可できません。"
+        },
+        "acceptEdits": {
+          "title": "編集を許可",
+          "description": "ワークスペース内ですべてのコマンドを自動実行。サンドボックス環境での完全自動モード。"
+        },
+        "bypassPermissions": {
+          "title": "権限をバイパス",
+          "description": "制限なしの完全なシステムアクセス。すべてのコマンドがディスクとネットワークへの完全なアクセスで自動実行されます。注意して使用してください。"
+        }
+      },
+      "technicalDetails": "技術的な詳細",
+      "technicalInfo": {
+        "default": "sandboxMode=workspace-write, approvalPolicy=on-request. ワークスペースのサンドボックス内でコマンドを実行します。承認が必要かどうかはCodexが判断します。この非対話型の連携では承認リクエストを許可できません。",
+        "acceptEdits": "sandboxMode=workspace-write, approvalPolicy=never。すべてのコマンドがプロジェクトディレクトリ内で自動実行。",
+        "bypassPermissions": "sandboxMode=danger-full-access, approvalPolicy=never。完全なシステムアクセス。信頼された環境でのみ使用してください。",
+        "overrideNote": "チャットインターフェースのモードボタンを使用してセッションごとに上書きできます。"
+      }
+    },
+    "actions": {
+      "add": "追加"
+    }
+  },
+  "mcpServers": {
+    "title": "MCPサーバー",
+    "description": {
+      "claude": "Model Context Protocolサーバーは、Claudeに追加のツールやデータソースを提供します",
+      "cursor": "Model Context Protocolサーバーは、Cursorに追加のツールやデータソースを提供します",
+      "codex": "Model Context Protocolサーバーは、Codexに追加のツールやデータソースを提供します"
+    },
+    "addButton": "MCPサーバーを追加",
+    "empty": "MCPサーバーは設定されていません",
+    "serverType": "種類",
+    "scope": {
+      "local": "ローカル",
+      "user": "ユーザー"
+    },
+    "config": {
+      "command": "コマンド",
+      "url": "URL",
+      "args": "引数",
+      "environment": "環境変数"
+    },
+    "tools": {
+      "title": "ツール",
+      "count": "（{{count}}）:",
+      "more": "他{{count}}件"
+    },
+    "actions": {
+      "edit": "サーバーを編集",
+      "delete": "サーバーを削除"
+    },
+    "help": {
+      "title": "Codex MCPについて",
+      "description": "Codexはstdioベースのツールサーバーをサポートしています。追加のツールやリソースでCodexの機能を拡張するサーバーを追加できます。"
+    }
+  },
+  "pluginSettings": {
+    "title": "プラグイン",
+    "description": "カスタムプラグインでインターフェースを拡張します。gitからインストールするか、~/.claude-code-ui/plugins/ にフォルダを配置してください。",
+    "installPlaceholder": "https://github.com/user/my-plugin",
+    "installButton": "インストール",
+    "installing": "インストール中…",
+    "securityWarning": "信頼できる作成者のプラグイン、またはソースコードを確認済みのプラグインのみをインストールしてください。",
+    "scanningPlugins": "プラグインをスキャン中…",
+    "noPluginsInstalled": "プラグインがインストールされていません",
+    "pullLatest": "gitから最新を取得",
+    "noGitRemote": "リモートgitリポジトリがありません — アップデート不可",
+    "uninstallPlugin": "プラグインを削除",
+    "confirmUninstall": "クリックして確定",
+    "confirmUninstallMessage": "{{name}} を削除しますか？この操作は取り消せません。",
+    "cancel": "キャンセル",
+    "remove": "削除",
+    "updateFailed": "アップデートに失敗しました",
+    "installFailed": "インストールに失敗しました",
+    "uninstallFailed": "削除に失敗しました",
+    "toggleFailed": "切り替えに失敗しました",
+    "buildYourOwn": "プラグインを自作する",
+    "starter": "スターター",
+    "docs": "ドキュメント",
+    "starterPlugin": {
+      "name": "プロジェクト統計",
+      "badge": "スターター",
+      "description": "プロジェクトのファイル数、コード行数、ファイルタイプの内訳、最近のアクティビティを表示します。",
+      "install": "インストール"
+    },
+    "morePlugins": "詳細",
+    "enable": "有効にする",
+    "disable": "無効にする",
+    "installAriaLabel": "プラグインのgitリポジトリURL",
+    "tab": "タブ",
+    "runningStatus": "実行中"
+  }
+}

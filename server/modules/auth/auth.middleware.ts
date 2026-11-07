@@ -1,9 +1,9 @@
 // @ts-nocheck -- JWT request augmentation is narrowed by Auth route contracts.
 import jwt from 'jsonwebtoken';
 
-import { userDb, appConfigDb } from '../database/index.js';
+import { IS_PLATFORM } from '@/shared/utils.js';
 
-const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+import { userDb, appConfigDb } from '../database/index.js';
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();

@@ -61,12 +61,8 @@ function createService(providers: IProvider[]) {
     },
     async getProviderModels() {
       return {
-        models: { OPTIONS: [], DEFAULT: 'default-model' },
-        cache: {
-          updatedAt: new Date(0).toISOString(),
-          expiresAt: new Date(0).toISOString(),
-          source: 'fresh',
-        },
+        OPTIONS: [],
+        DEFAULT: 'default-model',
       };
     },
   });

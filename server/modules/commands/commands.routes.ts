@@ -19,6 +19,23 @@ type CommandsRouterDependencies = {
   };
 };
 
+/**
+ * Fills a custom command's `$ARGUMENTS` with `argumentsText` and `$1`, `$2`, …
+ * with the matching `args` token; a `$N` with no token is left as written.
+ * One pass with a replacer function, so the user's text is inserted literally:
+ * `$&`/`$$` in it are not replacement patterns, and a `$1` it contains is not
+ * substituted again.
+ */
+function substituteCommandArguments(template: string, argumentsText: string, args: unknown[]): string {
+  return template.replace(/\$ARGUMENTS|\$([1-9]\d*)\b/g, (placeholder, position?: string) => {
+    if (position === undefined) {
+      return argumentsText;
+    }
+    const value = args[Number(position) - 1];
+    return value === undefined ? placeholder : String(value);
+  });
+}
+
 /** Creates Commands routes around explicit filesystem, model-catalog, and runtime adapters. */
 export function createCommandsRouter(dependencies: CommandsRouterDependencies): express.Router {
 const fs = dependencies.fileSystem;
@@ -63,14 +80,15 @@ const resolveCommandModel = async (modelsService, provider, context) => {
 
 const executeModelsCommand = async (args, context, modelsService) => {
   const currentProvider = readModelProvider(context?.provider);
-  const result = await modelsService.getProviderModels(currentProvider);
-  const catalog = result.models;
+  const catalog = await modelsService.getProviderModels(currentProvider);
   const currentModel = await resolveCommandModel(modelsService, currentProvider, context);
   const availableModels = catalog.OPTIONS.map((option) => option.value);
   const availableOptions = catalog.OPTIONS.map((option) => ({
     value: option.value,
     label: option.label,
     description: option.description,
+    recordId: option.recordId,
+    isCustom: option.isCustom,
   }));
 
   return {
@@ -88,7 +106,6 @@ const executeModelsCommand = async (args, context, modelsService) => {
       availableModels,
       availableOptions,
       defaultModel: catalog.DEFAULT,
-      cache: result.cache,
       message: `Current model: ${currentModel}`,
     },
   };
@@ -496,10 +513,16 @@ router.post("/list", async (req, res) => {
  * Execute a command with argument replacement
  * This endpoint prepares the command content but doesn't execute bash commands yet
  * (that will be handled in the command parser utility)
+ * Body: `args` holds the whitespace-split tokens for `$1`, `$2`, …; the optional
+ * `rawArgs` holds the untouched text after the command name for `$ARGUMENTS`.
  */
 router.post("/execute", async (req, res) => {
   try {
-    const { commandName, commandPath, args = [], context = {} } = req.body;
+    const { commandName, commandPath, rawArgs, context = {} } = req.body;
+    // A client that sends only `rawArgs` still gets `$1`, `$2`, … from its
+    // whitespace-split tokens.
+    const args = req.body.args
+      ?? (typeof rawArgs === "string" && rawArgs.trim() ? rawArgs.trim().split(/\s+/) : []);
 
     if (!commandName) {
       return res.status(400).json({
@@ -560,21 +583,11 @@ router.post("/execute", async (req, res) => {
     const content = await fs.readFile(commandPath, "utf8");
     const { data: metadata, content: commandContent } =
       parseFrontMatter(content);
-    // Basic argument replacement (will be enhanced in command parser utility)
-    let processedContent = commandContent;
-
-    // Replace $ARGUMENTS with all arguments joined
-    const argsString = args.join(" ");
-    processedContent = processedContent.replace(/\$ARGUMENTS/g, argsString);
-
-    // Replace $1, $2, etc. with positional arguments
-    args.forEach((arg, index) => {
-      const placeholder = `$${index + 1}`;
-      processedContent = processedContent.replace(
-        new RegExp(`\\${placeholder}\\b`, "g"),
-        arg,
-      );
-    });
+    // `$ARGUMENTS` gets the raw text typed after the command name (line breaks
+    // and spacing kept, as in the Claude Code CLI). Clients that send only the
+    // token list get the tokens joined with spaces.
+    const argumentsText = typeof rawArgs === "string" ? rawArgs : args.join(" ");
+    const processedContent = substituteCommandArguments(commandContent, argumentsText, args);
 
     res.json({
       type: "custom",

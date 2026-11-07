@@ -4,11 +4,9 @@ import { promises as fsPromises } from 'node:fs';
 
 import chokidar, { type FSWatcher } from 'chokidar';
 
-import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
-import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
+import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
-import { generateDisplayName } from '@/modules/projects/index.js';
 
 type WatcherEventType = 'add' | 'change';
 
@@ -31,17 +29,56 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
   },
 ];
 
-const WATCHER_IGNORED_PATTERNS = [
-  '**/node_modules/**',
-  '**/.git/**',
-  '**/dist/**',
-  '**/build/**',
-  '**/subagents/**',
-  '**/tool-results/**',
-  '**/*.tmp',
-  '**/*.swp',
-  '**/.DS_Store',
-];
+/**
+ * What the watcher never descends into or reports. These used to be glob
+ * strings, which chokidar v4 no longer understands: it takes a path, a RegExp
+ * or a function, so the globs matched nothing and every file under every
+ * provider root was watched and, with polling, stat()ed every interval (#1156).
+ */
+const IGNORED_DIRECTORY_NAMES = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  // Claude writes a subagent's transcript and large tool outputs here. The
+  // synchronizer skips them already (#880); ignoring them here keeps the
+  // watcher from walking them at all.
+  'subagents',
+  'tool-results',
+]);
+const IGNORED_FILE_NAMES = new Set(['.DS_Store']);
+const IGNORED_FILE_SUFFIXES = ['.tmp', '.swp'];
+
+/**
+ * Builds chokidar's `ignored` matcher for one watch root.
+ *
+ * Only the part of the path below `rootPath` is checked, so a home directory
+ * that happens to sit under `/build` or `/dist` cannot hide a whole provider.
+ *
+ * Exported for the providers module's tests, which run it against chokidar on
+ * a real directory tree.
+ */
+export function createWatcherIgnoredMatcher(rootPath: string): (filePath: string) => boolean {
+  return (filePath: string) => {
+    const relativePath = path.relative(rootPath, filePath);
+    // Outside the root is `..` as a whole component, or an absolute result
+    // (another drive on Windows). A child called `..archive` is still inside.
+    const isOutsideRoot = relativePath === '..'
+      || relativePath.startsWith(`..${path.sep}`)
+      || path.isAbsolute(relativePath);
+    if (!relativePath || isOutsideRoot) {
+      return false;
+    }
+
+    const segments = relativePath.split(path.sep);
+    const baseName = segments[segments.length - 1];
+    if (IGNORED_FILE_NAMES.has(baseName) || IGNORED_FILE_SUFFIXES.some((suffix) => baseName.endsWith(suffix))) {
+      return true;
+    }
+
+    return segments.some((segment) => IGNORED_DIRECTORY_NAMES.has(segment));
+  };
+}
 
 const PROJECTS_UPDATE_DEBOUNCE_MS = 500;
 const PROJECTS_UPDATE_MAX_WAIT_MS = 2_000;
@@ -125,50 +162,6 @@ function queuePendingWatcherUpdate(
   schedulePendingWatcherFlush();
 }
 
-/**
- * Builds one `session_upserted` delta event for a provider-native session id.
- *
- * The event carries everything a sidebar needs to upsert the session in place
- * (session summary plus owning-project metadata), so clients never need a full
- * project-list refetch when a transcript file changes on disk. Returns `null`
- * when the id cannot be resolved to an indexed session row.
- */
-async function buildSessionUpsertedEvent(updatedProviderSessionId: string): Promise<string | null> {
-  const row = sessionsDb.getSessionByProviderSessionId(updatedProviderSessionId)
-    ?? sessionsDb.getSessionById(updatedProviderSessionId);
-  if (!row || row.isArchived) {
-    return null;
-  }
-
-  const projectPath = row.project_path;
-  const project = projectPath ? projectsDb.getProjectPath(projectPath) : null;
-  const displayName = project?.custom_project_name?.trim()
-    ? project.custom_project_name
-    : await generateDisplayName(path.basename(projectPath ?? '') || (projectPath ?? ''), projectPath);
-
-  return JSON.stringify({
-    kind: 'session_upserted',
-    sessionId: row.session_id,
-    provider: row.provider,
-    session: {
-      id: row.session_id,
-      summary: row.custom_name || '',
-      messageCount: 0,
-      lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
-    },
-    project: project
-      ? {
-        projectId: project.project_id,
-        path: project.project_path,
-        fullPath: project.project_path,
-        displayName,
-        isStarred: Boolean(project.isStarred),
-      }
-      : null,
-    timestamp: new Date().toISOString(),
-  });
-}
-
 async function flushPendingWatcherUpdate(): Promise<void> {
   clearPendingWatcherFlushTimer();
 
@@ -190,23 +183,7 @@ async function flushPendingWatcherUpdate(): Promise<void> {
     // Per-session deltas instead of full project snapshots: an upsert of one
     // session can never clobber unrelated client state, so the frontend needs
     // no "suppress updates while a run is active" protection logic.
-    const events: string[] = [];
-    for (const updatedSessionId of queuedUpdate.updatedSessionIds) {
-      const event = await buildSessionUpsertedEvent(updatedSessionId);
-      if (event) {
-        events.push(event);
-      }
-    }
-
-    if (events.length > 0) {
-      connectedClients.forEach(client => {
-        if (client.readyState === WS_OPEN_STATE) {
-          for (const event of events) {
-            client.send(event);
-          }
-        }
-      });
-    }
+    await broadcastSessionUpsertedBatch(queuedUpdate.updatedSessionIds);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('Session watcher refresh failed while broadcasting session_upserted', { error: message });
@@ -262,6 +239,7 @@ export async function initializeSessionsWatcher(): Promise<void> {
   const initialSync = await sessionSynchronizerService.synchronizeSessions();
   console.log('Initial session synchronization complete', {
     processedByProvider: initialSync.processedByProvider,
+    prunedOrphans: initialSync.prunedOrphans,
     failures: initialSync.failures,
   });
 
@@ -270,11 +248,15 @@ export async function initializeSessionsWatcher(): Promise<void> {
       await fsPromises.mkdir(rootPath, { recursive: true });
 
       const watcher = chokidar.watch(rootPath, {
-        ignored: WATCHER_IGNORED_PATTERNS,
+        ignored: createWatcherIgnoredMatcher(rootPath),
         persistent: true,
         ignoreInitial: true,
         followSymlinks: false,
         depth: 6,
+        // Polling reaches filesystems that native events cannot: WSL's /mnt/c,
+        // network shares, some container mounts. Where native events do work,
+        // chokidar's own CHOKIDAR_USEPOLLING=false overrides this and a finished
+        // turn reaches the sidebar at once instead of up to 6 s later.
         usePolling: true,
         interval: 6_000,
         binaryInterval: 6_000,

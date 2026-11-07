@@ -47,8 +47,9 @@ test('transcribes with injected fetch and request-level credential/model overrid
 
   assert.deepEqual(result, { ok: true, value: { text: 'hello' } });
   assert.equal(requestedUrl, 'https://voice.example/v1/audio/transcriptions');
-  assert.equal((requestedOptions?.headers as Record<string, string>).Authorization, 'Bearer request-key');
-  assert.equal((requestedOptions?.body as FormData).get('model'), 'custom-whisper');
+  assert.ok(requestedOptions, 'fetchBackend should receive request options');
+  assert.equal((requestedOptions.headers as Record<string, string>).Authorization, 'Bearer request-key');
+  assert.equal((requestedOptions.body as FormData).get('model'), 'custom-whisper');
 });
 
 test('forwards the explicit TTS format and maps backend authentication failures', async () => {

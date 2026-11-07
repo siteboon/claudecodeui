@@ -29,7 +29,7 @@ const defaultDependencies: ProviderRuntimeServiceDependencies = {
   resolveProviderSessionId: (sessionId) => sessionsService.resolveProviderSessionId(sessionId),
   resolveResumeModel: (provider, sessionId, requestedModel) =>
     providerModelsService.resolveResumeModel(provider, sessionId, requestedModel),
-  getProviderModels: (provider, options) => providerModelsService.getProviderModels(provider, options),
+  getProviderModels: (provider) => providerModelsService.getProviderModels(provider),
 };
 
 /**
@@ -50,8 +50,7 @@ export function createProviderRuntimeService(
     resolveProviderSessionId: dependencies.resolveProviderSessionId,
     resolveResumeModel: (sessionId, requestedModel) =>
       dependencies.resolveResumeModel(provider.id, sessionId, requestedModel),
-    getProviderModels: async () =>
-      (await dependencies.getProviderModels(provider.id)).models,
+    getProviderModels: async () => dependencies.getProviderModels(provider.id),
     normalizeMessage: (raw, sessionId) => provider.sessions.normalizeMessage(raw, sessionId),
     async isProviderInstalled() {
       try {
@@ -90,6 +89,17 @@ export function createProviderRuntimeService(
 
     async abort(providerName: LLMProvider, sessionId: string): Promise<boolean> {
       return Boolean(await dependencies.resolveProvider(providerName).runtime.abort(sessionId));
+    },
+
+    async stopBackgroundTask(providerName: LLMProvider, sessionId: string, taskId: string): Promise<boolean> {
+      // A runtime that never holds background work has no task to stop.
+      const { runtime } = dependencies.resolveProvider(providerName);
+      return Boolean(await runtime.stopBackgroundTask?.(sessionId, taskId));
+    },
+
+    hasBackgroundWork(sessionId: string): boolean {
+      return dependencies.listProviders().some((provider) =>
+        (provider.runtime.listBackgroundWork?.() ?? []).some((entry) => entry.sessionId === sessionId));
     },
 
     resolveToolApproval(requestId: string, decision: ProviderPermissionDecision): void {

@@ -77,27 +77,7 @@ function isNewerVersion(candidateVersion: string, currentVersion: string): boole
   return false;
 }
 
-function loadEnvironmentFile(dependencies: CliServiceDependencies): void {
-  try {
-    const environmentFile = dependencies.fileSystem.readTextFile(
-      path.join(dependencies.applicationRoot, '.env'),
-    );
-    for (const line of environmentFile.split('\n')) {
-      const trimmedLine = line.trim();
-      if (!trimmedLine || trimmedLine.startsWith('#')) continue;
-
-      const [key, ...valueParts] = trimmedLine.split('=');
-      if (key && valueParts.length > 0 && !dependencies.environment[key]) {
-        dependencies.environment[key] = valueParts.join('=').trim();
-      }
-    }
-  } catch {
-    // The repository-level .env file is optional for every CLI command.
-  }
-}
-
 function showStatus(dependencies: CliServiceDependencies): void {
-  loadEnvironmentFile(dependencies);
   const { environment, fileSystem, output } = dependencies;
   const databasePath = environment.DATABASE_PATH || dependencies.defaultDatabasePath;
   const databaseExists = fileSystem.pathExists(databasePath);
@@ -180,7 +160,7 @@ Environment Variables:
   PORT                Set server port (default: 3001) (LEGACY)
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
-  CONTEXT_WINDOW      Set context window size (default: 160000)
+  CONTEXT_WINDOW      Fallback context window size (default: 160000)
 
 Documentation:
   ${dependencies.packageMetadata.homepage || 'https://github.com/siteboon/claudecodeui'}
