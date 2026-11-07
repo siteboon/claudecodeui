@@ -125,6 +125,8 @@ export function useSidebarController({
   // state would give saveProjectName a new identity on every keystroke and
   // re-render every memoized project row.
   const projectRenameOriginalPathRef = useRef<string | null>(null);
+  // The display name at the same moment, for the same reason.
+  const projectRenameOriginalNameRef = useRef<string | null>(null);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
   const activeSessionIds = activeSessions;
@@ -762,6 +764,7 @@ export function useSidebarController({
   // while the input is open.
   const startEditingProject = useCallback((project: Project) => {
     projectRenameOriginalPathRef.current = project.fullPath;
+    projectRenameOriginalNameRef.current = project.displayName;
     setActiveRename({
       target: 'project',
       id: project.projectId,
@@ -799,39 +802,57 @@ export function useSidebarController({
     // (missing directory, path already taken), and applying the display name
     // anyway would leave the row half-updated.
     async (projectId: string, nextName: string, nextPath: string) => {
-      // Set by either save that goes through: a folder that moved has to show
-      // up in the sidebar even when the display name then fails to save.
-      let savedAnyChange = false;
-      try {
-        const trimmedPath = nextPath.trim();
-        // Only a folder the user actually edited is sent. The path endpoint
-        // validates the folder, which a project discovered outside the
-        // workspace root would fail even though it is not being moved.
-        if (trimmedPath.length > 0 && trimmedPath !== projectRenameOriginalPathRef.current) {
+      const trimmedPath = nextPath.trim();
+      // Only a folder the user actually edited is sent. The path endpoint
+      // validates the folder, which a project discovered outside the
+      // workspace root would fail even though it is not being moved.
+      const folderEdited = trimmedPath.length > 0 && trimmedPath !== projectRenameOriginalPathRef.current;
+      // Likewise only an edited name, so a folder-only save cannot overwrite a
+      // name changed elsewhere while the editor was open.
+      const nameEdited = nextName.trim() !== (projectRenameOriginalNameRef.current ?? '').trim();
+
+      // A failed save keeps the editor open, with its drafts, so the change can
+      // be corrected or retried instead of silently discarded.
+      if (folderEdited) {
+        let failureMessage: string | null = null;
+        try {
           const pathResponse = await api.updateProjectPath(projectId, trimmedPath);
           if (!pathResponse.ok) {
             const failure = (await pathResponse.json().catch(() => null)) as
               | { error?: { message?: string; details?: string } }
               | null;
-            alert(failure?.error?.details || failure?.error?.message || t('messages.updateProjectPathError'));
-            // The editor stays open so the rejected folder can be corrected
-            // instead of silently discarded.
-            return;
+            failureMessage = failure?.error?.details || failure?.error?.message || t('messages.updateProjectPathError');
           }
-          savedAnyChange = true;
+        } catch (error) {
+          console.error('Error updating project folder:', error);
+          failureMessage = t('messages.updateProjectPathError');
         }
-
-        const response = await api.renameProject(projectId, nextName);
-        if (response.ok) {
-          savedAnyChange = true;
-        } else {
-          console.error('Failed to rename project');
+        if (failureMessage) {
+          alert(failureMessage);
+          return;
         }
-      } catch (error) {
-        console.error('Error renaming project:', error);
+        // The folder is saved; a retry after a failed rename must not send it again.
+        projectRenameOriginalPathRef.current = trimmedPath;
       }
 
-      if (savedAnyChange) {
+      if (nameEdited) {
+        let renamed = false;
+        try {
+          renamed = (await api.renameProject(projectId, nextName)).ok;
+        } catch (error) {
+          console.error('Error renaming project:', error);
+        }
+        if (!renamed) {
+          // A folder that moved has to show up even though the name did not save.
+          if (folderEdited) {
+            await paletteOps.refreshProjects();
+          }
+          alert(t('messages.updateProjectError'));
+          return;
+        }
+      }
+
+      if (folderEdited || nameEdited) {
         await paletteOps.refreshProjects();
       }
       setActiveRename(null);

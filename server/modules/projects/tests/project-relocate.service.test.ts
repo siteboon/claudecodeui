@@ -7,6 +7,7 @@ import test from 'node:test';
 import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { relocateProject } from '@/modules/projects/services/project-relocate.service.js';
 import { sessionsService } from '@/modules/providers/index.js';
+import { chatRunRegistry } from '@/modules/websocket/index.js';
 import { WORKSPACES_ROOT } from '@/shared/utils.js';
 
 type RelocateFixture = {
@@ -229,6 +230,107 @@ test('relocateProject puts the rows back when the transcripts cannot be moved', 
     const session = sessionsDb.getSessionById(SESSION_ID);
     assert.equal(session?.project_path, fixture.oldProjectPath);
     assert.equal(session?.jsonl_path, fixture.transcriptPath);
+  });
+});
+
+test('relocateProject moves the transcripts back when their new paths cannot be saved', async (t) => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+    const realUpdate = sessionsDb.updateSessionTranscriptPath.bind(sessionsDb);
+    let failed = false;
+    t.mock.method(sessionsDb, 'updateSessionTranscriptPath', (sessionId: string, jsonlPath: string) => {
+      if (!failed) {
+        failed = true;
+        throw new Error('database is locked');
+      }
+      return realUpdate(sessionId, jsonlPath);
+    });
+
+    await assert.rejects(() => relocateProject(fixture.projectId, fixture.newProjectPath), /database is locked/);
+
+    // Rows and files agree again: both describe the old folder.
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
+    assert.equal(sessionsDb.getSessionById(SESSION_ID)?.jsonl_path, fixture.transcriptPath);
+    assert.equal(JSON.parse(await readFile(fixture.transcriptPath, 'utf8')).cwd, fixture.oldProjectPath);
+    await assert.rejects(() => readFile(
+      path.join(fixture.claudeProjectsRoot, encodeClaudeProjectDirName(fixture.newProjectPath), `${SESSION_ID}.jsonl`),
+      'utf8',
+    ));
+  });
+});
+
+test('relocateProject keeps the project with its transcripts when they cannot be moved back', async (t) => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+    t.mock.method(sessionsDb, 'updateSessionTranscriptPath', () => {
+      throw new Error('database is locked');
+    });
+    const realRelocate = sessionsService.relocateProjectTranscripts.bind(sessionsService);
+    let calls = 0;
+    t.mock.method(sessionsService, 'relocateProjectTranscripts', async (input: Parameters<typeof realRelocate>[0]) => {
+      calls += 1;
+      if (calls > 1) {
+        throw new Error('disk full');
+      }
+      return realRelocate(input);
+    });
+    const consoleError = t.mock.method(console, 'error', () => {});
+
+    await assert.rejects(() => relocateProject(fixture.projectId, fixture.newProjectPath), /database is locked/);
+
+    assert.equal(consoleError.mock.callCount(), 1);
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.newProjectPath);
+    const movedPath = path.join(
+      fixture.claudeProjectsRoot,
+      encodeClaudeProjectDirName(fixture.newProjectPath),
+      `${SESSION_ID}.jsonl`,
+    );
+    assert.equal(JSON.parse(await readFile(movedPath, 'utf8')).cwd, fixture.newProjectPath);
+  });
+});
+
+test('relocateProject refuses while a conversation in the project is running', async () => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+    chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: null,
+      userId: null,
+    });
+    try {
+      await assert.rejects(
+        () => relocateProject(fixture.projectId, fixture.newProjectPath),
+        { statusCode: 409, code: 'PROJECT_SESSION_RUNNING' },
+      );
+    } finally {
+      chatRunRegistry.clearAll();
+    }
+
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.oldProjectPath);
+    assert.equal(JSON.parse(await readFile(fixture.transcriptPath, 'utf8')).cwd, fixture.oldProjectPath);
+  });
+});
+
+test('relocateProject runs a repeated request after the first, as a no-op', async () => {
+  await withRelocateFixture(async (fixture) => {
+    await rename(fixture.oldProjectPath, fixture.newProjectPath);
+
+    // A double Enter in the editor: both requests arrive before either finishes.
+    const [first, second] = await Promise.all([
+      relocateProject(fixture.projectId, fixture.newProjectPath),
+      relocateProject(fixture.projectId, fixture.newProjectPath),
+    ]);
+
+    assert.equal(first.movedTranscriptCount, 1);
+    assert.equal(second.path, fixture.newProjectPath);
+    assert.equal(second.movedTranscriptCount, 0);
+    assert.equal(projectsDb.getProjectPathById(fixture.projectId), fixture.newProjectPath);
+    assert.equal(
+      sessionsDb.getSessionById(SESSION_ID)?.jsonl_path,
+      path.join(fixture.claudeProjectsRoot, encodeClaudeProjectDirName(fixture.newProjectPath), `${SESSION_ID}.jsonl`),
+    );
   });
 });
 

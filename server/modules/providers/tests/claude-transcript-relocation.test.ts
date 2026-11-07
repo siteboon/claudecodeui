@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import fsPromises, { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import { ClaudeTranscriptRelocationProvider } from '@/modules/providers/list/claude/claude-transcript-relocation.provider.js';
 import { AppError } from '@/shared/utils.js';
@@ -25,6 +26,33 @@ async function writeTranscript(directory: string, sessionId: string, cwd: string
   await mkdir(directory, { recursive: true });
   await writeFile(transcriptPath, `${JSON.stringify({ sessionId, cwd })}\n`);
   return transcriptPath;
+}
+
+/**
+ * Fails the first `rename` that `matches` picks, the way a permission error
+ * would. The provider imports `rename` by name, so the builtin's named exports
+ * are re-synced after mocking it.
+ */
+async function withFailingRename(
+  matches: (from: string, to: string) => boolean,
+  runTest: () => Promise<void>,
+): Promise<void> {
+  const realRename = fsPromises.rename;
+  let failed = false;
+  mock.method(fsPromises, 'rename', async (from: string, to: string) => {
+    if (!failed && matches(String(from), String(to))) {
+      failed = true;
+      throw Object.assign(new Error(`EACCES: permission denied, rename '${from}'`), { code: 'EACCES' });
+    }
+    return realRename(from, to);
+  });
+  syncBuiltinESMExports();
+  try {
+    await runTest();
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+  }
 }
 
 test('a copy already in the new folder is a 409 and the moves before it are undone', async () => {
@@ -95,4 +123,112 @@ test('on macOS a decomposed accent encodes the way the SDK does', async () => {
   } finally {
     Object.defineProperty(process, 'platform', platform as PropertyDescriptor);
   }
+});
+
+test('an original that cannot leave the old folder undoes the whole move', async () => {
+  await withClaudeProjectsRoot(async (root) => {
+    const oldProjectPath = '/home/u/alpha';
+    const newProjectPath = '/home/u/beta';
+    const oldDirectory = path.join(root, encodeClaudeProjectDirName(oldProjectPath));
+    const newDirectory = path.join(root, encodeClaudeProjectDirName(newProjectPath));
+    const first = await writeTranscript(oldDirectory, 'session-a', oldProjectPath);
+    const stuck = await writeTranscript(oldDirectory, 'session-b', oldProjectPath);
+
+    // Left behind, the original still names the old folder, and a full scan
+    // would file the session back under the old project.
+    await withFailingRename((from) => from === stuck, async () => {
+      await assert.rejects(() => new ClaudeTranscriptRelocationProvider().relocateTranscripts({
+        sessions: [
+          { sessionId: 'a', jsonlPath: first },
+          { sessionId: 'b', jsonlPath: stuck },
+        ],
+        oldProjectPath,
+        newProjectPath,
+      }), /EACCES/);
+    });
+
+    assert.deepEqual((await readdir(oldDirectory)).sort(), ['session-a.jsonl', 'session-b.jsonl']);
+    assert.equal(JSON.parse(await readFile(first, 'utf8')).cwd, oldProjectPath);
+    assert.equal(JSON.parse(await readFile(stuck, 'utf8')).cwd, oldProjectPath);
+    assert.deepEqual(await readdir(newDirectory), []);
+  });
+});
+
+test('an in-place rewrite that cannot be swapped in undoes the others', async () => {
+  await withClaudeProjectsRoot(async (root) => {
+    // Both encode to the same folder, so the transcripts stay and only their cwd changes.
+    const oldProjectPath = '/home/u/my project';
+    const newProjectPath = '/home/u/my_project';
+    const directory = path.join(root, encodeClaudeProjectDirName(oldProjectPath));
+    const first = await writeTranscript(directory, 'session-a', oldProjectPath);
+    const stuck = await writeTranscript(directory, 'session-b', oldProjectPath);
+    const past = new Date('2024-01-02T03:04:05Z');
+    await fsPromises.utimes(first, past, past);
+
+    // Reported as moved while still naming the old folder, the session would be
+    // dragged back to it by the next synchronization.
+    await withFailingRename((from, to) => to === stuck && from.endsWith('.tmp'), async () => {
+      await assert.rejects(() => new ClaudeTranscriptRelocationProvider().relocateTranscripts({
+        sessions: [
+          { sessionId: 'a', jsonlPath: first },
+          { sessionId: 'b', jsonlPath: stuck },
+        ],
+        oldProjectPath,
+        newProjectPath,
+      }), /EACCES/);
+    });
+
+    assert.deepEqual((await readdir(directory)).sort(), ['session-a.jsonl', 'session-b.jsonl']);
+    assert.equal(JSON.parse(await readFile(first, 'utf8')).cwd, oldProjectPath);
+    assert.equal(JSON.parse(await readFile(stuck, 'utf8')).cwd, oldProjectPath);
+    // Put back with its own mtime, so the rescan does not see new activity.
+    assert.equal((await fsPromises.stat(first)).mtime.getTime(), past.getTime());
+  });
+});
+
+test('a cwd recorded in another form of the old folder is rewritten too', async () => {
+  await withClaudeProjectsRoot(async (root) => {
+    const oldProjectPath = '/home/u/alpha';
+    const newProjectPath = '/home/u/beta';
+    const oldDirectory = path.join(root, encodeClaudeProjectDirName(oldProjectPath));
+    // The synchronizer normalizes the cwd before filing the session, so this
+    // one belongs to the old project and would drag the session back to it.
+    const transcriptPath = await writeTranscript(oldDirectory, 'session-a', `${oldProjectPath}/`);
+
+    const [moved] = await new ClaudeTranscriptRelocationProvider().relocateTranscripts({
+      sessions: [{ sessionId: 'a', jsonlPath: transcriptPath }],
+      oldProjectPath,
+      newProjectPath,
+    });
+
+    assert.equal(JSON.parse(await readFile(moved.jsonlPath, 'utf8')).cwd, newProjectPath);
+  });
+});
+
+test('a relocated transcript keeps its mtime, so a rescan does not treat it as new activity', async () => {
+  await withClaudeProjectsRoot(async (root) => {
+    const past = new Date('2024-01-02T03:04:05Z');
+    const movedPath = await writeTranscript(path.join(root, encodeClaudeProjectDirName('/home/u/alpha')), 'moved', '/home/u/alpha');
+    const inPlacePath = await writeTranscript(path.join(root, encodeClaudeProjectDirName('/home/u/my project')), 'in-place', '/home/u/my project');
+    await fsPromises.utimes(movedPath, past, past);
+    await fsPromises.utimes(inPlacePath, past, past);
+
+    const provider = new ClaudeTranscriptRelocationProvider();
+    const [moved] = await provider.relocateTranscripts({
+      sessions: [{ sessionId: 'moved', jsonlPath: movedPath }],
+      oldProjectPath: '/home/u/alpha',
+      newProjectPath: '/home/u/beta',
+    });
+    const [inPlace] = await provider.relocateTranscripts({
+      sessions: [{ sessionId: 'in-place', jsonlPath: inPlacePath }],
+      oldProjectPath: '/home/u/my project',
+      newProjectPath: '/home/u/my_project',
+    });
+
+    assert.notEqual(moved.jsonlPath, movedPath);
+    assert.equal(inPlace.jsonlPath, inPlacePath);
+    for (const { jsonlPath } of [moved, inPlace]) {
+      assert.equal((await fsPromises.stat(jsonlPath)).mtime.getTime(), past.getTime());
+    }
+  });
 });
