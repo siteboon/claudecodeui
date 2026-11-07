@@ -162,7 +162,10 @@ async function findCodexHistorySource(filePath: string, threadId: string): Promi
   if (indexed?.provider === PROVIDER && indexed.jsonl_path) {
     try {
       if ((await fsp.stat(indexed.jsonl_path)).isFile()) {
-        return indexed.jsonl_path;
+        const indexedPath = await fsp.realpath(indexed.jsonl_path);
+        // A continuation can retain the logical thread id of an older rollout.
+        // Only accept the physical rollout identified by the history reference.
+        if (indexedPath !== filePath && path.basename(indexedPath).endsWith(`-${threadId}.jsonl`)) return indexedPath;
       }
     } catch {
       // The native CLI can archive a rollout without updating the app row.
