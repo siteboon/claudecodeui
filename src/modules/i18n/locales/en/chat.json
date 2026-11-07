@@ -94,6 +94,29 @@
     "alwaysAllow": "Always allow",
     "alwaysAllowCovers": "Always allow covers"
   },
+  "mcpElicitation": {
+    "asks": "{{server}} asks for your input",
+    "submit": "Submit",
+    "decline": "Decline",
+    "openLink": "Open link",
+    "unsafeUrl": "Only http and https links can be opened from here.",
+    "optional": "optional",
+    "choose": "Choose…",
+    "required": "Required",
+    "notANumber": "Enter a number",
+    "notAnInteger": "Enter a whole number",
+    "tooSmall": "At least {{value}}",
+    "tooLarge": "At most {{value}}",
+    "tooShort": "At least {{count}} characters",
+    "tooLong": "At most {{count}} characters",
+    "tooFew": "Pick at least {{count}}",
+    "tooMany": "Pick at most {{count}}",
+    "notAnEmail": "Enter an email address",
+    "notAUri": "Enter a full address, such as https://example.com",
+    "notADate": "Enter a date",
+    "notADateTime": "Enter a date and time",
+    "notTheFormat": "Not a valid {{format}}"
+  },
   "permissions": {
     "grant": "Grant permission for {{tool}}",
     "added": "Permission added",
@@ -230,6 +253,34 @@
       "perfWarning": "All messages loaded — scrolling may be slower. Click \"Scroll to bottom\" to restore performance."
     }
   },
+  "sideQuestion": {
+    "label": "Side question · not part of the session",
+    "pending": "Answering on the side",
+    "failed": "The side question failed.",
+    "dismiss": "Dismiss",
+    "unsupported": "This provider cannot answer side questions.",
+    "noSession": "Side questions need an existing chat; this one has not started yet."
+  },
+  "sendMenu": {
+    "trigger": "Send options",
+    "queue": {
+      "label": "Queue",
+      "descriptionResponding": "Send when this turn ends",
+      "descriptionBackground": "Send when the background work ends"
+    },
+    "sideQuestion": {
+      "label": "Side question",
+      "description": "Ask on the side now; the session never sees it"
+    },
+    "stop": {
+      "label": "Stop",
+      "description": "End the response being written"
+    },
+    "sendAnyway": {
+      "label": "Send anyway",
+      "description": "Send now; this stops the background work"
+    }
+  },
   "shell": {
     "selectProject": {
       "title": "Select a Project",
@@ -291,7 +342,8 @@
         "description": "A new message starts a new turn, which stops that work; anything it has not reported yet is lost. Queue the message to send it when the work finishes.",
         "cancel": "Cancel",
         "queue": "Queue",
-        "sendAnyway": "Send anyway"
+        "sendAnyway": "Send anyway",
+        "sideQuestion": "Side question"
       }
     },
     "controls": {
@@ -328,7 +380,8 @@
     "json": {
       "label": "JSON (.json)",
       "description": "Every message, unformatted, for tooling."
-    }
+    },
+    "includeSideQuestions": "Include side questions"
   },
   "schedule": {
     "trigger": "Schedule this message",

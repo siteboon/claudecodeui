@@ -19,6 +19,9 @@ import type {
   ProviderRuntimeProfile,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  SideQuestionOutcome,
+  SideQuestionRequest,
+  SideQuestionSink,
   UpsertProviderMcpServerInput,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
@@ -53,6 +56,19 @@ export interface IProviderRuntime {
    * settled, or the id was never one of its own.
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
+  /**
+   * Asks a side question on the provider runtime while a session is active.
+   *
+   * A provider with this method uses its native fork capability; one without it
+   * falls back to the history path (the provider runtime service supplies the history
+   * and drives the Claude adapter instead). This method never rejects: all outcomes
+   * are returned as SideQuestionOutcome (done or error), never thrown.
+   */
+  askSideQuestion?(
+    request: SideQuestionRequest,
+    sink: SideQuestionSink,
+    context: ProviderRuntimeContext,
+  ): Promise<SideQuestionOutcome>;
 }
 
 /**

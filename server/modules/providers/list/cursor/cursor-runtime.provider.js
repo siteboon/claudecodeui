@@ -123,7 +123,7 @@ async function spawnCursor(command, options = {}, ws, context) {
       let stdoutLineBuffer = '';
       let terminalNotificationSent = false;
 
-      const notifyTerminalState = ({ code = null, error = null } = {}) => {
+      const notifyTerminalState = ({ code = null, error = null, aborted = false } = {}) => {
         if (terminalNotificationSent) {
           return;
         }
@@ -132,6 +132,19 @@ async function spawnCursor(command, options = {}, ws, context) {
 
         // Notifications are app-facing, so they carry the app session id.
         const finalSessionId = sessionId || capturedSessionId || processKey;
+        // A user abort kills the CLI with SIGTERM, so it exits with code null;
+        // that is a cancellation, not a failure.
+        if (aborted) {
+          notifyRunStopped({
+            userId: ws?.userId || null,
+            provider: 'cursor',
+            sessionId: finalSessionId,
+            sessionName: sessionSummary,
+            stopReason: 'aborted'
+          });
+          return;
+        }
+
         if (code === 0 && !error) {
           notifyRunStopped({
             userId: ws?.userId || null,
@@ -319,10 +332,10 @@ async function spawnCursor(command, options = {}, ws, context) {
         }
 
         if (code === 0) {
-          notifyTerminalState({ code });
+          notifyTerminalState({ code, aborted: Boolean(cursorProcess.aborted) });
           settleOnce(() => resolve());
         } else {
-          notifyTerminalState({ code });
+          notifyTerminalState({ code, aborted: Boolean(cursorProcess.aborted) });
           settleOnce(() => reject(new Error(`Cursor CLI exited with code ${code}`)));
         }
       });
@@ -346,7 +359,7 @@ async function spawnCursor(command, options = {}, ws, context) {
           completeSent = true;
           ws.send(createCompleteMessage({ provider: 'cursor', sessionId: capturedSessionId || sessionId || null, exitCode: 1 }));
         }
-        notifyTerminalState({ error });
+        notifyTerminalState({ error, aborted: Boolean(cursorProcess.aborted) });
 
         settleOnce(() => reject(error));
       });

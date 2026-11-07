@@ -427,6 +427,8 @@ export type ChatMessage = {
   memoryCitations?: MemoryCitation[];
   /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
   toolStatus?: string;
+  /** Set when this row is the question or answer half of a side question pair, so it draws and behaves apart from the session's own transcript (no edit, fork or retry; never a grouping, last-message or fork anchor). The session id is carried here because `ChatMessage` otherwise has none of its own, and the dismiss control's DELETE needs it. */
+  sideQuestion?: { sideQuestionId: string; sessionId: string; status: SideQuestionStatus };
   [key: string]: unknown;
 };
 
@@ -498,6 +500,46 @@ export type ToolResult = {
 type QuestionOption = {
   label: string;
   description?: string;
+};
+
+// ---------------------------
+
+//----------------- SIDE QUESTIONS ------------
+
+/** Where a side question stands: `running` while the fork is still answering, `done` once it finished, `error` if the fork failed or the question was refused. */
+export type SideQuestionStatus = 'running' | 'done' | 'error';
+
+/** A side question asked beside a session's own transcript — answered by a fork of the session's provider that never joins the session itself. Same shape on client and server. */
+export type SideQuestion = {
+  id: string;
+  /** App session id the question was asked beside. */
+  sessionId: string;
+  question: string;
+  /** '' until text arrives; partial while `running`. */
+  answer: string;
+  status: SideQuestionStatus;
+  error: string | null;
+  model: string | null;
+  /** ISO timestamp. */
+  createdAt: string;
+  /** ISO timestamp, set once the fork reaches `done` or `error`. */
+  finishedAt: string | null;
+};
+
+/** One `side_question` chat socket event broadcast to every connected chat client as a side question's fork progresses, so another tab or a reconnected one sees it too. */
+export type SideQuestionEvent = {
+  kind: 'side_question';
+  sessionId: string;
+  sideQuestionId: string;
+  phase: 'started' | 'delta' | 'done' | 'error' | 'dismissed';
+  /** Delta only: the next piece of the answer. */
+  text?: string;
+  /** Error only. */
+  error?: string;
+  /** Carried on `started`, `done`, and `error` when a row exists: the whole row, so a tab that missed deltas still ends with the full answer. */
+  sideQuestion?: SideQuestion;
+  /** ISO, when the server sent it. */
+  timestamp: string;
 };
 
 // ---------------------------
@@ -793,8 +835,8 @@ export type QueuedDraft = {
   options?: QueuedSendOptions;
 };
 
-/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, or do nothing. */
-export type BackgroundSendChoice = 'send' | 'queue' | 'cancel';
+/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, ask a side question instead, or do nothing. */
+export type BackgroundSendChoice = 'send' | 'queue' | 'sideQuestion' | 'cancel';
 
 /** An open background-work send prompt, listing the session's own background tasks as display strings. */
 export type BackgroundSendPrompt = {
@@ -1520,6 +1562,43 @@ export type GithubCredentialItem = {
 
 // ---------------------------
 
+//----------------- SETTINGS NOTIFICATION WEBHOOK ------------
+
+/** Why a webhook delivery failed, exactly as the server stores it; the webhook card maps each value to a localized reason. */
+export type NotificationWebhookDeliveryError =
+  | 'invalidUrl'
+  | 'insecureUrl'
+  | 'blockedAddress'
+  | 'timeout'
+  | 'redirect'
+  | 'httpStatus'
+  | 'network'
+  | 'tls'
+  | 'dropped';
+
+/** The outcome of the most recent webhook event after its last attempt, as the server records it; `status` is the HTTP status when the receiver answered, `type` the event type (e.g. run.completed, webhook.test). */
+export type NotificationWebhookDelivery = {
+  eventId: string;
+  type: string;
+  ok: boolean;
+  status: number | null;
+  error: NotificationWebhookDeliveryError | null;
+  attempts: number;
+  at: string;
+};
+
+/** The saved webhook destination as the notifications API returns it. The signing secret is never part of it, only whether one is set; `configured` is false until a URL has been saved. */
+export type NotificationWebhookState = {
+  configured: boolean;
+  enabled: boolean;
+  url: string;
+  allowHttp: boolean;
+  hasSecret: boolean;
+  lastDelivery: NotificationWebhookDelivery | null;
+};
+
+// ---------------------------
+
 //----------------- SHELL ------------
 
 /** Handle returned when touch text-selection is installed on an xterm terminal; call updateHandles after the terminal reflows and dispose when tearing the terminal down. */
@@ -1554,6 +1633,9 @@ export type SessionRowActions = {
   onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectId: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  /** Archives the session straight away; it stays restorable from the archive. */
+  onArchiveSession: (sessionId: string) => void;
+  /** Asks to confirm, then deletes the session permanently. */
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Branches a session into an independent one. Rows hide it for providers that cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
@@ -1666,7 +1748,7 @@ export type ActiveSidebarRename =
  */
 export type PendingSidebarDeletion =
   | { kind: 'project'; project: Project; sessionCount: number }
-  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean }
+  | { kind: 'session'; sessionId: string; sessionTitle: string }
   | { kind: 'sessions'; sessionIds: string[] };
 
 /**

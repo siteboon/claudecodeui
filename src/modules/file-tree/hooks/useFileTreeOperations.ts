@@ -4,6 +4,7 @@ import JSZip from 'jszip';
 
 import { api } from '@/shared/api';
 import type { FileTreeNode,Project } from '@/shared/types';
+import { copyTextToClipboard, downloadBlob } from '@/shared/utils';
 
 // Invalid filename characters
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
@@ -237,29 +238,18 @@ export function useFileTreeOperations({
     }
   }, [selectedProject, newItemParent, newItemType, newItemName, validateFilename, showToast, t, onRefresh, handleCancelCreate]);
 
-  // Copy path to clipboard
+  // Copy path to clipboard. The shared helper falls back to `execCommand('copy')` when the
+  // Clipboard API is missing (plain-HTTP access) or rejects the write (some mobile browsers);
+  // a single toast reports its outcome once it is known.
   const handleCopyPath = useCallback((item: FileTreeNode) => {
-    navigator.clipboard.writeText(item.path).catch(() => {
-      // Clipboard API may fail in some contexts (e.g., non-HTTPS)
-      showToast(t('fileTree.toast.copyFailed', 'Failed to copy path'), 'error');
-      return;
+    void copyTextToClipboard(item.path).then((didCopy) => {
+      if (didCopy) {
+        showToast(t('fileTree.toast.pathCopied', 'Path copied to clipboard'), 'success');
+      } else {
+        showToast(t('fileTree.toast.copyFailed', 'Failed to copy path'), 'error');
+      }
     });
-    showToast(t('fileTree.toast.pathCopied', 'Path copied to clipboard'), 'success');
   }, [showToast, t]);
-
-  const triggerBrowserDownload = useCallback((blob: Blob, fileName: string) => {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-
-    anchor.href = url;
-    anchor.download = fileName;
-
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-
-    URL.revokeObjectURL(url);
-  }, []);
 
   // Download a single file
   const downloadSingleFile = useCallback(async (item: FileTreeNode) => {
@@ -273,8 +263,8 @@ export function useFileTreeOperations({
     }
 
     const blob = await response.blob();
-    triggerBrowserDownload(blob, item.name);
-  }, [selectedProject, triggerBrowserDownload]);
+    downloadBlob(blob, item.name);
+  }, [selectedProject]);
 
   // Download folder as ZIP
   const downloadFolderAsZip = useCallback(async (folder: FileTreeNode) => {
@@ -312,10 +302,10 @@ export function useFileTreeOperations({
 
     // Generate ZIP file
     const zipBlob = await zip.generateAsync({ type: 'blob' });
-    triggerBrowserDownload(zipBlob, `${folder.name}.zip`);
+    downloadBlob(zipBlob, `${folder.name}.zip`);
 
     showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded as ZIP'), 'success');
-  }, [selectedProject, showToast, t, triggerBrowserDownload]);
+  }, [selectedProject, showToast, t]);
 
   // Download file or folder. Declared after the two helpers it dispatches to so
   // it does not read them before initialization; both are memoized on
