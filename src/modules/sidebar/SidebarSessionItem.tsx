@@ -164,7 +164,7 @@ function SidebarSessionItem({
               role="status"
               aria-label={indicatorLabel}
               className={cn(
-                'h-2 w-2 animate-pulse rounded-full',
+                'h-2 w-2 rounded-full',
                 showAttentionIndicator
                   ? 'bg-amber-500'
                   : showBackgroundIndicator

@@ -185,8 +185,9 @@ export default function SidebarContent({
   const isRenamingOnMobile = isMobile && projectListProps.activeRename !== null;
 
   return (
+    // No backdrop-filter here: see src/shared/tests/persistentSurfacesBackdropFilter.test.ts.
     <div
-      className="flex h-full flex-col bg-background/80 backdrop-blur-sm md:w-full md:select-none"
+      className="flex h-full flex-col bg-background/80 md:w-full md:select-none"
       style={{}}
     >
       <SidebarHeader

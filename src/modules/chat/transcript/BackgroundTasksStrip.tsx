@@ -121,7 +121,7 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
     <div
       role="status"
       aria-label={t('workflow.backgroundTasks', 'Background tasks')}
-      className="flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-border/60 bg-background/95 px-2 py-1 text-[11px] text-muted-foreground shadow-sm backdrop-blur"
+      className="flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-border/60 bg-background/95 px-2 py-1 text-[11px] text-muted-foreground shadow-sm"
     >
       {running.map((message) => {
         const { kind, name, progress } = describeTask(message, t);

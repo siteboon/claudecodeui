@@ -345,7 +345,7 @@ export default function Shell({
 
         {cliPromptOptions && isConnected && (
           <div
-            className="absolute inset-x-0 bottom-0 z-10 border-t border-border bg-card/95 px-3 py-2 backdrop-blur-sm md:hidden"
+            className="absolute inset-x-0 bottom-0 z-10 border-t border-border bg-card/95 px-3 py-2 md:hidden"
             onMouseDown={(e) => e.preventDefault()}
           >
             <div className="flex flex-wrap items-center gap-2">
