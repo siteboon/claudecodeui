@@ -200,3 +200,31 @@ test('a cwd recorded in another form of the old folder is rewritten too', async 
     assert.equal(JSON.parse(await readFile(moved.jsonlPath, 'utf8')).cwd, newProjectPath);
   });
 });
+
+test('a relocated transcript keeps its mtime, so a rescan does not treat it as new activity', async () => {
+  await withClaudeProjectsRoot(async (root) => {
+    const past = new Date('2024-01-02T03:04:05Z');
+    const movedPath = await writeTranscript(path.join(root, encodeClaudeProjectDirName('/home/u/alpha')), 'moved', '/home/u/alpha');
+    const inPlacePath = await writeTranscript(path.join(root, encodeClaudeProjectDirName('/home/u/my project')), 'in-place', '/home/u/my project');
+    await fsPromises.utimes(movedPath, past, past);
+    await fsPromises.utimes(inPlacePath, past, past);
+
+    const provider = new ClaudeTranscriptRelocationProvider();
+    const [moved] = await provider.relocateTranscripts({
+      sessions: [{ sessionId: 'moved', jsonlPath: movedPath }],
+      oldProjectPath: '/home/u/alpha',
+      newProjectPath: '/home/u/beta',
+    });
+    const [inPlace] = await provider.relocateTranscripts({
+      sessions: [{ sessionId: 'in-place', jsonlPath: inPlacePath }],
+      oldProjectPath: '/home/u/my project',
+      newProjectPath: '/home/u/my_project',
+    });
+
+    assert.notEqual(moved.jsonlPath, movedPath);
+    assert.equal(inPlace.jsonlPath, inPlacePath);
+    for (const { jsonlPath } of [moved, inPlace]) {
+      assert.equal((await fsPromises.stat(jsonlPath)).mtime.getTime(), past.getTime());
+    }
+  });
+});

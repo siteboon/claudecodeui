@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { constants } from 'node:fs';
-import { copyFile, mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 
 import type { IProviderTranscriptRelocation } from '@/shared/interfaces.js';
 import type { SessionTranscriptRelocation } from '@/shared/types.js';
@@ -136,6 +136,9 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
         );
         const content = await readFile(session.jsonlPath, 'utf8');
         const rewrittenContent = rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath);
+        // The rescan reads activity from the file's mtime; a fresh one would
+        // un-archive the session and reorder the project's session list.
+        const { atime, mtime } = await stat(session.jsonlPath);
 
         if (targetPath === session.jsonlPath) {
           // Written beside the original and swapped in only after every other
@@ -144,6 +147,7 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
           const temporaryPath = `${session.jsonlPath}.${randomUUID()}.tmp`;
           await writeFile(temporaryPath, rewrittenContent, { flag: 'wx' });
           writtenPaths.push(temporaryPath);
+          await utimes(temporaryPath, atime, mtime);
           inPlaceRewrites.push({ temporaryPath, jsonlPath: session.jsonlPath });
           moved.push({ sessionId: session.sessionId, jsonlPath: session.jsonlPath });
           continue;
@@ -154,6 +158,7 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
         // transcript the new folder legitimately owns.
         await writeFile(targetPath, rewrittenContent, { flag: 'wx' });
         writtenPaths.push(targetPath);
+        await utimes(targetPath, atime, mtime);
 
         // Both folders share a parent, so this is a single atomic rename.
         const sessionDirectoryName = path.basename(session.jsonlPath, '.jsonl');
