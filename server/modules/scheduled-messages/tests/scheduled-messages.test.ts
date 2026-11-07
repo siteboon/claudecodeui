@@ -454,7 +454,7 @@ test('a due message is announced to open tabs as it is claimed, before its turn 
   });
 });
 
-test('a pass claims one due message per session and announces each session once', async () => {
+test('a pass sends a session\'s due messages in order, claiming each as it goes', async () => {
   await withIsolatedDatabase(async (userId) => {
     const otherSessionId = 'other-scheduled-session';
     sessionsDb.createAppSession(otherSessionId, 'claude', tmpdir(), 'Other scheduled session');
@@ -472,11 +472,14 @@ test('a pass claims one due message per session and announces each session once'
     }
     const tab = openTab();
 
-    // A session's second message waits for the next pass, so it is never
-    // recorded as sent while it still waits behind the first.
-    assert.equal(await dispatchDueScheduledMessages(createRuntime([])), 2);
-    assert.deepEqual(tab.announcements().map((frame) => frame.sessionId).sort(), [otherSessionId, SESSION_ID]);
-    assert.equal(await dispatchDueScheduledMessages(createRuntime([])), 1);
+    // A session's second message is claimed (and announced) only once the
+    // first has gone, so it is never recorded as sent while it still waits.
+    const sent: string[] = [];
+    const runtime = { ...(createRuntime([]) as object), run: (_provider: string, command: string) => { sent.push(command); return Promise.resolve(); } } as never;
+    assert.equal(await dispatchDueScheduledMessages(runtime), 2);
+    assert.deepEqual(tab.announcements().map((frame) => frame.sessionId).sort(), [otherSessionId, SESSION_ID, SESSION_ID]);
+    assert.deepEqual(sent.filter((content) => content.endsWith('for this session')), ['first for this session', 'second for this session']);
+    assert.equal(await dispatchDueScheduledMessages(runtime), 0);
   });
 });
 
@@ -636,7 +639,9 @@ test('a session\'s next due message stays pending while its earlier send is goin
     const firstPass = dispatchDueScheduledMessages(runtime);
     try {
       // Due in the same pass, but claimed one at a time.
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      for (let attempt = 0; attempt < 50 && started.length < 1; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
       assert.deepEqual(started, ['first']);
       assert.equal(await dispatchDueScheduledMessages(runtime), 0);
       assert.deepEqual(started, ['first']);
@@ -647,7 +652,8 @@ test('a session\'s next due message stays pending while its earlier send is goin
       await firstPass;
     }
 
-    assert.equal(await dispatchDueScheduledMessages(runtime), 1);
+    // The earlier pass sends it right after the first, not a poll later.
     assert.deepEqual(started, ['first', 'second']);
+    assert.equal(await dispatchDueScheduledMessages(runtime), 0);
   });
 });

@@ -71,7 +71,7 @@ export const scheduledMessagesDb = {
    * Claims the earliest message whose time has passed for each session not in
    * `skipSessionIds`, marking them in the same transaction that selects them.
    * A session's later due messages stay pending (cancellable, banner up) until
-   * a later pass, so none is recorded as sent before it actually goes.
+   * claimNextDue takes them, so none is recorded as sent before it actually goes.
    *
    * Claiming is what makes a missed schedule work: the server can be down at
    * the moment a message was due, and the next poll after it starts picks the
@@ -87,7 +87,7 @@ export const scheduledMessagesDb = {
         .prepare(
           `SELECT ${COLUMNS} FROM scheduled_messages
            WHERE status = 'pending' AND scheduled_for <= ?
-           ORDER BY scheduled_for ASC`
+           ORDER BY scheduled_for ASC, created_at ASC, rowid ASC`
         )
         .all(nowIso) as ScheduledMessageRow[];
       const sessions = new Set(skipSessionIds);
@@ -104,6 +104,26 @@ export const scheduledMessagesDb = {
       }
 
       return claimed;
+    })();
+  },
+
+  /** Claims one session's earliest due message, once its earlier send is done. */
+  claimNextDue(sessionId: string, now: Date): ScheduledMessageRow | null {
+    const db = getConnection();
+    return db.transaction(() => {
+      const row = db
+        .prepare(
+          `SELECT ${COLUMNS} FROM scheduled_messages
+           WHERE session_id = ? AND status = 'pending' AND scheduled_for <= ?
+           ORDER BY scheduled_for ASC, created_at ASC, rowid ASC
+           LIMIT 1`
+        )
+        .get(sessionId, now.toISOString()) as ScheduledMessageRow | undefined;
+      if (!row) return null;
+      db.prepare(
+        `UPDATE scheduled_messages SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      ).run(row.id);
+      return row;
     })();
   },
 

@@ -154,15 +154,23 @@ export async function dispatchDueScheduledMessages(
     announceScheduledMessagesChanged(sessionId);
   }
 
-  // One row per session (see claimDue), and sessions side by side, since a
-  // turn can stay open a long time (see runDispatchPass).
+  // Sessions side by side, since a turn can stay open a long time (see
+  // runDispatchPass). Each session's later due rows are claimed and sent here
+  // as soon as the earlier send ends, not on a later poll, so no other turn can
+  // start in between and then be interrupted by them.
   // shortcut: a session's next row waits for the whole earlier send, background work included (the runtime ends that hold after 30 idle minutes); interrupt instead if timeliness matters more.
-  await Promise.all(due.map(async (row) => {
-    sessionsSending.add(row.session_id);
+  await Promise.all(due.map(async (first) => {
+    const sessionId = first.session_id;
+    sessionsSending.add(sessionId);
     try {
-      await sendClaimedMessage(row, runtime);
+      let row: ScheduledMessageRow | null = first;
+      while (row) {
+        await sendClaimedMessage(row, runtime);
+        row = scheduledMessagesDb.claimNextDue(sessionId, new Date());
+        if (row) announceScheduledMessagesChanged(sessionId);
+      }
     } finally {
-      sessionsSending.delete(row.session_id);
+      sessionsSending.delete(sessionId);
     }
   }));
 
