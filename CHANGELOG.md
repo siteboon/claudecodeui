@@ -3,6 +3,33 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.8](https://github.com/siteboon/claudecodeui/compare/v1.37.7...v1.37.8) (2026-11-07)
+
+### New Features
+
+* **browser-use:** add browser_upload_file MCP tool ([#1704](https://github.com/siteboon/claudecodeui/issues/1704)) ([2c49a4a](https://github.com/siteboon/claudecodeui/commit/2c49a4a178b47bf90a27f405fb7692d9c528b70b))
+* **chat:** side questions answered by each provider's own session ([#1673](https://github.com/siteboon/claudecodeui/issues/1673)) ([dcc0bfb](https://github.com/siteboon/claudecodeui/commit/dcc0bfbce58142ca41c526d13c83b7e5a9b4cf3e)), closes [#N](https://github.com/siteboon/claudecodeui/issues/N) [#1698](https://github.com/siteboon/claudecodeui/issues/1698)
+* **chat:** steer a message into the running Claude turn at its next tool call ([#1760](https://github.com/siteboon/claudecodeui/issues/1760)) ([624da21](https://github.com/siteboon/claudecodeui/commit/624da21b795e90d1bdaa18c947d1868391dbe9fc))
+* **code-editor:** download the original file from the binary viewer ([#1759](https://github.com/siteboon/claudecodeui/issues/1759)) ([ca95ec4](https://github.com/siteboon/claudecodeui/commit/ca95ec4ce50bd165d296484206dcf9b450b0add0)), closes [#1692](https://github.com/siteboon/claudecodeui/issues/1692)
+* **notifications:** add an opt-in webhook channel for run lifecycle events ([#1714](https://github.com/siteboon/claudecodeui/issues/1714)) ([0b581d4](https://github.com/siteboon/claudecodeui/commit/0b581d4c19566988236699b6f72b2d99efeb0e29)), closes [#1586](https://github.com/siteboon/claudecodeui/issues/1586)
+* **sidebar:** separate Archive and Delete in the session menu ([#1758](https://github.com/siteboon/claudecodeui/issues/1758)) ([b994762](https://github.com/siteboon/claudecodeui/commit/b994762e09720bdfdac30d37766864bf69cb9ac2))
+
+### Bug Fixes
+
+* **chat:** decode Unicode file link paths before opening ([#1711](https://github.com/siteboon/claudecodeui/issues/1711)) ([58a28e0](https://github.com/siteboon/claudecodeui/commit/58a28e0445dbf194ada459cb5ccf0edb9f7631af))
+* **chat:** show MCP elicitation requests instead of declining them unseen ([#1725](https://github.com/siteboon/claudecodeui/issues/1725)) ([c6d6668](https://github.com/siteboon/claudecodeui/commit/c6d6668d50b01bf12036ebfbb088aac8020b86da))
+* **file-tree:** fall back when Copy Path cannot use the Clipboard API ([#1719](https://github.com/siteboon/claudecodeui/issues/1719)) ([1e580f1](https://github.com/siteboon/claudecodeui/commit/1e580f1e9f0431685d916657704985a6f238fd7a)), closes [#1642](https://github.com/siteboon/claudecodeui/issues/1642) [#1642](https://github.com/siteboon/claudecodeui/issues/1642)
+* **opencode:** list the user's OpenCode models on slow or busy hosts ([#1724](https://github.com/siteboon/claudecodeui/issues/1724)) ([b28a767](https://github.com/siteboon/claudecodeui/commit/b28a767c1c2426b19b9536db1b2b68e52638a9f2)), closes [#1695](https://github.com/siteboon/claudecodeui/issues/1695)
+* **opencode:** read only the requested page of a session's history ([#1722](https://github.com/siteboon/claudecodeui/issues/1722)) ([0bd1b79](https://github.com/siteboon/claudecodeui/commit/0bd1b79b821b891f09e18b3ff4a88f9fda55e5f3)), closes [#1696](https://github.com/siteboon/claudecodeui/issues/1696) [#1696](https://github.com/siteboon/claudecodeui/issues/1696)
+
+### Documentation
+
+* **plugins:** list the ccx plugin ([#1718](https://github.com/siteboon/claudecodeui/issues/1718)) ([7c1a631](https://github.com/siteboon/claudecodeui/commit/7c1a631f94ab321cbf057aca1db1e3f134bfff00)), closes [#1636](https://github.com/siteboon/claudecodeui/issues/1636)
+
+### Maintenance
+
+* **deps:** upgrade Codex CLI and SDK to 0.166.0 ([#1738](https://github.com/siteboon/claudecodeui/issues/1738)) ([7288d19](https://github.com/siteboon/claudecodeui/commit/7288d194e33fd6e4bf07dabe593ceb3ebcebedf3))
+
 ## [1.37.7](https://github.com/siteboon/claudecodeui/compare/v1.37.6...v1.37.7) (2026-10-31)
 
 ### New Features

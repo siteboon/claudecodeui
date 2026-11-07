@@ -48,6 +48,18 @@ type ProviderCapabilities = {
    * facet; keep the two in step.
    */
   supportsSessionMoving: boolean;
+  /**
+   * Whether the provider can answer a question on the side without touching
+   * the session's main turn. False only for Cursor, which has no headless
+   * way to do that.
+   */
+  supportsSideQuestions: boolean;
+  /**
+   * Whether a message can be sent into a running turn (`chat.steer`), which the
+   * model reads at its next tool-call boundary without the turn stopping.
+   * Requires a runtime that keeps its CLI's input open during a turn.
+   */
+  supportsSteering: boolean;
 };
 
 /**
@@ -74,6 +86,10 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: true,
     supportsSessionForking: true,
     supportsSessionMoving: true,
+    supportsSideQuestions: true,
+    // Streaming input stays open for the whole run, and a user message written
+    // to it with priority `next` joins the running turn.
+    supportsSteering: true,
   },
   cursor: {
     provider: 'cursor',
@@ -89,6 +105,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
     supportsSessionMoving: false,
+    supportsSideQuestions: false,
+    supportsSteering: false,
   },
   codex: {
     provider: 'codex',
@@ -108,6 +126,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: true,
     supportsSessionForking: true,
     supportsSessionMoving: true,
+    supportsSideQuestions: true,
+    supportsSteering: false,
   },
   opencode: {
     provider: 'opencode',
@@ -130,6 +150,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
     supportsSessionMoving: false,
+    supportsSideQuestions: true,
+    supportsSteering: false,
   },
 };
 

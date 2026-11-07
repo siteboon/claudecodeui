@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
 import type { MarkSessionIdle, SessionActivityMap,Project,ProjectSession,LLMProvider,NormalizedMessage,ChatMessage,DiffCalculator } from '@/shared/types';
@@ -11,6 +12,8 @@ import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { findSearchTargetIndex, resolveSearchWindowSize } from '@/modules/chat/utils/searchTargetLocator';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 import type { SearchTarget } from '@/modules/chat/utils/searchTargetLocator';
+import { sideQuestionStore, useSideQuestions } from '@/modules/chat/hooks/useSideQuestions';
+import { mergeSideQuestions } from '@/modules/chat/utils/sideQuestions';
 
 const INITIAL_VISIBLE_MESSAGES = 100;
 
@@ -204,6 +207,7 @@ export function useChatSessionState({
   lastSeqRef,
   sessionStore,
 }: UseChatSessionStateArgs) {
+  const { t } = useTranslation('chat');
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
@@ -413,6 +417,7 @@ export function useChatSessionState({
   }, [activeSessionId, pendingUserMessage, sessionStore]);
 
   const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : NO_MESSAGES;
+  const sideQuestions = useSideQuestions(activeSessionId);
 
   const chatMessages = useMemo(() => {
     const all = normalizedToChatMessages(storeMessages);
@@ -420,8 +425,14 @@ export function useChatSessionState({
     if (pendingUserMessage && all.length === 0) {
       return [pendingUserMessage];
     }
-    return all;
-  }, [storeMessages, pendingUserMessage]);
+    // Older pages not loaded yet (`hasMoreMessages`) means a pair older than
+    // the oldest loaded row is left out, so it does not jump to the top of
+    // the window and move again once those older pages arrive.
+    return mergeSideQuestions(all, sideQuestions, {
+      hasOlder: hasMoreMessages,
+      failedText: t('sideQuestion.failed'),
+    });
+  }, [storeMessages, pendingUserMessage, sideQuestions, hasMoreMessages, t]);
 
   /* ---------------------------------------------------------------- */
   /*  addMessage                                                       */
@@ -1107,8 +1118,15 @@ export function useChatSessionState({
       canRequest: () => activeSessionIdRef.current === sessionId,
     });
 
-    return normalizedToChatMessages(sessionStore.getMessages(sessionId));
-  }, [sessionStore]);
+    // The whole transcript is loaded (`limit: null`), so there is no older
+    // page left to protect a pair against: `hasOlder` is false here even
+    // though the live view may still have more pages pending.
+    return mergeSideQuestions(
+      normalizedToChatMessages(sessionStore.getMessages(sessionId)),
+      sideQuestionStore.forSession(sessionId),
+      { hasOlder: false, failedText: t('sideQuestion.failed') },
+    );
+  }, [sessionStore, t]);
 
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount((prev) => prev + 100);

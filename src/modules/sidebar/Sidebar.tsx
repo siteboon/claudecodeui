@@ -125,6 +125,7 @@ function Sidebar({
     cancelRename,
     saveProjectName,
     showDeleteSessionConfirmation,
+    archiveSession,
     confirmDeleteSession,
     sessionSelection,
     setProjectSessionSelection,
@@ -227,6 +228,7 @@ function Sidebar({
     onSaveProjectName: handleSaveProjectName,
     onDeleteProject: requestProjectDelete,
     onSessionSelect: handleSessionClick,
+    onArchiveSession: archiveSession,
     onDeleteSession: showDeleteSessionConfirmation,
     onForkSession: forkSession,
     onMoveSession: setPendingMove,
@@ -316,11 +318,7 @@ function Sidebar({
             onArchivedSessionClick={openArchivedSession}
             onRestoreArchivedSession={restoreArchivedSession}
             onDeleteArchivedSession={(session) => {
-              showDeleteSessionConfirmation(
-                session.sessionId,
-                session.sessionTitle,
-                { isArchived: true },
-              );
+              showDeleteSessionConfirmation(session.sessionId, session.sessionTitle);
             }}
             onConversationResultClick={(projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
               // `projectId` (DB key) is the canonical identifier post-migration.

@@ -41,6 +41,7 @@ type SidebarProjectItemProps = {
   onSaveProjectName: (projectId: string, nextName: string, nextPath: string) => void;
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
+  onArchiveSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   onForkSession?: (session: SessionWithProvider) => void;
   onMoveSession?: (session: SessionWithProvider) => void;
@@ -95,6 +96,7 @@ function SidebarProjectItem({
   onSaveProjectName,
   onDeleteProject,
   onSessionSelect,
+  onArchiveSession,
   onDeleteSession,
   onForkSession,
   onMoveSession,
@@ -515,6 +517,7 @@ function SidebarProjectItem({
         onSaveEditingSession={onSaveEditingSession}
         onProjectSelect={onProjectSelect}
         onSessionSelect={onSessionSelect}
+        onArchiveSession={onArchiveSession}
         onDeleteSession={onDeleteSession}
         onForkSession={onForkSession}
         onMoveSession={onMoveSession}

@@ -42,6 +42,7 @@ const renderRow = (overrides: Partial<React.ComponentProps<typeof SidebarSession
     onProjectSelect: noop,
     onSessionSelect: noop,
     onDeleteSession: noop,
+    onArchiveSession: noop,
     isSelecting: false,
     isChecked: false,
     onToggleSessionSelected: noop,
