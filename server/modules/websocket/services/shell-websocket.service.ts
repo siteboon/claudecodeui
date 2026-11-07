@@ -1,8 +1,9 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
-import pty, { type IPty } from 'node-pty';
+import pty, { type IPty, type IWindowsPtyForkOptions } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
@@ -114,12 +115,68 @@ function shouldAutoOpenUrlFromOutput(value: string): boolean {
   );
 }
 
+// Terminal queries. The Shell's xterm.js 5.5 (with its clipboard addon) answers
+// DSR/CPR, DA1/DA2, DECRQM, DECRQSS and the OSC 4/10/11/12 colour and OSC 52
+// clipboard reads. DA3, XTVERSION, kitty keyboard flags and the XTWINOPS size
+// reports get no answer from it (no handler; XTWINOPS needs `windowOptions`,
+// which the Shell does not set) and are only stripped in case a newer one does.
+const TERMINAL_QUERY_REGEX = new RegExp(
+  [
+    // CSI: DSR and cursor position (also DECXCPR), DA1/DA2/DA3, XTVERSION,
+    // DECRQM (ANSI and private modes), kitty keyboard flags, XTWINOPS 14/16/18.
+    /\x1b\[(?:\??\d*n|[>=]?0?c|>0?q|\??[\d;]*\$p|\?u|1[468]t)/.source,
+    // OSC 4/10/11/12 colour and OSC 52 clipboard queries that set nothing.
+    /\x1b\](?:4(?:;\d+;\?)+|1[0-2](?:;\?)+|52;[a-z0-9]*;\?)(?:\x07|\x1b\\)/.source,
+    // DECRQSS.
+    /\x1bP\$q[^\x1b]*\x1b\\/.source,
+  ].join('|'),
+  'g',
+);
+
+// The most characters (UTF-16 code units, so at most 48 KiB as UTF-8) a replay
+// frame carries. Sent as one frame, a full buffer (5000 chunks of 16 KiB) went
+// through a single JSON.stringify into a 118-million-character frame, which
+// held the event loop for 1.5 s. Frames of this size serialise about as fast as
+// one frame per chunk did; much larger ones of CJK text are slower again.
+const REPLAY_FRAME_LENGTH = 16 * 1024;
+
+/**
+ * The buffered output a reattaching client replays, without terminal queries,
+ * in frames of at most REPLAY_FRAME_LENGTH characters. A new terminal would
+ * answer every query in it again, and the reply reaches the program as typed
+ * input (OpenConsole turns a second DA1 reply into text and a cursor report
+ * nobody waits for into an F3 key, #1665). This also drops a query sent while
+ * no client was attached, so a program still waiting for that answer has to
+ * ask again. Joined before stripping because a query can be split across
+ * chunks. A frame may end inside an escape sequence (the terminal's parser
+ * carries it over, as with live chunks) but never between the two halves of a
+ * surrogate pair.
+ */
+function buildReplayFrames(buffer: string[]): string[] {
+  const replay = buffer.join('').replace(TERMINAL_QUERY_REGEX, '');
+  const frames: string[] = [];
+  let start = 0;
+  while (start < replay.length) {
+    let end = Math.min(start + REPLAY_FRAME_LENGTH, replay.length);
+    const lastCode = replay.charCodeAt(end - 1);
+    if (end < replay.length && lastCode >= 0xd800 && lastCode <= 0xdbff) {
+      end -= 1;
+    }
+    frames.push(replay.slice(start, end));
+    start = end;
+  }
+  return frames;
+}
+
 type ShellWebSocketDependencies = {
   resolveProviderSessionId: (
     sessionId: string,
     provider: string,
   ) => string | null | undefined;
   spawnPty?: typeof pty.spawn;
+  // Where node-pty is installed (null: nowhere); defaults to the package this
+  // server resolves. Only read on Windows, to find node-pty's bundled ConPTY.
+  nodePtyRoot?: string | null;
 };
 
 /**
@@ -523,6 +580,159 @@ function prioritizeUserNpmGlobalBin(env: NodeJS.ProcessEnv): { key: string; valu
   return { key: pathKey, value };
 }
 
+// Windows' own ConPTY host (conhost.exe) is only fixed with the OS. Before
+// Windows 11 it fails fast with 0xC0000409 ("stack-based buffer overrun") when a
+// resize reflows wide (CJK) glyphs that a program partly overwrote, or a command
+// line with them that is still being typed; Server 2022 crashed on both on CI
+// (#1665; microsoft/terminal#1856, #4907, #14600). node-pty ships a current
+// conpty.dll + OpenConsole.exe, which `useConptyDll` runs instead (VS Code's
+// default since 1.121). It is only the default where the built-in host crashes:
+// OpenConsole asks the terminal for the cursor position and waits up to 500 ms
+// for each answer, which a detached Shell or a slow link cannot give in time.
+// Windows 11 and Server 2025 keep their own host (builds 26100 and 26200 did not
+// crash on CI; 22000-22631 were not tested).
+const CONPTY_DLL_ENV = 'CLOUDCLI_WINDOWS_USE_CONPTY_DLL';
+const CONPTY_DLL_ON_VALUES = new Set(['1', 'true', 'yes', 'on']);
+const CONPTY_DLL_OFF_VALUES = new Set(['0', 'false', 'no', 'off']);
+// Windows 11 21H2. Windows 10 and Server 2019/2022 have lower build numbers.
+const FIRST_WINDOWS_11_BUILD = 22000;
+
+function resolveNodePtyRoot(): string | null {
+  try {
+    return path.dirname(createRequire(import.meta.url).resolve('node-pty/package.json'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The Windows build number from `os.release()` ("10.0.<build>"), or null when
+ * it does not read like one.
+ */
+function readWindowsBuildNumber(): number | null {
+  const match = /^10\.0\.(\d+)$/.exec(os.release().trim());
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Whether the conpty.dll + OpenConsole.exe pair sits next to the Windows addon
+ * that node-pty will actually load. node-pty takes the first `conpty.node` of
+ * `build/Release`, `build/Debug` and `prebuilds/win32-<arch>` (each beside and
+ * inside `lib/`) and looks for `conpty/conpty.dll` in that folder. A source
+ * rebuild (electron-rebuild) leaves `build/Release/conpty.node` without that
+ * folder, and asking for the DLL there would make every spawn throw.
+ */
+function hasBundledConpty(nodePtyRoot: string): boolean {
+  const addonDir = ['build/Release', 'build/Debug', `prebuilds/win32-${process.arch}`]
+    .flatMap((dir) => [path.join(nodePtyRoot, dir), path.join(nodePtyRoot, 'lib', dir)])
+    .find((dir) => fs.existsSync(path.join(dir, 'conpty.node')));
+  if (!addonDir) {
+    return false;
+  }
+  return ['conpty.dll', 'OpenConsole.exe'].every((file) => fs.existsSync(path.join(addonDir, 'conpty', file)));
+}
+
+/**
+ * Picks the ConPTY host for a Windows shell. CLOUDCLI_WINDOWS_USE_CONPTY_DLL set
+ * to 1/true/yes/on asks for node-pty's bundled host on any build, 0/false/no/off
+ * for Windows' own; unset or anything else picks the bundled host on builds
+ * before Windows 11, and Windows' own when the build cannot be read. The bundled
+ * host is only used when it is installed. Other platforms get no option at all.
+ * `nodePtyRoot` undefined means "the node-pty this server resolves"; null means
+ * none was found.
+ *
+ * The bundled host also gets `conptyInheritCursor`: it then asks the terminal
+ * where the cursor is before the shell starts. Unlike conhost it does not clear
+ * the screen first, so without it the first prompt was drawn one row above the
+ * cursor, over the "Starting terminal in" line the server writes first.
+ */
+function resolveWindowsConptyOptions(
+  nodePtyRoot: string | null | undefined,
+): Pick<IWindowsPtyForkOptions, 'useConptyDll' | 'conptyInheritCursor'> {
+  if (os.platform() !== 'win32') {
+    return {};
+  }
+  const setting = process.env[CONPTY_DLL_ENV]?.trim().toLowerCase() ?? '';
+  if (CONPTY_DLL_OFF_VALUES.has(setting)) {
+    return {};
+  }
+  if (!CONPTY_DLL_ON_VALUES.has(setting)) {
+    const build = readWindowsBuildNumber();
+    if (build === null || build >= FIRST_WINDOWS_11_BUILD) {
+      return {};
+    }
+  }
+  const root = nodePtyRoot === undefined ? resolveNodePtyRoot() : nodePtyRoot;
+  return root && hasBundledConpty(root) ? { useConptyDll: true, conptyInheritCursor: true } : {};
+}
+
+/**
+ * Spawns the shell. node-pty throws right away when the bundled ConPTY cannot be
+ * loaded or launched (a conpty.dll or OpenConsole.exe blocked by policy or
+ * antivirus), and the shell is then retried on Windows' own ConPTY. Its errors
+ * name conpty; any other ("File not found: <shell>") would fail the same way
+ * there and is thrown as it is. A bundled host that starts and then dies is not
+ * caught here: CLOUDCLI_WINDOWS_USE_CONPTY_DLL=false avoids it.
+ */
+function spawnShellPty(
+  spawnPty: typeof pty.spawn,
+  file: string,
+  args: string[],
+  options: IWindowsPtyForkOptions,
+): IPty {
+  if (!options.useConptyDll) {
+    return spawnPty(file, args, options);
+  }
+  try {
+    return spawnPty(file, args, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/conpty/i.test(message)) {
+      throw error;
+    }
+    console.warn(`[WARN] Bundled ConPTY failed to start (${message}); retrying on the Windows ConPTY`);
+    const { useConptyDll: _useConptyDll, conptyInheritCursor: _conptyInheritCursor, ...windowsConptyOptions } = options;
+    return spawnPty(file, args, windowsConptyOptions);
+  }
+}
+
+// The part of node-pty's Windows terminal (private, not in its typings) that
+// holds the console host's input pipe.
+type NodePtyWindowsInternals = {
+  _agent?: { inSocket?: { on?: (event: 'error', listener: (error: Error) => void) => unknown } };
+};
+
+/**
+ * node-pty writes Windows input into the console host's input pipe without an
+ * 'error' listener (microsoft/node-pty#942, #976). Input that arrives after the
+ * host closed the pipe, but before node-pty reports the exit, fails with EAGAIN
+ * or EPIPE, and the unhandled 'error' event would end the whole server. The
+ * bundled ConPTY exits together with its shell, so one key pressed while a shell
+ * exits was enough (#1665). The listener only logs the first error; the exit is
+ * still reported through onExit. node-pty may move its internals, so every step
+ * is guarded: another layout only means no listener.
+ */
+function handleWindowsInputPipeErrors(shellProcess: IPty): void {
+  if (os.platform() !== 'win32') {
+    return;
+  }
+  try {
+    const inSocket = (shellProcess as unknown as NodePtyWindowsInternals)._agent?.inSocket;
+    if (typeof inSocket?.on !== 'function') {
+      return;
+    }
+    let reported = false;
+    inSocket.on('error', (error) => {
+      if (!reported) {
+        reported = true;
+        console.warn(`[WARN] Shell input could not reach the console host (${error.message}); dropping it`);
+      }
+    });
+  } catch {
+    // A getter of another node-pty version threw; the shell runs without the listener.
+  }
+}
+
 /**
  * Used by this module's websocket gateway to connect the standalone Shell UI
  * to a retained PTY while keeping process lifecycle ownership on the server.
@@ -600,15 +810,13 @@ export function handleShellConnection(
             })
           );
 
-          if (existingSession.buffer.length > 0) {
-            existingSession.buffer.forEach((bufferedData) => {
-              ws.send(
-                JSON.stringify({
-                  type: 'output',
-                  data: bufferedData,
-                })
-              );
-            });
+          for (const replayFrame of buildReplayFrames(existingSession.buffer)) {
+            ws.send(
+              JSON.stringify({
+                type: 'output',
+                data: replayFrame,
+              })
+            );
           }
 
           existingSession.ws = ws;
@@ -647,7 +855,7 @@ export function handleShellConnection(
         const termRows = readNumber(data.rows, 24);
         const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
 
-        shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
+        shellProcess = spawnShellPty(dependencies.spawnPty ?? pty.spawn, shell, shellArgs, {
           name: 'xterm-256color',
           cols: termCols,
           rows: termRows,
@@ -663,7 +871,9 @@ export function handleShellConnection(
             // theme before its OSC 11 reply arrives) read it to pick light or dark.
             ...(colorScheme ? { COLORFGBG: colorScheme === 'light' ? '0;15' : '15;0' } : {}),
           },
+          ...resolveWindowsConptyOptions(dependencies.nodePtyRoot),
         });
+        handleWindowsInputPipeErrors(shellProcess);
 
         ptySessionsMap.set(ptySessionKey, {
           pty: shellProcess,
