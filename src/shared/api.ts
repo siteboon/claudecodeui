@@ -212,6 +212,8 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
     refresh: () => post('/api/auth/refresh'),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      post('/api/auth/change-password', { currentPassword, newPassword }),
     user: () => get('/api/auth/user'),
   },
 

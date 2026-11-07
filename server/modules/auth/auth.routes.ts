@@ -49,6 +49,19 @@ export function createAuthRouter(
     res.json(service.refreshSession((req as AuthenticatedRequest).user));
   });
 
+  router.post('/change-password', authenticateToken, async (req, res, next) => {
+    try {
+      const body = req.body as { currentPassword?: unknown; newPassword?: unknown };
+      res.json(await service.changePassword(
+        (req as AuthenticatedRequest).user,
+        body.currentPassword,
+        body.newPassword,
+      ));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post('/logout', authenticateToken, (_req, res) => {
     res.json(service.logout());
   });

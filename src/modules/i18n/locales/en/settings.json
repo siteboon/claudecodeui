@@ -17,6 +17,31 @@
     "profile": "Profile",
     "changePassword": "Change Password"
   },
+  "security": {
+    "title": "Security",
+    "changePassword": "Change Password",
+    "description": "Change the password for this CloudCLI login.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "passwordHint": "At least 6 characters.",
+    "actions": {
+      "save": "Change Password",
+      "saving": "Changing...",
+      "signOut": "Sign Out"
+    },
+    "status": {
+      "success": "Password changed"
+    },
+    "errors": {
+      "mismatch": "New passwords don't match",
+      "tooShort": "New password must be at least 6 characters",
+      "incorrectCurrent": "Current password is incorrect",
+      "generic": "Couldn't change the password"
+    },
+    "signOutTitle": "Sign out",
+    "signOutDescription": "Signs out this browser only. Other browsers stay signed in until their session expires."
+  },
   "mcp": {
     "title": "MCP Servers",
     "addServer": "Add Server",
@@ -133,6 +158,7 @@
     "browser": "Browser",
     "notifications": "Notifications",
     "plugins": "Plugins",
+    "security": "Security",
     "about": "About"
   },
   "notifications": {

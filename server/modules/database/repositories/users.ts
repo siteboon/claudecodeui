@@ -89,6 +89,27 @@ export const userDb = {
       .get(userId) as UserPublicRow | undefined;
   },
 
+  /**
+   * Returns the stored password hash for an active user by ID.
+   * Used by the auth module to verify the current password before changing it.
+   */
+  getPasswordHashById(userId: number): string | undefined {
+    const db = getConnection();
+    const row = db
+      .prepare('SELECT password_hash FROM users WHERE id = ? AND is_active = 1')
+      .get(userId) as { password_hash: string } | undefined;
+    return row?.password_hash;
+  },
+
+  /** Replaces the stored password hash for the given user. */
+  updatePasswordHash(userId: number, passwordHash: string): void {
+    const db = getConnection();
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(
+      passwordHash,
+      userId
+    );
+  },
+
   /** Returns the first active user. Used for single-user mode lookups. */
   getFirstUser(): UserPublicRow | undefined {
     const db = getConnection();

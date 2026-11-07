@@ -13,6 +13,8 @@ type AuthDependencies = {
     createUser(username: string, passwordHash: string): AuthUser;
     getUserByUsername(username: string): AuthLoginUser | undefined;
     updateLastLogin(userId: number): void;
+    getPasswordHashById(userId: number): string | undefined;
+    updatePasswordHash(userId: number, passwordHash: string): void;
   };
   transaction: {
     begin(): void;
@@ -146,6 +148,57 @@ export function createAuthService(dependencies: AuthDependencies) {
       }
 
       return { token: dependencies.generateToken(user as AuthUser) };
+    },
+
+    /**
+     * Changes the authenticated user's password after verifying the current
+     * one. Existing JWTs stay valid until they expire; they are stateless and
+     * not tied to the password hash.
+     */
+    async changePassword(user: unknown, currentPasswordInput: unknown, newPasswordInput: unknown) {
+      if (
+        typeof user !== 'object'
+        || user === null
+        || !('id' in user)
+        || (typeof user.id !== 'number' && typeof user.id !== 'bigint')
+      ) {
+        throw new AppError('Authenticated user is required', {
+          code: 'AUTH_USER_REQUIRED',
+          statusCode: 401,
+        });
+      }
+
+      const currentPassword = typeof currentPasswordInput === 'string' ? currentPasswordInput : '';
+      const newPassword = typeof newPasswordInput === 'string' ? newPasswordInput : '';
+      if (!currentPassword || !newPassword) {
+        throw new AppError('Current and new password are required', {
+          code: 'AUTH_CREDENTIALS_REQUIRED',
+          statusCode: 400,
+        });
+      }
+      // Same minimum as registration.
+      if (newPassword.length < 6) {
+        throw new AppError('New password must be at least 6 characters', {
+          code: 'AUTH_CREDENTIALS_TOO_SHORT',
+          statusCode: 400,
+        });
+      }
+
+      const userId = numericUserId(user.id);
+      const passwordHash = dependencies.users.getPasswordHashById(userId);
+      const validPassword = passwordHash
+        ? await dependencies.comparePassword(currentPassword, passwordHash)
+        : false;
+      if (!validPassword) {
+        // 400 rather than 401 so the client doesn't treat it as an expired session.
+        throw new AppError('Current password is incorrect', {
+          code: 'AUTH_INVALID_CURRENT_PASSWORD',
+          statusCode: 400,
+        });
+      }
+
+      dependencies.users.updatePasswordHash(userId, await dependencies.hashPassword(newPassword));
+      return { success: true };
     },
 
     logout() {
