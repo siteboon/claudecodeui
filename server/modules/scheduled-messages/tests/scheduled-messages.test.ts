@@ -538,3 +538,105 @@ test('a socket that cannot be written to does not stop a claimed message from be
     assert.equal(closedTab.frames.length, 0);
   });
 });
+
+/** A runtime whose turns stay running until released, like a turn held for background work. */
+function createHangingRuntime(runs: RunCall[]) {
+  const release: Array<() => void> = [];
+  const runtime = {
+    hasRuntime: () => true,
+    hasBackgroundWork: () => false,
+    run: (provider: string, command: string, options: Record<string, unknown>) => {
+      runs.push({ provider, command, options });
+      return new Promise<void>((resolve) => { release.push(resolve); });
+    },
+    abort: async () => true,
+  } as never;
+  return { runtime, releaseAll: () => release.splice(0).forEach((resolve) => resolve()) };
+}
+
+const withinASecond = <T>(promise: Promise<T>): Promise<T> => Promise.race([
+  promise,
+  new Promise<T>((_, reject) => { setTimeout(() => reject(new Error('the pass waited for the turn to end')), 1_000); }),
+]);
+
+test('a dispatch pass does not wait for the turns it starts', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionsDb.createAppSession('other-session', 'claude', '/tmp', 'Other session');
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, { text: '', queuedMessage: { content: 'a long one' } });
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: 'other-session',
+      content: 'due now',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+
+    const runs: RunCall[] = [];
+    const { runtime, releaseAll } = createHangingRuntime(runs);
+    try {
+      assert.equal(await withinASecond(dispatchDueScheduledMessages(runtime)), 1);
+      assert.equal(await withinASecond(dispatchQueuedMessages(runtime)), 1);
+      assert.deepEqual(runs.map((run) => run.command).sort(), ['a long one', 'due now']);
+      assert.equal(chatRunRegistry.isProcessing(SESSION_ID), true, 'the queued turn is still running');
+    } finally {
+      releaseAll();
+    }
+  });
+});
+
+test('a second due message for the same session waits for the first one\'s turn', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    for (const content of ['first', 'second']) {
+      scheduledMessagesService.schedule({
+        userId,
+        sessionId: SESSION_ID,
+        content,
+        scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+      });
+    }
+
+    sessionsDb.createAppSession('other-session', 'claude', '/tmp', 'Other session');
+    scheduledMessagesService.schedule({
+      userId,
+      sessionId: 'other-session',
+      content: 'elsewhere',
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+
+    const runs: RunCall[] = [];
+    const { runtime, releaseAll } = createHangingRuntime(runs);
+    assert.equal(await withinASecond(dispatchDueScheduledMessages(runtime)), 3);
+    assert.deepEqual(runs.map((run) => run.command).sort(), ['elsewhere', 'first'], 'the second does not interrupt the first, and other sessions go now');
+    releaseAll();
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+    assert.deepEqual(runs.map((run) => run.command).sort(), ['elsewhere', 'first', 'second']);
+    releaseAll();
+  });
+});
+
+test('a message due in a later pass waits for the session\'s scheduled turn instead of interrupting it', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const schedule = (content: string) => scheduledMessagesService.schedule({
+      userId,
+      sessionId: SESSION_ID,
+      content,
+      scheduledFor: new Date(Date.now() - 1_000).toISOString(),
+    });
+    const runs: RunCall[] = [];
+    const aborts: string[] = [];
+    const { runtime, releaseAll } = createHangingRuntime(runs);
+    const runtimeWithAborts = { ...(runtime as object), abort: async (_p: string, id: string) => { aborts.push(id); return true; } } as never;
+
+    schedule('first');
+    assert.equal(await withinASecond(dispatchDueScheduledMessages(runtimeWithAborts)), 1);
+    schedule('later');
+    assert.equal(await withinASecond(dispatchDueScheduledMessages(runtimeWithAborts)), 1);
+    assert.deepEqual(runs.map((run) => run.command), ['first']);
+    assert.deepEqual(aborts, [], 'the later message does not abort the first turn');
+
+    releaseAll();
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+    assert.deepEqual(runs.map((run) => run.command), ['first', 'later']);
+    releaseAll();
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
+  });
+});

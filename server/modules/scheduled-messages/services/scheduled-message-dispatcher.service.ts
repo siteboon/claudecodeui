@@ -1,7 +1,7 @@
 import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
 import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
 import { announceScheduledMessagesChanged } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
-import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
+import { chatRunRegistry, RUN_IN_PROGRESS_ERROR, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 import { readQueuedChatMessage } from '@/shared/utils.js';
 
@@ -50,7 +50,7 @@ async function sendClaimedQueuedMessage(
 
   // The registry check and run reservation are separate operations. If a run
   // wins that tiny race, put the turn back so the next poll tries again.
-  if (!result.started && result.error === 'A run was already in progress for this session.') {
+  if (!result.started && result.error === RUN_IN_PROGRESS_ERROR) {
     sessionDraftsDb.restoreQueuedMessage(candidate);
     return;
   }
@@ -95,10 +95,21 @@ function recordFailure(row: ScheduledMessageRow, reason: string): void {
   announceScheduledMessagesChanged(row.session_id);
 }
 
+/**
+ * The end of the last scheduled turn started or waiting per session, across
+ * passes, so a session's scheduled messages go one turn at a time.
+ */
+const scheduledTurns = new Map<string, Promise<void>>();
+
+/**
+ * Starts one due message. Resolves once its run holds the session; `done`
+ * settles when the run ends. Wrapped in an object because a promise resolved
+ * with a promise would wait for that one too.
+ */
 async function sendClaimedMessage(
   row: ScheduledMessageRow,
   runtime: ProviderRuntimeGateway,
-): Promise<void> {
+): Promise<{ done: Promise<void> }> {
   try {
     const result = await runDetachedChatTurn(
       {
@@ -120,10 +131,19 @@ async function sendClaimedMessage(
     // them it did not go.
     if (!result.started || result.error) {
       recordFailure(row, result.error ?? 'The session was unavailable when this was due.');
+      return { done: Promise.resolve() };
     }
+    return {
+      done: result.done.then((outcome) => {
+        if (outcome.error) {
+          recordFailure(row, outcome.error);
+        }
+      }),
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     recordFailure(row, message);
+    return { done: Promise.resolve() };
   }
 }
 
@@ -149,11 +169,41 @@ export async function dispatchDueScheduledMessages(
     announceScheduledMessagesChanged(sessionId);
   }
 
-  // Sequentially: a session can only have one run at a time, and two due
-  // messages for the same session must not race each other into it.
+  // A session can only have one run at a time, and two due messages for the
+  // same session must not race each other into it. A message's run is not
+  // waited for, so one long turn cannot hold up other sessions or the next
+  // pass. A second message for the same session waits for the first one's
+  // turn to end, in a chain of its own.
+  const bySession = new Map<string, ScheduledMessageRow[]>();
   for (const row of due) {
-    await sendClaimedMessage(row, runtime);
+    bySession.set(row.session_id, [...(bySession.get(row.session_id) ?? []), row]);
   }
+  await Promise.all([...bySession.entries()].map(async ([sessionId, rows]) => {
+    // An earlier pass's message for this session may still be running; this
+    // pass's messages line up behind it rather than interrupting it.
+    let tail = scheduledTurns.get(sessionId);
+    let waiting = rows;
+    if (!tail) {
+      tail = (await sendClaimedMessage(rows[0], runtime)).done;
+      waiting = rows.slice(1);
+    }
+    for (const row of waiting) {
+      tail = tail
+        .then(() => sendClaimedMessage(row, runtime))
+        .then(({ done }) => done)
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('[ScheduledMessages] Follow-up dispatch failed', { error: message });
+        });
+    }
+    const last = tail;
+    scheduledTurns.set(sessionId, last);
+    void last.then(() => {
+      if (scheduledTurns.get(sessionId) === last) {
+        scheduledTurns.delete(sessionId);
+      }
+    });
+  }));
 
   return due.length;
 }
