@@ -148,10 +148,13 @@ test('stopping the last outstanding task releases the held process', async () =>
     // The user stops it. The CLI answers with a `stopped` notification and
     // pushes no follow-up turn, so nothing else would ever end the hold.
     const stopping = stopClaudeSDKTask(SESSION_ID, 'wf1');
-    await settle();
+    // A second ✕ joins the stop under way rather than sending another.
+    const again = stopClaudeSDKTask(SESSION_ID, 'wf1');
+    await waitFor(() => script.stopped.length > 0);
     assert.deepEqual(script.stopped, ['wf1']);
     script.emit(taskNotification('wf1', 'toolu_wf', 'stopped'));
     assert.equal(await stopping, true, 'the stop counts once the task has settled');
+    assert.equal(await again, true);
     await settle();
 
     assert.deepEqual(listClaudeSDKBackgroundWork(), []);
@@ -210,10 +213,9 @@ test('an agent that ran in the foreground and settled before the result does not
     script.emit(taskNotification('a1', 'toolu_agent', 'completed'));
     script.emit(ack('toolu_agent', 'FOUR', { status: 'completed', agentId: 'a1' }));
     script.emit(result());
-    await settle();
+    await waitFor(() => script.released());
 
     assert.deepEqual(listClaudeSDKBackgroundWork(), []);
-    assert.equal(script.released(), true, 'nothing is outstanding, so nothing to hold for');
   });
 });
 

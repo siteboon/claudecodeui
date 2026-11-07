@@ -1962,12 +1962,26 @@ function listClaudeSDKBackgroundWork(): Array<{ sessionId: string; tasks: Backgr
  * @param {number} confirmMs - How long to wait for the task to settle
  * @returns {Promise<boolean>} False when no live process is tracking the task
  */
-async function stopClaudeSDKTask(sessionId: string, taskId: string, confirmMs = 5000) {
+// A repeated ✕ joins the stop under way instead of sending stop_task again.
+const pendingTaskStops = new Map<string, Promise<boolean>>();
+
+function stopClaudeSDKTask(sessionId: string, taskId: string, confirmMs = 5000): Promise<boolean> {
+  const key = `${sessionId}\u0000${taskId}`;
+  const pending = pendingTaskStops.get(key);
+  if (pending) return pending;
+  const stop = runClaudeSDKTaskStop(sessionId, taskId, confirmMs)
+    .finally(() => pendingTaskStops.delete(key));
+  pendingTaskStops.set(key, stop);
+  return stop;
+}
+
+async function runClaudeSDKTaskStop(sessionId: string, taskId: string, confirmMs: number): Promise<boolean> {
   const session = getSession(sessionId);
-  if (!session || !backgroundWork.has(sessionId, taskId)) {
+  const stopTask = session?.instance?.stopTask;
+  if (!session || !stopTask || !backgroundWork.has(sessionId, taskId)) {
     return false;
   }
-  await session.instance.stopTask!(taskId);
+  await stopTask.call(session.instance, taskId);
   const deadline = Date.now() + confirmMs;
   while (backgroundWork.has(sessionId, taskId)) {
     if (Date.now() >= deadline) {
