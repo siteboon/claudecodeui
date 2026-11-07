@@ -47,7 +47,7 @@ const releaseCreates = async (status = 201) => {
 const createRequests = (fetchMock: ReturnType<typeof vi.fn>) => fetchMock.mock.calls
   .filter(([url, init]) => String(url) === '/api/providers/sessions' && (init as RequestInit | undefined)?.method === 'POST');
 
-const renderComposer = (initialSession: ProjectSession | null) => {
+const renderComposer = (initialSession: ProjectSession | null, runtimeProfileId?: string) => {
   const sent: Array<{ type: string; sessionId?: string; content?: string }> = [];
   const established: string[] = [];
   const view = renderHook(({ session }: { session: ProjectSession | null }) =>
@@ -56,6 +56,7 @@ const renderComposer = (initialSession: ProjectSession | null) => {
       selectedSession: session,
       currentSessionId: session?.id ?? null,
       provider: 'claude',
+      runtimeProfileId,
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
@@ -127,6 +128,19 @@ test('submitting again while the new chat\'s session is being created allocates 
   // The ignored submit may come from the form: without this the browser would
   // run a native form submission and reload the page.
   assert.equal(secondSubmit.preventDefault.mock.calls.length, 1);
+});
+
+test('new-chat session creation retains the selected runtime profile', async () => {
+  const { view, chatSends } = renderComposer(null, 'claude-work');
+  await act(async () => { view.result.current.setInput('hello'); });
+  await act(async () => {
+    void view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  await releaseCreates();
+
+  const request = createRequests(fetchMock)[0];
+  assert.equal(JSON.parse(String((request[1] as RequestInit).body)).runtimeProfileId, 'claude-work');
+  assert.deepEqual(chatSends().map((message) => message.sessionId), ['session-1']);
 });
 
 test('a failed session creation does not block the retry', async () => {

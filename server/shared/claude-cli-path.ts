@@ -2,16 +2,11 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { ResolveClaudeCodeExecutablePathDependencies } from './types.js';
+
 const DEFAULT_CLAUDE_COMMAND = 'claude';
 const CLAUDE_SCRIPT_EXTENSIONS = new Set(['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']);
 const CLAUDE_WRAPPER_SEGMENTS = ['node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'] as const;
-
-export type ResolveClaudeCodeExecutablePathDependencies = {
-  execFileSync?: typeof execFileSync;
-  existsSync?: typeof fs.existsSync;
-  platform?: NodeJS.Platform;
-  readFileSync?: typeof fs.readFileSync;
-};
 
 function getPathApi(platform: NodeJS.Platform) {
   return platform === 'win32' ? path.win32 : path;
@@ -103,6 +98,7 @@ function resolveWindowsClaudeExecutablePath(
   try {
     const stdout = deps.execFileSync('where.exe', [configuredPath], {
       encoding: 'utf8',
+      env: deps.env,
       stdio: ['ignore', 'pipe', 'ignore'],
       windowsHide: true,
     });
@@ -132,6 +128,7 @@ function resolveWindowsClaudeExecutablePath(
 
 /**
  * Resolves the Claude Code executable to hand the SDK.
+ * Used by the providers module's Claude runtime and installation probe.
  *
  * Returns undefined when no real executable could be found and the caller did
  * not configure one, which means "let the SDK pick its own bundled binary".
@@ -145,6 +142,7 @@ export function resolveClaudeCodeExecutablePath(
     existsSync: dependencies.existsSync ?? fs.existsSync,
     platform: dependencies.platform ?? process.platform,
     readFileSync: dependencies.readFileSync ?? fs.readFileSync,
+    env: dependencies.env ?? process.env,
   };
 
   const configuredExplicitly = Boolean(stripWrappingQuotes(configuredPath || ''));

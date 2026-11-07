@@ -13,7 +13,6 @@
  */
 
 import crypto from 'crypto';
-import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 
@@ -25,6 +24,7 @@ import {
   buildClaudeUserContent,
   normalizeImageDescriptors
 } from '@/shared/image-attachments.js';
+import { ClaudeMcpProvider } from '@/modules/providers/list/claude/claude-mcp.provider.js';
 import {
   CLAUDE_PREDEFINED_MODELS,
   CLAUDE_ULTRACODE_EFFORT
@@ -356,17 +356,20 @@ export function buildClaudeSdkEnv(hostEnv: NodeJS.ProcessEnv = process.env): Nod
 }
 
 function mapCliOptionsToSDK(options: AnyRecord = {}) {
-  const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch } = options;
+  const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch, runtimeProfile } = options;
 
   const sdkOptions: AnyRecord = {};
 
-  sdkOptions.env = buildClaudeSdkEnv();
+  sdkOptions.env = buildClaudeSdkEnv({ ...process.env, ...(runtimeProfile?.env || {}) });
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
   // When nothing resolves the option stays unset on purpose: the SDK then falls back to the
   // binary it ships, which beats handing it a bare `claude` that raw spawn can never launch.
-  const claudeExecutablePath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+  const claudeExecutablePath = resolveClaudeCodeExecutablePath(
+    runtimeProfile?.executable || process.env.CLAUDE_CLI_PATH,
+    { env: sdkOptions.env },
+  );
   if (claudeExecutablePath) {
     sdkOptions.pathToClaudeCodeExecutable = claudeExecutablePath;
   }
@@ -1026,63 +1029,6 @@ function createHeldPromptStream(messages: unknown[]) {
 }
 
 /**
- * Loads MCP server configurations from ~/.claude.json
- * @param {string} cwd - Current working directory for project-specific configs
- * @returns {Object|null} MCP servers object or null if none found
- */
-async function loadMcpConfig(cwd: string | undefined): Promise<AnyRecord | null> {
-  try {
-    const claudeConfigPath = path.join(os.homedir(), '.claude.json');
-
-    // Check if config file exists
-    try {
-      await fs.access(claudeConfigPath);
-    } catch (error) {
-      // File doesn't exist, return null
-      // No config file
-      return null;
-    }
-
-    // Read and parse config file
-    let claudeConfig;
-    try {
-      const configContent = await fs.readFile(claudeConfigPath, 'utf8');
-      claudeConfig = JSON.parse(configContent);
-    } catch (error) {
-      console.error('Failed to parse ~/.claude.json:', (error as Error).message);
-      return null;
-    }
-
-    // Extract MCP servers (merge global and project-specific)
-    let mcpServers: AnyRecord = {};
-
-    // Add global MCP servers
-    if (claudeConfig.mcpServers && typeof claudeConfig.mcpServers === 'object') {
-      mcpServers = { ...claudeConfig.mcpServers };
-      // Global MCP servers loaded
-    }
-
-    // Add/override with project-specific MCP servers
-    if (claudeConfig.claudeProjects && cwd) {
-      const projectConfig = claudeConfig.claudeProjects[cwd];
-      if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
-        mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
-        // Project MCP servers merged
-      }
-    }
-
-    // Return null if no servers found
-    if (Object.keys(mcpServers).length === 0) {
-      return null;
-    }
-    return mcpServers;
-  } catch (error) {
-    console.error('Error loading MCP config:', (error as Error).message);
-    return null;
-  }
-}
-
-/**
  * Executes a Claude query using the SDK
  * @param {string} command - User prompt/command
  * @param {Object} options - Query options
@@ -1230,9 +1176,15 @@ async function queryClaudeSDK(
       providerSessionId,
       model: resolvedModel || options.model,
       effortModels,
+      runtimeProfile: context.runtimeProfile,
     });
 
-    const mcpServers = await loadMcpConfig(options.cwd);
+    const mcpServers = await new ClaudeMcpProvider().loadRuntimeServers(
+      options.cwd,
+      sdkOptions.env.CLAUDE_CONFIG_DIR
+        || (process.platform === 'win32' ? sdkOptions.env.USERPROFILE : sdkOptions.env.HOME)
+        || os.homedir(),
+    );
     if (mcpServers) {
       sdkOptions.mcpServers = mcpServers;
     }
@@ -1935,6 +1887,7 @@ async function askSideQuestion(
       if (!request.signal?.aborted && (session.inputReleased as unknown) === true) {
         return askClaudeSideQuestion(request, sink, {
           createQuery: context.createQuery,
+          runtimeProfile: context.runtimeProfile,
           liveTasks: backgroundWork.outstanding(request.appSessionId),
         });
       }
@@ -1967,6 +1920,7 @@ async function askSideQuestion(
 
   return askClaudeSideQuestion(request, sink, {
     createQuery: context.createQuery,
+    runtimeProfile: context.runtimeProfile,
     liveTasks: backgroundWork.outstanding(request.appSessionId),
   });
 }

@@ -1,8 +1,8 @@
-import os from 'node:os';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { providerRuntimeProfilesService } from '@/modules/providers/services/provider-runtime-profiles.service.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
@@ -11,6 +11,7 @@ import {
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { SessionArtifactReadOptions } from '@/shared/types.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -19,11 +20,11 @@ type ParsedSession = {
 };
 
 /**
- * Session indexer for Claude transcript artifacts.
+ * Used by the providers registry to index Claude transcripts in every configured home.
  */
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'claude' as const;
-  private readonly claudeHome = path.join(os.homedir(), '.claude');
+  private readonly scannedHomes = new Set<string>();
 
   /**
    * Returns true when a JSONL file is a subagent transcript or tool result
@@ -43,15 +44,42 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
-   * Scans ~/.claude/projects and upserts discovered sessions into DB.
+   * Scans default and profile project roots and preserves their runtime profile.
    */
   async synchronize(since?: Date): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
-    const files = await findFilesRecursivelyCreatedAfter(
-      path.join(this.claudeHome, 'projects'),
-      '.jsonl',
-      since ?? null
-    );
+    let processed = 0;
+    for (const { claudeHome, profileId } of providerRuntimeProfilesService.listClaudeHomes()) {
+      // A newly configured home can contain transcripts older than the global scan cursor.
+      const homeSince = this.scannedHomes.has(claudeHome) ? since : undefined;
+      const homeProcessed = await this.synchronizeHome(claudeHome, profileId, homeSince);
+      if (homeProcessed === null) {
+        // A missing projects root must get a full scan when it becomes available.
+        this.scannedHomes.delete(claudeHome);
+        continue;
+      }
+      processed += homeProcessed;
+      // Failed discovery or transcript reads must leave this home eligible for a full retry.
+      this.scannedHomes.add(claudeHome);
+    }
+    return processed;
+  }
+
+  /** Returns null when the projects root is absent, so it stays eligible for a full scan. */
+  private async synchronizeHome(claudeHome: string, profileId: string | null, since?: Date): Promise<number | null> {
+    const readOptions = { throwOnError: true };
+    const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
+    const projectsRoot = path.join(claudeHome, 'projects');
+    let files: string[];
+    try {
+      files = await findFilesRecursivelyCreatedAfter(projectsRoot, '.jsonl', since ?? null, [], readOptions);
+    } catch (error) {
+      // Only the initial root may be absent; a vanished entry makes the scan incomplete.
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT'
+        && 'path' in error && error.path === projectsRoot) {
+        return null;
+      }
+      throw error;
+    }
 
     let processed = 0;
     for (const filePath of files) {
@@ -59,7 +87,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const parsed = await this.processSessionFile(filePath, nameMap);
+      const parsed = await this.processSessionFile(filePath, nameMap, readOptions);
       if (!parsed) {
         continue;
       }
@@ -72,7 +100,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         parsed.sessionName,
         timestamps.createdAt,
         timestamps.updatedAt,
-        filePath
+        filePath,
+        profileId,
       );
       processed += 1;
     }
@@ -91,7 +120,16 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
-    const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
+    const homes = providerRuntimeProfilesService.listClaudeHomes();
+    const location = [...homes]
+      .sort((left, right) => right.claudeHome.length - left.claudeHome.length)
+      .find(({ claudeHome }) => {
+        const relativePath = path.relative(path.join(claudeHome, 'projects'), filePath);
+        return relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relativePath);
+      }) ?? homes[0];
+    // Explicit file synchronization also supports paths outside watched roots.
+    const nameMap = await buildLookupMap(path.join(location.claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;
@@ -105,7 +143,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       parsed.sessionName,
       timestamps.createdAt,
       timestamps.updatedAt,
-      filePath
+      filePath,
+      location.profileId,
     );
   }
 
@@ -114,7 +153,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   private async processSessionFile(
     filePath: string,
-    nameMap: Map<string, string>
+    nameMap: Map<string, string>,
+    options: SessionArtifactReadOptions = {},
   ): Promise<ParsedSession | null> {
     const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, unknown>;
@@ -129,7 +169,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         sessionId,
         projectPath,
       };
-    });
+    }, options);
 
     if (!parsed) {
       return null;

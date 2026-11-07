@@ -1,8 +1,9 @@
 import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
 import type { IProviderFork } from '@/shared/interfaces.js';
+import type { ProviderRuntimeProfile } from '@/shared/types.js';
 
 /**
- * Branches a Codex conversation into an independent thread.
+ * Used by the providers session service to branch Codex into an independent thread.
  *
  * `thread/fork` writes a real rollout with its own thread id and a
  * `forked_from_id` back-reference, which is what makes the copy resumable
@@ -22,6 +23,7 @@ export class CodexForkProvider implements IProviderFork {
     projectPath: string;
     upToAnchorId?: string;
     title?: string;
+    runtimeProfile?: ProviderRuntimeProfile;
   }): Promise<{ providerSessionId: string; jsonlPath: string }> {
     // `title` is deliberately not forwarded. The sidebar name lives in this
     // app's own session row, and naming the thread inside Codex would mean a
@@ -30,6 +32,8 @@ export class CodexForkProvider implements IProviderFork {
       threadId: input.providerSessionId,
       lastTurnId: input.upToAnchorId,
       cwd: input.projectPath,
+      jsonlPath: input.jsonlPath,
+      runtimeProfile: input.runtimeProfile,
     });
 
     // The path is the one the server reported and already confirmed on disk,

@@ -10,6 +10,7 @@ import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/datab
 import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
 import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sessions.provider.js';
+import { providerRuntimeProfilesService } from '@/modules/providers/services/provider-runtime-profiles.service.js';
 
 /**
  * Codex rows carry no id of their own, so an edit addresses the enclosing
@@ -220,7 +221,11 @@ test('rewinding a Codex session moves it onto the branch and retires the old thr
       codexAppServer.forkThread = realForkThread;
     }
 
-    assert.deepEqual(forkCalls, [{ threadId: 'thread-1', lastTurnId: 'turn-b', cwd: workspacePath }]);
+    assert.deepEqual(forkCalls, [{
+      threadId: 'thread-1', lastTurnId: 'turn-b', cwd: workspacePath,
+      jsonlPath: sessionsDb.getSupersededTranscriptPaths(sessionId)[0],
+      runtimeProfile: providerRuntimeProfilesService.resolve('codex', null),
+    }]);
 
     const session = sessionsDb.getSessionById(sessionId);
     assert.equal(session?.provider_session_id, 'thread-2');
@@ -388,6 +393,7 @@ test('codex app-server forks a real thread at a turn', { concurrency: false }, a
       // The fixture's second turn; the third must not survive the cut.
       lastTurnId: '01a02a81-2427-7853-b5e2-6eee36690146',
       cwd: workspacePath,
+      jsonlPath: path.join(sessionsDir, path.basename(fixture)),
     });
 
     assert.notEqual(fork.threadId, '01a02a80-dfb9-7882-8013-00e41955e656');

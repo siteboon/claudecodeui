@@ -203,6 +203,12 @@ Command forms currently used by the providers are:
 - Make the sync resilient to partial, malformed, or missing provider files.
 - The orchestration service runs all provider synchronizers and only advances
   `scan_state.last_scanned_at` when every provider succeeds.
+- Claude full scans enable `throwOnError` in transcript discovery and JSONL
+  extraction. An incomplete scan keeps the global cursor unchanged and leaves
+  a newly configured home eligible for a full retry, including older transcripts.
+  Missing provider directories remain valid empty roots and stay eligible for
+  a full scan when they appear. Files or nested directories that disappear
+  during discovery count as incomplete scans.
 
 Current session sync roots are:
 

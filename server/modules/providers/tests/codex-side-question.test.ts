@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
 import { codexRuntime } from '@/modules/providers/list/codex/codex-runtime.provider.js';
-import type { ProviderRuntimeContext, SideQuestionOutcome, SideQuestionRequest } from '@/shared/types.js';
+import type { ProviderRuntimeProfile, ProviderRuntimeContext, SideQuestionOutcome, SideQuestionRequest } from '@/shared/types.js';
 import {
   SIDE_CONVERSATION_BOUNDARY_PROMPT,
   SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
@@ -30,7 +30,7 @@ const FORK_THREAD = 'thread-fork-1';
 const TURN_ID = 'turn-1';
 const QUESTION = 'Which file holds the router?';
 
-type AskInput = { threadId: string; cwd: string; model: string; question: string; signal: AbortSignal };
+type AskInput = { threadId: string; cwd: string; model: string; question: string; signal: AbortSignal; runtimeProfile?: ProviderRuntimeProfile };
 type AppServerSideQuestion = {
   resolveLauncher?: () => string;
   askSideQuestion?: (input: AskInput, onDelta: (text: string) => void) => Promise<string>;
@@ -77,6 +77,7 @@ const APPS_CONFIG = ${JSON.stringify(appsConfig)};
 // project — this is what the "cwd-aware config/read" tests are checking for.
 const PROJECT_ONLY_MCP_SERVER_NAMES = ${JSON.stringify(projectOnlyMcpServerNames)};
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+fs.writeFileSync(${JSON.stringify(pidFile + '.env.json')}, JSON.stringify({home: process.env.CODEX_HOME, marker: process.env.CLOUDCLI_TEST_PROFILE}));
 setTimeout(() => process.exit(0), 15000);
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n');
 const notify = (method, params) => send({ jsonrpc: '2.0', method, params });
@@ -560,5 +561,38 @@ test('codexRuntime turns a rejected ask into an error outcome, never a throw', {
     const outcome = await runtime.askSideQuestion!(request(), { delta: () => {} }, context);
     assert.equal(outcome.status, 'error');
     assert.match(outcome.status === 'error' ? outcome.error : '', /model overloaded/);
+  });
+});
+
+
+test('a side question starts the selected Codex executable in the selected home', { concurrency: false, skip: process.platform === 'win32' }, async () => {
+  await withFakeAppServer('complete', async ({ dir, pidFile }) => {
+    const marker = process.env.CLOUDCLI_TEST_PROFILE;
+    const home = path.join(dir, 'work-home');
+    const script = path.join(dir, 'fake-app-server.cjs');
+    const executable = path.join(dir, 'profile-codex');
+    await writeFile(executable, `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`);
+    await chmod(executable, 0o755);
+    const profile: ProviderRuntimeProfile = {
+      id: 'work', name: 'Work', provider: 'codex', isDefault: false, executable,
+      env: { CODEX_HOME: home, CLOUDCLI_TEST_PROFILE: 'work', PATH: path.join(dir, 'empty-bin') },
+    };
+    const answer = await appServer.askSideQuestion!(askInput({ runtimeProfile: profile }), () => {});
+    assert.equal(answer, 'The router is in src/router.ts.');
+    assert.deepEqual(JSON.parse(await readFile(pidFile + '.env.json', 'utf8')), { home, marker: 'work' });
+    assert.equal(process.env.CLOUDCLI_TEST_PROFILE, marker);
+  });
+});
+
+test('codexRuntime passes the session runtime profile to the side-question client', { concurrency: false }, async () => {
+  const profile: ProviderRuntimeProfile = {
+    id: 'work', name: 'Work', provider: 'codex', isDefault: false, env: { CODEX_HOME: '/work/codex' },
+  };
+  await withStubbedClient(async (input) => {
+    assert.equal(input.runtimeProfile, profile);
+    return 'profile answer';
+  }, async () => {
+    const outcome = await runtime.askSideQuestion!(request(), { delta: () => {} }, { ...context, runtimeProfile: profile });
+    assert.deepEqual(outcome, { status: 'done', answer: 'profile answer' });
   });
 });

@@ -1,8 +1,8 @@
-import os from 'node:os';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { providerRuntimeProfilesService } from '@/modules/providers/services/provider-runtime-profiles.service.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
@@ -19,19 +19,30 @@ type ParsedSession = {
 };
 
 /**
- * Session indexer for Codex transcript artifacts.
+ * Used by the providers registry to index Codex transcripts in every configured home.
  */
 export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'codex' as const;
-  private readonly codexHome = path.join(os.homedir(), '.codex');
+  private readonly scannedHomes = new Set<string>();
 
   /**
-   * Scans ~/.codex/sessions and upserts discovered sessions into DB.
+   * Scans default and profile session roots and preserves their runtime profile.
    */
   async synchronize(since?: Date): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    let processed = 0;
+    for (const { codexHome, profileId } of providerRuntimeProfilesService.listCodexHomes()) {
+      // A newly configured profile can contain transcripts older than the global scan cursor.
+      const homeSince = profileId && !this.scannedHomes.has(codexHome) ? undefined : since;
+      processed += await this.synchronizeHome(codexHome, profileId, homeSince);
+      this.scannedHomes.add(codexHome);
+    }
+    return processed;
+  }
+
+  private async synchronizeHome(codexHome: string, profileId: string | null, since?: Date): Promise<number> {
+    const nameMap = await buildLookupMap(path.join(codexHome, 'session_index.jsonl'), 'id', 'thread_name');
     const files = await findFilesRecursivelyCreatedAfter(
-      path.join(this.codexHome, 'sessions'),
+      path.join(codexHome, 'sessions'),
       '.jsonl',
       since ?? null
     );
@@ -60,7 +71,8 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
         parsed.sessionName,
         timestamps.createdAt,
         timestamps.updatedAt,
-        filePath
+        filePath,
+        profileId,
       );
       processed += 1;
     }
@@ -76,7 +88,17 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    const location = providerRuntimeProfilesService.listCodexHomes()
+      .sort((left, right) => right.codexHome.length - left.codexHome.length)
+      .find(({ codexHome }) => {
+        const relativePath = path.relative(path.join(codexHome, 'sessions'), filePath);
+        return relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relativePath);
+      });
+    if (!location) {
+      return null;
+    }
+    const nameMap = await buildLookupMap(path.join(location.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;
@@ -90,7 +112,8 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       parsed.sessionName,
       timestamps.createdAt,
       timestamps.updatedAt,
-      filePath
+      filePath,
+      location.profileId,
     );
   }
 

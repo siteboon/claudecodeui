@@ -7,6 +7,7 @@ import type {
   AnyRecord,
   BackgroundTaskSummary,
   ProviderRuntimeContext,
+  ProviderRuntimeProfile,
   SideQuestionOutcome,
   SideQuestionRequest,
 } from '@/shared/types.js';
@@ -190,12 +191,13 @@ const task = (overrides: Partial<BackgroundTaskSummary> = {}): BackgroundTaskSum
 });
 
 /** Starts a fork run against a fresh script; `now` sits 42 s after the default task's start. */
-function startFork(options: { request?: Partial<SideQuestionRequest>; liveTasks?: BackgroundTaskSummary[] } = {}) {
+function startFork(options: { request?: Partial<SideQuestionRequest>; liveTasks?: BackgroundTaskSummary[]; runtimeProfile?: ProviderRuntimeProfile } = {}) {
   const { createQuery, script } = createScriptedQuery();
   const { deltas, sink } = createSink();
   const outcome = askClaudeSideQuestion(createRequest(options.request), sink, {
     createQuery,
     liveTasks: options.liveTasks ?? [],
+    runtimeProfile: options.runtimeProfile,
     now: () => 1_042_000,
   });
   return { script, deltas, outcome };
@@ -465,4 +467,24 @@ test('a createQuery that throws resolves to an error outcome instead of rejectin
     liveTasks: [],
   });
   assert.equal(settled.status, 'error');
+});
+
+
+test('the side-question fork uses the selected Claude executable and config directory', { timeout: 5000 }, async () => {
+  const marker = process.env.CLOUDCLI_TEST_PROFILE;
+  const executable = process.platform === 'win32' ? 'C:\\work\\claude.exe' : '/work/claude';
+  const { script, outcome } = startFork({ runtimeProfile: {
+    id: 'work', name: 'Work', provider: 'claude', isDefault: false, executable,
+    env: { CLAUDE_CONFIG_DIR: '/work/claude-config', CLOUDCLI_TEST_PROFILE: 'work' },
+  } });
+  await waitFor(() => script.calls.length === 1);
+  const { options } = script.calls[0]!;
+  assert.equal(options.pathToClaudeCodeExecutable, executable);
+  assert.equal(options.env.CLAUDE_CONFIG_DIR, '/work/claude-config');
+  assert.equal(options.env.CLOUDCLI_TEST_PROFILE, 'work');
+  assert.equal(options.strictMcpConfig, true);
+  assert.equal(process.env.CLOUDCLI_TEST_PROFILE, marker);
+  script.emit(assistantText('profile answer'));
+  script.emit(result('success', 'profile answer'));
+  assert.deepEqual(await outcome, { status: 'done', answer: 'profile answer' });
 });

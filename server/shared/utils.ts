@@ -29,6 +29,7 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderSkillSource,
+  SessionArtifactReadOptions,
   QueuedChatMessage,
   SubagentActivity,
   WorkspacePathValidationResult,
@@ -1196,14 +1197,18 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  *
  * Provider synchronizers call this to find transcript artifacts under provider
  * home directories. Pass `lastScanAt` to include only files created after the
- * previous scan, or pass `null` to perform a full rescan. Missing directories
- * are treated as empty because not every provider exists on every machine.
+ * previous scan, or pass `null` to perform a full rescan. By default, missing
+ * directories are treated as empty because not every provider exists on every machine.
+ * Enable `options.throwOnError` when a partial scan must not advance a cursor;
+ * every discovery/stat failure then rejects, including ENOENT during an active
+ * scan. Strict callers must handle an absent initial root separately.
  */
 export async function findFilesRecursivelyCreatedAfter(
   rootDir: string,
   extension: string,
   lastScanAt: Date | null,
-  fileList: string[] = []
+  fileList: string[] = [],
+  options: SessionArtifactReadOptions = {},
 ): Promise<string[]> {
   try {
     const entries = await readdir(rootDir, { withFileTypes: true });
@@ -1211,7 +1216,7 @@ export async function findFilesRecursivelyCreatedAfter(
       const fullPath = path.join(rootDir, entry.name);
 
       if (entry.isDirectory()) {
-        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList);
+        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList, options);
         continue;
       }
 
@@ -1229,7 +1234,10 @@ export async function findFilesRecursivelyCreatedAfter(
         fileList.push(fullPath);
       }
     }
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) {
+      throw error;
+    }
     // Missing provider folders are expected in first-run or partial setups.
   }
 
@@ -1311,16 +1319,22 @@ export async function buildLookupMap(
  *
  * The caller supplies an `extractor` that validates provider-specific row
  * shapes. This helper centralizes line-by-line parsing and lets indexers stop
- * scanning as soon as one valid row is found.
+ * scanning as soon as one valid row is found, skipping malformed JSON lines.
+ * Provider full scans can enable `options.throwOnError` to reject read failures
+ * and parse errors when no matching payload is found, preserving retries for
+ * incomplete transcripts without hiding valid metadata after a malformed row.
  */
 export async function extractFirstValidJsonlData<T>(
   filePath: string,
-  extractor: (parsedJson: unknown) => T | null | undefined
+  extractor: (parsedJson: unknown) => T | null | undefined,
+  options: SessionArtifactReadOptions = {},
 ): Promise<T | null> {
-  const fileStream = fs.createReadStream(filePath);
-  const lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
-
+  let fileStream: fs.ReadStream | undefined;
+  let lineReader: readline.Interface | undefined;
+  let parseError: unknown;
   try {
+    fileStream = fs.createReadStream(filePath);
+    lineReader = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
     for await (const line of lineReader) {
       const trimmed = line.trim();
       if (!trimmed) {
@@ -1330,24 +1344,29 @@ export async function extractFirstValidJsonlData<T>(
       let parsed: unknown;
       try {
         parsed = JSON.parse(trimmed);
-      } catch {
-        // A row can be half-written while the CLI is streaming into the file.
-        // Skip it rather than giving up before a later valid row.
+      } catch (error) {
+        parseError ??= error;
         continue;
       }
-
       const extracted = extractor(parsed);
       if (extracted) {
         return extracted;
       }
     }
-  } catch {
-    // Ignore malformed or missing artifacts so full scans keep progressing.
+  } catch (error) {
+    if (options.throwOnError) {
+      throw error;
+    }
+    // Best-effort scans tolerate read or extractor failures.
   } finally {
-    // Close on every exit (match, no match, or stream error) so a malformed
-    // artifact cannot leak the file descriptor across repeated watcher scans.
-    lineReader.close();
-    fileStream.close();
+    // Close on matches, no matches and read errors, preserving the upstream
+    // reader's explicit file-handle cleanup alongside strict scan retries.
+    lineReader?.close();
+    fileStream?.close();
+  }
+
+  if (options.throwOnError && parseError !== undefined) {
+    throw parseError;
   }
 
   return null;

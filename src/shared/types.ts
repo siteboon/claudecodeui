@@ -7,6 +7,15 @@ import type { NavigateFunction } from 'react-router-dom';
 /** Identifies which coding-agent CLI backs a session, project selection or model list. */
 export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode';
 
+/** Safe, selectable metadata for a server-configured CLI runtime environment. */
+export type ProviderRuntimeProfileSummary = {
+  id: string;
+  name: string;
+  provider: LLMProvider;
+  description?: string;
+  isDefault: boolean;
+};
+
 /** One selectable model in a provider's model menu, including its optional reasoning-effort choices. */
 export type ProviderModelOption = {
   value: string;

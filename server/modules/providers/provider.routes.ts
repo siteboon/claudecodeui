@@ -6,6 +6,7 @@ import { providerCapabilitiesService } from '@/modules/providers/services/provid
 import { providerCliService } from '@/modules/providers/services/provider-cli.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
+import { providerRuntimeProfilesService } from '@/modules/providers/services/provider-runtime-profiles.service.js';
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
@@ -870,6 +871,13 @@ router.get(
 );
 
 router.get(
+  '/runtime-profiles',
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.json(createApiSuccessResponse({ profiles: providerRuntimeProfilesService.list() }));
+  }),
+);
+
+router.get(
   '/:provider/capabilities',
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
@@ -902,7 +910,15 @@ router.post(
     const provider = parseProvider(body.provider);
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
     const initialMessage = typeof body.initialMessage === 'string' ? body.initialMessage : '';
-    const result = sessionsService.createAppSession(provider, projectPath, initialMessage);
+    const runtimeProfileId = typeof body.runtimeProfileId === 'string'
+      ? body.runtimeProfileId.trim()
+      : undefined;
+    const result = sessionsService.createAppSession(
+      provider,
+      projectPath,
+      initialMessage,
+      runtimeProfileId,
+    );
     res.status(201).json(createApiSuccessResponse(result));
   }),
 );
