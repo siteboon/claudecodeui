@@ -247,6 +247,7 @@ Every code that exists, with the line that emits it:
 | `STEER_UNAVAILABLE` | | `chat.steer` when no turn can take the message: the run ended, its turn was already reported complete, or the provider cannot steer. Carries the `messageId`; the client queues the message as the next turn instead of showing an error |
 | `TASK_ID_REQUIRED` | | `chat.stop-task` without a task id |
 | `NO_SUCH_TASK` | | `chat.stop-task` for a task the runtime is not tracking (already settled, or never this session's) |
+| `TASK_STOP_FAILED` | | `chat.stop-task` that the runtime could not carry out: the CLI acknowledged the stop but the task kept running, or the process could not be reached. Carries the `taskId` |
 | `UNKNOWN_MESSAGE_TYPE` | `:620` | Unrecognised `type` |
 | `INTERNAL_ERROR` | `:626` | Anything thrown out of a handler |
 

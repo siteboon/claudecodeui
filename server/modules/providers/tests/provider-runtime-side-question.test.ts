@@ -358,10 +358,12 @@ test('claudeRuntime.askSideQuestion forks with the live tasks of that app sessio
     await otherPending;
 
     // Let the held run go.
-    assert.equal(await stopClaudeSDKTask(SESSION_ID, 'wf1'), true);
+    // The stop counts only once the task settles, so the notification comes while it waits.
+    const stopping = stopClaudeSDKTask(SESSION_ID, 'wf1');
     held.script.emit({
       type: 'system', subtype: 'task_notification', session_id: NATIVE_ID, task_id: 'wf1', tool_use_id: 'toolu_wf', status: 'stopped', summary: 'stopped', output_file: '',
     });
+    assert.equal(await stopping, true);
     await waitFor(() => held.script.released());
     held.script.end();
     await done;

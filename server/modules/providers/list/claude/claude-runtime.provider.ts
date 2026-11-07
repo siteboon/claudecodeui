@@ -1953,8 +1953,6 @@ function listClaudeSDKBackgroundWork(): Array<{ sessionId: string; tasks: Backgr
  * Stops one outstanding background task through the SDK, which then emits a
  * `task_notification` with status `stopped` — the same event that drops the
  * task from the tracker and settles its card.
- * @param {string} sessionId - Session identifier
- * @param {string} taskId - The task's `task_id` as reported on `task_started`
  *
  * The CLI acknowledges `stop_task` even when it stops nothing (seen with a
  * Monitor task, CLI 2.1.318), so the stop only counts once the task has left

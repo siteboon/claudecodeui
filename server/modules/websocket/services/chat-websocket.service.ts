@@ -725,7 +725,8 @@ async function handleChatStopTask(
       taskId,
     );
   } catch (error) {
-    // The task is still running: say so instead of leaving the ✕ silent.
+    // The stop did not take (task still running, or the CLI could not be reached): say so instead of leaving the ✕ silent.
+    console.warn(`[chat] Stopping background task ${taskId} of ${sessionId} failed:`, error);
     sendProtocolError(ws, 'TASK_STOP_FAILED', error instanceof Error ? error.message : String(error), sessionId, { taskId });
     return;
   }

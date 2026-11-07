@@ -138,7 +138,7 @@ test('stopping the last outstanding task releases the held process', async () =>
     script.emit(taskStarted('wf1', 'toolu_wf', 'local_workflow'));
     script.emit(ack('toolu_wf', 'Workflow launched in background. Task ID: wf1', { status: 'async_launched', taskId: 'wf1', taskType: 'local_workflow' }));
     script.emit(result());
-    await settle();
+    await waitFor(() => sent.some((message) => message.kind === 'complete') && listClaudeSDKBackgroundWork().length === 1);
 
     // The turn is over for the client, the process is held for the workflow.
     assert.ok(sent.some((message) => message.kind === 'complete'));
@@ -166,7 +166,7 @@ test('a stop the CLI acknowledges without ending the task fails', async () => {
     script.emit(toolUse('toolu_mon', 'Monitor', { command: 'tail -f log', description: 'watch' }));
     script.emit(taskStarted('m1', 'toolu_mon', 'local_bash'));
     script.emit(result());
-    await settle();
+    await waitFor(() => listClaudeSDKBackgroundWork().length === 1);
 
     await assert.rejects(stopClaudeSDKTask(SESSION_ID, 'm1', 50), /still running/);
     assert.deepEqual(script.stopped, ['m1']);
