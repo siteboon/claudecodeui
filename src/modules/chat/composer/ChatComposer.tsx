@@ -15,7 +15,7 @@ import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, PencilIcon } from 'lu
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
 import { MCP_ELICITATION_TOOL_NAME } from '@/shared/constants';
-import type { BackgroundSendChoice, BackgroundSendPrompt, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import type { BackgroundSendChoice, BackgroundSendPrompt, PendingSteer, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -33,6 +33,7 @@ import VoiceInputButton from '@/modules/chat/composer/VoiceInputButton';
 import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
+import SteeredMessageCard from '@/modules/chat/composer/SteeredMessageCard';
 import BackgroundSendDialog from '@/modules/chat/composer/BackgroundSendDialog';
 import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessagePopover';
 import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
@@ -44,6 +45,10 @@ type MentionableFile = {
   name: string;
   path: string;
 };
+
+// A stable empty default, so a composer with no steered messages (every
+// caller but the chat tab) does not get a new array each render.
+const NO_PENDING_STEERS: PendingSteer[] = [];
 
 type ChatComposerProps = {
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -88,10 +93,14 @@ type ChatComposerProps = {
   onCancelScheduledMessage: (id: string) => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
-  /** Handle send menu choices (queue, side question, send). */
-  onSendMenuChoice?: (choice: 'queue' | 'sideQuestion' | 'send') => void;
+  /** Handle send menu choices (queue, steer, side question, send). */
+  onSendMenuChoice?: (choice: 'queue' | 'steer' | 'sideQuestion' | 'send') => void;
   /** False until the capability matrix has loaded, or for a provider it does not list; passed through to the send menu and the background-send dialog so neither offers a side question that would be refused. */
   supportsSideQuestions?: boolean;
+  /** Whether the provider can take a message into a running turn; gates the send menu's Steer row the same way `supportsSideQuestions` gates its row. */
+  supportsSteering?: boolean;
+  /** Messages sent into the running turn that the agent has not read yet, each shown as a card above the composer until its echo lands in the transcript. */
+  pendingSteers?: PendingSteer[];
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
   fileErrors: Map<string, string>;
@@ -170,6 +179,8 @@ export default function ChatComposer({
   onDeleteQueuedDraft,
   onSendMenuChoice,
   supportsSideQuestions,
+  supportsSteering = false,
+  pendingSteers = NO_PENDING_STEERS,
   attachedFiles,
   onRemoveAttachment,
   fileErrors,
@@ -331,6 +342,10 @@ export default function ChatComposer({
         hasText={Boolean(input.trim())}
         onResolve={onResolveBackgroundSendPrompt}
       />
+
+      {pendingSteers.map((steer) => (
+        <SteeredMessageCard key={steer.messageId} steer={steer} providerLabel={providerLabel} />
+      ))}
 
       {queuedDraft && (
         <QueuedMessageCard
@@ -529,6 +544,7 @@ export default function ChatComposer({
                 hasText={Boolean(input.trim())}
                 canAbortSession={canAbortSession}
                 supportsSideQuestions={supportsSideQuestions}
+                supportsSteering={supportsSteering}
                 sendByCtrlEnter={sendByCtrlEnter}
                 onSelect={(choice) => {
                   if (choice === 'stop') {

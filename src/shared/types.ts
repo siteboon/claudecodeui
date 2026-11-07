@@ -826,6 +826,34 @@ export type QueuedDraft = {
   options?: QueuedSendOptions;
 };
 
+/**
+ * A message sent into a running turn (steering) that the agent has not read
+ * yet. The composer shows it as a card until its echo reaches the transcript;
+ * `status` is `sending` until the server confirms it reached the turn, then
+ * `accepted`. Local to the tab that sent it.
+ */
+export type PendingSteer = {
+  /** The UUID the message was sent with; its transcript row and live echo carry it too. */
+  messageId: string;
+  /** The session whose turn it was sent into. */
+  sessionKey: string;
+  content: string;
+  /** Browser files kept so the message can go back into the composer intact. */
+  attachments: File[];
+  /** Descriptors uploaded before it was sent, reused if it has to be queued instead. */
+  uploadedAttachments: unknown[];
+  status: 'sending' | 'accepted';
+};
+
+/**
+ * What became of a steered message, as the realtime handler reports it to the
+ * composer: `accepted` (the server put it into the turn), `refused` (the turn
+ * had already ended, so it should go out as the next turn) or `delivered` (the
+ * agent read it; its echo is in the transcript). `delivered` is reported for
+ * every live user message, so the composer matches it against its own ids.
+ */
+export type SteerOutcome = 'accepted' | 'refused' | 'delivered';
+
 /** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, ask a side question instead, or do nothing. */
 export type BackgroundSendChoice = 'send' | 'queue' | 'sideQuestion' | 'cancel';
 

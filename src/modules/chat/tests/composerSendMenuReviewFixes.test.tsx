@@ -17,7 +17,7 @@ import ComposerSendMenu from '@/modules/chat/composer/ComposerSendMenu';
  */
 
 type SendMenuState = 'responding' | 'background';
-type SendMenuChoice = 'queue' | 'sideQuestion' | 'stop' | 'send';
+type SendMenuChoice = 'queue' | 'steer' | 'sideQuestion' | 'stop' | 'send';
 
 const open = () => {
   fireEvent.click(screen.getByRole('button', { name: 'Send options' }));
