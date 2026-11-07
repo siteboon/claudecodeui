@@ -595,13 +595,21 @@ test('a queued turn waits while a scheduled send for its session is still going'
     scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'scheduled', options: {}, scheduledFor: new Date(Date.now() - 1_000) });
     const first = holdFirstRun();
     let started = false;
-    const runtime = { ...(createRuntime([]) as object), run: () => { started = true; return first.run(); } } as never;
+    const runtime = {
+      ...(createRuntime([]) as object),
+      run: (_provider: string, command: string) => {
+        if (command !== 'scheduled') return Promise.resolve();
+        started = true;
+        return first.run();
+      },
+    } as never;
 
     const pass = dispatchDueScheduledMessages(runtime);
     try {
       for (let attempt = 0; attempt < 50 && !started; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
+      assert.equal(started, true);
       // The turn has completed in the registry, but its send has not settled.
       chatRunRegistry.clearAll();
       sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'queued', attachments: [] });
