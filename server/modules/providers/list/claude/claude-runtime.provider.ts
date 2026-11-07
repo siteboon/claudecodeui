@@ -27,6 +27,7 @@ import {
 } from '@/shared/image-attachments.js';
 import {
   CLAUDE_PREDEFINED_MODELS,
+  CLAUDE_FAST_SPEED,
   CLAUDE_ULTRACODE_EFFORT
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
@@ -42,7 +43,7 @@ import {
   getReportedClaudeContextWindow,
   rememberClaudeContextWindow
 } from '@/modules/providers/services/provider-token-usage.service.js';
-import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, findProviderModelOption } from '@/shared/utils.js';
 import type {
   AnyRecord,
   BackgroundTaskSummary,
@@ -169,12 +170,19 @@ function toElicitationResult(decision: ToolApprovalDecision, mode: ElicitationRe
 // selection is translated back into the two options the SDK actually understands here.
 const ULTRACODE_SDK_EFFORT = 'xhigh';
 
+/**
+ * Returns the effort to send when the selected model's catalog entry lists it. A
+ * concrete id the catalog does not list (an older `claude-opus-4-6`) is checked
+ * against its family alias's levels; the CLI then silently downgrades a level the
+ * model it runs does not support (the SDK's `effort` status reports the level "after
+ * any silent downgrade for the selected model"), so the turn runs rather than fails.
+ */
 function resolveClaudeEffort(
   model: string,
   effort: unknown,
   modelsDefinition: ProviderModelsDefinition = CLAUDE_PREDEFINED_MODELS,
 ): string | undefined {
-  const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
+  const selectedModel = findProviderModelOption(modelsDefinition?.OPTIONS, model);
   const allowedEfforts = selectedModel?.effort?.values
     ?.map((value) => value.value) || [];
   return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
@@ -203,6 +211,34 @@ function applyClaudeEffort(sdkOptions: AnyRecord, resolvedEffort: string | undef
     ...(sdkOptions.settings || {}),
     ultracode: true,
     enableWorkflows: true
+  };
+}
+
+/**
+ * Turns on Claude fast mode for this turn when the composer asked for it and the selected
+ * model offers it. Fast mode is a CLI setting rather than an SDK option. Without a speed
+ * choice nothing is set, so the user's own Claude setting applies.
+ * @param {Object} sdkOptions - SDK options being built (`model` already set)
+ * @param {unknown} speed - Speed value sent by the composer
+ * @param {Object} modelsDefinition - Catalog the selected model is looked up in
+ */
+export function applyClaudeSpeed(
+  sdkOptions: AnyRecord,
+  speed: unknown,
+  modelsDefinition: ProviderModelsDefinition = CLAUDE_PREDEFINED_MODELS,
+) {
+  if (speed !== CLAUDE_FAST_SPEED) {
+    return;
+  }
+
+  const selectedModel = findProviderModelOption(modelsDefinition?.OPTIONS, sdkOptions.model);
+  if (!selectedModel?.speed?.values.some((option) => option.value === CLAUDE_FAST_SPEED)) {
+    return;
+  }
+
+  sdkOptions.settings = {
+    ...(sdkOptions.settings || {}),
+    fastMode: true,
   };
 }
 
@@ -398,6 +434,7 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
     effort,
     options.effortModels || CLAUDE_PREDEFINED_MODELS,
   ));
+  applyClaudeSpeed(sdkOptions, options.speed, options.effortModels || CLAUDE_PREDEFINED_MODELS);
 
   sdkOptions.systemPrompt = {
     type: 'preset',

@@ -38,6 +38,10 @@ import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessageP
 import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
 import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
 import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
+import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
+
+const NO_SPEED_OPTIONS: NonNullable<ProviderModelOption['speed']>['values'] = [];
+const ignoreSpeedSelection = () => {};
 
 type MentionableFile = {
   name: string;
@@ -61,6 +65,9 @@ type ChatComposerProps = {
   effort: string;
   availableEffortOptions: NonNullable<ProviderModelOption['effort']>['values'];
   onSelectEffort: (effort: string) => void;
+  speed?: string;
+  availableSpeedOptions?: NonNullable<ProviderModelOption['speed']>['values'];
+  onSelectSpeed?: (speed: string) => void;
   model: string;
   availableModelOptions: ProviderModelOption[];
   onSelectModel: (model: string) => void;
@@ -138,6 +145,9 @@ export default function ChatComposer({
   effort,
   availableEffortOptions,
   onSelectEffort,
+  speed,
+  availableSpeedOptions,
+  onSelectSpeed,
   model,
   availableModelOptions,
   onSelectModel,
@@ -495,6 +505,9 @@ export default function ChatComposer({
               effort={effort}
               effortOptions={availableEffortOptions}
               onSelectEffort={onSelectEffort}
+              speed={speed ?? DEFAULT_EFFORT_VALUE}
+              speedOptions={availableSpeedOptions ?? NO_SPEED_OPTIONS}
+              onSelectSpeed={onSelectSpeed ?? ignoreSpeedSelection}
               model={model}
               modelOptions={availableModelOptions}
               onSelectModel={onSelectModel}

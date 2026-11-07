@@ -26,6 +26,22 @@ const ULTRACODE_EFFORT_OPTION = {
   description: 'Highest effort plus standing workflow orchestration.',
 };
 
+/** Speed value the composer sends to run a turn in Claude fast mode. */
+export const CLAUDE_FAST_SPEED = 'fast';
+
+/**
+ * Fast mode is a CLI setting the Agent SDK only turns on when asked
+ * (`fast_mode_disabled_reason: 'sdk_opt_in_required'` otherwise). It runs only
+ * on Opus, so it is offered on the `opus` alias and not on `default`, which
+ * resolves to Sonnet on some accounts: there fast mode would switch the session
+ * to Opus or be ignored.
+ */
+const FAST_SPEED_OPTION = {
+  value: CLAUDE_FAST_SPEED,
+  label: 'Fast',
+  description: 'Faster output, billed at a higher rate.',
+};
+
 export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
   OPTIONS: [
     {
@@ -121,6 +137,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           ULTRACODE_EFFORT_OPTION,
         ],
       },
+      speed: { values: [FAST_SPEED_OPTION] },
     },
     {
       value: 'opus[1m]',
