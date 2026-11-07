@@ -18,7 +18,7 @@ const isApplePlatform = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.te
 const SIDE_QUESTION_SHORTCUT = isApplePlatform ? '⌥↵' : 'Alt+↵';
 
 export type ComposerSendMenuState = 'responding' | 'background';
-export type ComposerSendMenuChoice = 'queue' | 'sideQuestion' | 'stop' | 'send';
+export type ComposerSendMenuChoice = 'queue' | 'steer' | 'sideQuestion' | 'stop' | 'send';
 
 type ComposerSendMenuProps = {
   /** Whether a turn is still being written, or only background work runs. */
@@ -31,6 +31,8 @@ type ComposerSendMenuProps = {
   canAbortSession?: boolean;
   /** False until the capability matrix has loaded, or for a provider it does not list; the side-question row is left out rather than offered and then refused. */
   supportsSideQuestions?: boolean;
+  /** Same gate for the Steer row: whether the provider can take a message into the turn being written. Only `responding` has a turn to steer, so the row never shows for background work. */
+  supportsSteering?: boolean;
   /** Mirrors the composer's "send with Ctrl+Enter" setting, so Queue's hint names the key that actually sends; defaults to false, Enter-to-send, like the composer's own default. */
   sendByCtrlEnter?: boolean;
   onSelect: (choice: ComposerSendMenuChoice) => void;
@@ -56,7 +58,7 @@ function ShortcutHint({ children }: { children: string }) {
  * background-send dialog, so a tap on the first row can never stop or
  * override anything.
  */
-export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, supportsSideQuestions = false, canAbortSession = true, sendByCtrlEnter = false, onSelect }: ComposerSendMenuProps) {
+export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, supportsSideQuestions = false, supportsSteering = false, canAbortSession = true, sendByCtrlEnter = false, onSelect }: ComposerSendMenuProps) {
   const { t } = useTranslation('chat');
   const [isOpen, setIsOpen] = useState(false);
   const close = useCallback(() => setIsOpen(false), []);
@@ -119,6 +121,19 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
             trailing={queueShortcut ? <ShortcutHint>{queueShortcut}</ShortcutHint> : undefined}
             onSelect={() => select('queue')}
           />
+          {state === 'responding' && supportsSteering && (
+            // Right under Queue: both send the message to this session, and
+            // differ only in when it is read. The first row stays Queue, so a
+            // tap that lands early still does the safe thing.
+            <ComposerMenuItem
+              disabled={!hasInput}
+              isSelected={false}
+              role="menuitem"
+              label={t('sendMenu.steer.label', { defaultValue: 'Steer' })}
+              description={t('sendMenu.steer.description', { defaultValue: 'Send into this turn; read at the next tool call' })}
+              onSelect={() => select('steer')}
+            />
+          )}
           {supportsSideQuestions && (
             <ComposerMenuItem
               disabled={!hasText}

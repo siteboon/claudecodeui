@@ -188,6 +188,13 @@
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
       "delete": "Delete queued message"
+    },
+    "steer": {
+      "label": "Steering",
+      "sending": "Sending…",
+      "willRead": "{{provider}} reads it at its next tool call",
+      "attachments_one": "{{count}} file attached",
+      "attachments_other": "{{count}} files attached"
     }
   },
   "composer": {
@@ -267,6 +274,10 @@
       "label": "Queue",
       "descriptionResponding": "Send when this turn ends",
       "descriptionBackground": "Send when the background work ends"
+    },
+    "steer": {
+      "label": "Steer",
+      "description": "Send into this turn; read at the next tool call"
     },
     "sideQuestion": {
       "label": "Side question",

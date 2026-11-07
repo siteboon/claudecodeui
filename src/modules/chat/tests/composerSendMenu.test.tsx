@@ -18,7 +18,7 @@ import ComposerSendMenu from '@/modules/chat/composer/ComposerSendMenu';
  */
 
 type SendMenuState = 'responding' | 'background';
-type SendMenuChoice = 'queue' | 'sideQuestion' | 'stop' | 'send';
+type SendMenuChoice = 'queue' | 'steer' | 'sideQuestion' | 'stop' | 'send';
 
 // Every test but the capability-gate ones draws the menu for a provider that
 // answers side questions; the component's default is false until the

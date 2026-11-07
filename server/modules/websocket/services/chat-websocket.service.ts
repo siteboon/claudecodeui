@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import type { WebSocket } from 'ws';
@@ -83,6 +84,8 @@ export type ProviderRuntimeGateway = SideQuestionRuntime & {
   ): Promise<unknown>;
   abort(provider: LLMProvider, sessionId: string): Promise<boolean>;
   stopBackgroundTask(provider: LLMProvider, sessionId: string, taskId: string): Promise<boolean>;
+  /** Delivers a message into the session's running turn; false when no turn can take it. */
+  steer(provider: LLMProvider, sessionId: string, command: string, options: AnyRecord): Promise<boolean>;
   /** Whether a provider runtime still holds background work for the session after its turn ended. */
   hasBackgroundWork(sessionId: string): boolean;
   resolveToolApproval(requestId: string, payload: ProviderPermissionDecision): void;
@@ -214,6 +217,22 @@ function resolveSendTarget(
 }
 
 /**
+ * The attachments a send names, from any of the option keys clients use,
+ * narrowed to files in the upload store and with duplicates dropped.
+ */
+function readVerifiedAttachments(clientOptions: AnyRecord): ChatAttachmentDescriptor[] {
+  const attachmentCandidates = [
+    ...normalizeAttachmentDescriptors(clientOptions.images),
+    ...normalizeAttachmentDescriptors(clientOptions.files),
+    ...normalizeAttachmentDescriptors(clientOptions.attachments),
+  ];
+  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
+  return verifiedAttachments.filter(
+    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
+  );
+}
+
+/**
  * Registers the run and hands the turn to the provider runtime.
  *
  * `extraRuntimeOptions` is how an edited message asks the provider to resume
@@ -264,15 +283,7 @@ async function dispatchRun(
     providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
   }
 
-  const attachmentCandidates = [
-    ...normalizeAttachmentDescriptors(clientOptions.images),
-    ...normalizeAttachmentDescriptors(clientOptions.files),
-    ...normalizeAttachmentDescriptors(clientOptions.attachments),
-  ];
-  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
-  const uniqueAttachments = verifiedAttachments.filter(
-    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
-  );
+  const uniqueAttachments = readVerifiedAttachments(clientOptions);
 
   // The provider runtimes receive the stable app session id. When their
   // CLI/SDK needs the provider-native id for resume, they resolve it from the
@@ -575,6 +586,74 @@ async function handleChatEditSend(
   );
 }
 
+// The id a steered message is tracked by becomes its transcript uuid, so it has
+// to be one.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Handles `chat.steer`: delivers a message into the session's running turn
+ * instead of starting a new one. The model reads it at its next tool-call
+ * boundary and carries on; the provider echoes it on the run's stream at that
+ * moment, which is how every attached tab learns it was read. The sender gets
+ * `chat_steer_accepted` once the provider has taken it.
+ *
+ * Refused with `STEER_UNAVAILABLE` (naming the `messageId`) when no turn can
+ * take it: the run has ended, its turn has already been reported complete, or
+ * the provider cannot write into a running turn. The client then sends the
+ * message the ordinary way, so nothing typed is lost to the race.
+ */
+async function handleChatSteer(
+  ws: WebSocket,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.steer');
+  if (!resolved) {
+    return;
+  }
+
+  const { sessionId, provider } = resolved;
+  const requestedId = typeof data.messageId === 'string' ? data.messageId.trim() : '';
+  const messageId = UUID_PATTERN.test(requestedId) ? requestedId : randomUUID();
+  const content = typeof data.content === 'string' ? data.content : '';
+  const clientOptions = (data.options ?? {}) as AnyRecord;
+  const attachments = readVerifiedAttachments(clientOptions);
+
+  if (!content.trim() && attachments.length === 0) {
+    sendProtocolError(ws, 'MESSAGE_REQUIRED', 'chat.steer requires a message.', sessionId, { messageId });
+    return;
+  }
+
+  const run = chatRunRegistry.getRun(sessionId);
+  const steered = run?.status === 'running'
+    ? await dependencies.runtime.steer(provider, sessionId, content, {
+      images: attachments.filter(isImageAttachmentDescriptor),
+      files: attachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+      messageId,
+    })
+    : false;
+
+  if (!steered) {
+    sendProtocolError(
+      ws,
+      'STEER_UNAVAILABLE',
+      `Session "${sessionId}" has no running turn to send the message into.`,
+      sessionId,
+      { messageId },
+    );
+    return;
+  }
+
+  // Tells the sender the message is on its way into the turn. From here it is
+  // the run's: the echo when Claude reads it, or the run ending without it.
+  sendJson(ws, {
+    kind: 'chat_steer_accepted',
+    sessionId,
+    messageId,
+    timestamp: new Date().toISOString(),
+  });
+}
+
 /**
  * Handles `chat.abort`: cancels the run for one app session and emits the
  * terminal `complete` on its behalf (runtimes skip their own complete for
@@ -749,6 +828,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * Inbound protocol (client to server):
  * - `chat.send`                { sessionId, content, options? }
  * - `chat.side_question`       { sessionId, sideQuestionId, question, options?: { model? } }
+ * - `chat.steer`               { sessionId, messageId, content, options? }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
@@ -756,8 +836,8 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *
  * Outbound protocol (server to client): every frame is `kind`-based — either
  * a provider `NormalizedMessage` (with `seq`) or a gateway event
- * (`chat_subscribed`, `session_upserted`, `loading_progress`,
- * `protocol_error`, `side_question`).
+ * (`chat_subscribed`, `chat_steer_accepted`, `session_upserted`,
+ * `loading_progress`, `protocol_error`, `side_question`).
  */
 /**
  * Runs a turn for a session with no client attached.
@@ -853,6 +933,9 @@ export function handleChatConnection(
           return;
         case 'chat.side_question':
           handleChatSideQuestion(ws, data, dependencies);
+          return;
+        case 'chat.steer':
+          await handleChatSteer(ws, data, dependencies);
           return;
         case 'chat.abort':
           await handleChatAbort(ws, data, dependencies);
