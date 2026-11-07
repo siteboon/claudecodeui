@@ -93,6 +93,59 @@ export function asyncHandler(
 }
 
 // ---------------------------
+//----------------- MULTIPART UPLOAD FILENAME UTILITIES ------------
+/**
+ * UTF-8 decoder that throws on invalid input instead of inserting U+FFFD, so
+ * `decodeMultipartFilename` can tell mojibake (valid UTF-8 bytes) apart from
+ * a name that really is latin1. The BOM is kept so no character is dropped.
+ */
+const STRICT_UTF8_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+
+/**
+ * Restores the name a client gave a file in a multipart upload.
+ *
+ * Browsers and curl send the part's `filename="..."` parameter as raw UTF-8
+ * bytes, but busboy (multer's parser) reads header parameters as latin1: multer
+ * 2.0.x cannot pass it a charset at all, and later 2.x releases default the
+ * option to latin1. Multer's `originalname` therefore arrives with each UTF-8
+ * byte turned into one character, e.g. `Счет.docx` arrives as
+ * `Ð¡Ñ\x87ÐµÑ\x82.docx` (two of those characters are invisible C1 controls).
+ *
+ * The name is re-read as UTF-8 only when its bytes form valid UTF-8, which a
+ * genuine latin1 name practically never does, so the result does not depend on
+ * the installed multer version or its options:
+ * - an ASCII-only name, or one that already holds a character above U+00FF
+ *   (busboy decoded it, e.g. from an RFC 5987 `filename*=UTF-8''...` parameter),
+ *   is returned unchanged;
+ * - otherwise the characters are turned back into the bytes they came from and
+ *   decoded as UTF-8; a name whose bytes are not valid UTF-8 (a real latin1 name
+ *   such as `café.txt` sent as `filename*=ISO-8859-1''caf%E9.txt`) is returned
+ *   unchanged. The one misread: a latin1 name that itself looks like mojibake,
+ *   such as `Â©2024.txt`, is re-read as `©2024.txt`.
+ *
+ * The result is meant for display and for callers that confine it themselves;
+ * it is not sanitized for use as a path.
+ *
+ * Used by the assets service and the file-tree and voice upload routes, which
+ * all read multer's `originalname`.
+ */
+export function decodeMultipartFilename(fileName: string): string {
+  // Without the `u` flag the second class also matches both halves of a
+  // surrogate pair, so emoji and other astral characters count as decoded.
+  const hasNonAsciiLatin1Characters = /[\u0080-\u00ff]/.test(fileName);
+  const hasCharactersAboveLatin1 = /[\u0100-\uffff]/.test(fileName);
+  if (!hasNonAsciiLatin1Characters || hasCharactersAboveLatin1) {
+    return fileName;
+  }
+
+  try {
+    return STRICT_UTF8_DECODER.decode(Buffer.from(fileName, 'latin1'));
+  } catch {
+    return fileName;
+  }
+}
+
+// ---------------------------
 //----------------- QUEUED CHAT MESSAGE UTILITIES ------------
 /**
  * Reads a stored queued chat message (the parsed JSON of

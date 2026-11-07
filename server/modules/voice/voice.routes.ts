@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import express from 'express';
 
 import type { VoiceRequestOverrides, VoiceService, VoiceServiceResult } from '@/shared/types.js';
-import { asyncHandler } from '@/shared/utils.js';
+import { asyncHandler, decodeMultipartFilename } from '@/shared/utils.js';
 
 type VoiceRouterDependencies = {
   voiceService: VoiceService;
@@ -70,7 +70,7 @@ export function createVoiceRouter(dependencies: VoiceRouterDependencies): expres
           audio: {
             bytes: request.file.buffer,
             mimeType: request.file.mimetype || 'audio/webm',
-            fileName: request.file.originalname || 'recording.webm',
+            fileName: decodeMultipartFilename(request.file.originalname) || 'recording.webm',
           },
           overrides: parseVoiceOverrides(request),
         });

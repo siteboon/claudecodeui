@@ -6,7 +6,7 @@ import type {
   FileTreeServices,
   FileTreeUploadedFile,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, decodeMultipartFilename } from '@/shared/utils.js';
 
 type FileTreeUploadLimits = {
   maximumFileSizeMegabytes: number;
@@ -72,9 +72,11 @@ function readRequestedFileCount(value: unknown, fallbackCount: number): number {
 }
 
 function normalizeUploadedFiles(request: UploadedRequest): FileTreeUploadedFile[] {
+  // `originalName` names the written file when the client sends no
+  // `relativePaths` entry for it, so it must be decoded from multer's latin1.
   return Array.isArray(request.files)
     ? request.files.map((file) => ({
-        originalName: file.originalname,
+        originalName: decodeMultipartFilename(file.originalname),
         temporaryPath: file.path,
         size: file.size,
         mimeType: file.mimetype,
