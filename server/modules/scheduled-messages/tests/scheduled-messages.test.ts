@@ -454,7 +454,7 @@ test('a due message is announced to open tabs as it is claimed, before its turn 
   });
 });
 
-test('a pass announces each session it claimed from once, however many of its messages were due', async () => {
+test('a pass claims one due message per session and announces each session once', async () => {
   await withIsolatedDatabase(async (userId) => {
     const otherSessionId = 'other-scheduled-session';
     sessionsDb.createAppSession(otherSessionId, 'claude', tmpdir(), 'Other scheduled session');
@@ -472,10 +472,11 @@ test('a pass announces each session it claimed from once, however many of its me
     }
     const tab = openTab();
 
-    assert.equal(await dispatchDueScheduledMessages(createRuntime([])), 3);
-
-    // One read per session is enough: a single GET returns all of its rows.
+    // A session's second message waits for the next pass, so it is never
+    // recorded as sent while it still waits behind the first.
+    assert.equal(await dispatchDueScheduledMessages(createRuntime([])), 2);
     assert.deepEqual(tab.announcements().map((frame) => frame.sessionId).sort(), [otherSessionId, SESSION_ID]);
+    assert.equal(await dispatchDueScheduledMessages(createRuntime([])), 1);
   });
 });
 
@@ -619,7 +620,8 @@ test('a session\'s next due message stays pending while its earlier send is goin
   // A later pass must neither overtake nor interrupt the earlier pass's turn,
   // and a message that has not gone must not be recorded as sent.
   await withIsolatedDatabase(async (userId) => {
-    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'first', options: {}, scheduledFor: new Date(Date.now() - 2_000) });
+    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'first', options: {}, scheduledFor: new Date(Date.now() - 3_000) });
+    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'second', options: {}, scheduledFor: new Date(Date.now() - 2_000) });
 
     const started: string[] = [];
     const first = holdFirstRun();
@@ -633,7 +635,9 @@ test('a session\'s next due message stays pending while its earlier send is goin
 
     const firstPass = dispatchDueScheduledMessages(runtime);
     try {
-      scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'second', options: {}, scheduledFor: new Date(Date.now() - 1_000) });
+      // Due in the same pass, but claimed one at a time.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.deepEqual(started, ['first']);
       assert.equal(await dispatchDueScheduledMessages(runtime), 0);
       assert.deepEqual(started, ['first']);
       const statuses = scheduledMessagesDb.listForSession(userId, SESSION_ID).map((row) => `${row.content}:${row.status}`).sort();

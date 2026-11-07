@@ -154,23 +154,15 @@ export async function dispatchDueScheduledMessages(
     announceScheduledMessagesChanged(sessionId);
   }
 
-  // Sequentially per session: a session can only have one run at a time, and
-  // two due messages for it must not race each other into it. Sessions go side
-  // by side, since a turn can stay open a long time (see runDispatchPass).
-  const bySession = new Map<string, ScheduledMessageRow[]>();
-  for (const row of due) {
-    const rows = bySession.get(row.session_id);
-    if (rows) rows.push(row);
-    else bySession.set(row.session_id, [row]);
-  }
-  await Promise.all([...bySession].map(async ([sessionId, rows]) => {
-    sessionsSending.add(sessionId);
+  // One row per session (see claimDue), and sessions side by side, since a
+  // turn can stay open a long time (see runDispatchPass).
+  // shortcut: a session's next row waits for the whole earlier send, background work included (the runtime ends that hold after 30 idle minutes); interrupt instead if timeliness matters more.
+  await Promise.all(due.map(async (row) => {
+    sessionsSending.add(row.session_id);
     try {
-      for (const row of rows) {
-        await sendClaimedMessage(row, runtime);
-      }
+      await sendClaimedMessage(row, runtime);
     } finally {
-      sessionsSending.delete(sessionId);
+      sessionsSending.delete(row.session_id);
     }
   }));
 

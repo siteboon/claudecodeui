@@ -68,15 +68,16 @@ export const scheduledMessagesDb = {
   },
 
   /**
-   * Claims every message whose time has passed, marking them in the same
-   * statement that selects them.
+   * Claims the earliest message whose time has passed for each session not in
+   * `skipSessionIds`, marking them in the same transaction that selects them.
+   * A session's later due messages stay pending (cancellable, banner up) until
+   * a later pass, so none is recorded as sent before it actually goes.
    *
    * Claiming is what makes a missed schedule work: the server can be down at
    * the moment a message was due, and the next poll after it starts picks the
    * message up instead of skipping it. Doing it in one transaction is what
    * stops two overlapping polls from sending the same message twice.
    */
-  /** Rows of `skipSessionIds` stay pending for a later pass. */
   claimDue(now: Date, skipSessionIds: ReadonlySet<string> = new Set()): ScheduledMessageRow[] {
     const db = getConnection();
     const nowIso = now.toISOString();
@@ -89,7 +90,12 @@ export const scheduledMessagesDb = {
            ORDER BY scheduled_for ASC`
         )
         .all(nowIso) as ScheduledMessageRow[];
-      const claimed = due.filter((row) => !skipSessionIds.has(row.session_id));
+      const sessions = new Set(skipSessionIds);
+      const claimed = due.filter((row) => {
+        if (sessions.has(row.session_id)) return false;
+        sessions.add(row.session_id);
+        return true;
+      });
 
       for (const row of claimed) {
         db.prepare(
