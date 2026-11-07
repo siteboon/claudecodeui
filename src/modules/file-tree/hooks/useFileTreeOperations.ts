@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 
 import { api } from '@/shared/api';
 import type { FileTreeNode,Project } from '@/shared/types';
-import { copyTextToClipboard } from '@/shared/utils';
+import { copyTextToClipboard, downloadBlob } from '@/shared/utils';
 
 // Invalid filename characters
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
@@ -251,20 +251,6 @@ export function useFileTreeOperations({
     });
   }, [showToast, t]);
 
-  const triggerBrowserDownload = useCallback((blob: Blob, fileName: string) => {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-
-    anchor.href = url;
-    anchor.download = fileName;
-
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-
-    URL.revokeObjectURL(url);
-  }, []);
-
   // Download a single file
   const downloadSingleFile = useCallback(async (item: FileTreeNode) => {
     if (!selectedProject) return;
@@ -277,8 +263,8 @@ export function useFileTreeOperations({
     }
 
     const blob = await response.blob();
-    triggerBrowserDownload(blob, item.name);
-  }, [selectedProject, triggerBrowserDownload]);
+    downloadBlob(blob, item.name);
+  }, [selectedProject]);
 
   // Download folder as ZIP
   const downloadFolderAsZip = useCallback(async (folder: FileTreeNode) => {
@@ -316,10 +302,10 @@ export function useFileTreeOperations({
 
     // Generate ZIP file
     const zipBlob = await zip.generateAsync({ type: 'blob' });
-    triggerBrowserDownload(zipBlob, `${folder.name}.zip`);
+    downloadBlob(zipBlob, `${folder.name}.zip`);
 
     showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded as ZIP'), 'success');
-  }, [selectedProject, showToast, t, triggerBrowserDownload]);
+  }, [selectedProject, showToast, t]);
 
   // Download file or folder. Declared after the two helpers it dispatches to so
   // it does not read them before initialization; both are memoized on
