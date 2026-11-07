@@ -148,6 +148,30 @@ test('a session that has not run moves for any provider; one with a transcript n
   });
 });
 
+test('an archived session, or one moved into an archived project, is refused', async () => {
+  await withDatabase(async (directory) => {
+    const source = path.join(directory, 'source');
+    const targetId = createTargetProject(path.join(directory, 'target'));
+    const archivedTargetId = createTargetProject(path.join(directory, 'archived-target'));
+    getConnection().prepare('UPDATE projects SET isArchived = 1 WHERE project_id = ?').run(archivedTargetId);
+
+    sessionsDb.createAppSession('archived', 'opencode', source, 'Archived');
+    getConnection().prepare("UPDATE sessions SET isArchived = 1 WHERE session_id = 'archived'").run();
+    await assert.rejects(
+      () => sessionsService.moveSessionToProject('archived', targetId),
+      (error: { code?: string }) => error.code === 'SESSION_MOVE_ARCHIVED',
+    );
+
+    sessionsDb.createAppSession('active', 'opencode', source, 'Active');
+    await assert.rejects(
+      () => sessionsService.moveSessionToProject('active', archivedTargetId),
+      (error: { code?: string }) => error.code === 'PROJECT_NOT_FOUND',
+    );
+    assert.equal(sessionsDb.getSessionById('active')?.project_path, source);
+    assert.equal(sessionsDb.getSessionById('archived')?.project_path, source);
+  });
+});
+
 test('a Codex rollout that cannot be rewritten leaves the session where it was', async () => {
   await withDatabase(async (directory) => {
     const source = path.join(directory, 'source');

@@ -438,9 +438,17 @@ export const sessionsService = {
         statusCode: 404,
       });
     }
+    // A move rewrites the transcript, and a rescan that sees it newer would un-archive the session.
+    if (session.isArchived) {
+      throw new AppError('Restore the session before moving it to another project.', {
+        code: 'SESSION_MOVE_ARCHIVED',
+        statusCode: 409,
+      });
+    }
 
     const target = projectsDb.getProjectById(projectId);
-    if (!target) {
+    // An archived project is hidden from the sidebar, so a session moved there would vanish.
+    if (!target || target.isArchived) {
       throw new AppError(`Project "${projectId}" was not found.`, {
         code: 'PROJECT_NOT_FOUND',
         statusCode: 404,

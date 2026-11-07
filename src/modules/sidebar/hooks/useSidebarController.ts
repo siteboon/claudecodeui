@@ -80,6 +80,7 @@ type UseSidebarControllerArgs = {
 /** Server error codes of a refused move, shown as translated reasons instead of the server's English text. */
 const MOVE_SESSION_ERROR_KEYS: Record<string, string> = {
   SESSION_MOVE_RUNNING: 'messages.moveSessionRunning',
+  SESSION_MOVE_ARCHIVED: 'messages.moveSessionArchived',
   SESSION_MOVE_NOT_SUPPORTED: 'messages.moveSessionNotSupported',
   SESSION_ALREADY_IN_PROJECT: 'messages.moveSessionAlreadyInProject',
   SESSION_MOVE_FAILED: 'messages.moveSessionFailed',
