@@ -72,7 +72,9 @@ async function sendClaimedQueuedMessage(
  * turn was promised to go "when this finishes", so it waits for that work too.
  */
 function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
-  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
+  // sessionsSending too: a scheduled turn can complete before its send settles,
+  // and the session's next due row would then interrupt this queued turn.
+  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId) || sessionsSending.has(sessionId);
 }
 
 /** Sends every persisted queued turn whose session is currently idle. */
