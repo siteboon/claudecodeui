@@ -17,6 +17,10 @@ const OPENCODE_ENV_KEYS = [
   'OPENCODE_API_KEY',
   'ANTHROPIC_API_KEY',
   'OPENAI_API_KEY',
+  'GOOGLE_GENERATIVE_AI_API_KEY',
+  'GROQ_API_KEY',
+  'OPENROUTER_API_KEY',
+  'WALLY_API_KEY',
   'OPENCODE_CONFIG',
   'OPENCODE_CONFIG_CONTENT',
 ];
@@ -211,6 +215,40 @@ test('OpenCode discovers only models available through connected providers', asy
       assert.deepEqual([...providerIds], ['openai']);
     },
     async () => ['openai/gpt-5.6'],
+  );
+
+  // A Wally key in the environment keeps its models next to a logged-in provider.
+  await withOpenCodeHome(
+    async (homeDir) => {
+      await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } });
+      process.env.WALLY_API_KEY = 'test';
+    },
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+
+      assert.deepEqual(catalog.OPTIONS.map((option) => option.value), [
+        'anthropic/claude-opus-5',
+        'wally/deepseek-v4.1-flash',
+      ]);
+    },
+    async () => ['anthropic/claude-opus-5', 'wally/deepseek-v4.1-flash', 'openai/gpt-5.6'],
+  );
+
+  // Two keys in the environment keep the models of both providers.
+  await withOpenCodeHome(
+    async () => {
+      process.env.OPENROUTER_API_KEY = 'test';
+      process.env.WALLY_API_KEY = 'test';
+    },
+    async (adapter) => {
+      const catalog = await adapter.getSupportedModels();
+
+      assert.deepEqual(catalog.OPTIONS.map((option) => option.value), [
+        'openrouter/qwen/qwen3-coder-flash',
+        'wally/deepseek-v4.1-flash',
+      ]);
+    },
+    async () => ['openrouter/qwen/qwen3-coder-flash', 'wally/deepseek-v4.1-flash', 'openai/gpt-5.6'],
   );
 });
 

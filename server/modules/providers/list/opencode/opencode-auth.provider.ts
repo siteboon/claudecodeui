@@ -19,6 +19,7 @@ const OPENCODE_ENV_CREDENTIAL_KEYS = [
   'GOOGLE_GENERATIVE_AI_API_KEY',
   'GROQ_API_KEY',
   'OPENROUTER_API_KEY',
+  'WALLY_API_KEY',
 ];
 
 export class OpenCodeProviderAuth implements IProviderAuth {
