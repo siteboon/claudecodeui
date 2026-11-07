@@ -11,6 +11,7 @@
  * - codexRuntime.abort(sessionId) - Cancel an active session
  */
 
+import { randomUUID } from 'node:crypto';
 import { Codex } from '@openai/codex-sdk';
 import type { ModelReasoningEffort, Thread, ThreadOptions } from '@openai/codex-sdk';
 
@@ -22,7 +23,8 @@ import {
   createNormalizedMessage,
 } from '@/shared/index.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
+import { sessionRuntimeFailuresDb } from '@/modules/database/index.js';
+import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter, SessionRuntimeFailure } from '@/shared/index.js';
 
 type ActiveCodexSession = {
   thread: Thread;
@@ -313,10 +315,55 @@ async function queryCodex(
   // stderr dump of unrelated CLI log lines, so the thrown wrapper is dropped
   // when the stream already reported the failure.
   let errorSurfaced = false;
+  const runId = `codex-failure-${randomUUID()}`;
+  const startedAt = new Date().toISOString();
+  let eventCount = 0;
+  let lastEventType: string | null = null;
+  let sawTurnCompleted = false;
+  let sawAssistantMessage = false;
+  let failureReported = false;
   const abortController = new AbortController();
   // Session-map key: the app session id when the caller supplied one, else
   // the provider-native thread id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+
+  const reportFailure = (code: SessionRuntimeFailure['code'], error?: Error) => {
+    if (failureReported) return;
+    failureReported = true;
+    const timestamp = new Date().toISOString();
+    // Parse only the SDK's exit envelope and known transport codes. Stderr may
+    // contain credentials or tool output and must not enter the durable journal.
+    const envelope = /Codex Exec exited with (?:code (\d+)|signal (SIG[A-Z0-9]+))/.exec(error?.message ?? '');
+    const content = 'Codex stopped before completing its reply. Check the conversation before retrying any work.';
+    const failure: SessionRuntimeFailure = {
+      id: runId, sessionId: sessionId || capturedSessionId || '', timestamp, startedAt,
+      provider: 'codex', code, content,
+      diagnostics: {
+        providerSessionId: capturedSessionId, model: resolvedModel ?? null, effort: resolvedEffort ?? null,
+        lastEventType, eventCount, sawTurnCompleted, sawAssistantMessage,
+        exitCode: envelope?.[1] ? Number(envelope[1]) : null,
+        signal: envelope?.[2] ?? null,
+        errorName: error?.name.replace(/[^A-Za-z0-9_]/g, '').slice(0, 64) ?? null,
+        transportCode: /\b(ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|UND_ERR_[A-Z_]+)\b/.exec(error?.message ?? '')?.[1] ?? null,
+      },
+    };
+    console.error('[Codex] Run failed', { runId, sessionId: failure.sessionId, code, ...failure.diagnostics });
+    try {
+      if (failure.sessionId) sessionRuntimeFailuresDb.record(failure);
+    } catch {
+      // Recording must never prevent the live failure and terminal completion.
+      console.error('[Codex] Could not persist run failure', { runId, sessionId: failure.sessionId });
+    }
+    if (!errorSurfaced) {
+      sendMessage(ws, createNormalizedMessage({
+        id: runId, timestamp, kind: 'error', content, sessionId: capturedSessionId || sessionId || null, provider: 'codex',
+      }));
+    }
+    notifyRunFailed({
+      userId: ws?.userId || null, provider: 'codex', sessionId: sessionId || capturedSessionId || null,
+      sessionName: sessionSummary, error: new Error(`${code}: ${content}`),
+    });
+  };
 
   try {
     codex = new Codex();
@@ -368,6 +415,13 @@ async function queryCodex(
     });
 
     for await (const event of streamedTurn.events) {
+      eventCount += 1;
+      lastEventType = event.type;
+      if (event.type === 'turn.started') sawTurnCompleted = false;
+      if (event.type === 'turn.completed') sawTurnCompleted = true;
+      if (event.type === 'item.completed' && event.item.type === 'agent_message' && event.item.text.trim()) {
+        sawAssistantMessage = true;
+      }
       // Capture thread/session id lazily from the stream (Codex emits this asynchronously).
       if (event.type === 'thread.started') {
         const discoveredSessionId = event.thread_id || null;
@@ -411,27 +465,18 @@ async function queryCodex(
       }
 
       const transformed = transformCodexEvent(event);
-      if (transformed.type === 'error' || transformed.itemType === 'error') {
-        errorSurfaced = true;
-      }
 
       // Normalize the transformed event into NormalizedMessage(s) via adapter
       const normalizedMsgs = context.normalizeMessage(transformed, capturedSessionId || sessionId || null);
       for (const msg of normalizedMsgs) {
+        if (msg.kind === 'error' && (event.type === 'turn.failed' || event.type === 'error')) errorSurfaced = true;
         sendMessage(ws, msg);
       }
 
+      // Codex also emits top-level error events while reconnecting. Only
+      // turn.failed is terminal; a later completed turn may have recovered.
       if (event.type === 'turn.failed' && !terminalFailure) {
-        terminalFailure = event.error || new Error('Turn failed');
-        errorSurfaced = true;
-        // Notifications are app-facing, so they carry the app session id.
-        notifyRunFailed({
-          userId: ws?.userId || null,
-          provider: 'codex',
-          sessionId: sessionId || capturedSessionId || null,
-          sessionName: sessionSummary,
-          error: terminalFailure
-        });
+        terminalFailure = event.error;
       }
 
       // Extract and send token usage if available (normalized to match Claude format)
@@ -448,6 +493,12 @@ async function queryCodex(
     const runSession = activeCodexSessions.get(sessionKey() || '');
     const runAborted = runSession?.status === 'aborted' || abortController.signal.aborted;
     if (!runAborted) {
+      if (terminalFailure) {
+        reportFailure('CODEX_TURN_FAILED');
+      } else if (!sawTurnCompleted) {
+        terminalFailure = new Error('CODEX_INCOMPLETE_STREAM');
+        reportFailure('CODEX_INCOMPLETE_STREAM');
+      }
       sendMessage(ws, createCompleteMessage({
         provider: 'codex',
         sessionId: capturedSessionId || sessionId || null,
@@ -470,41 +521,19 @@ async function queryCodex(
   } catch (error) {
     const session = activeCodexSessions.get(sessionKey() || '');
     const runError = error instanceof Error ? error : new Error(String(error));
-    const wasAborted =
-      session?.status === 'aborted' ||
-      runError.name === 'AbortError' ||
-      runError.message.toLowerCase().includes('aborted');
+    // Only our cancellation signal/state proves a user abort. A transport can
+    // throw AbortError (or say "aborted") without the user pressing Stop.
+    const wasAborted = session?.status === 'aborted' || abortController.signal.aborted;
 
     if (!wasAborted) {
-      console.error('[Codex] Error:', error);
-
-      if (!errorSurfaced) {
-        // Check if Codex SDK is available for a clearer error message
-        const installed = await context.isProviderInstalled();
-        const errorContent = !installed
-          ? 'Codex CLI is not configured. Please set up authentication first.'
-          : runError.message;
-
-        sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
-      }
+      reportFailure(terminalFailure ? 'CODEX_TURN_FAILED' : 'CODEX_STREAM_ERROR', runError);
       sendMessage(ws, createCompleteMessage({
         provider: 'codex',
         sessionId: capturedSessionId || sessionId || null,
         exitCode: 1,
       }));
-      if (!terminalFailure) {
-        notifyRunFailed({
-          userId: ws?.userId || null,
-          provider: 'codex',
-          sessionId: sessionId || capturedSessionId || null,
-          sessionName: sessionSummary,
-          error
-        });
-      }
-    } else if (!terminalFailure && (session?.status === 'aborted' || abortController.signal.aborted)) {
-      // The SDK rethrows the spawn AbortError once the CLI is killed. Only a
-      // real user abort counts; an error that merely mentions "aborted" stays
-      // silent as before.
+    } else if (!terminalFailure) {
+      // Only our own cancellation signal/state reaches this branch.
       notifyCodexRunAborted();
     }
 

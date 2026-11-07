@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { projectsDb, sessionsDb, sessionRuntimeFailuresDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
@@ -14,8 +14,8 @@ import type {
   LLMProvider,
   NormalizedMessage,
   WorkflowAgentActivity,
-} from '@/shared/types.js';
-import { AppError, sliceTailPage } from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { AppError, createNormalizedMessage, sliceTailPage } from '@/shared/index.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -493,13 +493,21 @@ export const sessionsService = {
       });
     }
 
-    // App-created sessions that never produced a provider transcript yet
-    // (e.g. first message still streaming) simply have no history.
+    const failures = session.provider === 'codex'
+      ? sessionRuntimeFailuresDb.list(sessionId).filter((failure) => !failure.diagnostics.providerSessionId
+        || !session.provider_session_id || failure.diagnostics.providerSessionId === session.provider_session_id)
+      : [];
+    const failureNotices = failures.map((failure) => createNormalizedMessage({
+      id: failure.id, sessionId, timestamp: failure.timestamp, provider: 'codex', kind: 'error', content: failure.content,
+    }));
+    // A failed first launch can have no provider transcript. Keep its durable
+    // notice available without asking the provider to resolve a missing id.
     if (!session.provider_session_id) {
+      const { page, hasMore } = sliceTailPage(failureNotices, options.limit ?? null, Math.max(0, options.offset ?? 0));
       return {
-        messages: [],
-        total: 0,
-        hasMore: false,
+        messages: page,
+        total: failureNotices.length,
+        hasMore,
         offset: options.offset ?? 0,
         limit: options.limit ?? null,
       };
@@ -507,7 +515,7 @@ export const sessionsService = {
 
     const provider = session.provider as LLMProvider;
     const providerSessions = providerRegistry.resolveProvider(provider).sessions;
-    const providerSessionId = session.provider_session_id;
+    const providerSessionId = session.provider_session_id ?? undefined;
     const projectPath = session.project_path ?? '';
     const requestedLimit = options.limit ?? null;
     const requestedOffset = options.offset ?? 0;
@@ -532,12 +540,26 @@ export const sessionsService = {
     });
 
     let result: FetchHistoryResult;
-    if (fullHistory) {
+    if (fullHistory || failures.length > 0) {
+      const full = fullHistory ?? await providerSessions.fetchHistory(sessionId, {
+        limit: null, offset: 0, projectPath, providerSessionId,
+      });
+      // Failures can arrive without changing the CLI file. Merge after reading
+      // the transcript cache and before slicing, so reloads and older pages
+      // retain a stable row count even when the native file never existed.
+      const messages = [...full.messages];
+      for (const [index, failure] of failures.entries()) {
+        const alreadyVisible = messages.some((message) => message.kind === 'error'
+          && message.timestamp >= failure.startedAt && message.timestamp <= failure.timestamp);
+        if (!alreadyVisible) messages.push(failureNotices[index]);
+      }
+      if (failures.length > 0) messages.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
       // Providers slice with this same helper, so a cached page is identical
       // to what a direct `(limit, offset)` read would have returned.
-      const { page, hasMore } = sliceTailPage(fullHistory.messages, requestedLimit, Math.max(0, requestedOffset));
+      const { page, hasMore } = sliceTailPage(messages, requestedLimit, Math.max(0, requestedOffset));
       result = {
-        ...fullHistory,
+        ...full,
+        total: messages.length,
         messages: page,
         hasMore,
         offset: requestedOffset,

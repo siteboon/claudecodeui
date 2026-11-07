@@ -1652,3 +1652,36 @@ export type CliApplication = {
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
 };
+
+// ---------------------------
+//----------------- DURABLE RUNTIME FAILURE EVIDENCE ------------
+
+/**
+ * Providers writes this app-session failure through Database and restores its
+ * public notice in history. Diagnostics are an explicit metadata allowlist:
+ * never include prompts, generated/tool output, credentials or raw CLI stderr.
+ * The journal retains at most 100 failures per session for up to 90 days
+ * (pruned on writes), and cascades when the app session is deleted/merged.
+ */
+export type SessionRuntimeFailure = {
+  id: string;
+  sessionId: string;
+  timestamp: string;
+  startedAt: string;
+  provider: 'codex';
+  code: 'CODEX_INCOMPLETE_STREAM' | 'CODEX_STREAM_ERROR' | 'CODEX_TURN_FAILED';
+  content: string;
+  diagnostics: {
+    providerSessionId: string | null;
+    model: string | null;
+    effort: string | null;
+    lastEventType: string | null;
+    eventCount: number;
+    sawTurnCompleted: boolean;
+    sawAssistantMessage: boolean;
+    exitCode: number | null;
+    signal: string | null;
+    errorName: string | null;
+    transportCode: string | null;
+  };
+};
