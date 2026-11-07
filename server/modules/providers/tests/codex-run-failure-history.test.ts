@@ -148,6 +148,35 @@ test('a rejected rewind retains the original pre-transcript failure', async (t) 
   });
 });
 
+for (const keepThroughId of [null, 'kept-turn']) {
+  test(`journal cleanup failure does not reject a completed rewind (${keepThroughId})`, async (t) => {
+    await withHistoryDatabase(async (root) => {
+      const sessionId = 'cleanup-failed-edit';
+      sessionsDb.createAppSession(sessionId, 'codex', root);
+      sessionsDb.assignProviderSessionId(sessionId, 'before-edit');
+      const failure = failureFor(sessionId, null);
+      sessionRuntimeFailuresDb.record(failure);
+      t.mock.method(codexAppServer, 'forkThread', async () => ({ threadId: 'after-edit', path: path.join(root, 'after-edit.jsonl') }));
+      const cleanupError = new Error('journal unavailable');
+      const cleanup = t.mock.method(sessionRuntimeFailuresDb, 'clearUnbound', () => { throw cleanupError; });
+      const warning = t.mock.method(console, 'warn', () => {});
+
+      await assert.doesNotReject(sessionsService.rewindSessionForEdit(sessionId, keepThroughId));
+
+      assert.equal(sessionsDb.getSessionById(sessionId)?.provider_session_id, keepThroughId ? 'after-edit' : null);
+      assert.deepEqual(cleanup.mock.calls.map((call) => call.arguments), [[sessionId]]);
+      assert.equal(warning.mock.callCount(), 1);
+      assert.deepEqual(warning.mock.calls[0].arguments, [
+        '[Sessions] Could not clear pre-transcript Codex failures after rewind', { sessionId }, cleanupError,
+      ]);
+      // Cleanup is best-effort: the completed rewind remains usable, though
+      // the old unbound notice can remain visible when its deletion failed.
+      assert.deepEqual(sessionRuntimeFailuresDb.list(sessionId), [failure]);
+      assert.deepEqual((await sessionsService.fetchHistory(sessionId)).messages.map((row) => row.id), [failure.id]);
+    });
+  });
+}
+
 for (const sourceState of ['UNAVAILABLE', 'INVALID'] as const) {
   test(`saved failures stay visible beside an explicit inherited history ${sourceState} error`, async () => {
     await withHistoryDatabase(async (root) => {

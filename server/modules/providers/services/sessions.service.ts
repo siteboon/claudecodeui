@@ -467,6 +467,8 @@ export const sessionsService = {
    * Rewinds a session on disk so `keepThroughId` is the last row it holds.
    *
    * Only call this once the run is admitted — see `providerRewindsForEdit`.
+   * Journal cleanup is best-effort once the provider rewind has succeeded:
+   * stale notices must not prevent the admitted edit from continuing.
    */
   async rewindSessionForEdit(sessionId: string, keepThroughId: string | null): Promise<void> {
     const session = sessionsDb.getSessionById(sessionId);
@@ -482,7 +484,15 @@ export const sessionsService = {
       await sessions.rewindSession(sessionId, keepThroughId);
       // Unbound first-launch failures belong to the conversation before the
       // edit. Bound failures remain journaled and are filtered by native id.
-      if (session.provider === 'codex') sessionRuntimeFailuresDb.clearUnbound(sessionId);
+      if (session.provider === 'codex') {
+        try {
+          sessionRuntimeFailuresDb.clearUnbound(sessionId);
+        } catch (error) {
+          // The transcript already moved; rejecting would falsely report a
+          // failed rewind and prevent the edited message from being sent.
+          console.warn('[Sessions] Could not clear pre-transcript Codex failures after rewind', { sessionId }, error);
+        }
+      }
     }
   },
 
