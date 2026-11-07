@@ -133,7 +133,7 @@ async function sendClaimedMessage(
 }
 
 /**
- * Sends every message whose time has come.
+ * Sends every message whose time has come and returns how many it handled.
  *
  * Exported so a test can drive one pass without waiting on the timer.
  */
@@ -155,10 +155,13 @@ export async function dispatchDueScheduledMessages(
   }
 
   // Sessions side by side, since a turn can stay open a long time (see
-  // runDispatchPass). Each session's later due rows are claimed and sent here
-  // as soon as the earlier send ends, not on a later poll, so no other turn can
-  // start in between and then be interrupted by them.
+  // runDispatchPass). A session's rows that were due at `now` go one after
+  // another in this pass, each claimed only when the earlier send ends, so
+  // none is recorded as sent while it still waits and no poll gap opens
+  // between them. A turn the user starts meanwhile is still interrupted, as
+  // any scheduled send interrupts the active run.
   // shortcut: a session's next row waits for the whole earlier send, background work included (the runtime ends that hold after 30 idle minutes); interrupt instead if timeliness matters more.
+  let sent = 0;
   await Promise.all(due.map(async (first) => {
     const sessionId = first.session_id;
     sessionsSending.add(sessionId);
@@ -166,15 +169,18 @@ export async function dispatchDueScheduledMessages(
       let row: ScheduledMessageRow | null = first;
       while (row) {
         await sendClaimedMessage(row, runtime);
-        row = scheduledMessagesDb.claimNextDue(sessionId, new Date());
+        sent += 1;
+        row = scheduledMessagesDb.claimNextDue(sessionId, now);
         if (row) announceScheduledMessagesChanged(sessionId);
       }
+    } catch (error) {
+      logPassFailure(error);
     } finally {
       sessionsSending.delete(sessionId);
     }
   }));
 
-  return due.length;
+  return sent;
 }
 
 function logPassFailure(error: unknown): void {

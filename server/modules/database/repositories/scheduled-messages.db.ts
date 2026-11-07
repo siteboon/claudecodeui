@@ -52,7 +52,7 @@ export const scheduledMessagesDb = {
       .prepare(
         `SELECT ${COLUMNS} FROM scheduled_messages
          WHERE user_id = ? AND session_id = ?
-         ORDER BY scheduled_for ASC`
+         ORDER BY scheduled_for ASC, created_at ASC, rowid ASC`
       )
       .all(userId, sessionId) as ScheduledMessageRow[];
   },

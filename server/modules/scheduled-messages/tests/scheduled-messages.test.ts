@@ -474,11 +474,11 @@ test('a pass sends a session\'s due messages in order, claiming each as it goes'
 
     // A session's second message is claimed (and announced) only once the
     // first has gone, so it is never recorded as sent while it still waits.
-    const sent: string[] = [];
-    const runtime = { ...(createRuntime([]) as object), run: (_provider: string, command: string) => { sent.push(command); return Promise.resolve(); } } as never;
-    assert.equal(await dispatchDueScheduledMessages(runtime), 2);
+    const runs: RunCall[] = [];
+    const runtime = createRuntime(runs);
+    assert.equal(await dispatchDueScheduledMessages(runtime), 3);
     assert.deepEqual(tab.announcements().map((frame) => frame.sessionId).sort(), [otherSessionId, SESSION_ID, SESSION_ID]);
-    assert.deepEqual(sent.filter((content) => content.endsWith('for this session')), ['first for this session', 'second for this session']);
+    assert.deepEqual(runs.map((run) => run.command).filter((content) => content.endsWith('for this session')), ['first for this session', 'second for this session']);
     assert.equal(await dispatchDueScheduledMessages(runtime), 0);
   });
 });
