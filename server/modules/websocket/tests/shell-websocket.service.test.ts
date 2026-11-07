@@ -10,6 +10,34 @@ import { WebSocket } from 'ws';
 
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
 
+test('Codex Shell uses the configured CLI for new and resumed sessions', (t) => {
+  const previous = process.env.CODEX_CLI_PATH;
+  process.env.CODEX_CLI_PATH = '/configured/codex';
+  t.after(() => {
+    if (previous === undefined) delete process.env.CODEX_CLI_PATH;
+    else process.env.CODEX_CLI_PATH = previous;
+  });
+  for (const resumed of [false, true]) {
+    const terminal = createFakePty();
+    const socket = createFakeSocket();
+    let command = '';
+    handleShellConnection(socket as never, {
+      resolveProviderSessionId: () => 'native-thread',
+      spawnPty: (_shell, args) => {
+        command = Array.isArray(args) ? args[args.length - 1] : args;
+        return terminal as never;
+      },
+    });
+    socket.emit('message', JSON.stringify({
+      type: 'init', projectPath: process.cwd(), provider: 'codex',
+      sessionId: `cli-runtime-${resumed}`, hasSession: resumed,
+    }));
+    assert.ok(command.includes("'/configured/codex'"));
+    assert.equal(command.includes('resume "native-thread"'), resumed);
+    terminal.emitExit();
+  }
+});
+
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
     readyState: number;
@@ -722,7 +750,13 @@ test('the restart hint is only offered when a restart would change the CLI colou
   }
 });
 
-test('other shells and initial commands only get the COLORFGBG hint', () => {
+test('other shells and initial commands only get the COLORFGBG hint', (t) => {
+  const previous = process.env.CODEX_CLI_PATH;
+  process.env.CODEX_CLI_PATH = '/configured/codex';
+  t.after(() => {
+    if (previous === undefined) delete process.env.CODEX_CLI_PATH;
+    else process.env.CODEX_CLI_PATH = previous;
+  });
   withClaudeConfig(({ projectPath }) => {
     const { calls, dependencies } = spawnRecorder();
     const loginCommand = 'claude --dangerously-skip-permissions /login';
@@ -738,7 +772,7 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
 
     assert.deepEqual(
       calls.map((call) => call.command),
-      ['npx task-master init', loginCommand, 'codex', 'codex']
+      ['npx task-master init', loginCommand, "'/configured/codex'", "'/configured/codex'"]
     );
     assert.deepEqual(
       calls.map((call) => call.env.COLORFGBG),
