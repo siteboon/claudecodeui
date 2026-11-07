@@ -1,5 +1,7 @@
 import spawn from 'cross-spawn';
 
+import { DISABLE_AUTH } from '@/shared/index.js';
+
 import { sessionDraftsDb, userDb, userPreferencesDb } from '@/modules/database/index.js';
 
 import { createUserRouter } from './user.routes.js';
@@ -35,6 +37,7 @@ async function readSystemGitConfig() {
 }
 
 const userService = createUserService({
+  disableAuth: DISABLE_AUTH,
   users: {
     getGitConfig: (userId) => userDb.getGitConfig(userId),
     updateGitConfig: (userId, gitName, gitEmail) => userDb.updateGitConfig(

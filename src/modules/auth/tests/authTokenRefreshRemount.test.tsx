@@ -156,8 +156,10 @@ test('tokens refreshed while the workspace is open do not remount it', async () 
   await waitFor(() => assert.equal(seenToken, rotations[2]));
   assert.equal(workspaceMounts, 1);
   assert.equal(loadingPasses, 1);
+  // Proactive refresh of the aged bootstrap token may race the first rotation.
+  // A repeated status/user bootstrap is what remounts the workspace.
   assert.deepEqual(
-    requestedPaths.slice(bootstrapRequests).filter((path) => path.startsWith('/api/auth/')),
+    requestedPaths.slice(bootstrapRequests).filter((path) => path === '/api/auth/status' || path === '/api/auth/user'),
     [],
   );
 });
