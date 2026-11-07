@@ -114,7 +114,7 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
     const writtenPaths: string[] = [];
     const sourcePaths: string[] = [];
     // Rewritten transcripts waiting to replace an original that stays in place.
-    const inPlaceRewrites: Array<{ temporaryPath: string; jsonlPath: string }> = [];
+    const inPlaceRewrites: Array<{ temporaryPath: string; jsonlPath: string; atime: Date; mtime: Date }> = [];
     // Session folders already moved, which a failure moves back.
     const movedDirectories: Array<{ sourcePath: string; targetPath: string }> = [];
     // Originals set aside under a `.tmp` name, which a failure puts back. The
@@ -134,11 +134,12 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
           encodedNewDirName,
           path.basename(session.jsonlPath),
         );
-        const content = await readFile(session.jsonlPath, 'utf8');
-        const rewrittenContent = rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath);
         // The rescan reads activity from the file's mtime; a fresh one would
         // un-archive the session and reorder the project's session list.
+        // Taken before the read, so a line appended meanwhile is not dated into the copy.
         const { atime, mtime } = await stat(session.jsonlPath);
+        const content = await readFile(session.jsonlPath, 'utf8');
+        const rewrittenContent = rewriteTranscriptCwd(content, input.oldProjectPath, input.newProjectPath);
 
         if (targetPath === session.jsonlPath) {
           // Written beside the original and swapped in only after every other
@@ -148,7 +149,7 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
           await writeFile(temporaryPath, rewrittenContent, { flag: 'wx' });
           writtenPaths.push(temporaryPath);
           await utimes(temporaryPath, atime, mtime);
-          inPlaceRewrites.push({ temporaryPath, jsonlPath: session.jsonlPath });
+          inPlaceRewrites.push({ temporaryPath, jsonlPath: session.jsonlPath, atime, mtime });
           moved.push({ sessionId: session.sessionId, jsonlPath: session.jsonlPath });
           continue;
         }
@@ -181,10 +182,12 @@ export class ClaudeTranscriptRelocationProvider implements IProviderTranscriptRe
         parkedOriginals.push({ originalPath: sourcePath, parkedPath });
       }
 
-      for (const { temporaryPath, jsonlPath } of inPlaceRewrites) {
+      for (const { temporaryPath, jsonlPath, atime, mtime } of inPlaceRewrites) {
         const parkedPath = `${jsonlPath}.${randomUUID()}.tmp`;
         await copyFile(jsonlPath, parkedPath, constants.COPYFILE_EXCL);
         parkedOriginals.push({ originalPath: jsonlPath, parkedPath });
+        // A rollback renames this copy back, and it must not look like new activity.
+        await utimes(parkedPath, atime, mtime);
         // A rename over the original is atomic, so a reader sees either the old
         // transcript or the rewritten one, never a half-written file.
         await rename(temporaryPath, jsonlPath);

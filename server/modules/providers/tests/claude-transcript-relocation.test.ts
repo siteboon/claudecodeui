@@ -162,6 +162,8 @@ test('an in-place rewrite that cannot be swapped in undoes the others', async ()
     const directory = path.join(root, encodeClaudeProjectDirName(oldProjectPath));
     const first = await writeTranscript(directory, 'session-a', oldProjectPath);
     const stuck = await writeTranscript(directory, 'session-b', oldProjectPath);
+    const past = new Date('2024-01-02T03:04:05Z');
+    await fsPromises.utimes(first, past, past);
 
     // Reported as moved while still naming the old folder, the session would be
     // dragged back to it by the next synchronization.
@@ -179,6 +181,8 @@ test('an in-place rewrite that cannot be swapped in undoes the others', async ()
     assert.deepEqual((await readdir(directory)).sort(), ['session-a.jsonl', 'session-b.jsonl']);
     assert.equal(JSON.parse(await readFile(first, 'utf8')).cwd, oldProjectPath);
     assert.equal(JSON.parse(await readFile(stuck, 'utf8')).cwd, oldProjectPath);
+    // Put back with its own mtime, so the rescan does not see new activity.
+    assert.equal((await fsPromises.stat(first)).mtime.getTime(), past.getTime());
   });
 });
 
