@@ -299,11 +299,19 @@ export const OPENCODE_PREDEFINED_MODELS: ProviderModelsDefinition = {
 /** Global OpenCode config files, in the order the CLI loads them. */
 const OPENCODE_CONFIG_FILES = ['config.json', 'opencode.json', 'opencode.jsonc'];
 
-/** Provider API keys OpenCode reads straight from the environment. */
+/**
+ * Provider API keys OpenCode reads straight from the environment. Every key the
+ * OpenCode auth status counts as a login is listed, so setting one more key
+ * never hides the models of another.
+ */
 const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
   OPENCODE_API_KEY: 'opencode',
   ANTHROPIC_API_KEY: 'anthropic',
   OPENAI_API_KEY: 'openai',
+  GOOGLE_GENERATIVE_AI_API_KEY: 'google',
+  GROQ_API_KEY: 'groq',
+  OPENROUTER_API_KEY: 'openrouter',
+  WALLY_API_KEY: 'wally',
 };
 
 /**
