@@ -66,6 +66,7 @@ import {
   createNormalizedMessage,
   getOpenCodeDatabasePath,
   readObjectRecord,
+  SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
   stripJsonComments,
   stripTrailingCommas,
 } from '@/shared/utils.js';
@@ -75,7 +76,12 @@ import type {
   ProviderPermissionDecision,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
+  SideQuestionOutcome,
+  SideQuestionRequest,
+  SideQuestionSink,
 } from '@/shared/types.js';
+
+import { opencodeSideQuestionForks } from './opencode-side-question-forks.js';
 
 // The notifications module is still JavaScript, and its defaults (`dedupeKey = null`,
 // `sessionId = null`) infer as the only accepted types; these state the shapes
@@ -188,6 +194,15 @@ type RememberedApproval = {
 };
 
 const activeTurns = new Map<string, OpenCodeTurn>();
+
+/**
+ * Servers of side questions currently answering, closed by the exit hook
+ * alongside `activeTurns`'s. A side question's own `opencode serve` never
+ * exits by itself (unlike the old `opencode run`), so a CloudCLI exit that
+ * skipped this set would leave it running until the next start's reaper, or
+ * forever if CloudCLI never starts again.
+ */
+const activeSideQuestionServers = new Set<OpenCodeServer>();
 const pendingPrompts = new Map<string, PendingOpenCodePrompt>();
 // "Always allow" is remembered by OpenCode only in its server's memory, and a
 // turn's server stops with the turn. The approved patterns are kept here per
@@ -517,6 +532,9 @@ function installExitHook(): void {
       turn.abortController.abort();
       turn.server?.close();
     }
+    for (const server of activeSideQuestionServers.values()) {
+      server.close();
+    }
   });
 }
 
@@ -648,10 +666,13 @@ function reserveFreePort(): Promise<number> {
  * so the variables are set just around that call and restored right after.
  * The question tool is switched on explicitly, since the chat can answer it.
  */
-async function startOpenCodeServer(signal: AbortSignal): Promise<{ server: OpenCodeServer; password: string }> {
+async function startOpenCodeServer(
+  signal: AbortSignal,
+  options: { config?: OpenCodeConfig; unsetPermissionEnv?: boolean } = {},
+): Promise<{ server: OpenCodeServer; password: string }> {
   const port = await reserveFreePort();
   const password = crypto.randomBytes(24).toString('base64url');
-  const childEnv: Record<string, string> = {
+  const childEnv: Record<string, string | undefined> = {
     OPENCODE_SERVER_PASSWORD: password,
     OPENCODE_SERVER_USERNAME: 'opencode',
     [OWNER_PID_ENV]: String(process.pid),
@@ -659,11 +680,21 @@ async function startOpenCodeServer(signal: AbortSignal): Promise<{ server: OpenC
   if (process.env.OPENCODE_ENABLE_QUESTION_TOOL === undefined) {
     childEnv.OPENCODE_ENABLE_QUESTION_TOOL = 'true';
   }
+  // A side question's server config already names its own agent explicitly;
+  // the user's own OPENCODE_PERMISSION must not reach it (gate F8's sibling:
+  // an env rule cannot shape a name it cannot predict either).
+  if (options.unsetPermissionEnv) {
+    childEnv.OPENCODE_PERMISSION = undefined;
+  }
 
   const previousEnv = new Map<string, string | undefined>();
   for (const [name, value] of Object.entries(childEnv)) {
     previousEnv.set(name, process.env[name]);
-    process.env[name] = value;
+    if (value === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = value;
+    }
   }
 
   let starting: Promise<OpenCodeServer>;
@@ -673,7 +704,7 @@ async function startOpenCodeServer(signal: AbortSignal): Promise<{ server: OpenC
       port,
       timeout: SERVER_START_TIMEOUT_MS,
       signal,
-      config: readInlineConfig(),
+      config: options.config ?? readInlineConfig(),
     });
   } finally {
     for (const [name, value] of previousEnv) {
@@ -1313,6 +1344,15 @@ async function runOpenCodeTurn(
     // safety-net `complete` from arriving first.
     await turn.abortFinished;
     await nextMacrotask();
+    // A stopped turn is a cancellation, reported the way Claude reports one,
+    // not as a failure or a completion.
+    reportRunStopped({
+      userId,
+      provider: PROVIDER,
+      sessionId: finalSessionId,
+      sessionName: sessionSummary,
+      stopReason: 'aborted',
+    });
     return;
   }
 
@@ -1432,6 +1472,256 @@ export function isOpenCodeSessionActive(sessionId: string): boolean {
   return activeTurns.has(sessionId);
 }
 
+// ---------------------------------------------------------------------------
+// Side questions
+// ---------------------------------------------------------------------------
+
+/**
+ * What the per-question agent may use: read-only, with opencode's own
+ * environment-file protection kept on `read` (a plain `read: 'allow'` would
+ * re-open the patterns opencode's own defaults deny). Rules are ordered and
+ * the last match wins, so the wildcard denial comes first. Unchanged from the
+ * CLI-era side question (`git show 2c691244:…/opencode-runtime.provider.js`).
+ *
+ * Exported for tests only.
+ */
+export function buildOpenCodeSideQuestionPermission(): Record<string, unknown> {
+  return {
+    '*': 'deny',
+    read: { '*': 'allow', '*.env': 'deny', '*.env.*': 'deny' },
+    grep: 'allow',
+    glob: 'allow',
+    list: 'allow',
+    edit: 'deny',
+    bash: 'deny',
+    task: 'deny',
+    webfetch: 'deny',
+    external_directory: 'deny',
+  };
+}
+
+/**
+ * The user's own inline config (if any) with `agentName` defined as a
+ * read-only side-question agent. The name is fresh per question (gate F8 of
+ * the cut-review: a project or global opencode config cannot predict it), so
+ * a `sidequestion` agent from the user's own config can neither replace nor
+ * merge into this one; every other key of the user's config stays.
+ *
+ * Exported for tests only.
+ */
+export function buildOpenCodeSideQuestionConfig(agentName: string): OpenCodeConfig {
+  const userConfig = (readInlineConfig() ?? {}) as AnyRecord;
+  const sideQuestionAgent = {
+    mode: 'primary',
+    description: 'Read-only fork answering a side question: looks, never touches.',
+    prompt: SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+    permission: buildOpenCodeSideQuestionPermission(),
+  };
+  return {
+    ...userConfig,
+    agent: { ...((userConfig.agent as AnyRecord | undefined) ?? {}), [agentName]: sideQuestionAgent },
+  } as OpenCodeConfig;
+}
+
+/**
+ * Asks a question on the side of an active opencode session: forks the
+ * parent session into a private `opencode serve`, under a fresh, read-only
+ * agent, and deletes the fork when done. Never rejects: every failure comes
+ * back as an `error` outcome, as `SideQuestionRuntime` requires.
+ *
+ * Per the plan's contract: nothing is ever sent to the parent session itself
+ * after the fork, and only the text of assistant messages this prompt
+ * created streams to `sink.delta` — not the question's own text part, and not
+ * the parent's history the fork copies in (every message id already on the
+ * fork right after it was created is history, not this answer).
+ */
+async function askOpenCodeSideQuestion(
+  request: SideQuestionRequest,
+  sink: SideQuestionSink,
+  _context: ProviderRuntimeContext,
+): Promise<SideQuestionOutcome> {
+  const { providerSessionId, projectPath, question, model, signal } = request;
+  if (!providerSessionId) {
+    return { status: 'error', error: 'This OpenCode session has no provider session to ask a side question on yet.', answer: '' };
+  }
+
+  const workingDir = projectPath || process.cwd();
+  const startedAt = Date.now();
+  // Registered before anything else: the fork's row can reach the database,
+  // and the session synchronizer, before the fork's id comes back.
+  const pendingToken = opencodeSideQuestionForks.registerPending(workingDir, startedAt);
+  const agentName = `sidequestion-${crypto.randomUUID()}`;
+  const config = buildOpenCodeSideQuestionConfig(agentName);
+
+  let answer = '';
+  let forkId: string | null = null;
+  let server: OpenCodeServer | null = null;
+  let client: OpencodeClient | null = null;
+  // Bound to the start only: once the server has started, a dismiss is
+  // handled below instead, so this signal must not keep killing it (the
+  // SDK's bindAbort would otherwise kill a started server on a later abort).
+  const startAbort = new AbortController();
+  const stopStart = () => startAbort.abort();
+  signal.addEventListener('abort', stopStart);
+  const loopAbort = new AbortController();
+
+  try {
+    try {
+      let started: Awaited<ReturnType<typeof startOpenCodeServer>>;
+      try {
+        started = await startOpenCodeServer(startAbort.signal, { config, unsetPermissionEnv: true });
+      } catch (error) {
+        if (startAbort.signal.aborted || !isRetryableStartFailure(error)) {
+          throw error;
+        }
+        started = await startOpenCodeServer(startAbort.signal, { config, unsetPermissionEnv: true });
+      }
+      server = started.server;
+      activeSideQuestionServers.add(server);
+      // Registered only now that a server actually exists to leak; closed
+      // below in the `finally`, the same instant it is removed from the set.
+      installExitHook();
+
+      client = createOpencodeClient({
+        baseUrl: server.url,
+        directory: workingDir,
+        headers: { Authorization: `Basic ${Buffer.from(`opencode:${started.password}`).toString('base64')}` },
+        throwOnError: true,
+      });
+    } finally {
+      signal.removeEventListener('abort', stopStart);
+    }
+
+    if (signal.aborted) {
+      throw new Error('The side question was dismissed.');
+    }
+
+    // Subscribed before anything is sent, so no event of the fork is missed;
+    // one retry attempt only, like a turn's own subscription.
+    const { stream } = await client.event.subscribe({}, { signal: loopAbort.signal, sseMaxRetryAttempts: 1 });
+    const events = stream[Symbol.asyncIterator]();
+    await withTimeout(events.next(), SERVER_START_TIMEOUT_MS, 'The OpenCode event stream did not connect.');
+
+    if (signal.aborted) {
+      throw new Error('The side question was dismissed.');
+    }
+    const forked = (await client.session.fork({ sessionID: providerSessionId })).data;
+    forkId = forked?.id ?? null;
+    if (!forkId) {
+      throw new Error('OpenCode did not fork the session.');
+    }
+    opencodeSideQuestionForks.add(forkId);
+    opencodeSideQuestionForks.clearPending(pendingToken);
+
+    if (signal.aborted) {
+      throw new Error('The side question was dismissed.');
+    }
+
+    // Right after the fork: every message id already here is copied parent
+    // history, never this question's own answer (gate F1 of the cut-review).
+    const historyIds = new Set(
+      ((await client.session.messages({ sessionID: forkId })).data ?? []).map((entry) => entry.info.id),
+    );
+    const assistantMessageIds = new Set<string>();
+    const streamedByPart = new Map<string, string>();
+
+    await client.session.promptAsync({
+      sessionID: forkId,
+      agent: agentName,
+      model: parseOpenCodeModel(model ?? undefined),
+      parts: [{ type: 'text', text: question }],
+    });
+
+    const dismissed = new Promise<'dismissed'>((resolve) => {
+      if (signal.aborted) {
+        resolve('dismissed');
+        return;
+      }
+      signal.addEventListener('abort', () => resolve('dismissed'), { once: true });
+    });
+
+    let sawBusy = false;
+    for (;;) {
+      const next = await Promise.race([events.next(), dismissed]);
+      if (next === 'dismissed') {
+        await client.session.abort({ sessionID: forkId }).catch(() => undefined);
+        return { status: 'error', error: 'The side question was dismissed.', answer };
+      }
+      if (next.done) {
+        return { status: 'error', error: 'The OpenCode server stopped unexpectedly.', answer };
+      }
+
+      const event = next.value;
+      if (event.type === 'message.updated') {
+        const info = event.properties.info;
+        if (info.sessionID === forkId && info.role === 'assistant' && !historyIds.has(info.id)) {
+          assistantMessageIds.add(info.id);
+        }
+        continue;
+      }
+      if (event.type === 'message.part.updated') {
+        const part = event.properties.part;
+        if (part.sessionID === forkId && part.type === 'text' && assistantMessageIds.has(part.messageID)) {
+          const already = streamedByPart.get(part.id) ?? '';
+          const delta = part.text.slice(already.length);
+          streamedByPart.set(part.id, part.text);
+          if (delta) {
+            answer += delta;
+            sink.delta(delta);
+          }
+        }
+        continue;
+      }
+      // opencode 1.18.30 streams a text part's actual text through this event,
+      // not `message.part.updated` (which only fires empty at `text-start` and
+      // full at `text-end`). Tracked in the same `streamedByPart` map so the
+      // `text-end` update above adds only whatever this loop has not already
+      // sent — it recomputes the remainder from `part.text`, so it never
+      // double-counts regardless of which event got there first.
+      if (event.type === 'message.part.delta') {
+        const { sessionID, messageID, partID, field, delta } = event.properties;
+        if (sessionID === forkId && field === 'text' && assistantMessageIds.has(messageID) && delta) {
+          const already = streamedByPart.get(partID) ?? '';
+          streamedByPart.set(partID, already + delta);
+          answer += delta;
+          sink.delta(delta);
+        }
+        continue;
+      }
+      if (event.type === 'session.error') {
+        if (event.properties.sessionID === forkId && event.properties.error) {
+          return { status: 'error', error: readErrorMessage(event.properties.error), answer };
+        }
+        continue;
+      }
+      if (event.type === 'session.status' && event.properties.sessionID === forkId) {
+        if (event.properties.status.type === 'busy') {
+          sawBusy = true;
+        } else if (event.properties.status.type === 'idle' && sawBusy) {
+          return { status: 'done', answer };
+        }
+      }
+    }
+  } catch (error) {
+    if (signal.aborted) {
+      return { status: 'error', error: 'The side question was dismissed.', answer };
+    }
+    return { status: 'error', error: readErrorMessage(error), answer };
+  } finally {
+    signal.removeEventListener('abort', stopStart);
+    loopAbort.abort();
+    if (forkId) {
+      await client?.session.delete({ sessionID: forkId }).catch(() => undefined);
+      opencodeSideQuestionForks.delete(forkId);
+    }
+    opencodeSideQuestionForks.clearPending(pendingToken);
+    if (server) {
+      activeSideQuestionServers.delete(server);
+    }
+    server?.close();
+  }
+}
+
 /**
  * The OpenCode runtime facet. Used by the OpenCode provider wrapper, through
  * which providerRuntimeService runs chat turns, scheduled messages and
@@ -1440,6 +1730,7 @@ export function isOpenCodeSessionActive(sessionId: string): boolean {
 export const opencodeRuntime = {
   run: runOpenCodeTurn,
   abort: abortOpenCodeSession,
+  askSideQuestion: askOpenCodeSideQuestion,
   permissions: {
     resolve: resolveOpenCodePrompt,
     listPending: getPendingOpenCodePrompts,

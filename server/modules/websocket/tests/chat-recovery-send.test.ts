@@ -49,6 +49,8 @@ async function fixture(t: TestContext) {
     hasBackgroundWork: () => false,
     resolveToolApproval: () => {},
     getPendingApprovalsForSession: () => [],
+    askSideQuestion: async () => { throw new Error('Recovery must not start a side question.'); },
+    steer: async () => false,
   };
   handleChatConnection(socket as never, { user: { id: 1 } } as never, { runtime });
   return {

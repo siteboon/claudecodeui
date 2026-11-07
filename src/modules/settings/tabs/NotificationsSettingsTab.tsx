@@ -1,6 +1,7 @@
 import { Bell, BellOff, BellRing, Loader2, Play, Volume2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import NotificationWebhookCard from '@/modules/settings/tabs/NotificationWebhookCard';
 import { Button } from '@/shared/ui';
 import { playChatCompletionSound } from '@/shared/utils';
 import type { NotificationPreferencesState } from '@/shared/types';
@@ -256,6 +257,8 @@ export default function NotificationsSettingsTab({
           </label>
         </div>
       </div>
+
+      <NotificationWebhookCard />
     </div>
   );
 }
