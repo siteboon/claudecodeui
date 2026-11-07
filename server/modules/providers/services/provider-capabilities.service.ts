@@ -42,6 +42,12 @@ type ProviderCapabilities = {
    * Whether a session's transcript can be branched into an independent one.
    */
   supportsSessionForking: boolean;
+  /**
+   * Whether the provider can answer a question on the side without touching
+   * the session's main turn. False only for Cursor, which has no headless
+   * way to do that.
+   */
+  supportsSideQuestions: boolean;
 };
 
 /**
@@ -67,6 +73,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSideQuestions: true,
   },
   cursor: {
     provider: 'cursor',
@@ -81,6 +88,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: [],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSideQuestions: false,
   },
   codex: {
     provider: 'codex',
@@ -99,6 +107,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSideQuestions: true,
   },
   opencode: {
     provider: 'opencode',
@@ -120,6 +129,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSideQuestions: true,
   },
   antigravity: {
     provider: 'antigravity',
