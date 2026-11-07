@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import nodeFs from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -2315,7 +2315,7 @@ test('Claude history of a fork ignores the resume stamp it copied from its paren
   }
 });
 
-test('Claude history of a fork finds a copied subagent under the session that spawned it', { concurrency: false }, async () => {
+test('Claude history of a fork reads its own copy of a subagent and the parent\'s metadata', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-fork-subagent-'));
 
   try {
@@ -2329,6 +2329,23 @@ test('Claude history of a fork finds a copied subagent under the session that sp
     await writeFile(
       path.join(forkSubagents, `agent-${AGENT_ID}.jsonl`),
       await readFile(path.join(tempRoot, SESSION_ID, 'subagents', `agent-${AGENT_ID}.jsonl`), 'utf8'),
+      'utf8',
+    );
+    // The agent was still running when the session was forked, so the parent's
+    // copy goes on past what the fork copied.
+    await appendFile(
+      path.join(tempRoot, SESSION_ID, 'subagents', `agent-${AGENT_ID}.jsonl`),
+      `${JSON.stringify({
+        type: 'assistant',
+        isSidechain: true,
+        agentId: AGENT_ID,
+        timestamp: '2026-08-21T10:01:00.000Z',
+        message: {
+          role: 'assistant',
+          model: 'claude-opus-5',
+          content: [{ type: 'tool_use', id: 'toolu_child_2', name: 'Read', input: { file_path: '/repo/README.md' } }],
+        },
+      })}\n`,
       'utf8',
     );
 

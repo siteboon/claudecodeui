@@ -215,28 +215,30 @@ async function readClaudeSubagentMeta(metaPath: string): Promise<ClaudeSubagentM
 }
 
 /**
- * Resolves where a subagent's transcript lives.
+ * Resolves where a subagent's transcript or metadata sidecar lives.
  *
- * Current Claude versions write it to
- * `<projectDir>/<providerSessionId>/subagents/agent-<agentId>.jsonl`; older
- * ones dropped it next to the parent transcript. Both are checked, newest
- * layout first, because a project directory usually holds sessions from
- * several CLI versions.
+ * Current Claude versions write both to
+ * `<projectDir>/<providerSessionId>/subagents/agent-<agentId>.<ext>`; older
+ * ones dropped them next to the parent transcript. Each session directory is
+ * checked in the order given, then the legacy layout, because a project
+ * directory usually holds sessions from several CLI versions.
  */
-async function findClaudeSubagentTranscript(
+async function findClaudeSubagentFile(
   projectDirectory: string,
-  providerSessionId: string,
+  providerSessionIds: readonly string[],
   agentId: string,
-): Promise<{ transcriptPath: string; metaPath: string } | null> {
+  suffix: '.jsonl' | '.meta.json',
+): Promise<string | null> {
   const candidates = [
-    path.join(projectDirectory, providerSessionId, 'subagents', `agent-${agentId}.jsonl`),
-    path.join(projectDirectory, `agent-${agentId}.jsonl`),
+    ...providerSessionIds.map((providerSessionId) =>
+      path.join(projectDirectory, providerSessionId, 'subagents', `agent-${agentId}${suffix}`)),
+    path.join(projectDirectory, `agent-${agentId}${suffix}`),
   ];
 
-  for (const transcriptPath of candidates) {
+  for (const filePath of candidates) {
     try {
-      await fsp.access(transcriptPath);
-      return { transcriptPath, metaPath: transcriptPath.replace(/\.jsonl$/, '.meta.json') };
+      await fsp.access(filePath);
+      return filePath;
     } catch {
       // Try the next layout.
     }
@@ -727,7 +729,7 @@ async function getSessionMessages(
     );
 
     // Keyed by agent id, valued by the session that spawned it: a fork's copied
-    // rows name agents whose transcript and metadata live under the parent.
+    // rows name agents whose transcript or metadata may live only under the parent.
     const agentSessions = new Map<string, string>();
     for (const message of messages) {
       const agentId = message.toolUseResult?.agentId;
@@ -747,17 +749,22 @@ async function getSessionMessages(
       info: Omit<SubagentInfo, 'status'>;
     }>();
     for (const [agentId, agentSessionId] of agentSessions) {
-      const located = await findClaudeSubagentTranscript(projectDir, agentSessionId, agentId)
-        ?? (agentSessionId === providerSessionId
-          ? null
-          : await findClaudeSubagentTranscript(projectDir, providerSessionId, agentId));
-      if (!located) {
+      // A fork's own copy of the agent transcript comes first: the parent's
+      // copy may have grown after the fork if the agent was still running.
+      // Claude Desktop copies the transcript but not its `.meta.json`, so the
+      // sidecar is looked up on its own and may come from the parent.
+      const sessionIds = agentSessionId === providerSessionId
+        ? [providerSessionId]
+        : [providerSessionId, agentSessionId];
+      const transcriptPath = await findClaudeSubagentFile(projectDir, sessionIds, agentId, '.jsonl');
+      if (!transcriptPath) {
         continue;
       }
+      const metaPath = await findClaudeSubagentFile(projectDir, sessionIds, agentId, '.meta.json');
 
       const [transcript, meta] = await Promise.all([
-        readClaudeSubagentTranscript(located.transcriptPath),
-        readClaudeSubagentMeta(located.metaPath),
+        readClaudeSubagentTranscript(transcriptPath),
+        metaPath ? readClaudeSubagentMeta(metaPath) : Promise.resolve<ClaudeSubagentMeta>({}),
       ]);
 
       subagentsById.set(agentId, {
