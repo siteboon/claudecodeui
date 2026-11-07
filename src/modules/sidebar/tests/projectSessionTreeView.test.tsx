@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import type { TFunction } from 'i18next';
 import { test, vi } from 'vitest';
@@ -29,7 +29,7 @@ const props = (overrides: Partial<ComponentProps<typeof SidebarProjectSessions>>
   activeSessions: new Set(), backgroundSessionIds: new Set(), attentionSessionIds: new Set(),
   currentTime: new Date('2026-10-18T00:00:00Z'), sessionRenameId: null, sessionRenameDraft: '',
   onRenameDraftChange: noop, onStartEditingSession: noop, onCancelEditingSession: noop,
-  onSaveEditingSession: noop, onProjectSelect: noop, onSessionSelect: noop, onDeleteSession: noop,
+  onSaveEditingSession: noop, onProjectSelect: noop, onSessionSelect: noop, onArchiveSession: noop, onDeleteSession: noop,
   onForkSession: noop, onLoadMoreSessions: noop, onNewSession: noop, selectedSessionIds: null,
   onSetSessionSelection: noop, onToggleSessionSelected: noop, onCancelSessionSelection: noop,
   onDeleteSelectedSessions: noop, t, ...overrides,
@@ -57,6 +57,27 @@ test.each([false, true])('Projects nests forks and preserves row actions in comp
   assert.equal(collapse.getAttribute('aria-expanded'), 'false');
   fireEvent.click(screen.getByRole('button', { name: 'sessions.expandForks Original' }));
   assert.deepEqual(rowIds(container), ['root', 'child', 'leaf', 'unrelated']);
+});
+
+test.each([root, leaf])('the mobile fork tree archives $id without selecting or deleting it', async (session) => {
+  compact.value = true;
+  const onArchiveSession = vi.fn();
+  const onDeleteSession = vi.fn();
+  const onSessionSelect = vi.fn();
+  render(<SidebarProjectSessions {...props({
+    sessions: [{ ...leaf, forkAncestors: [child, root] }],
+    onArchiveSession, onDeleteSession, onSessionSelect,
+  })} />);
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: `Session options for ${session.summary}` }));
+  });
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archive session' }));
+
+  assert.deepEqual(onArchiveSession.mock.calls, [[session.id]]);
+  assert.equal(onDeleteSession.mock.calls.length, 0);
+  assert.equal(onSessionSelect.mock.calls.length, 0);
+  assert.equal(screen.queryByRole('dialog'), null);
 });
 
 test.each([false, true])('fork connectors identify siblings and terminate the family in compact=%s', (isCompact) => {
@@ -148,7 +169,7 @@ test('Conversations stays flat and newest first even when sessions have fork met
     sessionActions={{
       activeSessions: new Set(), backgroundSessionIds: new Set(), attentionSessionIds: new Set(),
       activeRename: null, onRenameDraftChange: noop, onStartEditingSession: noop,
-      onCancelEditingSession: noop, onSaveEditingSession: noop, onDeleteSession: noop,
+      onCancelEditingSession: noop, onSaveEditingSession: noop, onArchiveSession: noop, onDeleteSession: noop,
     }} onConversationSelect={noop} onLoadMore={noop} onRetry={noop}
   />);
   assert.deepEqual(Array.from(container.querySelectorAll('[data-testid="recent-conversation-row"]')).map((row) => row.getAttribute('href')),

@@ -1515,6 +1515,43 @@ export type GithubCredentialItem = {
 
 // ---------------------------
 
+//----------------- SETTINGS NOTIFICATION WEBHOOK ------------
+
+/** Why a webhook delivery failed, exactly as the server stores it; the webhook card maps each value to a localized reason. */
+export type NotificationWebhookDeliveryError =
+  | 'invalidUrl'
+  | 'insecureUrl'
+  | 'blockedAddress'
+  | 'timeout'
+  | 'redirect'
+  | 'httpStatus'
+  | 'network'
+  | 'tls'
+  | 'dropped';
+
+/** The outcome of the most recent webhook event after its last attempt, as the server records it; `status` is the HTTP status when the receiver answered, `type` the event type (e.g. run.completed, webhook.test). */
+export type NotificationWebhookDelivery = {
+  eventId: string;
+  type: string;
+  ok: boolean;
+  status: number | null;
+  error: NotificationWebhookDeliveryError | null;
+  attempts: number;
+  at: string;
+};
+
+/** The saved webhook destination as the notifications API returns it. The signing secret is never part of it, only whether one is set; `configured` is false until a URL has been saved. */
+export type NotificationWebhookState = {
+  configured: boolean;
+  enabled: boolean;
+  url: string;
+  allowHttp: boolean;
+  hasSecret: boolean;
+  lastDelivery: NotificationWebhookDelivery | null;
+};
+
+// ---------------------------
+
 //----------------- SHELL ------------
 
 /** Handle returned when touch text-selection is installed on an xterm terminal; call updateHandles after the terminal reflows and dispose when tearing the terminal down. */
@@ -1549,6 +1586,9 @@ export type SessionRowActions = {
   onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectId: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  /** Archives the session straight away; it stays restorable from the archive. */
+  onArchiveSession: (sessionId: string) => void;
+  /** Asks to confirm, then deletes the session permanently. */
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Branches a session into an independent one. Rows hide it for providers that cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
@@ -1661,7 +1701,7 @@ export type ActiveSidebarRename =
  */
 export type PendingSidebarDeletion =
   | { kind: 'project'; project: Project; sessionCount: number }
-  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean }
+  | { kind: 'session'; sessionId: string; sessionTitle: string }
   | { kind: 'sessions'; sessionIds: string[] };
 
 /**
