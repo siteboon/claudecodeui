@@ -14,7 +14,7 @@ import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sess
 const reply: ThreadEvent = { type: 'item.completed', item: { type: 'agent_message', id: 'reply', text: 'Done' } };
 const complete: ThreadEvent = { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0, cache_write_input_tokens: 0, reasoning_output_tokens: 0 } };
 
-async function runFixture(t: test.TestContext, thread: Thread) {
+async function runFixture(t: test.TestContext, thread: Thread, contextOverrides: Partial<ProviderRuntimeContext> = {}) {
   const frames: NormalizedMessage[] = [];
   const failures: SessionRuntimeFailure[] = [];
   const logs: unknown[][] = [];
@@ -27,6 +27,7 @@ async function runFixture(t: test.TestContext, thread: Thread) {
     getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'test-model' }),
     isProviderInstalled: async () => true,
     normalizeMessage: (raw) => new CodexSessionsProvider().normalizeMessage(raw, 'native-thread'),
+    ...contextOverrides,
   };
   await codexRuntime.run('PRIVATE USER PROMPT', { sessionId: 'app-failure', cwd: process.cwd() }, {
     isWebSocketWriter: true, send: (frame) => frames.push(frame as NormalizedMessage),
@@ -111,10 +112,37 @@ test('actual Stop does not become a transport failure or duplicate completion', 
   assert.equal(result.frames.length, 0);
 });
 
+for (const preparation of ['resolveResumeModel', 'getProviderModels'] as const) {
+  test(`failure during ${preparation} is journaled before the SDK starts`, async (t) => {
+    const result = await runFixture(t, scripted([complete]), {
+      [preparation]: async () => { throw new Error('Preparation unavailable'); },
+    });
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.failures[0].code, 'CODEX_STREAM_ERROR');
+    assert.equal(result.failures[0].diagnostics.eventCount, 0);
+    assert.equal(result.failures[0].diagnostics.providerSessionId, null);
+    assert.equal(result.frames.filter((frame) => frame.kind === 'error').length, 1);
+    assert.equal(result.frames.filter((frame) => frame.kind === 'complete' && frame.exitCode === 1).length, 1);
+  });
+}
+
+for (const error of [undefined, new Error('aborted')]) {
+  test(`Stop after turn.failed retains one failure with no second completion (${error ? 'throw' : 'return'})`, async (t) => {
+    const result = await runFixture(t, scripted([{ type: 'turn.failed', error: { message: 'fatal' } }], error, true));
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.failures[0].code, 'CODEX_TURN_FAILED');
+    const errors = result.frames.filter((frame) => frame.kind === 'error');
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].id, result.failures[0].id);
+    assert.equal(result.frames.filter((frame) => frame.kind === 'complete').length, 0);
+  });
+}
+
 test('turn.failed cannot become success even if the stream exits normally', async (t) => {
   const result = await runFixture(t, scripted([{ type: 'turn.failed', error: { message: 'fatal' } }, reply, complete]));
   assert.equal(result.failures[0]?.code, 'CODEX_TURN_FAILED');
   assert.equal(result.frames.filter((frame) => frame.kind === 'error').length, 1);
+  assert.equal(result.frames.find((frame) => frame.kind === 'error')?.id, result.failures[0]?.id);
   assert.equal(result.frames.filter((frame) => frame.kind === 'complete' && frame.exitCode === 1).length, 1);
 });
 
@@ -123,6 +151,7 @@ test('SDK exit after turn.failed produces one error and preserves process diagno
     new Error('Codex Exec exited with code 7: PRIVATE STDERR sk-secret PRIVATE USER PROMPT ECONNRESET')));
   assert.equal(result.frames.filter((frame) => frame.kind === 'error').length, 1);
   assert.equal(result.failures.length, 1);
+  assert.equal(result.frames.find((frame) => frame.kind === 'error')?.id, result.failures[0].id);
   assert.equal(result.failures[0].diagnostics.exitCode, 7);
   assert.equal(result.failures[0].diagnostics.transportCode, 'ECONNRESET');
   assert.doesNotMatch(JSON.stringify(result), /PRIVATE STDERR|sk-secret|PRIVATE USER PROMPT/);

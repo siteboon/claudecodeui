@@ -478,9 +478,19 @@ export const sessionsService = {
     }
 
     const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
-    await sessions.rewindSession?.(sessionId, keepThroughId);
+    if (sessions.rewindSession) {
+      await sessions.rewindSession(sessionId, keepThroughId);
+      // Unbound first-launch failures belong to the conversation before the
+      // edit. Bound failures remain journaled and are filtered by native id.
+      if (session.provider === 'codex') sessionRuntimeFailuresDb.clearUnbound(sessionId);
+    }
   },
 
+  /**
+   * Loads the current transcript and merges durable failure notices before
+   * pagination. If inherited Codex history is broken, expose that error beside
+   * saved failures so neither an empty conversation nor a lost failure is shown.
+   */
   async fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
@@ -495,7 +505,7 @@ export const sessionsService = {
 
     const failures = session.provider === 'codex'
       ? sessionRuntimeFailuresDb.list(sessionId).filter((failure) => !failure.diagnostics.providerSessionId
-        || !session.provider_session_id || failure.diagnostics.providerSessionId === session.provider_session_id)
+        || failure.diagnostics.providerSessionId === session.provider_session_id)
       : [];
     const failureNotices = failures.map((failure) => createNormalizedMessage({
       id: failure.id, sessionId, timestamp: failure.timestamp, provider: 'codex', kind: 'error', content: failure.content,
@@ -528,22 +538,32 @@ export const sessionsService = {
     const transcriptPath = provider === 'claude' || provider === 'codex'
       ? session.jsonl_path
       : null;
-    const fullHistory = await sessionHistoryCache.getFullHistory({
-      sessionId,
-      transcriptPath,
-      loadFull: () => providerSessions.fetchHistory(sessionId, {
-        limit: null,
-        offset: 0,
-        projectPath,
-        providerSessionId,
-      }),
+    const loadFull = () => providerSessions.fetchHistory(sessionId, {
+      limit: null, offset: 0, projectPath, providerSessionId,
     });
+    let fullHistory: FetchHistoryResult | null;
+    let historyErrorNotice: NormalizedMessage | null = null;
+    try {
+      fullHistory = await sessionHistoryCache.getFullHistory({ sessionId, transcriptPath, loadFull });
+      if (!fullHistory && failures.length > 0) fullHistory = await loadFull();
+    } catch (error) {
+      if (provider !== 'codex' || failures.length === 0 || !(error instanceof AppError)
+        || !['CODEX_HISTORY_SOURCE_UNAVAILABLE', 'CODEX_HISTORY_SOURCE_INVALID'].includes(error.code)) {
+        throw error;
+      }
+      // This fallback is deliberately outside the cache: restoring the source
+      // must make the next request try loading the real transcript again.
+      fullHistory = { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
+      historyErrorNotice = createNormalizedMessage({
+        id: `codex-history-error-${providerSessionId}`, sessionId, provider: 'codex', kind: 'error',
+        timestamp: failures[failures.length - 1].timestamp,
+        content: `${error.message} (${error.code})`,
+      });
+    }
 
     let result: FetchHistoryResult;
-    if (fullHistory || failures.length > 0) {
-      const full = fullHistory ?? await providerSessions.fetchHistory(sessionId, {
-        limit: null, offset: 0, projectPath, providerSessionId,
-      });
+    if (fullHistory) {
+      const full = fullHistory;
       // Failures can arrive without changing the CLI file. Merge after reading
       // the transcript cache and before slicing, so reloads and older pages
       // retain a stable row count even when the native file never existed.
@@ -553,6 +573,9 @@ export const sessionsService = {
           && message.timestamp >= failure.startedAt && message.timestamp <= failure.timestamp);
         if (!alreadyVisible) messages.push(failureNotices[index]);
       }
+      // A history-loading warning is separate from the turn failure and must
+      // not satisfy the native-error deduplication above.
+      if (historyErrorNotice) messages.push(historyErrorNotice);
       if (failures.length > 0) messages.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
       // Providers slice with this same helper, so a cached page is identical
       // to what a direct `(limit, offset)` read would have returned.

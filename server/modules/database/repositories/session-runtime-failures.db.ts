@@ -22,4 +22,10 @@ export const sessionRuntimeFailuresDb = {
       WHERE session_id = ? ORDER BY timestamp, id`).all(sessionId) as Array<{ payload_json: string }>;
     return rows.map((row) => JSON.parse(row.payload_json) as SessionRuntimeFailure);
   },
+
+  /** The providers session service discards pre-transcript failures after an explicit rewind. */
+  clearUnbound(sessionId: string): void {
+    getConnection().prepare(`DELETE FROM session_runtime_failures WHERE session_id = ?
+      AND json_extract(payload_json, '$.diagnostics.providerSessionId') IS NULL`).run(sessionId);
+  },
 };

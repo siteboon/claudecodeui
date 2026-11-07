@@ -276,26 +276,16 @@ async function queryCodex(
     permissionMode = 'default'
   } = options;
 
-  // Callers pass the stable app session id; the SDK resumes threads with the
-  // provider-native id recorded on the session row.
-  const providerSessionId = context.resolveProviderSessionId(sessionId);
-
-  const resolvedModel = await context.resolveResumeModel(sessionId, model);
-
   const workingDirectory = cwd || projectPath || process.cwd();
   const { sandboxMode, approvalPolicy } = mapPermissionModeToCodexOptions(permissionMode);
-  const catalog = await context.getProviderModels();
-  const selectedModel = catalog.OPTIONS.find((option) => option.value === resolvedModel) || null;
-  const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
-  const resolvedEffort = typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
-    ? effort as ModelReasoningEffort
-    : undefined;
+  let resolvedModel: string | undefined;
+  let resolvedEffort: ModelReasoningEffort | undefined;
 
   let codex: Codex;
   let thread: Thread;
   // Provider-native thread id (starts as the resume id, or is captured from
   // the stream for brand-new sessions).
-  let capturedSessionId = providerSessionId;
+  let capturedSessionId: string | null = null;
   let sessionCreatedSent = false;
   // A user abort ends the run on one of two paths (the loop breaks, or the SDK
   // throws its AbortError); either way it is reported as a cancellation.
@@ -366,6 +356,17 @@ async function queryCodex(
   };
 
   try {
+    // Preparation can fail before there is an SDK stream. Keep it inside the
+    // same reporter so those attempts also survive a closed browser/reload.
+    const providerSessionId = context.resolveProviderSessionId(sessionId);
+    capturedSessionId = providerSessionId;
+    resolvedModel = await context.resolveResumeModel(sessionId, model);
+    const catalog = await context.getProviderModels();
+    const selectedModel = catalog.OPTIONS.find((option) => option.value === resolvedModel) || null;
+    const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
+    resolvedEffort = typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
+      ? effort as ModelReasoningEffort
+      : undefined;
     codex = new Codex();
 
     const threadOptions: ThreadOptions = {
@@ -470,7 +471,9 @@ async function queryCodex(
       const normalizedMsgs = context.normalizeMessage(transformed, capturedSessionId || sessionId || null);
       for (const msg of normalizedMsgs) {
         if (msg.kind === 'error' && (event.type === 'turn.failed' || event.type === 'error')) errorSurfaced = true;
-        sendMessage(ws, msg);
+        // The completion refresh merges server history with live messages by
+        // id. A terminal error and its durable notice must name the same row.
+        sendMessage(ws, event.type === 'turn.failed' && msg.kind === 'error' ? { ...msg, id: runId } : msg);
       }
 
       // Codex also emits top-level error events while reconnecting. Only
@@ -492,10 +495,11 @@ async function queryCodex(
     // terminal `complete` (aborted: true) was already sent by abort-session.
     const runSession = activeCodexSessions.get(sessionKey() || '');
     const runAborted = runSession?.status === 'aborted' || abortController.signal.aborted;
+    // Stop can arrive after turn.failed while the SDK is still draining. It
+    // cancels the remaining stream, not the failure already shown to the user.
+    if (terminalFailure) reportFailure('CODEX_TURN_FAILED');
     if (!runAborted) {
-      if (terminalFailure) {
-        reportFailure('CODEX_TURN_FAILED');
-      } else if (!sawTurnCompleted) {
+      if (!terminalFailure && !sawTurnCompleted) {
         terminalFailure = new Error('CODEX_INCOMPLETE_STREAM');
         reportFailure('CODEX_INCOMPLETE_STREAM');
       }
@@ -523,10 +527,13 @@ async function queryCodex(
     const runError = error instanceof Error ? error : new Error(String(error));
     // Only our cancellation signal/state proves a user abort. A transport can
     // throw AbortError (or say "aborted") without the user pressing Stop.
-    const wasAborted = session?.status === 'aborted' || abortController.signal.aborted;
+    const wasAborted = (session?.abortController === abortController && session.status === 'aborted')
+      || abortController.signal.aborted;
 
-    if (!wasAborted) {
+    if (!wasAborted || terminalFailure) {
       reportFailure(terminalFailure ? 'CODEX_TURN_FAILED' : 'CODEX_STREAM_ERROR', runError);
+    }
+    if (!wasAborted) {
       sendMessage(ws, createCompleteMessage({
         provider: 'codex',
         sessionId: capturedSessionId || sessionId || null,
