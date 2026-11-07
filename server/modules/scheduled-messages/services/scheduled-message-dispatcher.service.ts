@@ -15,6 +15,8 @@ import { readQueuedChatMessage } from '@/shared/utils.js';
 const POLL_INTERVAL_MS = 30_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+/** Each session's last scheduled send, from this pass or an earlier one. */
+const scheduledSendChains = new Map<string, Promise<void>>();
 
 function readOptions(raw: string): Record<string, unknown> {
   try {
@@ -148,17 +150,24 @@ export async function dispatchDueScheduledMessages(
     announceScheduledMessagesChanged(sessionId);
   }
 
-  // Sequentially per session: a session can only have one run at a time, and
-  // two due messages for it must not race each other into it. Sessions go side
-  // by side, since a turn can stay open for a long time (see runDispatchPass).
-  const bySession = new Map<string, ScheduledMessageRow[]>();
-  for (const row of due) {
-    bySession.set(row.session_id, [...(bySession.get(row.session_id) ?? []), row]);
-  }
-  await Promise.all([...bySession.values()].map(async (rows) => {
-    for (const row of rows) {
-      await sendClaimedMessage(row, runtime);
-    }
+  // In order per session, across passes too: a session can only have one run
+  // at a time, and its due messages must not race or overtake each other.
+  // Sessions go side by side, since a turn can stay open a long time (see
+  // runDispatchPass). sendClaimedMessage records its own failures, so a chain
+  // never rejects.
+  await Promise.all(due.map((row) => {
+    const previous = scheduledSendChains.get(row.session_id);
+    // Started at once when nothing is ahead, so the run is reserved before the
+    // queued pass checks whether the session is busy.
+    const current = previous
+      ? previous.then(() => sendClaimedMessage(row, runtime))
+      : sendClaimedMessage(row, runtime);
+    scheduledSendChains.set(row.session_id, current);
+    return current.finally(() => {
+      if (scheduledSendChains.get(row.session_id) === current) {
+        scheduledSendChains.delete(row.session_id);
+      }
+    });
   }));
 
   return due.length;
@@ -179,6 +188,8 @@ function logPassFailure(error: unknown): void {
  */
 export function runDispatchPass(runtime: ProviderRuntimeGateway): Promise<void> {
   return Promise.all([
+    // First: a due send reserves its run before the queued pass checks
+    // whether that session is busy, so the two do not start together.
     dispatchDueScheduledMessages(runtime).catch(logPassFailure),
     dispatchQueuedMessages(runtime).catch(logPassFailure),
   ]).then(() => undefined);

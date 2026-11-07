@@ -614,3 +614,31 @@ test('due messages for different sessions go side by side within one pass', asyn
     }
   });
 });
+
+test('a session\'s due messages keep their order across passes', async () => {
+  // A later pass must neither overtake nor interrupt the earlier pass's turn.
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'first', options: {}, scheduledFor: new Date(Date.now() - 3_000) });
+    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'second', options: {}, scheduledFor: new Date(Date.now() - 2_000) });
+
+    const started: string[] = [];
+    const first = holdFirstRun();
+    const runtime = {
+      ...(createRuntime([]) as object),
+      run: (_provider: string, command: string) => {
+        started.push(command);
+        return command === 'first' ? first.run() : Promise.resolve();
+      },
+    } as never;
+
+    const firstPass = dispatchDueScheduledMessages(runtime);
+    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'third', options: {}, scheduledFor: new Date(Date.now() - 1_000) });
+    const secondPass = dispatchDueScheduledMessages(runtime);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(started, ['first']);
+
+    first.release();
+    await Promise.all([firstPass, secondPass]);
+    assert.deepEqual(started, ['first', 'second', 'third']);
+  });
+});
