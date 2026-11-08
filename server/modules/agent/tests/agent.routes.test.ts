@@ -328,8 +328,8 @@ async function runWithoutModel(
   return { models, catalogReads };
 }
 
-async function startClaudeRunWith(extraBody: Record<string, unknown>): Promise<{ unattended?: boolean }> {
-  const runOptions: { unattended?: boolean }[] = [];
+async function startClaudeRunWith(extraBody: Record<string, unknown>): Promise<{ unattended?: boolean; permissionMode?: string }> {
+  const runOptions: { unattended?: boolean; permissionMode?: string }[] = [];
   await withAgentServer(createDependencies({
     fileSystem: { access: async () => undefined } as unknown as AgentDependencies['fileSystem'],
     models: {
@@ -356,7 +356,10 @@ test('Agent route marks a Claude run unattended by default, as no person can ans
 });
 
 test('Agent route runs Claude attended when the caller says a person is watching', async () => {
-  assert.equal((await startClaudeRunWith({ unattended: false })).unattended, false);
+  const attended = await startClaudeRunWith({ unattended: false });
+  assert.equal(attended.unattended, false);
+  // The runtime test pins that onElicitation survives this mode.
+  assert.equal(attended.permissionMode, 'bypassPermissions');
   // curl -d sends every field as a string, as it does for stream and cleanup.
   assert.equal((await startClaudeRunWith({ unattended: 'false' })).unattended, false);
 });
