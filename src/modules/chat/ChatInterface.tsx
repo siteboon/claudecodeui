@@ -125,6 +125,7 @@ function ChatInterface({
     supportsMessageEditing,
     supportsSessionForking,
     supportsSideQuestions,
+    supportsSteering,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -221,6 +222,8 @@ function ChatInterface({
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
+    pendingSteers,
+    handleSteerOutcome,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
@@ -256,6 +259,7 @@ function ChatInterface({
     sendMessage,
     isConnected,
     sendByCtrlEnter,
+    supportsSteering,
     onSessionProcessing,
     onSessionEstablished: handleSessionEstablished,
     onFileOpen,
@@ -305,6 +309,7 @@ function ChatInterface({
     onWebSocketReconnect: handleWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
+    onSteerOutcome: handleSteerOutcome,
   });
 
   // Lets other modules (the quick settings Commands tab) hand text to the
@@ -575,6 +580,8 @@ function ChatInterface({
           onEditQueuedDraft={editQueuedDraft}
           onDeleteQueuedDraft={deleteQueuedDraft}
           onSendMenuChoice={handleSendMenuChoice}
+          supportsSteering={supportsSteering}
+          pendingSteers={pendingSteers}
           attachedFiles={attachedFiles}
           onRemoveAttachment={(index) =>
             setAttachedFiles((previous) =>
