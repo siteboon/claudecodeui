@@ -328,7 +328,7 @@ async function runWithoutModel(
   return { models, catalogReads };
 }
 
-test('Agent route marks a Claude run unattended, as no person can answer an MCP server there', async () => {
+async function startClaudeRunWith(extraBody: Record<string, unknown>): Promise<{ unattended?: boolean }> {
   const runOptions: { unattended?: boolean }[] = [];
   await withAgentServer(createDependencies({
     fileSystem: { access: async () => undefined } as unknown as AgentDependencies['fileSystem'],
@@ -342,13 +342,30 @@ test('Agent route marks a Claude run unattended, as no person can answer an MCP 
     const response = await fetch(`${baseUrl}/api/agent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ projectPath: '/home/test/project', message: 'Run', provider: 'claude', stream: false }),
+      body: JSON.stringify({ projectPath: '/home/test/project', message: 'Run', provider: 'claude', stream: false, ...extraBody }),
     });
     assert.equal(response.status, 200);
   });
 
   assert.equal(runOptions.length, 1);
-  assert.equal(runOptions[0].unattended, true);
+  return runOptions[0];
+}
+
+test('Agent route marks a Claude run unattended by default, as no person can answer an MCP server there', async () => {
+  assert.equal((await startClaudeRunWith({})).unattended, true);
+});
+
+test('Agent route runs Claude attended when the caller says a person is watching', async () => {
+  assert.equal((await startClaudeRunWith({ unattended: false })).unattended, false);
+  // curl -d sends every field as a string, as it does for stream and cleanup.
+  assert.equal((await startClaudeRunWith({ unattended: 'false' })).unattended, false);
+});
+
+test('Agent route keeps a Claude run unattended for any value other than false', async () => {
+  // Waiting on a form nobody sees holds the run, so a malformed value keeps the declining default.
+  for (const value of [true, 'true', 'no', 0, null]) {
+    assert.equal((await startClaudeRunWith({ unattended: value })).unattended, true, `unattended: ${JSON.stringify(value)}`);
+  }
 });
 
 test('Agent route starts Claude and Cursor on the first custom model while only custom models are listed', async () => {
