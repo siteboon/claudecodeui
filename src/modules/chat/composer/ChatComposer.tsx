@@ -10,11 +10,12 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
+import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
-import type { BackgroundSendChoice, BackgroundSendPrompt, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import { MCP_ELICITATION_TOOL_NAME } from '@/shared/constants';
+import type { BackgroundSendChoice, BackgroundSendPrompt, PendingSteer, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -32,16 +33,22 @@ import VoiceInputButton from '@/modules/chat/composer/VoiceInputButton';
 import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
+import SteeredMessageCard from '@/modules/chat/composer/SteeredMessageCard';
 import BackgroundSendDialog from '@/modules/chat/composer/BackgroundSendDialog';
 import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessagePopover';
 import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
 import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
 import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
+import ComposerSendMenu from '@/modules/chat/composer/ComposerSendMenu';
 
 type MentionableFile = {
   name: string;
   path: string;
 };
+
+// A stable empty default, so a composer with no steered messages (every
+// caller but the chat tab) does not get a new array each render.
+const NO_PENDING_STEERS: PendingSteer[] = [];
 
 type ChatComposerProps = {
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -53,6 +60,8 @@ type ChatComposerProps = {
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
+  /** Whether the viewed session can currently be interrupted; threaded to the send menu's Stop row, which otherwise looks actionable while `onAbortSession` already no-ops. Defaults to true so existing callers and tests, which never had a non-interruptible turn, keep working. */
+  canAbortSession?: boolean;
   permissionMode: PermissionMode;
   availablePermissionModes: PermissionMode[];
   onSelectPermissionMode: (mode: PermissionMode) => void;
@@ -84,6 +93,14 @@ type ChatComposerProps = {
   onCancelScheduledMessage: (id: string) => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
+  /** Handle send menu choices (queue, steer, side question, send). */
+  onSendMenuChoice?: (choice: 'queue' | 'steer' | 'sideQuestion' | 'send') => void;
+  /** False until the capability matrix has loaded, or for a provider it does not list; passed through to the send menu and the background-send dialog so neither offers a side question that would be refused. */
+  supportsSideQuestions?: boolean;
+  /** Whether the provider can take a message into a running turn; gates the send menu's Steer row the same way `supportsSideQuestions` gates its row. */
+  supportsSteering?: boolean;
+  /** Messages sent into the running turn that the agent has not read yet, each shown as a card above the composer until its echo lands in the transcript. */
+  pendingSteers?: PendingSteer[];
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
   fileErrors: Map<string, string>;
@@ -130,6 +147,7 @@ export default function ChatComposer({
   activity,
   isLoading,
   onAbortSession,
+  canAbortSession = true,
   permissionMode,
   availablePermissionModes,
   onSelectPermissionMode,
@@ -159,6 +177,10 @@ export default function ChatComposer({
   onCancelScheduledMessage,
   onEditQueuedDraft,
   onDeleteQueuedDraft,
+  onSendMenuChoice,
+  supportsSideQuestions,
+  supportsSteering = false,
+  pendingSteers = NO_PENDING_STEERS,
   attachedFiles,
   onRemoveAttachment,
   fileErrors,
@@ -247,9 +269,10 @@ export default function ChatComposer({
   const isRecording = voiceState === 'recording';
   const isTranscribing = voiceState === 'transcribing';
 
-  // Detect if the AskUserQuestion interactive panel is active
+  // Detect if an interactive panel that takes the person's answer is active:
+  // a question from the agent, or an MCP server's request for input.
   const hasQuestionPanel = pendingPermissionRequests.some(
-    (r) => r.toolName === 'AskUserQuestion'
+    (r) => r.toolName === 'AskUserQuestion' || r.toolName === MCP_ELICITATION_TOOL_NAME
   );
 
   // Hide the thinking/status bar while any permission request is pending
@@ -257,7 +280,8 @@ export default function ChatComposer({
   const hasActivityIndicator = Boolean(activity && !hasPendingPermissions);
 
   const hasQueuedDraft = Boolean(queuedDraft);
-  const canQueueDraft = isLoading && Boolean(input.trim() || attachedFiles.length > 0);
+  const hasAnyInput = Boolean(input.trim() || attachedFiles.length > 0);
+  const canQueueDraft = isLoading && hasAnyInput;
   const submitHint = canQueueDraft
     ? hasQueuedDraft
       ? t('input.hintText.appendQueued', { defaultValue: 'Enter to add to the queued message' })
@@ -265,13 +289,10 @@ export default function ChatComposer({
     : sendByCtrlEnter
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');
-  const submitAriaLabel = canQueueDraft
-    ? hasQueuedDraft
-      ? t('input.queue.append', { defaultValue: 'Add to queued message' })
-      : t('input.queue.sendNext', { defaultValue: 'Queue next message' })
-    : isLoading
-      ? t('input.stop')
-      : t('input.send');
+  // With an empty composer during a turn the green button is the one-tap Stop,
+  // so it says so to screen readers as it did before the send menu existed.
+  const submitAriaLabel =
+    isLoading && !hasAnyInput && !isRecording && !isTranscribing ? t('input.stop') : t('input.send');
 
   return (
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
@@ -317,8 +338,14 @@ export default function ChatComposer({
 
       <BackgroundSendDialog
         prompt={backgroundSendPrompt}
+        supportsSideQuestions={supportsSideQuestions}
+        hasText={Boolean(input.trim())}
         onResolve={onResolveBackgroundSendPrompt}
       />
+
+      {pendingSteers.map((steer) => (
+        <SteeredMessageCard key={steer.messageId} steer={steer} providerLabel={providerLabel} />
+      ))}
 
       {queuedDraft && (
         <QueuedMessageCard
@@ -506,41 +533,66 @@ export default function ChatComposer({
               providerLabel={providerLabel}
             />
 
-            <PromptInputSubmit
-              onClick={
-                canQueueDraft
-                  ? (e: MouseEvent<HTMLButtonElement>) => {
-                      e.preventDefault();
-                      onSubmit(e);
-                    }
-                  : isLoading
-                    ? onAbortSession
-                    : isRecording
-                      ? (e: MouseEvent<HTMLButtonElement>) => {
-                          e.preventDefault();
-                          voiceStop({ send: true });
-                        }
-                      : undefined
-              }
-              disabled={
-                isLoading
-                  ? false
-                  : isRecording
-                    ? false
-                    : isTranscribing
-                      ? true
-                      : !input.trim() && attachedFiles.length === 0
-              }
-              aria-label={submitAriaLabel}
-              title={submitAriaLabel}
-              className="h-10 w-10 sm:h-10 sm:w-10"
-            >
-              {isTranscribing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : canQueueDraft ? (
-                <ArrowUpIcon className="h-4 w-4" />
-              ) : undefined}
-            </PromptInputSubmit>
+            {(isLoading || activity?.background) && hasAnyInput && !isRecording && !isTranscribing ? (
+              // The caret-trigger menu only replaces the plain button when there is
+              // something to send: an empty composer during a turn keeps the
+              // one-tap ■ Stop below, and an empty composer during background
+              // work keeps the plain disabled ↑, exactly as on `main`.
+              <ComposerSendMenu
+                state={isLoading ? 'responding' : 'background'}
+                hasInput={hasAnyInput}
+                hasText={Boolean(input.trim())}
+                canAbortSession={canAbortSession}
+                supportsSideQuestions={supportsSideQuestions}
+                supportsSteering={supportsSteering}
+                sendByCtrlEnter={sendByCtrlEnter}
+                onSelect={(choice) => {
+                  if (choice === 'stop') {
+                    onAbortSession();
+                    return;
+                  }
+                  onSendMenuChoice?.(choice);
+                }}
+              />
+            ) : (
+              <PromptInputSubmit
+                onClick={
+                  isTranscribing
+                    ? undefined
+                    : isLoading && !isRecording
+                      ? onAbortSession
+                      : isRecording
+                        ? (e: MouseEvent<HTMLButtonElement>) => {
+                            e.preventDefault();
+                            voiceStop({ send: true });
+                          }
+                        : undefined
+                }
+                disabled={
+                  // Transcribing shows the same spinner as a running turn, but it
+                  // is not a turn: disable the button so a tap cannot reach
+                  // `onAbortSession` and end an unrelated in-flight turn.
+                  isTranscribing
+                    ? true
+                    : isLoading
+                      // With an empty composer this button is the one-tap Stop
+                      // (see `onClick` above), so it disables on `canAbortSession`
+                      // exactly like the send menu's Stop row does. Recording
+                      // keeps its own voice-stop behavior either way.
+                      ? !isRecording && !canAbortSession
+                      : isRecording
+                        ? false
+                        : !hasAnyInput
+                }
+                aria-label={submitAriaLabel}
+                title={submitAriaLabel}
+                className="h-10 w-10 sm:h-10 sm:w-10"
+              >
+                {isTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : undefined}
+              </PromptInputSubmit>
+            )}
           </div>
 
           <div

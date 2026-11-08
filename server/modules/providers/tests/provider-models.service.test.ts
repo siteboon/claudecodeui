@@ -421,6 +421,50 @@ test('duplicate model ids are rejected within one provider', async () => {
   );
 });
 
+test('a custom model whose id later became a built-in is listed once', async () => {
+  const { service, catalog } = createTestService();
+  // Written straight to the store: the service refuses this id today, but the
+  // row predates the built-in when an update ships a model the user added.
+  catalog.createCustomProviderModel('codex', { model: 'Mine', id: 'codex-default' });
+  await service.createCustomModel('codex', { model: 'Other', id: 'other-model' });
+
+  const listed = await service.getProviderModels('codex');
+  assert.deepEqual(
+    listed.OPTIONS.map((option) => [option.value, option.isCustom]),
+    [['codex-default', false], ['other-model', true]],
+  );
+
+  // Only the built-ins hide it: the row comes back with custom-models-only on.
+  const customOnly = await service.setCustomModelsOnly('codex', true);
+  assert.deepEqual(customOnly.OPTIONS.map((option) => option.value), ['codex-default', 'other-model']);
+});
+
+test('a custom model whose id later became a built-in can still be renamed, but not moved onto', async () => {
+  const { service, catalog } = createTestService();
+  const shadowed = catalog.createCustomProviderModel('codex', { model: 'Mine', id: 'codex-default' });
+  const other = await service.createCustomModel('codex', { model: 'Other', id: 'other-model' });
+
+  const renamed = await service.updateCustomModel('codex', shadowed.recordId, {
+    model: 'Renamed',
+    id: 'codex-default',
+  });
+  assert.equal(renamed.model.label, 'Renamed');
+
+  // The exemption covers a row keeping its own id, nothing else: another row
+  // still cannot take that id, and neither can a new one.
+  await assert.rejects(
+    () => service.updateCustomModel('codex', other.model.recordId as number, {
+      model: 'Other',
+      id: 'codex-default',
+    }),
+    (error) => error instanceof AppError && error.code === 'MODEL_ID_ALREADY_EXISTS',
+  );
+  await assert.rejects(
+    () => service.createCustomModel('codex', { model: 'New', id: 'codex-default' }),
+    (error) => error instanceof AppError && error.code === 'MODEL_ID_ALREADY_EXISTS',
+  );
+});
+
 test('predefined models have no database record or mutation target', async () => {
   const { service, catalog } = createTestService();
   const models = await service.getProviderModels('opencode');
