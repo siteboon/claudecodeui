@@ -31,7 +31,10 @@ const toProviderEffortOptions = (
 const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   claude: 'default',
   cursor: 'gpt-5.3-codex',
-  codex: 'gpt-5.4',
+  // The server catalog's DEFAULT. A new browser keeps this model for as long
+  // as the catalog lists it, so it must be one the bundled Codex CLI knows;
+  // any other model runs on the CLI's fallback metadata.
+  codex: 'gpt-5.6-sol',
   opencode: 'anthropic/claude-sonnet-4-5',
 };
 
@@ -65,6 +68,8 @@ type ProviderCapabilities = {
   supportsEffort?: boolean;
   supportsMessageEditing?: boolean;
   supportsSessionForking?: boolean;
+  supportsSideQuestions?: boolean;
+  supportsSteering?: boolean;
 };
 
 type ProviderCapabilitiesApiResponse = {
@@ -459,6 +464,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
    */
   const supportsMessageEditing = Boolean(providerCapabilities?.[provider]?.supportsMessageEditing);
   const supportsSessionForking = Boolean(providerCapabilities?.[provider]?.supportsSessionForking);
+  const supportsSideQuestions = Boolean(providerCapabilities?.[provider]?.supportsSideQuestions);
+  const supportsSteering = Boolean(providerCapabilities?.[provider]?.supportsSteering);
 
   const resolvePermissionModeForProvider = useCallback((
     targetProvider: LLMProvider,
@@ -837,5 +844,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
+    supportsSideQuestions,
+    supportsSteering,
   };
 }

@@ -905,29 +905,15 @@ export function useSidebarController({
   );
 
   const showDeleteSessionConfirmation = useCallback(
-    (
-      sessionId: string,
-      sessionTitle: string,
-      options: { isArchived?: boolean } = {},
-    ) => {
-      setPendingDeletion({
-        kind: 'session',
-        sessionId,
-        sessionTitle,
-        isArchived: Boolean(options.isArchived),
-      });
+    (sessionId: string, sessionTitle: string) => {
+      setPendingDeletion({ kind: 'session', sessionId, sessionTitle });
     },
     [],
   );
 
-  const confirmDeleteSession = useCallback(async (hardDelete = false) => {
-    if (pendingDeletion?.kind !== 'session') {
-      return;
-    }
-
-    const { sessionId } = pendingDeletion;
-    setPendingDeletion(null);
-
+  // Shared by archive and permanent delete: the server takes the same route for
+  // both, and either way the session leaves the active lists.
+  const removeSession = useCallback(async (sessionId: string, hardDelete: boolean) => {
     try {
       const response = await api.deleteSession(sessionId, hardDelete);
 
@@ -946,17 +932,37 @@ export function useSidebarController({
         await fetchArchivedSessions();
       } else {
         const errorText = await response.text();
-        console.error('[Sidebar] Failed to delete session:', {
+        console.error(`[Sidebar] Failed to ${hardDelete ? 'delete' : 'archive'} session:`, {
           status: response.status,
           error: errorText,
         });
-        alert(t('messages.deleteSessionFailed'));
+        alert(hardDelete
+          ? t('messages.deleteSessionFailed')
+          : t('messages.archiveSessionFailed', 'Failed to archive session. Please try again.'));
       }
     } catch (error) {
-      console.error('[Sidebar] Error deleting session:', error);
-      alert(t('messages.deleteSessionError'));
+      console.error(`[Sidebar] Error ${hardDelete ? 'deleting' : 'archiving'} session:`, error);
+      alert(hardDelete
+        ? t('messages.deleteSessionError')
+        : t('messages.archiveSessionError', 'Error archiving session. Please try again.'));
     }
-  }, [fetchArchivedSessions, onSessionDelete, pendingDeletion, t]);
+  }, [fetchArchivedSessions, onSessionDelete, t]);
+
+  // Archiving is reversible from the archive list, so it skips the confirmation
+  // that guards a permanent delete.
+  const archiveSession = useCallback((sessionId: string) => {
+    void removeSession(sessionId, false);
+  }, [removeSession]);
+
+  const confirmDeleteSession = useCallback(async () => {
+    if (pendingDeletion?.kind !== 'session') {
+      return;
+    }
+
+    const { sessionId } = pendingDeletion;
+    setPendingDeletion(null);
+    await removeSession(sessionId, true);
+  }, [pendingDeletion, removeSession]);
 
   const setProjectSessionSelection = useCallback((selection: SidebarSessionSelection) => {
     setSessionSelection(selection);
@@ -1343,6 +1349,7 @@ export function useSidebarController({
     cancelRename,
     saveProjectName,
     showDeleteSessionConfirmation,
+    archiveSession,
     confirmDeleteSession,
     sessionSelection,
     setProjectSessionSelection,
