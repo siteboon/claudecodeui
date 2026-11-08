@@ -7,6 +7,7 @@ import {
   AppError,
   SIDE_CONVERSATION_BOUNDARY_PROMPT,
   SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+  SIDE_QUESTION_ANSWER_SEPARATOR,
 } from '@/shared/utils.js';
 
 /**
@@ -473,6 +474,22 @@ export const codexAppServer = {
         // Deltas are optional and `item/completed` is the final item, so an
         // agent message that never streamed is taken from there instead.
         const streamedItemIds = new Set<string>();
+        // Codex often writes a progress note ("I'll read math.js…") and the
+        // answer as two agentMessage items. A new item id after text already
+        // sent starts a new paragraph. A delta without an item id is taken as
+        // part of the current item: a seam guessed wrong would split a word.
+        let currentItemId: string | null = null;
+        const appendAgentText = (itemId: string | null, chunk: string) => {
+          if (text && itemId !== null && currentItemId !== null && itemId !== currentItemId) {
+            text += SIDE_QUESTION_ANSWER_SEPARATOR;
+            onDelta(SIDE_QUESTION_ANSWER_SEPARATOR);
+          }
+          if (itemId !== null) {
+            currentItemId = itemId;
+          }
+          text += chunk;
+          onDelta(chunk);
+        };
         let settled = false;
         let removeNotificationListener: (() => void) | null = null;
         let removeExitListener: (() => void) | null = null;
@@ -579,11 +596,11 @@ export const codexAppServer = {
             if (method === 'item/agentMessage/delta') {
               const delta = typeof notificationParams.delta === 'string' ? notificationParams.delta : '';
               if (delta) {
-                if (typeof notificationParams.itemId === 'string') {
-                  streamedItemIds.add(notificationParams.itemId);
+                const itemId = typeof notificationParams.itemId === 'string' ? notificationParams.itemId : null;
+                if (itemId !== null) {
+                  streamedItemIds.add(itemId);
                 }
-                text += delta;
-                onDelta(delta);
+                appendAgentText(itemId, delta);
               }
               return;
             }
@@ -595,8 +612,7 @@ export const codexAppServer = {
                 && typeof item.text === 'string' && item.text
                 && !(typeof item.id === 'string' && streamedItemIds.has(item.id))
               ) {
-                text += item.text;
-                onDelta(item.text);
+                appendAgentText(typeof item.id === 'string' ? item.id : null, item.text);
               }
               return;
             }

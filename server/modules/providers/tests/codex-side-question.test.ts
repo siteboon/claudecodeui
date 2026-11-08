@@ -47,7 +47,7 @@ const appServer = codexAppServer as unknown as AppServerSideQuestion;
 const runtime = codexRuntime as unknown as RuntimeSideQuestion;
 
 type Mode = 'complete' | 'failed' | 'fork-error' | 'hang' | 'server-request' | 'plugin-list-error'
-  | 'initialize-hang' | 'completed-only';
+  | 'initialize-hang' | 'completed-only' | 'two-streamed' | 'streamed-then-completed-only';
 
 /**
  * The fake app-server. `mode` decides how the turn goes; everything received
@@ -80,7 +80,7 @@ fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 setTimeout(() => process.exit(0), 15000);
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n');
 const notify = (method, params) => send({ jsonrpc: '2.0', method, params });
-const delta = (threadId, text) => notify('item/agentMessage/delta', { threadId, turnId: ${JSON.stringify(TURN_ID)}, itemId: 'msg-1', delta: text });
+const delta = (threadId, text, itemId = 'msg-1') => notify('item/agentMessage/delta', { threadId, turnId: ${JSON.stringify(TURN_ID)}, itemId, delta: text });
 const completedMessage = (threadId, id, text) => notify('item/completed', { threadId, turnId: ${JSON.stringify(TURN_ID)}, item: { type: 'agentMessage', id, text, phase: 'final_answer', memoryCitation: null, delivery: null, questions: null }, completedAtMs: 0 });
 const turn = (status, error) => ({ id: ${JSON.stringify(TURN_ID)}, items: [], itemsView: 'full', status, error, startedAt: null, completedAt: null });
 const FORK = ${JSON.stringify(FORK_THREAD)};
@@ -95,6 +95,20 @@ function runTurn() {
   if (MODE === 'failed') {
     delta(FORK, 'partial ');
     notify('turn/completed', { threadId: FORK, turn: turn('failed', { message: 'model overloaded', codexErrorInfo: null, additionalDetails: null, misalignment: null }) });
+    return;
+  }
+  if (MODE === 'two-streamed' || MODE === 'streamed-then-completed-only') {
+    // What Codex 0.166.0 sent live for a side question that needs a file
+    // read: a progress note as one agentMessage item, the answer as another.
+    delta(FORK, "I'll read ");
+    delta(FORK, 'notes.md.');
+    completedMessage(FORK, 'msg-1', "I'll read notes.md.");
+    if (MODE === 'two-streamed') {
+      delta(FORK, 'The codeword ', 'msg-2');
+      delta(FORK, 'is HERON.', 'msg-2');
+    }
+    completedMessage(FORK, 'msg-2', 'The codeword is HERON.');
+    notify('turn/completed', { threadId: FORK, turn: turn('completed', null) });
     return;
   }
   if (MODE === 'completed-only') {
@@ -413,7 +427,25 @@ test('an agent message that arrives only as item/completed, with no deltas, is t
   });
 });
 
-test('a failed turn rejects with the turn\'s error message', { concurrency: false }, async () => {
+test('two agent messages are joined with a paragraph break, streamed as its own delta', { concurrency: false }, async () => {
+  await withFakeAppServer('two-streamed', async () => {
+    const deltas: string[] = [];
+    const answer = await appServer.askSideQuestion!(askInput(), (text) => { deltas.push(text); });
+    assert.deepEqual(deltas, ["I'll read ", 'notes.md.', '\n\n', 'The codeword ', 'is HERON.']);
+    assert.equal(answer, "I'll read notes.md.\n\nThe codeword is HERON.", 'not "…notes.md.The codeword…"');
+  });
+});
+
+test('an agent message that arrives only as item/completed after a streamed one is joined the same way', { concurrency: false }, async () => {
+  await withFakeAppServer('streamed-then-completed-only', async () => {
+    const deltas: string[] = [];
+    const answer = await appServer.askSideQuestion!(askInput(), (text) => { deltas.push(text); });
+    assert.deepEqual(deltas, ["I'll read ", 'notes.md.', '\n\n', 'The codeword is HERON.']);
+    assert.equal(answer, "I'll read notes.md.\n\nThe codeword is HERON.");
+  });
+});
+
+test('a failed turn rejects with the turn\'s error message',{ concurrency: false }, async () => {
   await withFakeAppServer('failed', async () => {
     await assert.rejects(appServer.askSideQuestion!(askInput(), () => {}), /model overloaded/);
   });
