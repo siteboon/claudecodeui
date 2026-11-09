@@ -73,6 +73,7 @@ export default function CodeEditor({
     hasUnsavedChanges,
     handleSave,
     handleDownload,
+    handleDownloadOriginal,
   } = useCodeEditorDocument({
     file,
     projectPath,
@@ -265,13 +266,21 @@ export default function CodeEditor({
   if (isBinary) {
     return (
       <CodeEditorBinaryFile
+        key={`${file.projectId ?? ''}:${file.path}`}
         file={file}
         isSidebar={isSidebar}
         isFullscreen={isFullscreen}
         onClose={requestClose}
         onToggleFullscreen={() => setIsFullscreen((previous) => !previous)}
+        onDownload={handleDownloadOriginal}
         title={t('binaryFile.title', 'Binary File')}
         message={t('binaryFile.message', 'The file "{{fileName}}" cannot be displayed in the text editor because it is a binary file.', { fileName: file.name })}
+        labels={{
+          download: t('binaryFile.download', 'Download original file'),
+          downloading: t('binaryFile.downloading', 'Downloading…'),
+          downloadFailed: t('binaryFile.downloadFailed', 'Could not download the file. Please try again.'),
+          close: t('actions.close', 'Close'),
+        }}
       />
     );
   }
