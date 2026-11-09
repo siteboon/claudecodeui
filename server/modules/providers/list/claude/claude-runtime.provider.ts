@@ -1954,16 +1954,55 @@ function listClaudeSDKBackgroundWork(): Array<{ sessionId: string; tasks: Backgr
  * Stops one outstanding background task through the SDK, which then emits a
  * `task_notification` with status `stopped` — the same event that drops the
  * task from the tracker and settles its card.
+ *
+ * The CLI acknowledges `stop_task` even when it stops nothing (seen with a
+ * Monitor task, CLI 2.1.318), so the stop only counts once the task has left
+ * the tracker; otherwise this throws and the user hears the stop failed.
  * @param {string} sessionId - Session identifier
  * @param {string} taskId - The task's `task_id` as reported on `task_started`
+ * @param {number} confirmMs - How long to wait for the task to settle
  * @returns {Promise<boolean>} False when no live process is tracking the task
  */
-async function stopClaudeSDKTask(sessionId: string, taskId: string) {
+// A repeated ✕ joins the stop under way instead of sending stop_task again.
+const pendingTaskStops = new Map<string, Promise<boolean>>();
+
+function stopClaudeSDKTask(sessionId: string, taskId: string, confirmMs = 5000): Promise<boolean> {
+  const key = `${sessionId}\u0000${taskId}`;
+  const pending = pendingTaskStops.get(key);
+  if (pending) return pending;
+  const stop = runClaudeSDKTaskStop(sessionId, taskId, confirmMs)
+    .finally(() => pendingTaskStops.delete(key));
+  pendingTaskStops.set(key, stop);
+  return stop;
+}
+
+async function runClaudeSDKTaskStop(sessionId: string, taskId: string, confirmMs: number): Promise<boolean> {
   const session = getSession(sessionId);
-  if (!session || !backgroundWork.has(sessionId, taskId)) {
+  const stopTask = session?.instance?.stopTask;
+  if (!session || !stopTask || !backgroundWork.has(sessionId, taskId)) {
     return false;
   }
-  await session.instance.stopTask!(taskId);
+  // Not awaited: the CLI may answer late or never, and the task leaving the
+  // tracker is what counts, so one deadline covers both waits.
+  let answered = false;
+  let failed = false;
+  let failure: unknown;
+  stopTask.call(session.instance, taskId).then(
+    () => { answered = true; },
+    (error: unknown) => { answered = true; failed = true; failure = error; },
+  );
+  const deadline = Date.now() + confirmMs;
+  while (backgroundWork.has(sessionId, taskId)) {
+    if (failed) {
+      throw failure;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(answered
+        ? `Claude Code acknowledged the stop, but background task "${taskId}" is still running.`
+        : `Claude Code did not answer the stop of background task "${taskId}".`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
   return true;
 }
 
