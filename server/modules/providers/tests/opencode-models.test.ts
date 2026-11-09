@@ -436,6 +436,10 @@ test('OpenCode caches the CLI model listing and refreshes it in the background',
         () => now,
       );
       const flushRead = async (): Promise<void> => {
+        for (let i = 0; i < 1000 && pendingReads.length === 0; i++) {
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        assert.ok(pendingReads.length > 0, 'model reader started');
         pendingReads.shift()?.();
         await new Promise((resolve) => setImmediate(resolve));
       };
@@ -658,7 +662,7 @@ test('OpenCode does not restore a removed provider from an in-flight refresh', a
     finishRefresh(listing);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[1]);
-    assert.equal(reads, 2);
+    assert.equal(reads, 3); // One bounded retry after the removal revision.
     now += 30_000;
     await adapter.getSupportedModels();
     await new Promise((resolve) => setImmediate(resolve));
@@ -1085,3 +1089,431 @@ test('OpenCode composes the provider prefix into session model ids', async () =>
     await rm(tempSessionsDirectory, { recursive: true, force: true });
   }
 });
+
+// Review regressions use only injected model readers and synthetic local auth.
+test('review: first discovery observes credential removal', async () => {
+  let home = '';
+  await withOpenCodeHome(async (dir) => {
+    home = dir;
+    process.env.WALLY_API_KEY = 'test';
+    await writeOpenCodeAuth(home, { nvidia: { key: 'test' } });
+  }, async () => {
+    const adapter = new OpenCodeProviderModels(async () => {
+      await writeOpenCodeAuth(home, {});
+      return ['nvidia/test', 'wally/test'];
+    });
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+  });
+});
+
+test('review: reconnect refreshes pruned known provider before expiry', async () => {
+  let home = '';
+  await withOpenCodeHome(async (dir) => {
+    home = dir; process.env.WALLY_API_KEY = 'test';
+    await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+  }, async () => {
+    let reads = 0;
+    const adapter = new OpenCodeProviderModels(async () => {
+      reads++; return ['anthropic/test', 'wally/test'];
+    });
+    await adapter.getSupportedModels();
+    await writeOpenCodeAuth(home, {});
+    await adapter.getSupportedModels();
+    await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+    await adapter.getSupportedModels();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['anthropic/test', 'wally/test']);
+    assert.equal(reads, 2);
+  });
+});
+
+test('review: malformed auth preserves the last snapshot but empty auth removes', async () => {
+  let home = '';
+  await withOpenCodeHome(async (dir) => {
+    home = dir; process.env.WALLY_API_KEY = 'test';
+    await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+  }, async (adapter) => {
+    await adapter.getSupportedModels();
+    await writeFile(path.join(home, '.local/share/opencode/auth.json'), '{');
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, 'anthropic/test');
+    await writeOpenCodeAuth(home, {});
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, 'wally/test');
+  }, async () => ['anthropic/test', 'wally/test']);
+});
+
+test('review: static fallback does not restore a removed Wally provider', async () => {
+  await withOpenCodeHome(async () => { process.env.WALLY_API_KEY = 'test'; }, async (adapter) => {
+    await adapter.getSupportedModels();
+    delete process.env.WALLY_API_KEY;
+    const catalog = await adapter.getSupportedModels();
+    assert.ok(catalog.OPTIONS.length > 0);
+    assert.ok(catalog.OPTIONS.every(x => !x.value.startsWith('wally/')));
+  });
+});
+
+test('review: healthy pending refresh preserves env-only models until failure', async () => {
+  await withOpenCodeHome(async () => { process.env.WALLY_API_KEY = 'test'; }, async () => {
+    let now = 0; let reads = 0;
+    let finish: (value: string[]) => void = () => assert.fail('not started');
+    const listing = ['nvidia/test', 'wally/test'];
+    const adapter = new OpenCodeProviderModels(async () => {
+      if (++reads === 1) return listing;
+      return new Promise<string[]>(resolve => { finish = resolve; });
+    }, () => now);
+    await adapter.getSupportedModels(); now = 300_000;
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+    finish(listing); await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+    now = 600_000;
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+    finish([]); await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+    now = 630_000;
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+    finish([]); await new Promise(resolve => setImmediate(resolve));
+  });
+});
+
+test('review: waiting request uses latest known-provider snapshot', async () => {
+  let home = '';
+  await withOpenCodeHome(async (dir) => {
+    home = dir; await writeOpenCodeAuth(home, { wally: { key: 'test' } });
+  }, async () => {
+    let finish: (value: string[]) => void = () => assert.fail('not started');
+    let started: () => void = () => {};
+    const gate = new Promise<void>(resolve => { started = resolve; });
+    let reads = 0;
+    const adapter = new OpenCodeProviderModels(() => {
+      if (++reads > 1) return Promise.resolve(['openai/test']);
+      return new Promise<string[]>(resolve => { finish = resolve; started(); });
+    });
+    const older = adapter.getSupportedModels(); await gate;
+    await writeOpenCodeAuth(home, { openai: { key: 'test' } });
+    let captured: () => void = () => {};
+    const snapshotCaptured = new Promise<void>(resolve => { captured = resolve; });
+    const originalRead = fsPromises.readFile;
+    const readMock = mock.method(fsPromises, 'readFile', async (
+      file: Parameters<typeof fsPromises.readFile>[0], options: any,
+    ) => {
+      try { return await originalRead(file, options); }
+      finally {
+        if (String(file).endsWith('/opencode.jsonc')) captured();
+      }
+    });
+    syncBuiltinESMExports();
+    const newer = adapter.getSupportedModels();
+    try {
+      await snapshotCaptured;
+      // The final config read has finished; drain its application microtasks.
+      await new Promise(resolve => setImmediate(resolve));
+    } finally {
+      readMock.mock.restore(); syncBuiltinESMExports();
+    }
+    finish(['wally/test', 'openai/test']);
+    const [a, b] = await Promise.all([older, newer]);
+    assert.ok(a.OPTIONS.length > 0);
+    assert.ok(a.OPTIONS.every(x => x.value.startsWith('openai/')));
+    assert.deepEqual(a, b);
+  });
+});
+
+test('review: credential capture order prevents stale logout eviction', async () => {
+  let home = '';
+  await withOpenCodeHome(async (dir) => {
+    home = dir; process.env.WALLY_API_KEY = 'test';
+    await writeOpenCodeAuth(home, { nvidia: { key: 'test' } });
+  }, async () => {
+    let reads = 0;
+    const listing = ['nvidia/test', 'wally/test'];
+    const adapter = new OpenCodeProviderModels(async () => { reads++; return listing; });
+    await adapter.getSupportedModels();
+    await writeOpenCodeAuth(home, {});
+    let releaseAuth: () => void = () => {};
+    let releaseConfig: () => void = () => {};
+    let authReached: () => void = () => {};
+    let configReached: () => void = () => {};
+    const authSignal = new Promise<void>(r => { authReached = r; });
+    const configSignal = new Promise<void>(r => { configReached = r; });
+    const authGate = new Promise<void>(r => { releaseAuth = r; });
+    const configGate = new Promise<void>(r => { releaseConfig = r; });
+    let authHeld = false; let configHeld = false;
+    const original = fsPromises.readFile;
+    const readMock = mock.method(fsPromises, 'readFile', async (
+      file: Parameters<typeof fsPromises.readFile>[0], options: any,
+    ) => {
+      if (!authHeld && String(file).endsWith('/auth.json')) {
+        authHeld = true; authReached(); await authGate;
+      } else if (!configHeld && String(file).endsWith('/config.json')) {
+        configHeld = true; configReached(); await configGate;
+      }
+      return original(file, options);
+    });
+    syncBuiltinESMExports();
+    const first = adapter.getSupportedModels();
+    let second: Promise<unknown> | undefined;
+    try {
+      await authSignal;
+      second = adapter.getSupportedModels(); await configSignal;
+      await writeOpenCodeAuth(home, { nvidia: { key: 'test' } });
+      releaseAuth(); await first;
+      releaseConfig(); await second;
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+      assert.equal(reads, 1, 'stale logout must not evict and rediscover');
+    } finally {
+      releaseAuth(); releaseConfig(); await Promise.all([first, second]);
+      readMock.mock.restore(); syncBuiltinESMExports();
+    }
+  });
+});
+
+test('review: revision change retries discovery without restoring the removed provider', async () => {
+  let home = '';
+  await withOpenCodeHome(async (dir) => {
+    home = dir; process.env.WALLY_API_KEY = 'test';
+    await writeOpenCodeAuth(home, { nvidia: { key: 'test' } });
+  }, async () => {
+    let now = 0; let reads = 0;
+    let retried: () => void = () => {};
+    const retryStarted = new Promise<void>(resolve => { retried = resolve; });
+    let finish: (value: string[]) => void = () => assert.fail('not started');
+    const adapter = new OpenCodeProviderModels(async () => {
+      reads++;
+      if (reads === 1) return ['nvidia/test', 'wally/test'];
+      if (reads === 2) return new Promise<string[]>(resolve => { finish = resolve; });
+      retried();
+      return ['nvidia/test', 'proxy/test', 'wally/test'];
+    }, () => now);
+    await adapter.getSupportedModels(); now = 300_000;
+    await adapter.getSupportedModels();
+    await writeOpenCodeAuth(home, { proxy: { key: 'test' } });
+    await adapter.getSupportedModels();
+    finish(['proxy/test', 'wally/test']);
+    // Baseline has no retry: one request deterministically exposes the missing result.
+    await Promise.race([retryStarted, adapter.getSupportedModels().then(() => undefined)]);
+    await new Promise(resolve => setImmediate(resolve));
+    const result = await adapter.getSupportedModels();
+    assert.deepEqual(result.OPTIONS.map(x => x.value), ['proxy/test', 'wally/test']);
+    assert.equal(reads, 3);
+  });
+});
+
+for (const source of ['auth', 'env', 'config'] as const) {
+  test(`revision5: reconnect during pending refresh (${source})`, async () => {
+    let home = '';
+    const connect = async (enabled: boolean) => {
+      if (source === 'auth') {
+        await writeOpenCodeAuth(home, enabled ? { anthropic: { key: 'test' } } : {});
+      } else if (source === 'env') {
+        if (enabled) process.env.ANTHROPIC_API_KEY = 'test';
+        else delete process.env.ANTHROPIC_API_KEY;
+      } else {
+        process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ provider: enabled ? { anthropic: {} } : {} });
+      }
+    };
+    await withOpenCodeHome(async (dir) => {
+      home = dir;
+      process.env.WALLY_API_KEY = 'test';
+      await connect(true);
+    }, async () => {
+      let now = 0;
+      let reads = 0;
+      let finish: (listing: string[]) => void = () => assert.fail('refresh not started');
+      const listing = ['anthropic/test', 'wally/test'];
+      const adapter = new OpenCodeProviderModels(async () => {
+        reads++;
+        if (reads === 2) return new Promise<string[]>(resolve => { finish = resolve; });
+        assert.ok(reads <= 3, 'reconnection must not spin or retry without bound');
+        return listing;
+      }, () => now);
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+      await connect(false);
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+      now = 300_000;
+      await adapter.getSupportedModels();
+      assert.equal(reads, 2);
+      await connect(true);
+      await adapter.getSupportedModels();
+      assert.equal(reads, 2, 'pending discovery must remain shared');
+      finish(['wally/test']);
+      await new Promise(resolve => setImmediate(resolve));
+      await adapter.getSupportedModels();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+      assert.equal(reads, 3, 'a discovery after reconnect is required');
+      await adapter.getSupportedModels();
+      assert.equal(reads, 3, 'stable credentials must not cause repeated discovery');
+    });
+  });
+}
+
+for (const invalid of ['null', '[]', '42']) {
+  test(`revision5: invalid auth shape ${invalid} preserves snapshot`, async () => {
+    let home = '';
+    const listing = ['anthropic/test', 'wally/test'];
+    await withOpenCodeHome(async (dir) => {
+      home = dir;
+      process.env.WALLY_API_KEY = 'test';
+      await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+    }, async (adapter) => {
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+      const authPath = path.join(home, '.local/share/opencode/auth.json');
+      await writeFile(authPath, invalid);
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+      await writeOpenCodeAuth(home, {});
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+      await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+      await adapter.getSupportedModels();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+      await rm(authPath);
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+    }, async () => listing);
+  });
+}
+
+test('revision5: reconnect churn during retry remains bounded', async () => {
+  let home = '';
+  await withOpenCodeHome(async (dir) => {
+    home = dir;
+    process.env.WALLY_API_KEY = 'test';
+    await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+  }, async () => {
+    let now = 0;
+    let reads = 0;
+    const listing = ['anthropic/test', 'wally/test'];
+    let finish: (value: string[]) => void = () => assert.fail('refresh not started');
+    const adapter = new OpenCodeProviderModels(async () => {
+      reads++;
+      assert.ok(reads <= 4, 'refresh must retry at most once during churn');
+      if (reads === 2 || reads === 3) {
+        return new Promise<string[]>(resolve => { finish = resolve; });
+      }
+      return listing;
+    }, () => now);
+    await adapter.getSupportedModels();
+    await writeOpenCodeAuth(home, {});
+    await adapter.getSupportedModels();
+    now = 300_000;
+    await adapter.getSupportedModels();
+    await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+    await adapter.getSupportedModels();
+    finish(['wally/test']);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(reads, 3, 'reconnect requires a new discovery');
+    await writeOpenCodeAuth(home, {});
+    await adapter.getSupportedModels();
+    await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+    await adapter.getSupportedModels();
+    finish(listing);
+    await new Promise(resolve => setImmediate(resolve));
+    // Churn during the one retry discards its listing and uses the short backoff.
+    for (let i = 0; i < 3; i++) {
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+      assert.equal(reads, 3);
+    }
+    now += 30_000;
+    await adapter.getSupportedModels();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+    assert.equal(reads, 4);
+  });
+});
+
+for (const source of ['auth', 'env', 'config'] as const) {
+  test(`revision6: provider addition during concurrent first discovery (${source})`, async () => {
+    let home = '';
+    await withOpenCodeHome(async (dir) => {
+      home = dir;
+      process.env.WALLY_API_KEY = 'test';
+    }, async () => {
+      let reads = 0;
+      let started: () => void = () => {};
+      const listingStarted = new Promise<void>(resolve => { started = resolve; });
+      let finish: (listing: string[]) => void = () => assert.fail('listing not started');
+      const listing = ['anthropic/test', 'wally/test'];
+      const adapter = new OpenCodeProviderModels(async () => {
+        reads++;
+        assert.ok(reads <= 2, 'first discovery must retry at most once');
+        if (reads === 1) {
+          return new Promise<string[]>(resolve => { finish = resolve; started(); });
+        }
+        return listing;
+      }, () => 0);
+      // Observe completion of the real snapshot update in the concurrent request.
+      const originalUpdate = (adapter as any).updateProviderSnapshot.bind(adapter);
+      let snapshots = 0;
+      let applied: () => void = () => {};
+      const snapshotApplied = new Promise<void>(resolve => { applied = resolve; });
+      const updateMock = mock.method(adapter as any, 'updateProviderSnapshot', async () => {
+        await originalUpdate();
+        if (++snapshots === 2) applied();
+      });
+      const first = adapter.getSupportedModels();
+      await listingStarted;
+      if (source === 'auth') {
+        await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+      } else if (source === 'env') {
+        process.env.ANTHROPIC_API_KEY = 'test';
+      } else {
+        process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ provider: { anthropic: {} } });
+      }
+      const concurrent = adapter.getSupportedModels();
+      await snapshotApplied;
+      assert.equal(reads, 1, 'concurrent first requests must share the pending listing');
+      finish(['wally/test']);
+      try {
+        for (const catalog of await Promise.all([first, concurrent])) {
+          assert.deepEqual(catalog.OPTIONS.map(x => x.value), listing);
+        }
+        assert.equal(reads, 2, 'the new provider requires one fresh discovery');
+        for (let i = 0; i < 3; i++) {
+          assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+          assert.equal(reads, 2, 'stable credentials must not spin');
+        }
+      } finally {
+        updateMock.mock.restore();
+      }
+    });
+  });
+}
+
+for (const source of ['auth', 'env', 'config'] as const) {
+  test(`revision7: provider addition during single-request first discovery (${source})`, async () => {
+    let home = '';
+    await withOpenCodeHome(async (dir) => {
+      home = dir;
+      process.env.WALLY_API_KEY = 'test';
+    }, async () => {
+      let reads = 0;
+      let started: () => void = () => {};
+      const listingStarted = new Promise<void>(resolve => { started = resolve; });
+      let finish: (listing: string[]) => void = () => assert.fail('listing not started');
+      const listing = ['anthropic/test', 'wally/test'];
+      const adapter = new OpenCodeProviderModels(async () => {
+        reads++;
+        assert.ok(reads <= 2, 'first discovery must retry at most once');
+        if (reads === 1) {
+          return new Promise<string[]>(resolve => { finish = resolve; started(); });
+        }
+        return listing;
+      }, () => 0);
+      const pending = adapter.getSupportedModels();
+      await listingStarted;
+      if (source === 'auth') {
+        await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+      } else if (source === 'env') {
+        process.env.ANTHROPIC_API_KEY = 'test';
+      } else {
+        process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ provider: { anthropic: {} } });
+      }
+      // No other request observes the addition before the old listing resolves.
+      finish(['wally/test']);
+      assert.deepEqual((await pending).OPTIONS.map(x => x.value), listing);
+      assert.equal(reads, 2, 'the same request must perform one fresh discovery');
+      for (let i = 0; i < 3; i++) {
+        assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
+        assert.equal(reads, 2, 'stable credentials must not spin');
+      }
+    });
+  });
+}

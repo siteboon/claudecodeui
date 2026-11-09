@@ -405,10 +405,13 @@ const readInstalledOpenCodeModels = async (): Promise<string[]> => {
   }
 };
 
-const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, unknown> | null> => {
+const readOpenCodeJsonFile = async (filePath: string, authoritative = false): Promise<Record<string, unknown> | null> => {
   try {
-    return readObjectRecord(JSON.parse(await readFile(filePath, 'utf8')));
-  } catch {
+    const record = readObjectRecord(JSON.parse(await readFile(filePath, 'utf8')));
+    if (authoritative && !record) throw new Error('Invalid OpenCode auth document');
+    return record;
+  } catch (error) {
+    if (authoritative && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     // Missing, unreadable, or comment-bearing (.jsonc) files simply contribute
     // nothing; the auth store is the authoritative source below.
     return null;
@@ -433,13 +436,15 @@ const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, un
  * project-level `opencode.json` are not visible here, so callers retain the
  * unfiltered catalog in that case.
  */
-const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> => {
+const readConnectedOpenCodeProviderIds = async (captured: () => void): Promise<Set<string> | null> => {
   const providerIds = new Set<string>();
   const configDir = path.join(os.homedir(), '.config', 'opencode');
 
   const auth = await readOpenCodeJsonFile(
     path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json'),
+    true,
   );
+  captured();
   for (const [providerId, credential] of Object.entries(auth ?? {})) {
     if (readObjectRecord(credential)) {
       providerIds.add(providerId);
@@ -599,11 +604,12 @@ export class OpenCodeProviderModels implements IProviderModels {
     discoveredAt: number | null;
   } | null = null;
 
-  /** Local removals invalidate cached evidence, including a read already in flight. */
+  /** Local provider changes invalidate cached evidence, including a read already in flight. */
   private observedProviderIds = new Set<string>();
   private providerRevision = 0;
+  private removedProviderIds = new Set<string>();
 
-  /** Apply local snapshots in request order, even when filesystem reads finish out of order. */
+  /** Apply local snapshots in credential capture order, even when config reads finish out of order. */
   private providerSnapshotGeneration = 0;
   private appliedProviderSnapshotGeneration = 0;
 
@@ -622,15 +628,24 @@ export class OpenCodeProviderModels implements IProviderModels {
     this.pendingModelReferences = this.readModels()
       // The picker remains available when a local CLI invocation fails.
       .catch(() => [] as string[])
-      .then((listed) => {
-        // A CLI started before logout cannot restore the removed provider.
-        if (providerRevision !== this.providerRevision) listed = [];
+      .then(async (listed) => {
+        // If no caller observed a change, reconcile before spending the single retry.
+        if (providerRevision === this.providerRevision) await this.updateProviderSnapshot();
+        // Retry once against current credentials. Never loop on repeated churn.
+        const revisionChanged = providerRevision !== this.providerRevision;
+        if (revisionChanged) {
+          const retryRevision = this.providerRevision;
+          listed = await this.readModels().catch(() => [] as string[]);
+          listed = retryRevision === this.providerRevision
+            ? listed.filter(model => !this.removedProviderIds.has(model.split('/')[0]))
+            : [];
+        }
         // A failed refresh keeps the last good listing, retried on the short
         // schedule, instead of putting the static catalog back in the picker.
         const references = listed.length > 0
           ? listed
           : this.cachedModelReferences?.references ?? [];
-        const ttl = listed.length > 0
+        const ttl = listed.length > 0 && !revisionChanged
           ? OPENCODE_MODELS_CACHE_TTL_MS
           : OPENCODE_MODELS_EMPTY_CACHE_TTL_MS;
         this.cachedModelReferences = {
@@ -638,7 +653,7 @@ export class OpenCodeProviderModels implements IProviderModels {
           expiresAt: this.now() + ttl,
           discoveredAt: listed.length > 0
             ? this.now()
-            : this.cachedModelReferences?.discoveredAt ?? null,
+            : null,
         };
         return references;
       })
@@ -664,39 +679,68 @@ export class OpenCodeProviderModels implements IProviderModels {
     return this.cachedModelReferences.references;
   }
 
-  async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    const snapshotGeneration = ++this.providerSnapshotGeneration;
-    const pendingModelReferences = this.readModelReferences();
-    let connectedProviderIds = await readConnectedOpenCodeProviderIds();
-    const removedProviderIds = new Set<string>();
-    if (snapshotGeneration > this.appliedProviderSnapshotGeneration) {
-      this.appliedProviderSnapshotGeneration = snapshotGeneration;
-      for (const id of this.observedProviderIds) {
-        if (!connectedProviderIds?.has(id)) removedProviderIds.add(id);
-      }
-      this.observedProviderIds = connectedProviderIds ?? new Set();
-      if (removedProviderIds.size > 0) {
-        this.providerRevision += 1;
-        if (this.cachedModelReferences) {
-          this.cachedModelReferences.references = this.cachedModelReferences.references.filter(
-            (model) => !removedProviderIds.has(model.split('/')[0]),
-          );
-        }
-      }
-    } else {
-      connectedProviderIds = this.observedProviderIds.size > 0 ? this.observedProviderIds : null;
+  private async updateProviderSnapshot(): Promise<void> {
+    let snapshotGeneration = 0;
+    let connectedProviderIds: Set<string> | null;
+    try {
+      connectedProviderIds = await readConnectedOpenCodeProviderIds(() => {
+        // Order by credential capture, before slower config reads can interleave.
+        snapshotGeneration = ++this.providerSnapshotGeneration;
+      });
+    } catch {
+      // A failed auth read is not evidence of logout.
+      return;
     }
-    const modelReferences = await pendingModelReferences;
+    if (snapshotGeneration <= this.appliedProviderSnapshotGeneration) return;
+    const hadSnapshot = this.appliedProviderSnapshotGeneration > 0;
+    this.appliedProviderSnapshotGeneration = snapshotGeneration;
+    const removed = new Set<string>();
+    for (const id of this.observedProviderIds) {
+      if (!connectedProviderIds?.has(id)) {
+        removed.add(id);
+        this.removedProviderIds.add(id);
+      }
+    }
+    for (const id of connectedProviderIds ?? []) {
+      // Reconnection must rediscover references already pruned from the cache.
+      if (hadSnapshot && !this.observedProviderIds.has(id)) {
+        if (this.cachedModelReferences) this.cachedModelReferences.expiresAt = 0;
+        // Invalidate an older listing even while first discovery has no cache.
+        this.providerRevision += 1;
+      }
+      this.removedProviderIds.delete(id);
+    }
+    this.observedProviderIds = connectedProviderIds ?? new Set();
+    if (removed.size > 0) {
+      this.providerRevision += 1;
+      if (this.cachedModelReferences) {
+        this.cachedModelReferences.references = this.cachedModelReferences.references.filter(
+          (model) => !removed.has(model.split('/')[0]),
+        );
+      }
+    }
+  }
+
+  async getSupportedModels(): Promise<ProviderModelsDefinition> {
+    // Establish the credential baseline before discovery can capture a listing.
+    await this.updateProviderSnapshot();
+    const modelReferences = await this.readModelReferences();
+    // Initial discovery can take seconds; apply credentials changed while waiting.
+    await this.updateProviderSnapshot();
+    const connectedProviderIds = this.observedProviderIds.size > 0 ? this.observedProviderIds : null;
     // Failure retries must not renew CLI evidence for providers whose local
     // credentials we cannot check. Keep the existing stale-cache behavior for
-    // known or locally connected providers; otherwise require discovery within 5 min.
+    // known or locally connected providers. Keep unknown providers during the
+    // first pending refresh, then require fresh evidence after any failure.
     const discoveredAt = this.cachedModelReferences?.discoveredAt;
     const freshDiscovery = discoveredAt != null
       && this.now() < discoveredAt + OPENCODE_MODELS_CACHE_TTL_MS;
     const discovered = createDiscoveredOpenCodeModels(
       (this.cachedModelReferences?.references ?? modelReferences).filter((model) =>
-        !removedProviderIds.has(model.split('/')[0])
-        && (freshDiscovery || connectedProviderIds?.has(model.split('/')[0])
+        (!this.removedProviderIds.has(model.split('/')[0])
+          || (freshDiscovery && !OPENCODE_KNOWN_PROVIDER_IDS.has(model.split('/')[0])))
+        && (freshDiscovery || (discoveredAt != null && this.pendingModelReferences !== null)
+          || connectedProviderIds?.has(model.split('/')[0])
           || OPENCODE_KNOWN_PROVIDER_IDS.has(model.split('/')[0]))),
       connectedProviderIds,
     );
@@ -707,7 +751,14 @@ export class OpenCodeProviderModels implements IProviderModels {
     // Discovery can fail when the CLI is not installed or is upgraded. Keep
     // known static options only for connected providers; an unknown provider
     // gets an empty picker instead of a misleading foreign-provider catalog.
-    return filterOpenCodeModelsByProvider(OPENCODE_PREDEFINED_MODELS, connectedProviderIds);
+    const fallback = filterOpenCodeModelsByProvider(OPENCODE_PREDEFINED_MODELS, connectedProviderIds);
+    const options = fallback.OPTIONS.filter(option => !this.removedProviderIds.has(option.value.split('/')[0]));
+    return {
+      ...fallback,
+      OPTIONS: options,
+      DEFAULT: options.some(option => option.value === fallback.DEFAULT)
+        ? fallback.DEFAULT : options[0]?.value ?? '',
+    };
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
