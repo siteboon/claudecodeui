@@ -281,11 +281,13 @@ export function summarizeClaudeTokenUsage(
     const rowInputTokens = directInputTokens + rowCacheReadTokens + rowCacheCreationTokens;
     const rowOutputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
 
-    // `<synthetic>` rows — interrupts, API errors, "No response requested" —
-    // are written with an all-zero usage block rather than none at all. They
-    // never carried a prompt, so treating one as the newest turn zeroed a
-    // counter that a live event had just set correctly.
-    if (rowInputTokens === 0 && rowOutputTokens === 0) {
+    // There is no context window without a prompt. `<synthetic>` rows —
+    // interrupts, API errors, "No response requested" — are written with a
+    // zeroed usage block rather than none at all, so treating one as the
+    // newest turn zeroed a counter that a live event had just set correctly.
+    // Judged on the prompt alone, as the live reader does: output without one
+    // is still not a reading.
+    if (rowInputTokens === 0) {
       continue;
     }
 

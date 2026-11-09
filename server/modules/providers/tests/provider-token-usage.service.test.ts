@@ -233,6 +233,17 @@ test('the Claude summarizer skips synthetic rows that carry an all-zero usage bl
   assert.equal(summarizeClaudeTokenUsage(entries, '200000').used, 4083);
 });
 
+test('the Claude summarizer skips a row with output but no prompt', () => {
+  // Zero input and cache counts with output: there is no context window without
+  // a prompt, and the live reader refuses the same reading.
+  const entries = [
+    { type: 'assistant', message: { usage: { input_tokens: 12, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 2_000, output_tokens: 5 } } },
+    { type: 'assistant', message: { usage: { input_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 7 } } },
+  ];
+
+  assert.equal(summarizeClaudeTokenUsage(entries, '200000').inputTokens, 42_012);
+});
+
 test('the Claude summarizer skips a subagent sidechain turn', () => {
   // A sidechain turn reports the subagent's own context window. Reading it
   // made the counter drop to the subagent's number mid-run.

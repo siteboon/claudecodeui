@@ -720,6 +720,14 @@ function buildTokenBudget(messageUsage: AnyRecord, reportedContextWindow?: numbe
 }
 
 /**
+ * Whether a main-thread message carries a usage payload at all, complete or not.
+ */
+function hasUsage(message: AnyRecord): boolean {
+  const usage = message.message?.usage;
+  return Boolean(usage) && typeof usage === 'object';
+}
+
+/**
  * Extracts the session's context-window usage from an SDK stream message.
  *
  * Only assistant messages describe the context window: each one reports the
@@ -755,7 +763,17 @@ function extractTokenBudget(sdkMessage: unknown, reportedContextWindow?: number 
     return null;
   }
 
-  return buildTokenBudget(messageUsage, reportedContextWindow);
+  const budget = buildTokenBudget(messageUsage, reportedContextWindow);
+
+  // There is no context window without a prompt: an account that is zero
+  // throughout is one of the messages the CLI writes itself (model
+  // `<synthetic>`: the interrupt notice, an API error, the usage-limit line),
+  // not a measurement of this conversation.
+  if (budget.inputTokens <= 0) {
+    return null;
+  }
+
+  return budget;
 }
 
 /**
@@ -1205,9 +1223,15 @@ async function queryClaudeSDK(
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
-  // Set once a turn publishes a budget read from an assistant message, so the
-  // turn-ending `result` is only mined for usage when nothing better arrived.
-  let assistantBudgetSent = false;
+  // Set once the current turn's assistant messages carry usage, whether or not
+  // it was published, and cleared at that turn's `result`. The `result` is
+  // mined for usage only when none did: its usage is the turn's summed bill,
+  // which is only an honest stand-in on an SDK build that reports no
+  // per-assistant usage at all. Keyed on usage being present rather than on a
+  // budget being sent, so a turn whose only frame was a rejected `<synthetic>`
+  // one does not fall through to the bill. Per turn, because a held run goes on
+  // to further turns (background work reporting back) under the same loop.
+  let assistantUsageSeen = false;
   // The window the SDK reported for this session's model (a resumed session
   // starts from the one its last run reported), the model the main thread's
   // assistant rows name, and the budget last published — re-sent with the
@@ -1711,8 +1735,11 @@ async function queryClaudeSDK(
       // Extract and send token budget updates from assistant usage payloads,
       // falling back to the turn's cumulative bill only for SDK builds that
       // report no per-assistant usage at all.
+      if (message.type === 'assistant' && !message.parent_tool_use_id && hasUsage(message)) {
+        assistantUsageSeen = true;
+      }
       let tokenBudgetData = extractTokenBudget(message, reportedContextWindow)
-        || (assistantBudgetSent ? null : extractCumulativeTokenBudget(message, reportedContextWindow));
+        || (assistantUsageSeen ? null : extractCumulativeTokenBudget(message, reportedContextWindow));
       if (
         !tokenBudgetData
         && turnContextWindow
@@ -1723,9 +1750,6 @@ async function queryClaudeSDK(
         tokenBudgetData = { ...(lastSentTokenBudget as TokenBudget), total: turnContextWindow };
       }
       if (tokenBudgetData) {
-        if (message.type === 'assistant') {
-          assistantBudgetSent = true;
-        }
         lastSentTokenBudget = tokenBudgetData;
         ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       }
@@ -1757,6 +1781,10 @@ async function queryClaudeSDK(
 
       if (message.type === 'result') {
         const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
+        // The usage flag is per turn: a held run goes on to further turns
+        // (background work reporting back, steered follow-ups), and each one
+        // falls back to its own result only when its own frames had no usage.
+        assistantUsageSeen = false;
         if (pendingSteerIds.size > 0 && !abortPending) {
           // The turn ended before Claude reached a tool-call boundary, so the
           // steered messages it never read are still queued in the CLI, which
