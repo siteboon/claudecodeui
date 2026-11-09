@@ -328,6 +328,49 @@ async function runWithoutModel(
   return { models, catalogReads };
 }
 
+async function startClaudeRunWith(extraBody: Record<string, unknown>): Promise<{ unattended?: boolean; permissionMode?: string }> {
+  const runOptions: { unattended?: boolean; permissionMode?: string }[] = [];
+  await withAgentServer(createDependencies({
+    fileSystem: { access: async () => undefined } as unknown as AgentDependencies['fileSystem'],
+    models: {
+      getProviderModels: async () => ({ OPTIONS: [{ value: 'sonnet' }], DEFAULT: 'sonnet' }),
+    } as unknown as AgentDependencies['models'],
+    queryClaude: (async (_prompt: string, options: { unattended?: boolean }) => {
+      runOptions.push(options);
+    }) as unknown as AgentDependencies['queryClaude'],
+  }), async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/agent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ projectPath: '/home/test/project', message: 'Run', provider: 'claude', stream: false, ...extraBody }),
+    });
+    assert.equal(response.status, 200);
+  });
+
+  assert.equal(runOptions.length, 1);
+  return runOptions[0];
+}
+
+test('Agent route marks a Claude run unattended by default, as no person can answer an MCP server there', async () => {
+  assert.equal((await startClaudeRunWith({})).unattended, true);
+});
+
+test('Agent route runs Claude attended when the caller says a person is watching', async () => {
+  const attended = await startClaudeRunWith({ unattended: false });
+  assert.equal(attended.unattended, false);
+  // The runtime test pins that onElicitation survives this mode.
+  assert.equal(attended.permissionMode, 'bypassPermissions');
+  // curl -d sends every field as a string, as it does for stream and cleanup.
+  assert.equal((await startClaudeRunWith({ unattended: 'false' })).unattended, false);
+});
+
+test('Agent route keeps a Claude run unattended for any value other than false', async () => {
+  // Waiting on a form nobody sees holds the run, so a malformed value keeps the declining default.
+  for (const value of [true, 'true', 'no', 0, null]) {
+    assert.equal((await startClaudeRunWith({ unattended: value })).unattended, true, `unattended: ${JSON.stringify(value)}`);
+  }
+});
+
 test('Agent route starts Claude and Cursor on the first custom model while only custom models are listed', async () => {
   // What the Providers service returns with "Use only my models" on.
   const customOnly = (value: string) => ({
