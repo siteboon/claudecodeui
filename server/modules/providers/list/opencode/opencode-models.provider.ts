@@ -345,7 +345,7 @@ const OPENCODE_MODEL_REFERENCE_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9
  * Reads model references from the local OpenCode CLI without invoking a shell.
  *
  * Model availability can differ by account and changes independently of
- * CloudCLI releases, so `opencode models` is the source of truth. The CLI
+ * CloudCLI releases, so `opencode models` supplies discovery evidence. The CLI
  * output is deliberately treated as untrusted: only standalone,
  * fully-qualified `<provider>/<model>` lines are accepted.
  *
@@ -405,84 +405,59 @@ const readInstalledOpenCodeModels = async (): Promise<string[]> => {
   }
 };
 
-const readOpenCodeJsonFile = async (filePath: string, authoritative = false): Promise<Record<string, unknown> | null> => {
+/** Read failures preserve only this source's previous evidence; absence confirms removal. */
+const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, unknown> | null> => {
   try {
     const record = readObjectRecord(JSON.parse(await readFile(filePath, 'utf8')));
-    if (authoritative && !record) throw new Error('Invalid OpenCode auth document');
+    if (!record) throw new Error('Invalid OpenCode document');
     return record;
   } catch (error) {
-    if (authoritative && (error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    // Missing, unreadable, or comment-bearing (.jsonc) files simply contribute
-    // nothing; the auth store is the authoritative source below.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     return null;
   }
 };
 
 /**
- * Lists the upstream providers this OpenCode install can actually route to.
- *
- * OpenCode resolves `<providerID>/<modelID>` against the providers the user has
- * connected, and rejects anything else outright - `Model
- * opencode/claude-sonnet-4-6 is not valid` is what a run gets for asking for an
- * OpenCode Zen model on a machine that only has an Anthropic key. The curated
- * catalog spans every provider OpenCode can address, so it has to be narrowed
- * to this machine's providers before it reaches the model picker.
- *
- * Custom config passed through `OPENCODE_CONFIG` (a file path) or
- * `OPENCODE_CONFIG_CONTENT` (inline JSON) is read too, so providers declared
- * there are not filtered out of the CLI listing.
- *
- * Returns null when nothing can be read. Providers declared only in a
- * project-level `opencode.json` are not visible here, so callers retain the
- * unfiltered catalog in that case.
+ * Order each independent source before its read starts, so delayed old bytes
+ * cannot overwrite a newer read. Later sources retain their own read order.
+ * A provider declaration (including one with custom `env` names) is bound config
+ * evidence itself. Environment-only evidence uses the explicit supported map;
+ * a variable's spelling alone never establishes a provider relationship.
  */
-const readConnectedOpenCodeProviderIds = async (captured: () => void): Promise<Set<string> | null> => {
-  const providerIds = new Set<string>();
-  const configDir = path.join(os.homedir(), '.config', 'opencode');
-
-  const auth = await readOpenCodeJsonFile(
-    path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json'),
-    true,
-  );
-  captured();
-  for (const [providerId, credential] of Object.entries(auth ?? {})) {
-    if (readObjectRecord(credential)) {
-      providerIds.add(providerId);
+const readConnectedOpenCodeProviderIds = async (
+  beginCapture: (source: string) => (providerIds: Set<string>) => void,
+): Promise<void> => {
+  const captureFile = async (source: string, filePath: string, auth = false) => {
+    const captured = beginCapture(source);
+    try {
+      const record = await readOpenCodeJsonFile(filePath);
+      const ids = auth
+        ? Object.entries(record ?? {}).filter(([, credential]) => readObjectRecord(credential)).map(([id]) => id)
+        : Object.keys(readObjectRecord(record?.provider) ?? {});
+      captured(new Set(ids));
+    } catch {
+      // Malformed or unreadable data is not evidence of logout.
     }
-  }
-
-  const configs: Array<Record<string, unknown> | null> = [];
+  };
+  await captureFile('auth', path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json'), true);
+  const configDir = path.join(os.homedir(), '.config', 'opencode');
   for (const configFile of OPENCODE_CONFIG_FILES) {
-    configs.push(await readOpenCodeJsonFile(path.join(configDir, configFile)));
+    await captureFile(configFile, path.join(configDir, configFile));
   }
-
   const customConfigPath = readOptionalString(process.env.OPENCODE_CONFIG);
-  if (customConfigPath) {
-    configs.push(await readOpenCodeJsonFile(customConfigPath));
-  }
+  if (customConfigPath) await captureFile('custom', customConfigPath);
+  else beginCapture('custom')(new Set());
 
   const inlineConfig = readOptionalString(process.env.OPENCODE_CONFIG_CONTENT);
-  if (inlineConfig) {
-    try {
-      configs.push(readObjectRecord(JSON.parse(inlineConfig)));
-    } catch {
-      // Malformed inline config contributes nothing, like an unreadable file.
-    }
+  try {
+    const config = inlineConfig ? readObjectRecord(JSON.parse(inlineConfig)) : {};
+    if (!config) throw new Error('Invalid OpenCode config');
+    beginCapture('inline')(new Set(Object.keys(readObjectRecord(config.provider) ?? {})));
+  } catch {
+    // Preserve this source during a partial write, while still reading env.
   }
-
-  for (const config of configs) {
-    for (const providerId of Object.keys(readObjectRecord(config?.provider) ?? {})) {
-      providerIds.add(providerId);
-    }
-  }
-
-  for (const [envKey, providerId] of Object.entries(OPENCODE_ENV_PROVIDER_IDS)) {
-    if (readOptionalString(process.env[envKey])) {
-      providerIds.add(providerId);
-    }
-  }
-
-  return providerIds.size > 0 ? providerIds : null;
+  beginCapture('env')(new Set(Object.entries(OPENCODE_ENV_PROVIDER_IDS)
+    .filter(([key]) => readOptionalString(process.env[key])).map(([, id]) => id)));
 };
 
 /**
@@ -530,8 +505,8 @@ const createDiscoveredOpenCodeModels = (
     .filter((model) => {
       const providerId = model.split('/')[0];
       // Keep existing filtering for known providers. For providers outside our
-      // local registry, the CLI's active-provider listing is authoritative:
-      // their credentials may use arbitrary env names or plugin configuration.
+      // local registry, the caller admits only fresh discovery or bound local
+      // evidence, and excludes providers whose final local source vanished.
       return !connectedProviderIds || connectedProviderIds.has(providerId)
         || !OPENCODE_KNOWN_PROVIDER_IDS.has(providerId);
     })
@@ -609,9 +584,10 @@ export class OpenCodeProviderModels implements IProviderModels {
   private providerRevision = 0;
   private removedProviderIds = new Set<string>();
 
-  /** Apply local snapshots in credential capture order, even when config reads finish out of order. */
+  /** Sources retain independent evidence so failed reads and overlapping captures cannot erase each other. */
+  private providerSources = new Map<string, Set<string>>();
   private providerSnapshotGeneration = 0;
-  private appliedProviderSnapshotGeneration = 0;
+  private appliedSourceGenerations = new Map<string, number>();
 
   /** In-flight CLI read, shared so concurrent picker loads spawn one process. */
   private pendingModelReferences: Promise<string[]> | null = null;
@@ -680,42 +656,39 @@ export class OpenCodeProviderModels implements IProviderModels {
   }
 
   private async updateProviderSnapshot(): Promise<void> {
-    let snapshotGeneration = 0;
-    let connectedProviderIds: Set<string> | null;
-    try {
-      connectedProviderIds = await readConnectedOpenCodeProviderIds(() => {
-        // Order by credential capture, before slower config reads can interleave.
-        snapshotGeneration = ++this.providerSnapshotGeneration;
-      });
-    } catch {
-      // A failed auth read is not evidence of logout.
-      return;
+    const captures = new Map<string, { ids: Set<string>; generation: number }>();
+    await readConnectedOpenCodeProviderIds((source) => {
+      const generation = ++this.providerSnapshotGeneration;
+      return ids => { captures.set(source, { ids, generation }); };
+    });
+    const hadSnapshot = this.providerSources.size > 0;
+    for (const [source, { ids, generation }] of captures) {
+      if (generation <= (this.appliedSourceGenerations.get(source) ?? 0)) continue;
+      this.appliedSourceGenerations.set(source, generation);
+      this.providerSources.set(source, ids);
     }
-    if (snapshotGeneration <= this.appliedProviderSnapshotGeneration) return;
-    const hadSnapshot = this.appliedProviderSnapshotGeneration > 0;
-    this.appliedProviderSnapshotGeneration = snapshotGeneration;
+    const connectedProviderIds = new Set([...this.providerSources.values()].flatMap(value => [...value]));
     const removed = new Set<string>();
     for (const id of this.observedProviderIds) {
-      if (!connectedProviderIds?.has(id)) {
+      if (!connectedProviderIds.has(id)) {
         removed.add(id);
         this.removedProviderIds.add(id);
       }
     }
-    for (const id of connectedProviderIds ?? []) {
-      // Reconnection must rediscover references already pruned from the cache.
-      if (hadSnapshot && !this.observedProviderIds.has(id)) {
+    for (const id of connectedProviderIds) {
+      // A recovered first snapshot also invalidates discovery already in flight.
+      if (!this.observedProviderIds.has(id) && (hadSnapshot || this.pendingModelReferences || this.cachedModelReferences)) {
         if (this.cachedModelReferences) this.cachedModelReferences.expiresAt = 0;
-        // Invalidate an older listing even while first discovery has no cache.
         this.providerRevision += 1;
       }
       this.removedProviderIds.delete(id);
     }
-    this.observedProviderIds = connectedProviderIds ?? new Set();
+    this.observedProviderIds = connectedProviderIds;
     if (removed.size > 0) {
       this.providerRevision += 1;
       if (this.cachedModelReferences) {
         this.cachedModelReferences.references = this.cachedModelReferences.references.filter(
-          (model) => !removed.has(model.split('/')[0]),
+          model => !removed.has(model.split('/')[0]),
         );
       }
     }
@@ -730,16 +703,15 @@ export class OpenCodeProviderModels implements IProviderModels {
     const connectedProviderIds = this.observedProviderIds.size > 0 ? this.observedProviderIds : null;
     // Failure retries must not renew CLI evidence for providers whose local
     // credentials we cannot check. Keep the existing stale-cache behavior for
-    // known or locally connected providers. Keep unknown providers during the
-    // first pending refresh, then require fresh evidence after any failure.
+    // known or locally connected providers. Unknown discovery expires even if
+    // a refresh is pending. Only bound local evidence can clear revocation.
     const discoveredAt = this.cachedModelReferences?.discoveredAt;
     const freshDiscovery = discoveredAt != null
       && this.now() < discoveredAt + OPENCODE_MODELS_CACHE_TTL_MS;
     const discovered = createDiscoveredOpenCodeModels(
       (this.cachedModelReferences?.references ?? modelReferences).filter((model) =>
-        (!this.removedProviderIds.has(model.split('/')[0])
-          || (freshDiscovery && !OPENCODE_KNOWN_PROVIDER_IDS.has(model.split('/')[0])))
-        && (freshDiscovery || (discoveredAt != null && this.pendingModelReferences !== null)
+        !this.removedProviderIds.has(model.split('/')[0])
+        && (freshDiscovery
           || connectedProviderIds?.has(model.split('/')[0])
           || OPENCODE_KNOWN_PROVIDER_IDS.has(model.split('/')[0]))),
       connectedProviderIds,

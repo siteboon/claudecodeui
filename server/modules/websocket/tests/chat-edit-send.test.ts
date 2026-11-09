@@ -16,10 +16,12 @@ const SESSION_ID = 'edit-session';
 function createFakeSocket() {
   const socket = new EventEmitter() as EventEmitter & {
     readyState: number;
+    pending: Set<Promise<unknown>>;
     frames: Array<Record<string, unknown>>;
     send: (data: string) => void;
   };
   socket.readyState = 1;
+  socket.pending = new Set();
   socket.frames = [];
   socket.send = (data: string) => socket.frames.push(JSON.parse(data) as Record<string, unknown>);
   return socket;
@@ -77,6 +79,7 @@ async function withGateway(
   runTest: (context: {
     socket: ReturnType<typeof createFakeSocket>;
     runs: RunCall[];
+    admitted: Promise<void>;
   }) => Promise<void>,
   rows: unknown[] = TRANSCRIPT_ROWS,
 ): Promise<void> {
@@ -89,6 +92,8 @@ async function withGateway(
   process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
   await initializeDatabase();
 
+  let admit!: () => void;
+  const admitted = new Promise<void>((resolve) => { admit = resolve; });
   const runs: RunCall[] = [];
   const socket = createFakeSocket();
 
@@ -104,6 +109,7 @@ async function withGateway(
           hasRuntime: () => true,
           run: async (runProvider: string, command: string, options: Record<string, unknown>) => {
             runs.push({ provider: runProvider, command, options });
+            admit();
             if (holdRun) {
               await holdRun;
             }
@@ -112,9 +118,10 @@ async function withGateway(
       },
     );
 
-    await runTest({ socket, runs });
+    await runTest({ socket, runs, admitted });
   } finally {
     releaseHeldRun?.();
+    await Promise.all(socket.pending);
     releaseHeldRun = null;
     holdRun = null;
     connectedClients.clear();
@@ -129,18 +136,25 @@ async function withGateway(
   }
 }
 
-/** The handler is async and the socket listener does not await it. */
-const settle = () => new Promise((resolve) => { setTimeout(resolve, 30); });
+/** Invoke the registered listeners and retain their work until fixture cleanup. */
+async function sendMessage(socket: ReturnType<typeof createFakeSocket>, data: string): Promise<void> {
+  const pending = Promise.all(socket.listeners('message').map((listener) => listener.call(socket, data)));
+  socket.pending.add(pending);
+  try {
+    await pending;
+  } finally {
+    socket.pending.delete(pending);
+  }
+}
 
 test('an edit resumes through the turn before the one being replaced', async () => {
   await withGateway('claude', async ({ socket, runs }) => {
-    socket.emit('message', JSON.stringify({
+    await sendMessage(socket, JSON.stringify({
       type: 'chat.edit-send',
       sessionId: SESSION_ID,
       anchorId: 'e-u2',
       content: 'a better second prompt',
     }));
-    await settle();
 
     assert.equal(runs.length, 1);
     assert.equal(runs[0].command, 'a better second prompt');
@@ -152,13 +166,12 @@ test('an edit resumes through the turn before the one being replaced', async () 
 
 test('editing the first prompt starts the conversation over', async () => {
   await withGateway('claude', async ({ socket, runs }) => {
-    socket.emit('message', JSON.stringify({
+    await sendMessage(socket, JSON.stringify({
       type: 'chat.edit-send',
       sessionId: SESSION_ID,
       anchorId: 'e-u1',
       content: 'a better first prompt',
     }));
-    await settle();
 
     assert.equal(runs.length, 1);
     assert.equal(runs[0].options.resumeAnchorId, undefined);
@@ -168,13 +181,12 @@ test('editing the first prompt starts the conversation over', async () => {
 
 test('every subscribed client is told to drop the superseded turns', async () => {
   await withGateway('claude', async ({ socket }) => {
-    socket.emit('message', JSON.stringify({
+    await sendMessage(socket, JSON.stringify({
       type: 'chat.edit-send',
       sessionId: SESSION_ID,
       anchorId: 'e-u2',
       content: 'replacement',
     }));
-    await settle();
 
     const truncation = socket.frames.find((frame) => frame.kind === 'history_truncated');
     assert.ok(truncation, 'a history_truncated frame is emitted');
@@ -187,12 +199,11 @@ test('every subscribed client is told to drop the superseded turns', async () =>
 
 test('an edit without an anchor is refused', async () => {
   await withGateway('claude', async ({ socket, runs }) => {
-    socket.emit('message', JSON.stringify({
+    await sendMessage(socket, JSON.stringify({
       type: 'chat.edit-send',
       sessionId: SESSION_ID,
       content: 'no anchor',
     }));
-    await settle();
 
     assert.equal(runs.length, 0);
     assert.equal(socket.frames.at(-1)?.code, 'ANCHOR_REQUIRED');
@@ -201,13 +212,12 @@ test('an edit without an anchor is refused', async () => {
 
 test('an anchor the transcript does not hold is refused', async () => {
   await withGateway('claude', async ({ socket, runs }) => {
-    socket.emit('message', JSON.stringify({
+    await sendMessage(socket, JSON.stringify({
       type: 'chat.edit-send',
       sessionId: SESSION_ID,
       anchorId: 'not-in-transcript',
       content: 'replacement',
     }));
-    await settle();
 
     assert.equal(runs.length, 0);
     assert.equal(socket.frames.at(-1)?.code, 'ANCHOR_NOT_FOUND');
@@ -216,13 +226,12 @@ test('an anchor the transcript does not hold is refused', async () => {
 
 test('a provider that cannot re-run from a point is refused rather than sending a new message', async () => {
   await withGateway('cursor', async ({ socket, runs }) => {
-    socket.emit('message', JSON.stringify({
+    await sendMessage(socket, JSON.stringify({
       type: 'chat.edit-send',
       sessionId: SESSION_ID,
       anchorId: 'e-u2',
       content: 'replacement',
     }));
-    await settle();
 
     assert.equal(runs.length, 0);
     assert.equal(socket.frames.at(-1)?.code, 'EDIT_NOT_SUPPORTED');
@@ -230,39 +239,31 @@ test('a provider that cannot re-run from a point is refused rather than sending 
 });
 
 test('a refused send never rewinds the conversation', async () => {
-  await withGateway('codex', async ({ socket, runs }) => {
-    // The rewind moves the session onto a different provider transcript and
-    // cannot be undone, so a send the gateway is about to refuse must not
-    // reach it. A run already in flight is the realistic way that happens: a
-    // scheduled message, or another device.
+  await withGateway('codex', async ({ socket, runs, admitted }) => {
+    // Keep the admitted run active until the edit has been refused.
     const realRewind = sessionsService.rewindSessionForEdit;
     let rewound = false;
     sessionsService.rewindSessionForEdit = async () => { rewound = true; };
     holdTheNextRun();
+    const first = sendMessage(socket, JSON.stringify({
+      type: 'chat.send', sessionId: SESSION_ID, content: 'a turn that is already running',
+    }));
 
     try {
-      socket.emit('message', JSON.stringify({
-        type: 'chat.send',
-        sessionId: SESSION_ID,
-        content: 'a turn that is already running',
-      }));
-      await settle();
+      await admitted;
       assert.equal(runs.length, 1);
-
-      socket.emit('message', JSON.stringify({
-        type: 'chat.edit-send',
-        sessionId: SESSION_ID,
-        anchorId: 'turn-b',
+      await sendMessage(socket, JSON.stringify({
+        type: 'chat.edit-send', sessionId: SESSION_ID, anchorId: 'turn-b',
         content: 'an edit that arrives too late',
       }));
-      await settle();
+      assert.equal(rewound, false);
+      assert.equal(runs.length, 1);
+      assert.equal(socket.frames.at(-1)?.code, 'RUN_IN_PROGRESS');
     } finally {
+      releaseHeldRun?.();
+      await first;
       sessionsService.rewindSessionForEdit = realRewind;
     }
-
-    assert.equal(rewound, false);
-    assert.equal(runs.length, 1);
-    assert.equal(socket.frames.at(-1)?.code, 'RUN_IN_PROGRESS');
   }, CODEX_TRANSCRIPT_ROWS);
 });
 
@@ -281,13 +282,12 @@ test('a provider that has to branch to rewind is rewound before the run, not dur
     };
 
     try {
-      socket.emit('message', JSON.stringify({
+      await sendMessage(socket, JSON.stringify({
         type: 'chat.edit-send',
         sessionId: SESSION_ID,
         anchorId: 'turn-b',
         content: 'a better second prompt',
       }));
-      await settle();
     } finally {
       sessionsService.rewindSessionForEdit = realRewind;
     }

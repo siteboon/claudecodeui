@@ -92,20 +92,22 @@ async function withRun(
     createQuery,
   };
 
+  const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
   try {
-    const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
     await runTest({ script, sent, done });
-    script.end();
-    await done;
   } finally {
-    await rm(cwd, { recursive: true, force: true });
+    script.end();
+    try {
+      await done;
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   }
 }
 
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 25); });
 
-// A fixed settle can be too short on a loaded machine; the supersede tests
-// wait for the run to have actually processed its turn instead.
+// Wait for observable runtime progress within a bounded polling window.
 async function waitFor(condition: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 200 && !condition(); attempt += 1) {
     await settle();
@@ -138,7 +140,7 @@ test('stopping the last outstanding task releases the held process', async () =>
     script.emit(taskStarted('wf1', 'toolu_wf', 'local_workflow'));
     script.emit(ack('toolu_wf', 'Workflow launched in background. Task ID: wf1', { status: 'async_launched', taskId: 'wf1', taskType: 'local_workflow' }));
     script.emit(result());
-    await settle();
+    await waitFor(() => sent.some((message) => message.kind === 'complete'));
 
     // The turn is over for the client, the process is held for the workflow.
     assert.ok(sent.some((message) => message.kind === 'complete'));
@@ -150,7 +152,7 @@ test('stopping the last outstanding task releases the held process', async () =>
     assert.equal(await stopClaudeSDKTask(SESSION_ID, 'wf1'), true);
     assert.deepEqual(script.stopped, ['wf1']);
     script.emit(taskNotification('wf1', 'toolu_wf', 'stopped'));
-    await settle();
+    await waitFor(() => script.released());
 
     assert.deepEqual(listClaudeSDKBackgroundWork(), []);
     assert.equal(script.released(), true, 'the process is let go once nothing is outstanding');
@@ -159,22 +161,22 @@ test('stopping the last outstanding task releases the held process', async () =>
 });
 
 test('a task that reported completed keeps the hold for the turn that relays its result', async () => {
-  await withRun(async ({ script }) => {
+  await withRun(async ({ script, sent }) => {
     script.emit(init());
     script.emit(toolUse('toolu_wf', 'Workflow', { script: 'export const meta = {}' }));
     script.emit(taskStarted('wf1', 'toolu_wf', 'local_workflow'));
     script.emit(ack('toolu_wf', 'Workflow launched in background. Task ID: wf1', { status: 'async_launched', taskId: 'wf1', taskType: 'local_workflow' }));
     script.emit(result());
-    await settle();
+    await waitFor(() => sent.some((message) => message.kind === 'complete'));
 
     // Completed, unlike stopped, is followed by a turn the CLI pushes to relay
     // the result; closing stdin at the notification would cut it short.
     script.emit(taskNotification('wf1', 'toolu_wf', 'completed'));
-    await settle();
+    await waitFor(() => listClaudeSDKBackgroundWork().every((entry) => entry.tasks.length === 0));
     assert.equal(script.released(), false);
 
     script.emit(result());
-    await settle();
+    await waitFor(() => script.released());
     assert.equal(script.released(), true, 'the follow-up turn\'s result ends the hold');
   });
 });
@@ -190,7 +192,7 @@ test('an agent that ran in the foreground and settled before the result does not
     script.emit(taskNotification('a1', 'toolu_agent', 'completed'));
     script.emit(ack('toolu_agent', 'FOUR', { status: 'completed', agentId: 'a1' }));
     script.emit(result());
-    await settle();
+    await waitFor(() => script.released());
 
     assert.deepEqual(listClaudeSDKBackgroundWork(), []);
     assert.equal(script.released(), true, 'nothing is outstanding, so nothing to hold for');
@@ -214,9 +216,10 @@ test('a new turn stops the tasks the held process still has going before letting
     isProviderInstalled: async () => true,
   };
 
+  let firstRun: Promise<unknown> | undefined;
+  let secondRun: Promise<unknown> | undefined;
   try {
-    const firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: first.createQuery });
-    await settle();
+    firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: first.createQuery });
     first.script.emit(init());
     first.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
     first.script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
@@ -229,8 +232,8 @@ test('a new turn stops the tasks the held process still has going before letting
     // superseded process would live on next to the new one for as long as
     // the agent runs. The stop has to reach it before stdin ends, because the
     // SDK drops control requests written to an ended stdin.
-    const secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
-    await settle();
+    secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
+    await waitFor(() => first.script.released());
     assert.deepEqual(first.script.stopped, ['a1'], 'the held process is told to stop its agent');
     assert.equal(first.script.released(), true, 'and is then let go');
     assert.deepEqual(second.script.stopped, [], 'the new process is untouched');
@@ -244,7 +247,13 @@ test('a new turn stops the tasks the held process still has going before letting
     await secondRun;
     assert.deepEqual(listClaudeSDKBackgroundWork(), []);
   } finally {
-    await rm(cwd, { recursive: true, force: true });
+    first.script.end();
+    second.script.end();
+    try {
+      await Promise.allSettled([firstRun, secondRun]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   }
 });
 
@@ -269,9 +278,10 @@ test('a held process is still let go when stopping its tasks throws', async () =
       stopTask: () => { throw new Error('stop failed'); },
     });
 
+  let firstRun: Promise<unknown> | undefined;
+  let secondRun: Promise<unknown> | undefined;
   try {
-    const firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: throwingStop });
-    await settle();
+    firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: throwingStop });
     first.script.emit(init());
     first.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
     first.script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
@@ -280,8 +290,8 @@ test('a held process is still let go when stopping its tasks throws', async () =
     await waitFor(() => sent.some((message) => message.kind === 'complete'));
     assert.equal(first.script.released(), false, 'the first process is held for its agent');
 
-    const secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
-    await settle();
+    secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
+    await waitFor(() => first.script.released());
     assert.equal(first.script.released(), true, 'the held process is let go anyway');
 
     first.script.end();
@@ -292,17 +302,23 @@ test('a held process is still let go when stopping its tasks throws', async () =
     await secondRun;
     assert.equal(second.script.released(), true, 'the new turn ran to completion');
   } finally {
-    await rm(cwd, { recursive: true, force: true });
+    first.script.end();
+    second.script.end();
+    try {
+      await Promise.allSettled([firstRun, secondRun]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   }
 });
 
 test('a turn whose tool emits no task events still holds on the static rule', async () => {
-  await withRun(async ({ script }) => {
+  await withRun(async ({ script, sent }) => {
     script.emit(init());
     script.emit(toolUse('toolu_monitor', 'Monitor', { command: 'tail -f x', description: 'watch', timeout_ms: 1000 }));
     script.emit(ack('toolu_monitor', 'Monitor started', {}));
     script.emit(result());
-    await settle();
+    await waitFor(() => sent.some((message) => message.kind === 'complete'));
 
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
   });

@@ -14,6 +14,10 @@ import {
   OPENCODE_PREDEFINED_MODELS,
 } from '@/modules/providers/list/opencode/opencode-models.provider.js';
 
+// Match filesystem fixtures on either platform, including Windows path probes.
+const isOpenCodeFile = (file: unknown, name: string): boolean =>
+  String(file).split(/[\\/]/).at(-1) === name;
+
 const OPENCODE_ENV_KEYS = [
   'OPENCODE_API_KEY',
   'ANTHROPIC_API_KEY',
@@ -23,6 +27,8 @@ const OPENCODE_ENV_KEYS = [
   'OPENROUTER_API_KEY',
   'WALLY_API_KEY',
   'NVIDIA_API_KEY',
+  'MY_PROXY_API_KEY',
+  'PROXY_TOKEN',
   'OPENCODE_CONFIG',
   'OPENCODE_CONFIG_CONTENT',
 ];
@@ -511,7 +517,12 @@ test('OpenCode invalidates removed unknown providers and recovers after failed r
       now += 30_000;
       await adapter.getSupportedModels();
       await new Promise((resolve) => setImmediate(resolve));
-      assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[0]);
+      assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[1], 'fresh discovery cannot undo local removal');
+      if (source === 'auth') await writeOpenCodeAuth(home, { nvidia: { key: 'test' } });
+      else process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ provider: { nvidia: {} } });
+      await adapter.getSupportedModels();
+      await (adapter as any).pendingModelReferences;
+      assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[0], 'bound evidence reconnects');
     });
   }
 });
@@ -543,11 +554,11 @@ test('OpenCode preserves stale discovery with current local provider evidence', 
       now = 300_000;
       assert.deepEqual(await values(), listing); // Refresh is still pending.
       finishRefresh([]);
-      await new Promise((resolve) => setImmediate(resolve));
+      await (adapter as any).pendingModelReferences;
       assert.deepEqual(await values(), listing); // Empty refresh retains local evidence.
       now += 30_000;
       assert.deepEqual(await values(), listing);
-      await new Promise((resolve) => setImmediate(resolve));
+      await (adapter as any).pendingModelReferences;
       assert.deepEqual(await values(), listing); // Rejected refresh does too.
       assert.equal(reads, 3);
       if (source === 'auth') await writeOpenCodeAuth(home, {});
@@ -627,12 +638,12 @@ test('OpenCode bounds stale env-only unknown discovery across empty and rejected
     for (const time of [300_000, 330_000]) {
       now = time;
       await adapter.getSupportedModels();
-      await new Promise((resolve) => setImmediate(resolve));
+      await (adapter as any).pendingModelReferences;
       assert.equal((await adapter.getSupportedModels()).DEFAULT, 'wally/deepseek-ai/DeepSeek-V4.1-Flash');
     }
     now = 360_000;
     await adapter.getSupportedModels();
-    await new Promise((resolve) => setImmediate(resolve));
+    await (adapter as any).pendingModelReferences;
     assert.equal((await adapter.getSupportedModels()).DEFAULT, 'nvidia/vendor/model');
   });
 });
@@ -665,8 +676,12 @@ test('OpenCode does not restore a removed provider from an in-flight refresh', a
     assert.equal(reads, 3); // One bounded retry after the removal revision.
     now += 30_000;
     await adapter.getSupportedModels();
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[0]);
+    await (adapter as any).pendingModelReferences;
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[1], 'later discovery still cannot undo removal');
+    await writeOpenCodeAuth(home, { nvidia: { key: 'test' } });
+    await adapter.getSupportedModels();
+    await (adapter as any).pendingModelReferences;
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[0], 'explicit login reconnects');
   });
 });
 
@@ -1023,6 +1038,8 @@ test('OpenCode composes the provider prefix into session model ids', async () =>
   try {
     closeConnection();
     process.env.DATABASE_PATH = path.join(tempSessionsDirectory, 'auth.db');
+    // Prevent legacy database migration from copying data outside this fixture.
+    new Database(process.env.DATABASE_PATH).close();
     await initializeDatabase();
     // OpenCode stores the provider and model id in separate fields of the
     // session row ({"id":"z-ai/glm-5.3-flash","providerID":"openrouter"}), but
@@ -1151,7 +1168,7 @@ test('review: static fallback does not restore a removed Wally provider', async 
   });
 });
 
-test('review: healthy pending refresh preserves env-only models until failure', async () => {
+test('review: healthy pending refresh renews unknown models only on success', async () => {
   await withOpenCodeHome(async () => { process.env.WALLY_API_KEY = 'test'; }, async () => {
     let now = 0; let reads = 0;
     let finish: (value: string[]) => void = () => assert.fail('not started');
@@ -1161,16 +1178,16 @@ test('review: healthy pending refresh preserves env-only models until failure', 
       return new Promise<string[]>(resolve => { finish = resolve; });
     }, () => now);
     await adapter.getSupportedModels(); now = 300_000;
-    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
-    finish(listing); await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+    finish(listing); await (adapter as any).pendingModelReferences;
     assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
     now = 600_000;
-    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), listing);
-    finish([]); await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+    finish([]); await (adapter as any).pendingModelReferences;
     assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
     now = 630_000;
     assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
-    finish([]); await new Promise(resolve => setImmediate(resolve));
+    finish([]); await (adapter as any).pendingModelReferences;
   });
 });
 
@@ -1197,7 +1214,7 @@ test('review: waiting request uses latest known-provider snapshot', async () => 
     ) => {
       try { return await originalRead(file, options); }
       finally {
-        if (String(file).endsWith('/opencode.jsonc')) captured();
+        if (isOpenCodeFile(file, 'opencode.jsonc')) captured();
       }
     });
     syncBuiltinESMExports();
@@ -1241,9 +1258,9 @@ test('review: credential capture order prevents stale logout eviction', async ()
     const readMock = mock.method(fsPromises, 'readFile', async (
       file: Parameters<typeof fsPromises.readFile>[0], options: any,
     ) => {
-      if (!authHeld && String(file).endsWith('/auth.json')) {
+      if (!authHeld && isOpenCodeFile(file, 'auth.json')) {
         authHeld = true; authReached(); await authGate;
-      } else if (!configHeld && String(file).endsWith('/config.json')) {
+      } else if (!configHeld && isOpenCodeFile(file, 'config.json')) {
         configHeld = true; configReached(); await configGate;
       }
       return original(file, options);
@@ -1517,3 +1534,357 @@ for (const source of ['auth', 'env', 'config'] as const) {
     });
   });
 }
+
+for (const source of ['env', 'config'] as const) {
+  test(`revision8: invalid auth retains independent ${source} evidence`, async () => {
+    await withOpenCodeHome(async home => {
+      await writeOpenCodeAuth(home, {});
+      await writeFile(path.join(home, '.local/share/opencode/auth.json'), 'null');
+      if (source === 'env') process.env.WALLY_API_KEY = 'test';
+      else process.env.OPENCODE_CONFIG_CONTENT = '{"provider":{"wally":{}}}';
+    }, async adapter => {
+      const result = await adapter.getSupportedModels();
+      assert.ok(result.OPTIONS.length > 0);
+      assert.ok(result.OPTIONS.every(option => option.value.startsWith('wally/')));
+    });
+  });
+}
+
+for (const failure of ['malformed', 'unreadable'] as const) {
+  test(`revision8: ${failure} config preserves cached models`, async () => {
+    let config = '';
+    await withOpenCodeHome(async home => {
+      process.env.WALLY_API_KEY = 'test';
+      config = path.join(home, '.config/opencode/config.json');
+      await mkdir(path.dirname(config), { recursive: true });
+      await writeFile(config, '{"provider":{"anthropic":{}}}');
+    }, async () => {
+      let reads = 0;
+      const adapter = new OpenCodeProviderModels(async () => ++reads === 1 ? ['anthropic/test', 'wally/test'] : []);
+      await adapter.getSupportedModels();
+      if (failure === 'malformed') await writeFile(config, '{');
+      else { await rm(config); await mkdir(config); }
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['anthropic/test', 'wally/test']);
+      if (failure === 'unreadable') await rm(config, { recursive: true });
+      await writeFile(config, '{"provider":{"anthropic":{}}}');
+      await adapter.getSupportedModels();
+      await (adapter as any).pendingModelReferences;
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['anthropic/test', 'wally/test']);
+      await rm(config);
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+    });
+  });
+}
+
+// Replaces revision8's unsupported NVIDIA_API_KEY naming inference. The SDK's
+// provider env array declares a custom name; the current config is bound source
+// evidence, independent of auth. Undeclared-name rejection is tested below.
+for (const source of ['file', 'inline'] as const) {
+  test(`revision10: declared custom env config survives auth removal (${source})`, async () => {
+    let home = '';
+    const declare = async (enabled: boolean) => {
+      const config = JSON.stringify({ provider: enabled ? { 'my-proxy': { env: ['PROXY_TOKEN'] } } : {} });
+      if (source === 'inline') process.env.OPENCODE_CONFIG_CONTENT = config;
+      else {
+        const dir = path.join(home, '.config', 'opencode');
+        await mkdir(dir, { recursive: true });
+        await writeFile(path.join(dir, 'opencode.json'), config);
+      }
+    };
+    await withOpenCodeHome(async dir => {
+      home = dir;
+      process.env.WALLY_API_KEY = 'test';
+      process.env.PROXY_TOKEN = 'test';
+      await writeOpenCodeAuth(home, { 'my-proxy': { key: 'test' } });
+      await declare(true);
+    }, async () => {
+      let now = 0;
+      let reads = 0;
+      const listing = ['my-proxy/test', 'wally/test'];
+      const adapter = new OpenCodeProviderModels(async () => {
+        if (++reads === 1) await writeOpenCodeAuth(home, {});
+        return listing;
+      }, () => now);
+      const values = async () => (await adapter.getSupportedModels()).OPTIONS.map(x => x.value);
+      assert.deepEqual(await values(), listing);
+      assert.equal(reads, 1, 'remaining config evidence avoids invalidation');
+      await declare(false);
+      assert.deepEqual(await values(), ['wally/test'], 'env without its declaration cannot retain models');
+      now = 300_000;
+      await values();
+      await (adapter as any).pendingModelReferences;
+      assert.deepEqual(await values(), ['wally/test'], 'fresh listing cannot replace the vanished declaration');
+      await declare(true);
+      await values();
+      await (adapter as any).pendingModelReferences;
+      assert.deepEqual(await values(), listing, 'returning bound config reconnects');
+    });
+  });
+}
+
+// Variable spelling is not evidence that a provider consumes it. These cases
+// include both the old guessed suffix and an arbitrary plugin variable name.
+for (const [providerId, envKey] of [
+  ['nvidia', 'NVIDIA_API_KEY'],
+  ['my-proxy', 'MY_PROXY_API_KEY'],
+  ['my-proxy', 'PROXY_TOKEN'],
+]) {
+  test(`revision10: undeclared ${envKey} cannot undo ${providerId} revocation`, async () => {
+    let home = '';
+    await withOpenCodeHome(async dir => {
+      home = dir;
+      process.env.WALLY_API_KEY = 'test';
+      process.env[envKey] = 'test';
+      await writeOpenCodeAuth(home, { [providerId]: { key: 'test' } });
+    }, async () => {
+      let now = 0;
+      let reads = 0;
+      const listing = [`${providerId}/test`, 'wally/test'];
+      const adapter = new OpenCodeProviderModels(async () => {
+        if (++reads === 1) await writeOpenCodeAuth(home, {});
+        return listing;
+      }, () => now);
+      const values = async () => (await adapter.getSupportedModels()).OPTIONS.map(x => x.value);
+      assert.deepEqual(await values(), ['wally/test']);
+      assert.equal(reads, 2, 'removal requires at most one retry');
+      for (const time of [30_000, 330_000, 630_000]) {
+        now = time;
+        await values();
+        await (adapter as any).pendingModelReferences;
+        assert.deepEqual(await values(), ['wally/test'], 'fresh discovery cannot clear revocation');
+      }
+      await writeOpenCodeAuth(home, { [providerId]: { key: 'test' } });
+      await values();
+      await (adapter as any).pendingModelReferences;
+      assert.deepEqual(await values(), listing, 'explicit auth can reconnect');
+    });
+  });
+}
+
+test('revision10: pending refresh cannot extend unknown discovery lifetime', async () => {
+  await withOpenCodeHome(async () => { process.env.WALLY_API_KEY = 'test'; }, async () => {
+    let now = 0;
+    let reads = 0;
+    let finish: (listing: string[]) => void = () => assert.fail('refresh not started');
+    const listing = ['my-proxy/test', 'wally/test'];
+    const adapter = new OpenCodeProviderModels(async () => {
+      if (++reads === 1) return listing;
+      return new Promise<string[]>(resolve => { finish = resolve; });
+    }, () => now);
+    const values = async () => (await adapter.getSupportedModels()).OPTIONS.map(x => x.value);
+    assert.deepEqual(await values(), listing, 'fresh unknown discovery is sufficient');
+    now = 299_999;
+    assert.deepEqual(await values(), listing);
+    now = 300_000;
+    try {
+      assert.deepEqual(await values(), ['wally/test']);
+      now = 900_000;
+      assert.deepEqual(await values(), ['wally/test']);
+      assert.equal(reads, 2, 'pending requests share a single refresh');
+    } finally {
+      finish([]);
+      await (adapter as any).pendingModelReferences;
+    }
+    assert.deepEqual(await values(), ['wally/test'], 'failure cannot renew expired evidence');
+  });
+});
+
+test('revision10: explicit supported env retains models through discovery failure until removed', async () => {
+  await withOpenCodeHome(async () => { process.env.WALLY_API_KEY = 'test'; }, async () => {
+    let now = 0;
+    let reads = 0;
+    // Use a non-curated reference so static fallback cannot satisfy retention.
+    const listing = ['wally/test'];
+    const adapter = new OpenCodeProviderModels(async () => {
+      if (++reads === 1) return listing;
+      if (reads === 2) return [];
+      throw new Error('discovery unavailable');
+    }, () => now);
+    const values = async () => (await adapter.getSupportedModels()).OPTIONS.map(x => x.value);
+    assert.deepEqual(await values(), listing);
+    for (const time of [300_000, 330_000]) {
+      now = time;
+      await values();
+      await (adapter as any).pendingModelReferences;
+      assert.deepEqual(await values(), listing);
+    }
+    assert.equal(reads, 3);
+    delete process.env.WALLY_API_KEY;
+    assert.ok((await values()).every(value => !value.startsWith('wally/')));
+    assert.equal(reads, 3, 'removal must apply without another CLI invocation');
+  });
+});
+
+test('revision8: failed initial auth snapshot invalidates first discovery on recovery', async () => {
+  let home = '';
+  await withOpenCodeHome(async dir => {
+    home = dir; await writeOpenCodeAuth(home, {});
+    await writeFile(path.join(home, '.local/share/opencode/auth.json'), 'null');
+  }, async () => {
+    let reads = 0;
+    const adapter = new OpenCodeProviderModels(async () => {
+      if (++reads === 1) {
+        await writeOpenCodeAuth(home, { anthropic: { key: 'test' } });
+        return ['wally/test'];
+      }
+      return ['anthropic/test'];
+    });
+    assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['anthropic/test']);
+    assert.equal(reads, 2);
+  });
+});
+
+test('revision8: later config capture applies despite earlier auth capture', async () => {
+  await withOpenCodeHome(async () => {
+    process.env.WALLY_API_KEY = 'test';
+    process.env.OPENCODE_CONFIG_CONTENT = '{"provider":{"anthropic":{}}}';
+  }, async adapter => {
+    await adapter.getSupportedModels();
+    const original = fsPromises.readFile;
+    let release: () => void = () => {};
+    let reached: () => void = () => {};
+    const gate = new Promise<void>(r => { release = r; });
+    const signal = new Promise<void>(r => { reached = r; });
+    let configReads = 0;
+    const readMock = mock.method(fsPromises, 'readFile', async (
+      file: Parameters<typeof fsPromises.readFile>[0], options: any,
+    ) => {
+      if (path.basename(String(file)) === 'config.json' && ++configReads === 2) {
+        reached(); await gate;
+      }
+      return original(file, options);
+    });
+    syncBuiltinESMExports();
+    const older = adapter.getSupportedModels();
+    try {
+      await signal;
+      await adapter.getSupportedModels();
+      process.env.OPENCODE_CONFIG_CONTENT = '{"provider":{}}';
+      release();
+      assert.deepEqual((await older).OPTIONS.map(x => x.value), ['wally/test']);
+    } finally {
+      release(); await older; readMock.mock.restore(); syncBuiltinESMExports();
+    }
+  }, async () => ['anthropic/test', 'wally/test']);
+});
+
+for (const source of ['auth', 'config'] as const) {
+  for (const connected of [false, true]) {
+    test(`revision11: captured stale ${source} bytes cannot undo newer ${connected ? 'login' : 'removal'}`, async () => {
+      let home = '';
+      const fileName = source === 'auth' ? 'auth.json' : 'opencode.jsonc';
+      const connect = async (enabled: boolean) => {
+        if (source === 'auth') {
+          await writeOpenCodeAuth(home, enabled ? { anthropic: { key: 'test' } } : {});
+        } else {
+          const dir = path.join(home, '.config', 'opencode');
+          await mkdir(dir, { recursive: true });
+          await writeFile(path.join(dir, fileName), JSON.stringify({ provider: enabled ? { anthropic: {} } : {} }));
+        }
+      };
+      await withOpenCodeHome(async dir => {
+        home = dir;
+        await connect(true);
+      }, async adapter => {
+        await adapter.getSupportedModels();
+        if (connected) {
+          await connect(false);
+          await adapter.getSupportedModels();
+          assert.equal((adapter as any).removedProviderIds.has('anthropic'), true);
+        }
+        const original = fsPromises.readFile;
+        let release: () => void = () => {};
+        let reached: (bytes: unknown) => void = () => {};
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        const captured = new Promise<unknown>(resolve => { reached = resolve; });
+        let reads = 0;
+        const readMock = mock.method(fsPromises, 'readFile', async (
+          file: Parameters<typeof fsPromises.readFile>[0], options: any,
+        ) => {
+          const bytes = await original(file, options);
+          // Hold the older request's final snapshot AFTER the real fs read.
+          // Returning these saved bytes must not overwrite a newer source read.
+          if (isOpenCodeFile(file, fileName) && ++reads === 2) {
+            reached(bytes);
+            await gate;
+          }
+          return bytes;
+        });
+        syncBuiltinESMExports();
+        const older = adapter.getSupportedModels();
+        try {
+          const bytes = JSON.parse(String(await captured));
+          assert.equal(Object.hasOwn(source === 'auth' ? bytes : bytes.provider, 'anthropic'), !connected);
+          await connect(connected);
+          const newer = await adapter.getSupportedModels();
+          assert.equal(newer.OPTIONS.some(x => x.value.startsWith('anthropic/')), connected);
+          assert.equal((adapter as any).removedProviderIds.has('anthropic'), !connected);
+          release();
+          const oldResponse = await older;
+          // Inspect immediately: another request could repair the corrupted state.
+          assert.deepEqual({
+            oldResponseHasProvider: oldResponse.OPTIONS.some(x => x.value.startsWith('anthropic/')),
+            revoked: (adapter as any).removedProviderIds.has('anthropic'),
+            observed: (adapter as any).observedProviderIds.has('anthropic'),
+            sourceHasProvider: (adapter as any).providerSources.get(source === 'auth' ? 'auth' : fileName).has('anthropic'),
+          }, {
+            oldResponseHasProvider: connected,
+            revoked: !connected,
+            observed: connected,
+            sourceHasProvider: connected,
+          });
+        } finally {
+          release();
+          await older;
+          readMock.mock.restore();
+          syncBuiltinESMExports();
+        }
+      }, async () => ['anthropic/test']);
+    });
+  }
+}
+
+test('revision8: gated path suffixes accept native Windows paths', () => {
+  for (const name of ['auth.json', 'config.json', 'opencode.jsonc']) {
+    const file = path.win32.join('C:\\fixture', 'opencode', name);
+    assert.equal(isOpenCodeFile(file, name), true);
+    assert.equal(isOpenCodeFile(path.posix.join('/fixture', 'opencode', name), name), true);
+  }
+});
+
+
+test('revision8: setImmediate does not await a gated refresh snapshot', async () => {
+  await withOpenCodeHome(async () => { process.env.WALLY_API_KEY = 'test'; }, async () => {
+    let now = 0;
+    let finish: (listing: string[]) => void = () => {};
+    let reads = 0;
+    const adapter = new OpenCodeProviderModels(async () => {
+      if (++reads === 1) return ['nvidia/test', 'wally/test'];
+      return new Promise<string[]>(resolve => { finish = resolve; });
+    }, () => now);
+    await adapter.getSupportedModels();
+    now = 300_000;
+    await adapter.getSupportedModels();
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const original = (adapter as any).updateProviderSnapshot.bind(adapter);
+    let held = false;
+    const updateMock = mock.method(adapter as any, 'updateProviderSnapshot', async () => {
+      if (!held) { held = true; await gate; }
+      await original();
+    });
+    const pending = (adapter as any).pendingModelReferences;
+    try {
+      finish([]);
+      await new Promise(resolve => setImmediate(resolve));
+      // This was the old test's wait. It cannot observe the empty refresh yet.
+      assert.equal((adapter as any).pendingModelReferences, pending);
+      release();
+      await pending;
+      assert.equal((adapter as any).pendingModelReferences, null);
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(x => x.value), ['wally/test']);
+    } finally {
+      release(); await pending; updateMock.mock.restore();
+    }
+  });
+});
