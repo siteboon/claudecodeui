@@ -86,6 +86,26 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   return copied;
 }
 
+/**
+ * Saves a blob through the browser's download flow under `fileName`. The name
+ * goes to the anchor's `download` attribute as-is, so non-ASCII names survive.
+ */
+export function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+
+  anchor.href = url;
+  anchor.download = fileName;
+
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+
+  // Revoking in the same task can cancel the download in Firefox and Safari,
+  // which read the object URL after click() returns.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 // ---------------------------
 
 //----------------- NOTIFICATION SOUND ------------
