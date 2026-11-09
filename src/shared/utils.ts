@@ -1,7 +1,48 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import remarkMath from 'remark-math';
+import type { Processor } from 'unified';
+import type { Construct } from 'micromark-util-types';
+// Register remark-parse's unified Data types without loading another parser.
+import type {} from 'remark-parse';
 
 import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
+
+//----------------- MARKDOWN MATH ------------
+
+/**
+ * Enables dollar-delimited math for chat and editor previews without treating
+ * ordinary prices as formulas. Single-dollar math must stay on one line, have
+ * no whitespace just inside its delimiters, and not close before a digit.
+ * Double-dollar math keeps remark-math's existing behavior.
+ */
+export function remarkMathWithCurrencyProtection(this: Processor) {
+  remarkMath.call(this, { singleDollarTextMath: true });
+
+  // Wrap only the text construct registered by this invocation of remarkMath;
+  // its block parser, code handling and MDAST integration remain unchanged.
+  const extensions = this.data().micromarkExtensions!;
+  const extension = extensions[extensions.length - 1];
+  const mathText = extension.text![36] as Construct;
+  const tokenize = mathText.tokenize;
+  mathText.tokenize = function (effects, ok, nok) {
+    return tokenize.call(this, effects, (code) => {
+      const token = this.events[this.events.length - 1][1];
+      const source = this.sliceSerialize(token);
+      if (!source.startsWith('$$')) {
+        const value = source.slice(1, -1);
+        // Reject before committing the token, so Markdown still parses the
+        // original prose, emphasis and links when a pair is actually currency.
+        if (/^\s|\s$|[\r\n]/.test(value) || (code !== null && code >= 48 && code <= 57)) {
+          return nok(code);
+        }
+      }
+      return ok(code);
+    }, nok);
+  };
+}
+
+// ---------------------------
 
 //----------------- DEPLOYMENT MODE ------------
 
