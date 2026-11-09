@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readdir, readlink, realpath, rm, writeFile } from 'node:fs/promises';
+import fsPromises, { chmod, mkdir, mkdtemp, readdir, readlink, realpath, rm, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test, { mock } from 'node:test';
@@ -21,6 +22,7 @@ const OPENCODE_ENV_KEYS = [
   'GROQ_API_KEY',
   'OPENROUTER_API_KEY',
   'WALLY_API_KEY',
+  'NVIDIA_API_KEY',
   'OPENCODE_CONFIG',
   'OPENCODE_CONFIG_CONTENT',
 ];
@@ -81,7 +83,7 @@ test('OpenCode falls back to the curated catalog only when no providers are know
   const providerIds = new Set(
     OPENCODE_PREDEFINED_MODELS.OPTIONS.map((option) => option.value.split('/')[0]),
   );
-  assert.deepEqual([...providerIds].sort(), ['anthropic', 'opencode', 'opencode-go', 'openai'].sort());
+  assert.deepEqual([...providerIds].sort(), ['anthropic', 'opencode', 'opencode-go', 'openai', 'wally'].sort());
   assert.equal(
     OPENCODE_PREDEFINED_MODELS.OPTIONS.every((option) => /^[a-z0-9-]+\/.+/.test(option.value)),
     true,
@@ -252,6 +254,73 @@ test('OpenCode discovers only models available through connected providers', asy
   );
 });
 
+for (const failure of ['empty', 'rejected'] as const) {
+  test(`OpenCode gives a Wally-only login a fallback after ${failure} initial discovery`, async () => {
+    await withOpenCodeHome(
+      async () => { process.env.WALLY_API_KEY = 'test'; },
+      async (adapter) => {
+        const catalog = await adapter.getSupportedModels();
+        assert.deepEqual(catalog.OPTIONS.map((option) => option.value), ['wally/deepseek-v4.1-flash']);
+        assert.equal(catalog.DEFAULT, 'wally/deepseek-v4.1-flash');
+        assert.equal((await adapter.getCurrentActiveModel()).model, catalog.DEFAULT);
+      },
+      async () => {
+        if (failure === 'rejected') throw new Error('OpenCode unavailable');
+        return [];
+      },
+    );
+  });
+}
+
+test('OpenCode preserves CLI-discovered environment-only providers when a Wally key is added', async () => {
+  for (const withWally of [false, true]) {
+    await withOpenCodeHome(
+      async () => {
+        process.env.NVIDIA_API_KEY = 'test';
+        if (withWally) process.env.WALLY_API_KEY = 'test';
+      },
+      async (adapter) => {
+        const catalog = await adapter.getSupportedModels();
+        const expected = ['nvidia/vendor/model'];
+        if (withWally) expected.push('wally/deepseek-v4.1-flash');
+        assert.deepEqual(catalog.OPTIONS.map((option) => option.value), expected);
+        assert.equal(catalog.DEFAULT, expected[0]);
+      },
+      async () => withWally
+        ? ['nvidia/vendor/model', 'wally/deepseek-v4.1-flash', 'openai/gpt-5.6']
+        : ['nvidia/vendor/model'],
+    );
+  }
+});
+
+for (const [envKey, providerId] of [
+  ['WALLY_API_KEY', 'wally'],
+  ['GOOGLE_GENERATIVE_AI_API_KEY', 'google'],
+  ['GROQ_API_KEY', 'groq'],
+]) {
+  test(`OpenCode discovers ${envKey} models and retains other connected providers`, async () => {
+    const model = providerId === 'wally' ? 'wally/deepseek-v4.1-flash' : `${providerId}/test-model`;
+    await withOpenCodeHome(
+      async (homeDir) => {
+        process.env[envKey] = 'test';
+        if (providerId !== 'wally') {
+          await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } });
+        }
+      },
+      async (adapter) => {
+        const catalog = await adapter.getSupportedModels();
+        const expected = providerId === 'wally' ? [model] : [model, 'anthropic/claude-opus-5'];
+        assert.deepEqual(catalog.OPTIONS.map((option) => option.value), expected);
+        assert.equal(catalog.DEFAULT, model);
+      },
+      async () => providerId === 'wally'
+        ? ['openai/gpt-5.6', model]
+        : ['openai/gpt-5.6', model, 'anthropic/claude-opus-5',
+          providerId === 'google' ? 'groq/test-model' : 'google/test-model'],
+    );
+  });
+}
+
 test('OpenCode uses discovered GitHub Copilot models and never falls back to foreign providers', async () => {
   await withOpenCodeHome(
     (homeDir) => writeOpenCodeAuth(homeDir, { 'github-copilot': { type: 'oauth' } }),
@@ -396,6 +465,205 @@ test('OpenCode caches the CLI model listing and refreshes it in the background',
       assert.equal(readCount, 2);
     },
   );
+});
+
+test('OpenCode invalidates removed unknown providers and recovers after failed refreshes', async () => {
+  for (const source of ['auth', 'config']) {
+    let home = '';
+    await withOpenCodeHome(async (homeDir) => {
+      home = homeDir;
+      process.env.WALLY_API_KEY = 'test';
+      if (source === 'auth') {
+        await writeOpenCodeAuth(home, { nvidia: { type: 'api', key: 'test' } });
+      } else {
+        process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ provider: { nvidia: {} } });
+      }
+    }, async () => {
+      let now = 0;
+      let reads = 0;
+      let fail = false;
+      const listing = ['nvidia/vendor/model', 'wally/deepseek-ai/DeepSeek-V4.1-Flash'];
+      const adapter = new OpenCodeProviderModels(async () => {
+        reads += 1;
+        if (fail) {
+          if (reads % 2) throw new Error('test failure');
+          return [];
+        }
+        return listing;
+      }, () => now);
+      assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[0]);
+      if (source === 'auth') await writeOpenCodeAuth(home, {});
+      else delete process.env.OPENCODE_CONFIG_CONTENT;
+      fail = true;
+      assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[1]);
+      assert.equal(reads, 1); // Removal does not require another CLI process.
+      for (const time of [300_000, 330_000, 360_000]) {
+        now = time;
+        await adapter.getSupportedModels();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[1]);
+      }
+      fail = false;
+      now += 30_000;
+      await adapter.getSupportedModels();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[0]);
+    });
+  }
+});
+
+test('OpenCode preserves stale discovery with current local provider evidence', async () => {
+  for (const source of ['auth', 'config']) {
+    let home = '';
+    await withOpenCodeHome(async (homeDir) => {
+      home = homeDir;
+      process.env.WALLY_API_KEY = 'test';
+      if (source === 'auth') {
+        await writeOpenCodeAuth(home, { 'github-copilot': { type: 'oauth' } });
+      } else {
+        process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ provider: { 'github-copilot': {} } });
+      }
+    }, async () => {
+      let now = 0;
+      let reads = 0;
+      let finishRefresh: (models: string[]) => void = () => assert.fail('refresh not started');
+      const listing = ['github-copilot/test-model', 'wally/deepseek-v4.1-flash'];
+      const adapter = new OpenCodeProviderModels(() => {
+        reads += 1;
+        if (reads === 1) return Promise.resolve(listing);
+        if (reads === 2) return new Promise<string[]>((resolve) => { finishRefresh = resolve; });
+        return Promise.reject(new Error('test failure'));
+      }, () => now);
+      const values = async () => (await adapter.getSupportedModels()).OPTIONS.map((option) => option.value);
+      assert.deepEqual(await values(), listing);
+      now = 300_000;
+      assert.deepEqual(await values(), listing); // Refresh is still pending.
+      finishRefresh([]);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(await values(), listing); // Empty refresh retains local evidence.
+      now += 30_000;
+      assert.deepEqual(await values(), listing);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(await values(), listing); // Rejected refresh does too.
+      assert.equal(reads, 3);
+      if (source === 'auth') await writeOpenCodeAuth(home, {});
+      else delete process.env.OPENCODE_CONFIG_CONTENT;
+      assert.deepEqual(await values(), [listing[1]]);
+      assert.equal(reads, 3);
+    });
+  }
+});
+
+test('OpenCode ignores an older provider snapshot after a concurrent login', async () => {
+  let home = '';
+  await withOpenCodeHome(async (homeDir) => {
+    home = homeDir;
+    process.env.WALLY_API_KEY = 'test';
+    await writeOpenCodeAuth(home, {});
+  }, async () => {
+    let reads = 0;
+    const listing = ['nvidia/vendor/model', 'wally/deepseek-v4.1-flash'];
+    const adapter = new OpenCodeProviderModels(async () => {
+      reads += 1;
+      return listing;
+    });
+    let releaseConfig: () => void = () => {};
+    let signalConfig: () => void = () => {};
+    const configReached = new Promise<void>((resolve) => { signalConfig = resolve; });
+    const configGate = new Promise<void>((resolve) => { releaseConfig = resolve; });
+    const originalReadFile = fsPromises.readFile;
+    let gated = false;
+    const readMock = mock.method(fsPromises, 'readFile', async (
+      filePath: Parameters<typeof fsPromises.readFile>[0], options: any,
+    ) => {
+      // The auth file has already been read when the first config read begins.
+      if (!gated && String(filePath) === path.join(home, '.config', 'opencode', 'opencode.json')) {
+        gated = true;
+        signalConfig();
+        await configGate;
+      }
+      return originalReadFile(filePath, options);
+    });
+    syncBuiltinESMExports();
+    const olderRequest = adapter.getSupportedModels();
+    try {
+      await configReached;
+      await writeOpenCodeAuth(home, { nvidia: { type: 'api', key: 'test' } });
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map((option) => option.value), listing);
+      releaseConfig();
+      await olderRequest;
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map((option) => option.value), listing);
+      assert.equal(reads, 1); // Newer evidence survives without another CLI read.
+    } finally {
+      releaseConfig();
+      await olderRequest;
+      readMock.mock.restore();
+      syncBuiltinESMExports();
+    }
+  });
+});
+
+test('OpenCode bounds stale env-only unknown discovery across empty and rejected refreshes', async () => {
+  await withOpenCodeHome(async () => {
+    process.env.WALLY_API_KEY = 'test';
+    process.env.NVIDIA_API_KEY = 'test';
+  }, async () => {
+    let now = 0;
+    let reads = 0;
+    const adapter = new OpenCodeProviderModels(async () => {
+      reads += 1;
+      if (reads === 2) return [];
+      if (reads === 3) throw new Error('test failure');
+      return ['nvidia/vendor/model', 'wally/deepseek-ai/DeepSeek-V4.1-Flash'];
+    }, () => now);
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, 'nvidia/vendor/model');
+    now = 299_999;
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, 'nvidia/vendor/model');
+    assert.equal(reads, 1);
+    for (const time of [300_000, 330_000]) {
+      now = time;
+      await adapter.getSupportedModels();
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal((await adapter.getSupportedModels()).DEFAULT, 'wally/deepseek-ai/DeepSeek-V4.1-Flash');
+    }
+    now = 360_000;
+    await adapter.getSupportedModels();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, 'nvidia/vendor/model');
+  });
+});
+
+test('OpenCode does not restore a removed provider from an in-flight refresh', async () => {
+  let home = '';
+  await withOpenCodeHome(async (homeDir) => {
+    home = homeDir;
+    process.env.WALLY_API_KEY = 'test';
+    await writeOpenCodeAuth(home, { nvidia: { type: 'api', key: 'test' } });
+  }, async () => {
+    let now = 0;
+    let reads = 0;
+    let finishRefresh: (models: string[]) => void = () => assert.fail('refresh not started');
+    const listing = ['nvidia/vendor/model', 'wally/deepseek-ai/DeepSeek-V4.1-Flash'];
+    const adapter = new OpenCodeProviderModels(() => {
+      reads += 1;
+      return reads === 2
+        ? new Promise<string[]>((resolve) => { finishRefresh = resolve; })
+        : Promise.resolve(listing);
+    }, () => now);
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[0]);
+    now = 300_000;
+    await adapter.getSupportedModels();
+    await writeOpenCodeAuth(home, {});
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[1]);
+    finishRefresh(listing);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[1]);
+    assert.equal(reads, 2);
+    now += 30_000;
+    await adapter.getSupportedModels();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal((await adapter.getSupportedModels()).DEFAULT, listing[0]);
+  });
 });
 
 test('OpenCode retries a failed CLI listing sooner than a successful one', async () => {

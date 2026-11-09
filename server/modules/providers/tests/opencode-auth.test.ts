@@ -69,3 +69,14 @@ test('OpenCode counts a Wally API key in the environment as configured', async (
     assert.equal(status.method, 'environment');
   });
 });
+
+for (const envKey of ['GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY']) {
+  test(`OpenCode counts ${envKey} as configured`, async () => {
+    await withEmptyOpenCodeHome({ [envKey]: 'test' }, async (auth) => {
+      const status = await auth.getStatus();
+      assert.equal(status.authenticated, true);
+      assert.equal(status.email, envKey);
+      assert.equal(status.method, 'environment');
+    });
+  });
+}
