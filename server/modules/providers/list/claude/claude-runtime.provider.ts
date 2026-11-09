@@ -1371,9 +1371,10 @@ async function queryClaudeSDK(
     // request takes the permission round trip so it reaches every attached tab,
     // survives a refresh and raises a notification. There is no timeout here:
     // the server keeps its own, and an abort arrives through the signal.
-    // An unattended run (the agent API, commit-message generation) has nobody to
-    // show the form to, so it leaves the callback unset: the SDK then declines
-    // at once, rather than the run waiting on an answer that cannot come.
+    // An unattended run (commit-message generation, and an agent-API run unless
+    // its caller passed `unattended: false`) has nobody to show the form to, so
+    // it leaves the callback unset: the SDK then declines at once, rather than
+    // the run waiting on an answer that cannot come.
     if (!options.unattended) {
       sdkOptions.onElicitation = async (request: ElicitationRequest, elicitationOptions: { signal: AbortSignal }) => {
         const requestId = createRequestId();
