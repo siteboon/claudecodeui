@@ -1181,11 +1181,11 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * Recursively discovers files that match one extension, with optional incremental filtering.
  *
  * Provider synchronizers call this to find transcript artifacts under provider
- * home directories. Pass `lastScanAt` to include only files created after the
+ * home directories. Pass `lastScanAt` to include only files modified after the
  * previous scan, or pass `null` to perform a full rescan. Missing directories
  * are treated as empty because not every provider exists on every machine.
  */
-export async function findFilesRecursivelyCreatedAfter(
+export async function findFilesRecursivelyModifiedAfter(
   rootDir: string,
   extension: string,
   lastScanAt: Date | null,
@@ -1197,7 +1197,7 @@ export async function findFilesRecursivelyCreatedAfter(
       const fullPath = path.join(rootDir, entry.name);
 
       if (entry.isDirectory()) {
-        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList);
+        await findFilesRecursivelyModifiedAfter(fullPath, extension, lastScanAt, fileList);
         continue;
       }
 
@@ -1211,7 +1211,7 @@ export async function findFilesRecursivelyCreatedAfter(
       }
 
       const fileStat = await stat(fullPath);
-      if (fileStat.birthtime > lastScanAt) {
+      if (fileStat.mtime > lastScanAt) {
         fileList.push(fullPath);
       }
     }
@@ -1697,4 +1697,33 @@ export function findApplicationRoot(startDirectory: string): string {
   return path.basename(parentDirectory) === 'dist-server'
     ? path.dirname(parentDirectory)
     : parentDirectory;
+}
+
+// ---------------------------
+//----------------- LINUX NATIVE SESSION LOCKS ------------
+/**
+ * Providers' native CLI liveness readers use this device/inode key to match a
+ * stat result to Linux /proc/locks. Bigints preserve inode precision, including
+ * extended major and minor device numbers; this is only a Linux lock identity.
+ */
+export function getLinuxFileLockIdentity(device: bigint, inode: bigint): string {
+  const major = ((device >> 8n) & 0xfffn) | ((device >> 32n) & 0xfffff000n);
+  const minor = (device & 0xffn) | ((device >> 12n) & 0xffffff00n);
+  return `${major.toString(16)}:${minor.toString(16)}:${inode}`;
+}
+
+/**
+ * Providers' native activity readers use only granted exclusive whole-file
+ * flock owners as process evidence. Queued requests, POSIX SQLite locks, shared
+ * locks and invalid PIDs are excluded. Keys match getLinuxFileLockIdentity.
+ */
+export function parseLinuxExclusiveFileLocks(contents: string): Map<string, number> {
+  const holders = new Map<string, number>();
+  for (const line of contents.split('\n')) {
+    const match = /^\d+:\s+FLOCK\s+ADVISORY\s+WRITE\s+(\d+)\s+([\da-f]+):([\da-f]+):(\d+)\s+0\s+EOF\s*$/i.exec(line);
+    if (!match || Number(match[1]) <= 0) continue;
+    const key = `${BigInt(`0x${match[2]}`).toString(16)}:${BigInt(`0x${match[3]}`).toString(16)}:${match[4]}`;
+    holders.set(key, Number(match[1]));
+  }
+  return holders;
 }

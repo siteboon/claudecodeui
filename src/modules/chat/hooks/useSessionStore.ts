@@ -341,12 +341,19 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
   if (realtime.length === 0) {
     return dedupeAdjacentAssistantEchoes(server);
   }
+  const serverIds = new Set(server.map((message) => message.id));
+  // AGY streams persisted user rows before the next history refresh. They
+  // already own the turn, even while both copies live in the realtime buffer.
+  // Keep history first so edited echoes retain their row-count boundary.
+  const persistedMessages = [
+    ...server,
+    ...realtime.filter((message) => !message.id.startsWith('local_') && !serverIds.has(message.id)),
+  ];
+  const reconciledRealtime = removeOptimisticUserEchoes(persistedMessages, realtime);
   if (server.length === 0) {
-    return dedupeAdjacentAssistantEchoes(realtime);
+    return dedupeAdjacentAssistantEchoes(reconciledRealtime);
   }
 
-  const serverIds = new Set(server.map((message) => message.id));
-  const reconciledRealtime = removeOptimisticUserEchoes(server, realtime);
   const extra = reconciledRealtime.filter((message) => {
     if (serverIds.has(message.id)) {
       return false;

@@ -11,15 +11,15 @@ import {
   isImageAttachmentDescriptor,
   normalizeAttachmentDescriptors,
   type ChatAttachmentDescriptor,
-} from '@/shared/image-attachments.js';
+} from '@/shared/index.js';
 import type {
   AnyRecord,
   AuthenticatedWebSocketRequest,
   LLMProvider,
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
-} from '@/shared/types.js';
-import { parseIncomingJsonObject } from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { parseIncomingJsonObject } from '@/shared/index.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -222,6 +222,11 @@ async function dispatchRun(
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
 
+  if (await sessionsService.getExternalSessionActivity(sessionId)) {
+    const error = 'This session is running in the Antigravity CLI.';
+    if (ws) sendProtocolError(ws, 'RUN_IN_PROGRESS', error, sessionId);
+    return { started: false, error };
+  }
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,
     provider,
@@ -500,11 +505,11 @@ async function handleChatStopTask(
  * This single message replaces the old `check-session-status`,
  * `get-pending-permissions`, and Claude-only writer reconnect flows.
  */
-function handleChatSubscribe(
+async function handleChatSubscribe(
   ws: WebSocket,
   data: AnyRecord,
   dependencies: ChatWebSocketDependencies
-): void {
+): Promise<void> {
   const targets = Array.isArray(data.sessions) ? data.sessions : [];
 
   for (const target of targets) {
@@ -526,6 +531,7 @@ function handleChatSubscribe(
 
     const run = chatRunRegistry.getRun(sessionId);
     const isProcessing = chatRunRegistry.isProcessing(sessionId);
+    const external = isProcessing ? null : await sessionsService.getExternalSessionActivity(sessionId);
 
     // Future live events for this run should land on the socket that asked —
     // this is what makes mid-stream page refreshes work for all providers.
@@ -544,7 +550,8 @@ function handleChatSubscribe(
     sendJson(ws, {
       kind: 'chat_subscribed',
       sessionId,
-      isProcessing,
+      isProcessing: isProcessing || Boolean(external),
+      ...(external ? { external: true, canInterrupt: false, statusText: 'Running in the Antigravity CLI' } : {}),
       lastSeq: run?.lastSeq ?? 0,
       pendingPermissions,
       timestamp: new Date().toISOString(),
@@ -694,7 +701,7 @@ export function handleChatConnection(
           await handleChatStopTask(ws, data, dependencies);
           return;
         case 'chat.subscribe':
-          handleChatSubscribe(ws, data, dependencies);
+          await handleChatSubscribe(ws, data, dependencies);
           return;
         case 'chat.permission-response':
           handlePermissionResponse(data, dependencies);

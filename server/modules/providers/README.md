@@ -56,6 +56,23 @@ A CLI that does not emit this protocol reports an explicit error. Aborts send
 SIGTERM, escalate to SIGKILL after three seconds, and retain process ownership
 until exit. Successful stderr diagnostics are excluded from assistant replies.
 
+Antigravity supports whole-conversation forks through the shared session-fork
+endpoint and sidebar controls. A read-only SQLite backup preserves native steps
+and independently indexed generation/executor caches, assigns new native and
+trajectory identities, and copies conversation artifacts into an independent
+brain directory. The original conversation and workspace files remain intact.
+The app retains the source model, effort, title and fork ancestry. AGY currently
+exposes `/fork` only in its interactive TUI, so this adapter validates the known
+native storage layout and rejects unsupported layouts. Message-prefix forks
+are explicitly unsupported; their cache boundaries require a native API.
+
+On Linux, external AGY activity requires both a busy native summary and a live,
+same-user AGY process holding that conversation's exclusive presence lock.
+These turns appear as external activity, cannot be interrupted by CloudCLI,
+and block duplicate sends and forks. Idle/crashed owners do not remain busy.
+Incremental transcript scans use modification times, and the mapped app row
+keeps ownership of its project path and title when native history is stale.
+
 Antigravity model discovery queries `agy models` on every backend catalog read,
 so account changes and subscription changes use the CLI's current model list.
 The fallback catalog is used only when discovery fails or returns no models;
@@ -225,7 +242,7 @@ Command forms currently used by the providers are:
 - Use the existing helpers when they fit:
   - `buildLookupMap(...)`
   - `extractFirstValidJsonlData(...)`
-  - `findFilesRecursivelyCreatedAfter(...)`
+  - `findFilesRecursivelyModifiedAfter(...)`
   - `normalizeSessionName(...)`
   - `readFileTimestamps(...)`
 - Make the sync resilient to partial, malformed, or missing provider files.

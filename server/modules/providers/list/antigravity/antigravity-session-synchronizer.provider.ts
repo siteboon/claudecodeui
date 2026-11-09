@@ -7,7 +7,7 @@ import { sessionsDb } from '@/modules/database/index.js';
 import { antigravityRunBindings } from '@/modules/providers/services/antigravity-run-bindings.service.js';
 import type { IProviderSessionSynchronizer } from '@/shared/index.js';
 import {
-  findFilesRecursivelyCreatedAfter,
+  findFilesRecursivelyModifiedAfter,
   normalizeSessionName,
   readFileTimestamps,
   readObjectRecord,
@@ -47,7 +47,7 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
   async synchronize(since?: Date): Promise<number> {
     const files = new Set([
       ...this.deferredFiles,
-      ...await findFilesRecursivelyCreatedAfter(this.brainDir, 'transcript.jsonl', since ?? null),
+      ...await findFilesRecursivelyModifiedAfter(this.brainDir, 'transcript.jsonl', since ?? null),
     ]);
     const history = await this.readHistoryMetadata();
     let processed = 0;
@@ -100,10 +100,12 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
     const sessionId = parts[0];
     const fromHistory = history.get(sessionId);
     let firstUserMessage = fromHistory?.sessionName;
-    let projectPath = fromHistory?.projectPath;
-    // A mapped app row knows the workspace before AGY appends history.jsonl.
+    // The app mapping owns the workspace even if native history still names
+    // an older directory. Tool targets must not relocate a conversation.
     const existing = sessionsDb.getSessionByProviderSessionId(sessionId);
-    projectPath ??= existing?.project_path ?? undefined;
+    const projectPath = existing?.provider === PROVIDER
+      ? existing.project_path ?? fromHistory?.projectPath
+      : fromHistory?.projectPath;
     try {
       const lines = (await readFile(filePath, 'utf8')).split(/\r?\n/);
       for (const line of lines) {

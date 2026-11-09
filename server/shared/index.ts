@@ -3,6 +3,7 @@ export { appendFilesInputTag, buildCodexInputItems, normalizeImageDescriptors } 
 // Providers, Agent response collection, and Websocket Shell launches consume these shared contracts.
 export type {
   IProviderAuth,
+  IProviderFork,
   IProviderModels,
   IProviderRuntime,
   IProviderSessions,
@@ -11,6 +12,11 @@ export type {
 } from './interfaces.js';
 export type {
   AnyRecord,
+  AuthenticatedWebSocketRequest,
+  BackgroundTaskSummary,
+  LLMProvider,
+  ProviderPermissionDecision,
+  WorkflowAgentActivity,
   CliVersionProbe,
   FetchHistoryOptions,
   FetchHistoryResult,
@@ -29,10 +35,12 @@ export type {
 export {
   AppError,
   buildDefaultProviderCurrentActiveModel,
+  buildLookupMap,
+  extractFirstValidJsonlData,
   buildProviderCliEnv,
   createCompleteMessage,
   createNormalizedMessage,
-  findFilesRecursivelyCreatedAfter,
+  findFilesRecursivelyModifiedAfter,
   generateMessageId,
   normalizeProjectPath,
   normalizeSessionName,
@@ -52,3 +60,8 @@ export {
   stripAntigravityTags,
   writeJsonConfig,
 } from './utils.js';
+
+export { getLinuxFileLockIdentity, parseLinuxExclusiveFileLocks } from './utils.js';
+
+export { getGlobalImageAssetsDir, isImageAttachmentDescriptor, normalizeAttachmentDescriptors } from './image-attachments.js';
+export type { ChatAttachmentDescriptor } from './image-attachments.js';

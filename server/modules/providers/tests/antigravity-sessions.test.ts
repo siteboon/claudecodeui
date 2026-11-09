@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -371,4 +371,34 @@ test('an abandoned pending app row does not suppress unrelated terminal sessions
       assert.equal(sessionsDb.getAllSessions().length, 2);
     });
   } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('incremental AGY scans refresh resumed transcripts and retain the mapped app workspace', async () => {
+  await withIsolatedDatabase(async () => {
+    const home = await mkdtemp(path.join(os.tmpdir(), 'antigravity-recency-'));
+    const restoreHome = patchHomeDir(home);
+    try {
+      const id = 'native-resumed';
+      const transcript = await writeAntigravityTranscript(home, id);
+      sessionsDb.createAppSession('mapped-resumed', 'antigravity', '/mapped-workspace', 'Keep title');
+      sessionsDb.assignProviderSessionId('mapped-resumed', id);
+      await writeFile(path.join(home, '.gemini', 'antigravity-cli', 'history.jsonl'), JSON.stringify({
+        conversationId: id, workspace: '/stale-native-workspace', display: 'Native title',
+      }) + '\n');
+      const synchronizer = new AntigravitySessionSynchronizer();
+      assert.equal(await synchronizer.synchronize(), 1);
+      const since = new Date(Date.now() + 1000);
+      const updated = new Date(since.getTime() + 1000);
+      await appendFile(transcript, JSON.stringify({
+        step_index: 2, source: 'USER_EXPLICIT', type: 'USER_INPUT', content: 'continue',
+      }) + '\n');
+      await utimes(transcript, updated, updated);
+      assert.equal(await synchronizer.synchronize(since), 1);
+      const session = sessionsDb.getSessionById('mapped-resumed');
+      assert.equal(session?.project_path, '/mapped-workspace');
+      assert.equal(session?.custom_name, 'Keep title');
+      assert.equal(session?.updated_at, updated.toISOString());
+    } finally { restoreHome(); await rm(home, { recursive: true, force: true }); }
+  });
 });
