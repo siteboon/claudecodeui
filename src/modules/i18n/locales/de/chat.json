@@ -297,7 +297,8 @@
     },
     "handoff": {
       "label": "In neuem Chat fortsetzen",
-      "description": "Kurze Zusammenfassung als erste Nachricht; beliebigen Provider wählen."
+      "description": "Kurze Zusammenfassung als erste Nachricht; beliebigen Provider wählen.",
+      "failed": "Gesamte Unterhaltung konnte nicht geladen werden. Bitte erneut versuchen."
     },
     "includeSideQuestions": "Nebenfragen mitexportieren"
   },

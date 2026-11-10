@@ -62,6 +62,7 @@ export default function ChatExportMenu({
   // Whether the side-question asides go into the file. Off by default, so a plain export
   // matches what the session itself saw; the operator opts in from this option.
   const [includeSideQuestions, setIncludeSideQuestions] = useState(false);
+  const [handoffFailed, setHandoffFailed] = useState(false);
 
   if (messages.length === 0) {
     return null;
@@ -94,6 +95,7 @@ export default function ChatExportMenu({
   // provider and can edit it before sending.
   const continueInNewChat = async (project: Project, openNewSession: (project: Project) => void) => {
     setBusyFormat('handoff');
+    setHandoffFailed(false);
     try {
       const scope = `project:${project.projectId}`;
       const digest = buildHandoffMarkdown({
@@ -114,6 +116,7 @@ export default function ChatExportMenu({
       openNewSession(project);
     } catch (error) {
       console.error('Failed to continue conversation in a new chat:', error);
+      setHandoffFailed(true);
     } finally {
       setBusyFormat(null);
     }
@@ -131,7 +134,7 @@ export default function ChatExportMenu({
     items.push({
       key: 'handoff',
       label: t('export.handoff.label'),
-      description: t('export.handoff.description'),
+      description: t(handoffFailed ? 'export.handoff.failed' : 'export.handoff.description'),
       icon: ArrowRightLeft,
       loading: busyFormat === 'handoff',
       onSelect: () => { void continueInNewChat(selectedProject, onNewSession); },

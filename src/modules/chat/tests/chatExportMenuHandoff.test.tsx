@@ -83,6 +83,29 @@ describe('ChatExportMenu continue in new chat', () => {
     assert.equal(count('I am continuing'), 3);
   });
 
+  it('opens no new chat from a partial transcript when the full one fails to load', async () => {
+    const onNewSession = vi.fn();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(
+      <ChatExportMenu
+        messages={turns('cached tail')}
+        sessionId="s1"
+        provider="claude"
+        selectedProject={project}
+        createDiff={() => []}
+        onLoadFullTranscript={() => Promise.reject(new Error('offline'))}
+        onNewSession={onNewSession}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'export.trigger' }));
+    await act(async () => { fireEvent.click(screen.getByText('export.handoff.label')); });
+    fireEvent.click(screen.getByRole('button', { name: 'export.trigger' }));
+
+    await waitFor(() => assert.ok(screen.getByText('export.handoff.failed')));
+    assert.equal(onNewSession.mock.calls.length, 0);
+    assert.equal(drafts.has(scope), false);
+  });
+
   it('never replaces a digest when the session has no id yet', async () => {
     await handoff(undefined, 'chat one');
     await handoff(undefined, 'chat two');
