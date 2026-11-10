@@ -161,14 +161,45 @@ test('app-server history stays empty for new or detached sessions without a prov
   }
 });
 
-test('app-server history rejects incomplete turns without a JSONL fallback', async () => {
+for (const itemsView of [undefined, 'summary', 'full']) {
+  test(`app-server history reads supplied items with ${itemsView ?? 'missing'} itemsView`, async () => {
+    const provider = new CodexSessionsProvider({
+      readRuntimeMode: () => 'app-server',
+      appServer: {
+        async readThread() {
+          return { thread: { turns: [{
+            id: 'turn-compatible',
+            ...(itemsView === undefined ? {} : { itemsView }),
+            status: 'completed',
+            items: [
+              { type: 'userMessage', id: 'prompt', content: [{ type: 'text', text: 'Question' }] },
+              { type: 'agentMessage', id: 'answer', text: 'Answer' },
+            ],
+          }] } };
+        },
+      },
+    });
+
+    const options = { providerSessionId: 'thread-compatible' };
+    const history = await provider.fetchHistory('app-history', options);
+    assert.deepEqual(history.messages.map((message) => message.content), ['Question', 'Answer']);
+    assert.equal(history.messages[0].transcriptAnchorId, 'turn-compatible');
+
+    const page = await provider.fetchHistory('app-history', { ...options, limit: 1, offset: 1 });
+    assert.deepEqual(page.messages.map((message) => message.content), ['Question']);
+    assert.equal(page.total, 2);
+    assert.equal(page.hasMore, false);
+  });
+}
+
+test('app-server history accepts an empty items array without a full view marker', async () => {
   const provider = new CodexSessionsProvider({
     readRuntimeMode: () => 'app-server',
     appServer: {
       async readThread() {
         return {
           thread: {
-            id: 'thread-incomplete',
+            id: 'thread-empty',
             turns: [{ id: 'turn-1', itemsView: 'summary', items: [] }],
           },
         };
@@ -176,8 +207,25 @@ test('app-server history rejects incomplete turns without a JSONL fallback', asy
     },
   });
 
-  await assert.rejects(
-    provider.fetchHistory('app-history', { providerSessionId: 'thread-incomplete' }),
-    /incomplete turn item view/,
-  );
+  const history = await provider.fetchHistory('app-history', { providerSessionId: 'thread-empty' });
+  assert.deepEqual(history.messages, []);
+  assert.equal(history.total, 0);
 });
+
+for (const turn of [null, { id: 'missing-items' }, { id: 'invalid-items', itemsView: 'full', items: {} }]) {
+  test(`app-server history rejects a turn without an items array: ${JSON.stringify(turn)}`, async () => {
+    const provider = new CodexSessionsProvider({
+      readRuntimeMode: () => 'app-server',
+      appServer: {
+        async readThread() {
+          return { thread: { turns: [turn] } };
+        },
+      },
+    });
+
+    await assert.rejects(
+      provider.fetchHistory('app-history', { providerSessionId: 'thread-invalid' }),
+      /turn without an items array/,
+    );
+  });
+}

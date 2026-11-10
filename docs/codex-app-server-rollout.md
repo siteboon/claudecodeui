@@ -30,6 +30,9 @@ non-browser callers can pass `codexRuntimeMode=sdk` or `codexRuntimeMode=app-ser
 to the session messages endpoint, or omit it to use the server default.
 Only SDK JSONL history uses the file-stat cache; app-server history is read
 directly so switching modes cannot reuse history from the other runtime.
+App-server history reads the supplied turn `items` arrays even when `itemsView`
+is missing or reports `summary`. A turn without an items array remains an error;
+the reader does not silently omit it or switch to JSONL history.
 The browser also rebuilds the session's persisted-message cache when the runtime
 changes, restarts pagination at the newest page, and ignores late responses from
 the old reader. In-progress streamed messages are preserved.

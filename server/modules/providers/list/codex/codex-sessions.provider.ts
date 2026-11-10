@@ -2454,8 +2454,11 @@ export class CodexSessionsProvider implements IProviderSessions {
     const normalized: NormalizedMessage[] = [];
     for (const rawTurn of thread.turns) {
       const turn = readObjectRecord(rawTurn);
-      if (!turn || turn.itemsView !== 'full' || !Array.isArray(turn.items)) {
-        throw new Error('thread/read returned an incomplete turn item view');
+      // The view marker varies across app-server versions; read the supplied
+      // items even when it is omitted or says `summary`. Invalid payloads must
+      // still fail explicitly instead of silently dropping conversation turns.
+      if (!turn || !Array.isArray(turn.items)) {
+        throw new Error('thread/read returned a turn without an items array');
       }
 
       const timestamp = timestampFromSeconds(turn.startedAt, thread.createdAt);
