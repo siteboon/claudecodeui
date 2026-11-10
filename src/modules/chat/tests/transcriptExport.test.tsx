@@ -284,11 +284,14 @@ describe('handoff digest', () => {
       toolInput: { file_path: `/repo/${'deep/'.repeat(60)}module-${index}.ts`, edits: [] },
       timestamp: new Date('2026-08-24T09:00:00.000Z'),
     }) as unknown as ChatMessage);
-    const messages = [turn('user', 't'.repeat(5000)), ...edits, turn('assistant', 'where it got to')];
+    const messages = [turn('user', 't'.repeat(5000)), ...edits, turn('assistant', `${'r'.repeat(9000)} where it got to`)];
 
     const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude' });
 
     expect(digest.endsWith('where it got to')).toBe(true);
+    expect(digest.length).toBeLessThanOrEqual(16000);
+    expect(digest).toContain('module-39.ts');
+    expect(digest).toMatch(/- _…\d+ more_/);
   });
 
   it('handles an empty transcript', () => {

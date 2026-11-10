@@ -207,16 +207,20 @@ export function buildHandoffMarkdown({
     head.push('', '## Original task', '', task.length > taskCap ? `${task.slice(0, taskCap)}…` : task);
   }
   if (files.size > 0) {
-    // The newest paths, capped so a sweeping refactor cannot crowd out the conversation.
+    // The newest paths, capped by count and to a quarter of maxChars so a sweeping
+    // refactor or deep paths cannot crowd out the conversation.
     const shown = [...files].slice(-40);
+    const listChars = () => shown.reduce((sum, file) => sum + file.length + 5, 0);
+    while (shown.length > 1 && listChars() > maxChars / 4) shown.shift();
     head.push('', '## Files touched', '', ...shown.map((file) => `- \`${file}\``));
     if (files.size > shown.length) head.push(`- _…${files.size - shown.length} more_`);
   }
 
   // Newest turns first until the budget runs out, then back into reading order.
   // 80 reserves room for the section heading and the omitted-turns marker. The
-  // floor keeps the latest turn when a long task and file list fill the head,
-  // at the cost of running past maxChars.
+  // floor keeps the latest turn when a long task and file list fill the head;
+  // both are capped to about a quarter each above, so the total stays within
+  // maxChars unless a single path alone is longer than that quarter.
   let budget = Math.max(maxChars - head.join('\n').length - 80, Math.floor(maxChars / 4));
   const recent: string[] = [];
   for (let index = turns.length - 1; index > taskIndex; index -= 1) {
