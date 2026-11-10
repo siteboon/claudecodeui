@@ -1400,8 +1400,8 @@ export function useChatComposerState({
           attachments: uploadedAttachments,
         },
       });
-      // Only the edit just sent ends; one left open in another chat resumes there.
-      setEditing((current) => (current?.anchorId === editingAnchorId ? null : current));
+      // Only the edit just sent ends; one left open in another chat (a fork can share anchors) resumes there.
+      setEditing((current) => (current?.scope === draftScope && current.anchorId === editingAnchorId ? null : current));
 
       // Recorded under the (possibly just-allocated) session id, so the first
       // message of a new chat lands in the history of the session the user is
@@ -1430,6 +1430,7 @@ export function useChatComposerState({
       attachedFiles,
       buildSendOptions,
       currentSessionId,
+      draftScope,
       editingAnchorId,
       executeCommand,
       isLoading,
