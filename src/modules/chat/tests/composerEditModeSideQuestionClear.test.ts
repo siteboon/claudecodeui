@@ -100,7 +100,7 @@ test('Asking a side question while editing ends edit mode, so the next send is a
   assert.equal(sendFrames[0]?.anchorId, undefined, 'no anchor is carried over from the ended edit');
 });
 
-test('Opening another chat while editing ends edit mode there', async () => {
+test('Opening another chat while editing leaves edit mode out of it', async () => {
   const { view } = render();
 
   await act(async () => { view.result.current.beginEditMessage(EDITED_MESSAGE); });
@@ -109,4 +109,7 @@ test('Opening another chat while editing ends edit mode there', async () => {
   // A new chat in the same project, as "Continue in new chat" opens it.
   await act(async () => { view.rerender({ session: null }); });
   assert.equal(view.result.current.editingAnchorId, null, 'the old chat\'s anchor does not follow into the new one');
+
+  await act(async () => { view.rerender({ session: SESSION }); });
+  assert.equal(view.result.current.editingAnchorId, 'anchor-1', 'back in the first chat, the edit resumes');
 });

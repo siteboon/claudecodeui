@@ -63,7 +63,9 @@ export default function ChatExportMenu({
   // matches what the session itself saw; the operator opts in from this option.
   const [includeSideQuestions, setIncludeSideQuestions] = useState(false);
   // The item whose last run failed shows that in its description; a log line alone left the click looking ignored.
-  const [failedItem, setFailedItem] = useState<TranscriptExportFormat | 'handoff' | null>(null);
+  // Kept per session, since the menu stays mounted when another chat opens.
+  const [failure, setFailure] = useState<{ sessionId: string | null | undefined; item: TranscriptExportFormat | 'handoff' } | null>(null);
+  const failedItem = failure && failure.sessionId === sessionId ? failure.item : null;
 
   if (messages.length === 0) {
     return null;
@@ -76,7 +78,7 @@ export default function ChatExportMenu({
 
   const runExport = async (format: TranscriptExportFormat) => {
     setBusyFormat(format);
-    setFailedItem(null);
+    setFailure(null);
     try {
       await downloadTranscriptExport(format, {
         messages: await loadMessages(),
@@ -88,7 +90,7 @@ export default function ChatExportMenu({
       });
     } catch (error) {
       console.error('Failed to export conversation:', error);
-      setFailedItem(format);
+      setFailure({ sessionId, item: format });
     } finally {
       setBusyFormat(null);
     }
@@ -98,7 +100,7 @@ export default function ChatExportMenu({
   // provider and can edit it before sending.
   const continueInNewChat = async (project: Project, openNewSession: (project: Project) => void) => {
     setBusyFormat('handoff');
-    setFailedItem(null);
+    setFailure(null);
     try {
       const scope = `project:${project.projectId}`;
       const digest = buildHandoffMarkdown({
@@ -120,7 +122,7 @@ export default function ChatExportMenu({
       openNewSession(project);
     } catch (error) {
       console.error('Failed to continue conversation in a new chat:', error);
-      setFailedItem('handoff');
+      setFailure({ sessionId, item: 'handoff' });
     } finally {
       setBusyFormat(null);
     }
