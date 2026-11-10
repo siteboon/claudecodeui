@@ -1,7 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
-import { errorMessage } from '@/shared/utils.js';
+import { errorMessage, SIDE_QUESTION_ANSWER_SEPARATOR } from '@/shared/utils.js';
 import type {
   AnyRecord,
   BackgroundTaskSummary,
@@ -159,8 +159,8 @@ async function runSideQuestionQuery(
         // The seam is not text: it only separates text already delivered,
         // never opens the answer.
         if (hasToolUse && hasText) {
-          sink.delta('\n\n');
-          answer += '\n\n';
+          sink.delta(SIDE_QUESTION_ANSWER_SEPARATOR);
+          answer += SIDE_QUESTION_ANSWER_SEPARATOR;
         }
         continue;
       }

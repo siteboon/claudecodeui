@@ -33,7 +33,15 @@
   },
   "binaryFile": {
     "title": "Binary Dosya",
-    "message": "\"{{fileName}}\" dosyası binary olduğu için metin editöründe gösterilemez."
+    "message": "\"{{fileName}}\" dosyası binary olduğu için metin editöründe gösterilemez.",
+    "download": "Orijinal dosyayı indir",
+    "downloading": "İndiriliyor…",
+    "downloadFailed": "Dosya indirilemedi. Lütfen tekrar deneyin."
+  },
+  "filePreview": {
+    "loading": "Önizleme yükleniyor...",
+    "error": "Bu dosya görüntülenemiyor.",
+    "openInNewTab": "Yeni sekmede aç"
   },
   "unsavedChanges": {
     "confirmClose": "Kaydedilmemiş değişikliklerin var. Bu dosya kapatılsın ve değişiklikler silinsin mi?",

@@ -1560,6 +1560,22 @@ export function findApplicationRoot(startDirectory: string): string {
 export const SIDE_QUESTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
 // ---------------------------
+//----------------- SIDE-QUESTION ANSWER JOINING ------------
+/**
+ * What a side-question runtime streams between two separate pieces of answer
+ * text: Codex `agentMessage` items, opencode text parts, or Claude text on
+ * either side of a tool call. A model often writes a progress note ("I'll read
+ * math.js…") and then the answer as its own message; joined bare, they read
+ * as one run-on sentence ("…what it does.The `add` function…"). The answer is
+ * rendered as Markdown without `breaks`, where a single newline is only a
+ * space, so the seam is a blank line, i.e. a paragraph break.
+ *
+ * Sent only between two pieces, never before the first one, so it cannot
+ * open an answer. Used by the Claude, Codex and opencode side-question code.
+ */
+export const SIDE_QUESTION_ANSWER_SEPARATOR = '\n\n';
+
+// ---------------------------
 //----------------- SIDE-CONVERSATION INSTRUCTIONS ------------
 // Both texts are copied verbatim from Codex's TUI `/side` command,
 // codex-rs/tui/src/app/side.rs at tag rust-v0.166.0
