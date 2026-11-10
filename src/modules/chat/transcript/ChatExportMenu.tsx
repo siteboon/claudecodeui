@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRightLeft, Braces, Download, FileCode2, FileText, Loader2 } from 'lucide-react';
 
@@ -66,6 +66,9 @@ export default function ChatExportMenu({
   // Kept per session, since the menu stays mounted when another chat opens.
   const [failure, setFailure] = useState<{ sessionId: string | null | undefined; item: TranscriptExportFormat | 'handoff' } | null>(null);
   const failedItem = failure && failure.sessionId === sessionId ? failure.item : null;
+  // The chat open now, read after the transcript loads to tell whether the user has moved on.
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
 
   if (messages.length === 0) {
     return null;
@@ -102,9 +105,12 @@ export default function ChatExportMenu({
     setBusyFormat('handoff');
     setFailure(null);
     try {
+      const fullMessages = await loadMessages();
+      // The user opened another chat while it loaded: do not pull them away from it.
+      if (sessionIdRef.current !== sessionId) return;
       const scope = `project:${project.projectId}`;
       const digest = buildHandoffMarkdown({
-        messages: await loadMessages(),
+        messages: fullMessages,
         sessionTitle: sessionTitle?.trim() || t('export.untitled'),
         provider,
       });

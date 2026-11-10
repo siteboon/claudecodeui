@@ -113,3 +113,18 @@ test('Opening another chat while editing leaves edit mode out of it', async () =
   await act(async () => { view.rerender({ session: SESSION }); });
   assert.equal(view.result.current.editingAnchorId, 'anchor-1', 'back in the first chat, the edit resumes');
 });
+
+test('Sending in another chat leaves an edit open in the first chat', async () => {
+  const { view, of } = render();
+
+  await act(async () => { view.result.current.beginEditMessage(EDITED_MESSAGE); });
+  await act(async () => { view.rerender({ session: { id: 'session-2' } }); });
+  await act(async () => { view.result.current.setInput('a message in the other chat'); });
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  assert.equal(of('chat.send').length, 1, 'the other chat sends a plain message');
+
+  await act(async () => { view.rerender({ session: SESSION }); });
+  assert.equal(view.result.current.editingAnchorId, 'anchor-1', 'the first chat\'s edit is still open');
+});

@@ -106,6 +106,28 @@ describe('ChatExportMenu continue in new chat', () => {
     assert.equal(drafts.has(scope), false);
   });
 
+  it('stays put when another chat opens while the transcript loads', async () => {
+    const onNewSession = vi.fn();
+    let finish: (messages: ChatMessage[]) => void = () => {};
+    const props = {
+      messages: turns('first chat'),
+      provider: 'claude',
+      selectedProject: project,
+      createDiff: () => [],
+      onLoadFullTranscript: () => new Promise<ChatMessage[]>((resolve) => { finish = resolve; }),
+      onNewSession,
+    };
+    const view = render(<ChatExportMenu {...props} sessionId="s1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'export.trigger' }));
+    await act(async () => { fireEvent.click(screen.getByText('export.handoff.label')); });
+
+    view.rerender(<ChatExportMenu {...props} sessionId="s2" />);
+    await act(async () => { finish(turns('first chat')); });
+
+    assert.equal(onNewSession.mock.calls.length, 0);
+    assert.equal(drafts.has(scope), false);
+  });
+
   it('never replaces a digest when the session has no id yet', async () => {
     await handoff(undefined, 'chat one');
     await handoff(undefined, 'chat two');

@@ -821,7 +821,8 @@ export function useChatComposerState({
   const clearComposerAfterSideQuestion = useCallback(() => {
     setInput('');
     inputValueRef.current = '';
-    setEditing(null);
+    // Only this chat's edit ends; one left open in another chat resumes there.
+    setEditing((current) => (current?.scope === draftScopeRef.current ? null : current));
     resetCommandMenuState();
     setIsTextareaExpanded(false);
     if (textareaRef.current) {
@@ -1399,7 +1400,8 @@ export function useChatComposerState({
           attachments: uploadedAttachments,
         },
       });
-      setEditing(null);
+      // Only the edit just sent ends; one left open in another chat resumes there.
+      setEditing((current) => (current?.anchorId === editingAnchorId ? null : current));
 
       // Recorded under the (possibly just-allocated) session id, so the first
       // message of a new chat lands in the history of the session the user is
