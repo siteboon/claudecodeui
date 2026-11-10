@@ -66,11 +66,14 @@ export default function ChatExportMenu({
   // Kept per session, since the menu stays mounted when another chat opens.
   const [failure, setFailure] = useState<{ sessionId: string | null | undefined; item: TranscriptExportFormat | 'handoff' } | null>(null);
   const failedItem = failure && failure.sessionId === sessionId ? failure.item : null;
-  // The chat open now, read after the transcript loads to tell whether the user has moved on.
-  const sessionIdRef = useRef(sessionId);
+  // The chat open now, read after the transcript loads to tell whether the user has moved on:
+  // another session, another project (two new chats both lack a session id), or away from the chat.
+  const openChat = `${selectedProject?.projectId ?? ''}:${sessionId ?? ''}`;
+  const openChatRef = useRef<string | null>(null);
   useLayoutEffect(() => {
-    sessionIdRef.current = sessionId;
-  }, [sessionId]);
+    openChatRef.current = openChat;
+    return () => { openChatRef.current = null; };
+  }, [openChat]);
 
   if (messages.length === 0) {
     return null;
@@ -109,7 +112,7 @@ export default function ChatExportMenu({
     try {
       const fullMessages = await loadMessages();
       // The user opened another chat while it loaded: do not pull them away from it.
-      if (sessionIdRef.current !== sessionId) return;
+      if (openChatRef.current !== openChat) return;
       const scope = `project:${project.projectId}`;
       const digest = buildHandoffMarkdown({
         messages: fullMessages,

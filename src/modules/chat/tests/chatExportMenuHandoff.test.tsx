@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { beforeEach, describe, it, vi } from 'vitest';
 import type * as ReactI18nextModule from 'react-i18next';
 
@@ -127,6 +128,57 @@ describe('ChatExportMenu continue in new chat', () => {
     assert.equal(onNewSession.mock.calls.length, 0);
     assert.equal(drafts.has(scope), false);
   });
+
+  it('shows a failed file export on its item, only in the chat it failed in', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const props = {
+      messages: turns('cached tail'),
+      provider: 'claude',
+      selectedProject: project,
+      createDiff: () => [],
+      onLoadFullTranscript: () => Promise.reject(new Error('offline')),
+    };
+    const view = render(<ChatExportMenu {...props} sessionId="s1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'export.trigger' }));
+    await act(async () => { fireEvent.click(screen.getByText('export.markdown.label')); });
+    fireEvent.click(screen.getByRole('button', { name: 'export.trigger' }));
+
+    await waitFor(() => assert.ok(screen.getByText('export.failed')));
+    assert.ok(screen.getByText('export.html.description'), 'the other formats keep their description');
+
+    view.rerender(<ChatExportMenu {...props} sessionId="s2" />);
+    assert.equal(screen.queryByText('export.failed'), null, 'another chat does not inherit the failure');
+  });
+
+  for (const [name, leave] of [
+    ['the menu unmounts', (view: ReturnType<typeof render>) => view.unmount()],
+    ['another project opens', (view: ReturnType<typeof render>, props: ComponentProps<typeof ChatExportMenu>) => {
+      view.rerender(<ChatExportMenu {...props} selectedProject={{ projectId: 'other' } as Project} />);
+    }],
+  ] as const) {
+    it(`stays put when ${name} while the transcript loads`, async () => {
+      const onNewSession = vi.fn();
+      let finish: (messages: ChatMessage[]) => void = () => {};
+      // No session id on either side, so only the project or the unmount tells the chats apart.
+      const props = {
+        messages: turns('first chat'),
+        provider: 'claude',
+        selectedProject: project,
+        createDiff: () => [],
+        onLoadFullTranscript: () => new Promise<ChatMessage[]>((resolve) => { finish = resolve; }),
+        onNewSession,
+      };
+      const view = render(<ChatExportMenu {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'export.trigger' }));
+      await act(async () => { fireEvent.click(screen.getByText('export.handoff.label')); });
+
+      leave(view, props);
+      await act(async () => { finish(turns('first chat')); });
+
+      assert.equal(onNewSession.mock.calls.length, 0);
+      assert.equal(drafts.has(scope), false);
+    });
+  }
 
   it('never replaces a digest when the session has no id yet', async () => {
     await handoff(undefined, 'chat one');
