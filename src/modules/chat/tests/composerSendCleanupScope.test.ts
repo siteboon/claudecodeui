@@ -45,7 +45,11 @@ const backgroundInA: SessionActivityMap = new Map([[
   },
 ]]);
 
-const renderComposer = (initialSession: ProjectSession | null, processingSessions?: SessionActivityMap) => {
+const renderComposer = (
+  initialSession: ProjectSession | null,
+  processingSessions?: SessionActivityMap,
+  { isLoading = false, supportsSteering = false } = {},
+) => {
   const sent: Array<{ type: string; sessionId?: string; content?: string; anchorId?: string }> = [];
   let rerender: ((props: Props) => void) | undefined;
   const view = renderHook(({ session }: Props) =>
@@ -59,7 +63,8 @@ const renderComposer = (initialSession: ProjectSession | null, processingSession
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
       currentProviderModel: 'test-model',
       currentProviderEffort: 'medium',
-      isLoading: false,
+      isLoading,
+      supportsSteering,
       processingSessions,
       supportsSideQuestions: true,
       canAbortSession: false,
@@ -90,6 +95,10 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
     if (String(url) === '/api/assets/files' && init?.method === 'POST') {
       return new Promise<Response>((resolve) => { pendingUploads.push({ resolve }); });
+    }
+    if (String(url) === '/api/user/drafts/queued-message' && init?.method === 'POST') {
+      const { queuedMessage } = JSON.parse(String(init.body)) as { queuedMessage: unknown };
+      return Promise.resolve(jsonResponse({ queuedMessage, appended: false }));
     }
     if (String(url) === '/api/providers/sessions' && init?.method === 'POST') {
       return new Promise<Response>((resolve) => { pendingCreates.push({ resolve }); });
@@ -184,3 +193,30 @@ test('an edit begun in another chat during the upload survives the send', async 
   assert.deepEqual(chatSends().map((message) => message.sessionId), ['session-a']);
   assert.deepEqual(editSends().map((message) => [message.sessionId, message.anchorId]), [['session-b', 'anchor-b']]);
 });
+
+for (const [name, submitOptions] of [
+  ['queued', undefined],
+  ['steered', { steerIntoTurn: true }],
+] as const) {
+  test(`files ${name} from a chat leave the composer after a chat switch, the open chat's text stays`, async () => {
+    const { view } = renderComposer(SESSION_A, undefined, { isLoading: true, supportsSteering: true });
+    const fileA = new File(['a'], 'a.txt');
+    const fileB = new File(['b'], 'b.txt');
+    await act(async () => {
+      view.result.current.setInput('from a');
+      view.result.current.setAttachedFiles([fileA]);
+    });
+    await act(async () => {
+      void view.result.current.handleSubmit({ preventDefault: () => undefined } as never, undefined, submitOptions);
+    });
+    await act(async () => { view.rerender({ session: SESSION_B }); });
+    await act(async () => {
+      view.result.current.setInput('typed in b');
+      view.result.current.setAttachedFiles((files) => [...files, fileB]);
+    });
+    await release(pendingUploads, { attachments: [{ id: 'asset-a' }] });
+
+    assert.deepEqual(view.result.current.attachedFiles, [fileB], 'only the open chat\'s file stays');
+    assert.equal(view.result.current.input, 'typed in b');
+  });
+}

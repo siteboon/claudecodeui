@@ -894,10 +894,13 @@ export function useChatComposerState({
     async (durableDraft: QueuedDraft, queuedSessionKey: string | null, { fromComposer = true } = {}) => {
       const queuedFromOpenComposer = fromComposer
         && (!queuedSessionKey || sessionKeyRef.current === queuedSessionKey);
+      // Attachments are not kept per chat: the queued ones leave even when another chat is open now.
+      if (fromComposer) {
+        setAttachedFiles((files) => files.filter((file) => !durableDraft.attachments.includes(file)));
+      }
       if (queuedFromOpenComposer) {
         setInput('');
         inputValueRef.current = '';
-        setAttachedFiles((files) => files.filter((file) => !durableDraft.attachments.includes(file)));
         setFileErrors(new Map());
         resetCommandMenuState();
         setIsTextareaExpanded(false);
@@ -1022,11 +1025,12 @@ export function useChatComposerState({
         options: { attachments: message.uploadedAttachments },
       });
       recordSentMessage(message.content, steerSessionKey);
+      // Attachments are not kept per chat: the steered ones leave even when another chat is open now.
+      setAttachedFiles((files) => files.filter((file) => !message.attachments.includes(file)));
 
       if (sessionKeyRef.current === steerSessionKey) {
         setInput('');
         inputValueRef.current = '';
-        setAttachedFiles((files) => files.filter((file) => !message.attachments.includes(file)));
         setFileErrors(new Map());
         resetCommandMenuState();
         setIsTextareaExpanded(false);
