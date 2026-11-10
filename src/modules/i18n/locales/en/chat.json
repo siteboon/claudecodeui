@@ -394,9 +394,9 @@
     },
     "handoff": {
       "label": "Continue in new chat",
-      "description": "Short summary as the first message; pick any provider.",
-      "failed": "Could not load the whole conversation. Try again."
+      "description": "Short summary as the first message; pick any provider."
     },
+    "failed": "Failed. Try again.",
     "includeSideQuestions": "Include side questions"
   },
   "schedule": {

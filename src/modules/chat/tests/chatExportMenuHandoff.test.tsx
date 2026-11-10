@@ -101,7 +101,7 @@ describe('ChatExportMenu continue in new chat', () => {
     await act(async () => { fireEvent.click(screen.getByText('export.handoff.label')); });
     fireEvent.click(screen.getByRole('button', { name: 'export.trigger' }));
 
-    await waitFor(() => assert.ok(screen.getByText('export.handoff.failed')));
+    await waitFor(() => assert.ok(screen.getByText('export.failed')));
     assert.equal(onNewSession.mock.calls.length, 0);
     assert.equal(drafts.has(scope), false);
   });

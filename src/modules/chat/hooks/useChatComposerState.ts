@@ -1603,6 +1603,12 @@ export function useChatComposerState({
     return subscribeToChatDrafts(restoreDraft);
   }, [draftScope]);
 
+  // An edit belongs to the chat it started in. Carried into another chat (a new one opened
+  // by "Continue in new chat" included), the next send went out as a rejected `chat.edit-send`.
+  useEffect(() => {
+    setEditingAnchorId(null);
+  }, [draftScope]);
+
   // Only persist text that was typed for the scope it is about to be written
   // to; see the inputState declaration for why the scope travels with the text.
   useEffect(() => {

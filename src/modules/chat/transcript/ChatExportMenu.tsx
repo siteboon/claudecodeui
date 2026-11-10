@@ -62,7 +62,8 @@ export default function ChatExportMenu({
   // Whether the side-question asides go into the file. Off by default, so a plain export
   // matches what the session itself saw; the operator opts in from this option.
   const [includeSideQuestions, setIncludeSideQuestions] = useState(false);
-  const [handoffFailed, setHandoffFailed] = useState(false);
+  // The item whose last run failed shows that in its description; a log line alone left the click looking ignored.
+  const [failedItem, setFailedItem] = useState<TranscriptExportFormat | 'handoff' | null>(null);
 
   if (messages.length === 0) {
     return null;
@@ -75,6 +76,7 @@ export default function ChatExportMenu({
 
   const runExport = async (format: TranscriptExportFormat) => {
     setBusyFormat(format);
+    setFailedItem(null);
     try {
       await downloadTranscriptExport(format, {
         messages: await loadMessages(),
@@ -86,6 +88,7 @@ export default function ChatExportMenu({
       });
     } catch (error) {
       console.error('Failed to export conversation:', error);
+      setFailedItem(format);
     } finally {
       setBusyFormat(null);
     }
@@ -95,7 +98,7 @@ export default function ChatExportMenu({
   // provider and can edit it before sending.
   const continueInNewChat = async (project: Project, openNewSession: (project: Project) => void) => {
     setBusyFormat('handoff');
-    setHandoffFailed(false);
+    setFailedItem(null);
     try {
       const scope = `project:${project.projectId}`;
       const digest = buildHandoffMarkdown({
@@ -108,15 +111,16 @@ export default function ChatExportMenu({
       const draft = readDraftText(scope);
       // Without a session id two chats cannot be told apart, so nothing is replaced.
       const previous = sessionId ? lastHandoffDigests.get(scope) : undefined;
-      const existing = (previous && previous.sessionId === sessionId && draft.endsWith(previous.digest)
-        ? draft.slice(0, -previous.digest.length)
-        : draft).trim();
-      writeDraftText(scope, existing ? `${existing}\n\n${digest}` : digest);
+      // The user's own text stays verbatim; only the old digest and the separator before it go.
+      const existing = previous && previous.sessionId === sessionId && draft.endsWith(previous.digest)
+        ? draft.slice(0, -previous.digest.length).replace(/\n\n$/, '')
+        : draft;
+      writeDraftText(scope, existing.trim() ? `${existing}\n\n${digest}` : digest);
       if (sessionId) lastHandoffDigests.set(scope, { sessionId, digest });
       openNewSession(project);
     } catch (error) {
       console.error('Failed to continue conversation in a new chat:', error);
-      setHandoffFailed(true);
+      setFailedItem('handoff');
     } finally {
       setBusyFormat(null);
     }
@@ -125,7 +129,7 @@ export default function ChatExportMenu({
   const items = FORMATS.map((format) => ({
     key: format.id as string,
     label: t(format.labelKey),
-    description: t(format.descriptionKey),
+    description: t(failedItem === format.id ? 'export.failed' : format.descriptionKey),
     icon: format.icon,
     loading: busyFormat === format.id,
     onSelect: () => { void runExport(format.id); },
@@ -134,7 +138,7 @@ export default function ChatExportMenu({
     items.push({
       key: 'handoff',
       label: t('export.handoff.label'),
-      description: t(handoffFailed ? 'export.handoff.failed' : 'export.handoff.description'),
+      description: t(failedItem === 'handoff' ? 'export.failed' : 'export.handoff.description'),
       icon: ArrowRightLeft,
       loading: busyFormat === 'handoff',
       onSelect: () => { void continueInNewChat(selectedProject, onNewSession); },
