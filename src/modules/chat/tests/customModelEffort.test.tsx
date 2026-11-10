@@ -105,6 +105,7 @@ const createActions = () => {
       updated.push({ provider, input });
     },
     remove: async () => {},
+    setCustomModelsOnly: async () => {},
   };
   return { actions, created, updated };
 };

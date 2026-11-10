@@ -4,6 +4,7 @@
     "account": "Hesap",
     "permissions": "İzinler",
     "mcpServers": "MCP Sunucuları",
+    "skills": "Beceriler",
     "appearance": "Görünüm"
   },
   "account": {
@@ -49,6 +50,21 @@
     "resetToDefaults": "Varsayılanlara Döndür",
     "cancelChanges": "Değişiklikleri İptal Et"
   },
+  "voiceSettings": {
+    "title": "Ses",
+    "description": "OpenAI uyumlu bir ses altyapısıyla konuşarak yazma ve sesli okuma.",
+    "enable": "Sesi etkinleştir",
+    "enableDescription": "Mikrofon düğmesini ve mesajlardaki sesli okuma düğmesini göster.",
+    "backendTitle": "Altyapı",
+    "backendDescription": "OpenAI, Groq veya yerel bir sunucu (LocalAI, Speaches, Kokoro-FastAPI) adresi girin. Sunucu varsayılanını kullanmak için boş bırakın.",
+    "baseUrl": "Temel URL",
+    "apiKey": "API anahtarı",
+    "sttModel": "Konuşmadan yazıya modeli",
+    "ttsModel": "Yazıdan konuşmaya modeli",
+    "voice": "Ses",
+    "format": "Ses biçimi",
+    "note": "Özel bir temel URL doğrudan tarayıcınız tarafından çağrılır ve tarayıcı CORS isteklerine izin vermelidir. Sunucuda ayarlı altyapıyı kullanmak için boş bırakın."
+  },
   "quickSettings": {
     "title": "Hızlı Ayarlar",
     "sections": {
@@ -60,6 +76,7 @@
     "showRawParameters": "Ham parametreleri göster",
     "showThinking": "Düşünmeyi göster",
     "sendByCtrlEnter": "Ctrl+Enter ile gönder",
+    "voiceEnabled": "Ses (mikrofon + sesli okuma)",
     "sendByCtrlEnterDescription": "Etkinleştirildiğinde, Ctrl+Enter'a basmak yalnız Enter yerine mesajı gönderir. IME (girdi metot düzenleyici) kullananlar için yanlışlıkla göndermeyi önler.",
     "dragHandle": {
       "dragging": "Tutamaç sürükleniyor",
@@ -111,11 +128,13 @@
     "appearance": "Görünüm",
     "git": "Git",
     "apiTokens": "API ve Token'lar",
+    "voice": "Ses",
     "tasks": "Görevler",
-    "computer": "Bilgisayar Kullanımı",
+    "browser": "Tarayıcı",
     "notifications": "Bildirimler",
     "plugins": "Eklentiler",
-    "about": "Hakkında"
+    "about": "Hakkında",
+    "computer": "Bilgisayar Kullanımı"
   },
   "notifications": {
     "title": "Bildirimler",
@@ -129,6 +148,13 @@
       "unsupported": "Bu tarayıcıda push bildirimleri desteklenmiyor.",
       "denied": "Push bildirimleri engellendi. Lütfen tarayıcı ayarlarından izin ver."
     },
+    "desktop": {
+      "title": "Bu masaüstü uygulamasına bildirim gönder",
+      "enable": "Bildirimleri aç",
+      "disable": "Bildirimleri kapat",
+      "enabled": "Bu masaüstü uygulaması için bildirimler açık",
+      "unsupported": "Bu sistemde masaüstü bildirimleri desteklenmiyor."
+    },
     "sound": {
       "title": "Ses",
       "description": "Sohbet çalışması tamamlandığında kısa bir ton çal.",
@@ -140,6 +166,61 @@
       "actionRequired": "Aksiyon gerekli",
       "stop": "Çalıştırma durduruldu",
       "error": "Çalıştırma başarısız"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Çalıştırma olaylarını, açık bir tarayıcı olmasa bile kendi HTTP uç noktana (örneğin n8n, Home Assistant veya bir sohbet aktarıcısı) gönderir.",
+      "urlLabel": "Hedef URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Şifresiz HTTP'ye izin ver (yalnızca bu bilgisayar veya yerel ağın için)",
+      "enabled": "Etkin",
+      "save": "Kaydet",
+      "saving": "Kaydediliyor...",
+      "saved": "Kaydedildi",
+      "remove": "Kaldır",
+      "confirmRemove": "Bu webhook kaldırılsın mı? URL'si ve imzalama anahtarı silinecek.",
+      "payloadNote": "Her olay yalnızca türünü, sağlayıcıyı, oturum kimliğini ve sonucu içerir. İstemler, mesajlar ve çıktılar asla gönderilmez.",
+      "eventsNote": "Webhook'lar, Etkinlik Türleri altındaki \"Çalıştırma durduruldu\" ve \"Çalıştırma başarısız\" seçimlerini izler.",
+      "secret": {
+        "title": "İmzalama anahtarı",
+        "description": "Alıcının her isteği doğrulamasını sağlar (Standard Webhooks imzası).",
+        "none": "Ayarlanmadı",
+        "set": "Ayarlandı",
+        "generate": "Oluştur",
+        "rotate": "Yenile",
+        "remove": "Anahtarı kaldır",
+        "showOnce": "Bu anahtarı şimdi kopyala. Bir daha gösterilmeyecek.",
+        "copy": "Anahtarı kopyala",
+        "copied": "Kopyalandı",
+        "dismiss": "Kaydettim"
+      },
+      "test": {
+        "send": "Test olayı gönder",
+        "sending": "Gönderiliyor..."
+      },
+      "status": {
+        "never": "Henüz teslimat yok.",
+        "ok": "Son teslimat başarılı ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Son teslimat başarısız ({{type}}, {{time}}, deneme: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "Kayıtlı URL geçerli değil.",
+        "insecureUrl": "Bu URL için şifresiz HTTP'ye izin verilmiyor.",
+        "blockedAddress": "Hedef adrese izin verilmiyor.",
+        "timeout": "5 saniye içinde yanıt gelmedi.",
+        "redirect": "Alıcı bir yönlendirmeyle yanıt verdi (HTTP {{status}}); yönlendirmeler takip edilmez.",
+        "httpStatus": "Alıcı HTTP {{status}} ile yanıt verdi.",
+        "network": "Alıcıya bağlanılamadı.",
+        "tls": "Alıcının TLS sertifikası reddedildi.",
+        "dropped": "Zaten çok fazla teslimat sürdüğü için atlandı."
+      },
+      "errors": {
+        "invalidUrl": "Geçerli bir http:// veya https:// URL'si gir.",
+        "insecureUrl": "http:// URL'leri için \"Şifresiz HTTP'ye izin ver\" seçeneği gerekir.",
+        "blockedAddress": "Bu adres bir webhook hedefi olamaz (link-local, bulut meta verisi, multicast veya ayrılmış).",
+        "notConfigured": "Önce bir webhook URL'si kaydet.",
+        "requestFailed": "İstek başarısız oldu. Lütfen tekrar dene."
+      }
     }
   },
   "appearanceSettings": {
@@ -182,6 +263,11 @@
         "label": "Yazı Tipi Boyutu",
         "description": "Editör yazı tipi boyutu (piksel)"
       }
+    },
+    "keepProjectsExpanded": {
+      "section": "Kenar çubuğu",
+      "label": "Projeleri açık tut",
+      "description": "Birden fazla projeyi aynı anda açın ve sayfa yenilendikten sonra da hatırlansın."
     }
   },
   "mcpForm": {
@@ -231,7 +317,24 @@
       "saving": "Kaydediliyor...",
       "addServer": "Sunucu Ekle",
       "updateServer": "Sunucuyu Güncelle"
-    }
+    },
+    "scopes": {
+      "userGlobal": "Kullanıcı (Genel)",
+      "userAllProviders": "Kullanıcı (Tüm Sağlayıcılar)",
+      "local": "Claude Yerel",
+      "project": "Proje",
+      "projectAllProviders": "Proje (Tüm Sağlayıcılar)",
+      "userGlobalDesc": "Bu makinedeki tüm projelerde kullanılabilir",
+      "userAllProvidersDesc": "Her sağlayıcının kullanıcı ayarına yazılır ve bu makinedeki tüm projelerde kullanılabilir",
+      "localDesc": "Seçili proje için Claude kullanıcı ayarlarında saklanır",
+      "projectDesc": "Seçili projenin çalışma alanında saklanır",
+      "projectAllProvidersDesc": "Her sağlayıcı için seçili projenin çalışma alanına yazılır"
+    },
+    "unsupportedTransport": "MCP Sunucusu Ekle tüm sağlayıcılarda yalnızca stdio ve http destekler, {{transport}} desteklenmez.",
+    "addToProvider": "{{provider}} için {{action}}",
+    "workingDirectory": "Çalışma Dizini",
+    "envVarNames": "Ortam Değişkeni Adları",
+    "bearerTokenEnvVar": "Bearer Token Ortam Değişkeni"
   },
   "saveStatus": {
     "success": "Ayarlar başarıyla kaydedildi!",
@@ -351,9 +454,56 @@
       },
       "codex": {
         "description": "OpenAI Codex AI asistanı"
+      },
+      "opencode": {
+        "description": "OpenCode komut satırı asistanı"
       }
     },
     "connectionStatus": "Bağlantı Durumu",
+    "cli": {
+      "title": "CLI sürümü",
+      "checking": "Sürüm kontrol ediliyor…",
+      "installed": "Kurulu: v{{version}}",
+      "installedUnknown": "Kurulu (sürüm bilinmiyor)",
+      "versionUnavailable": "Sürüm okunamadı",
+      "updateAvailable": "Güncelleme var: v{{version}}",
+      "upToDate": "Güncel",
+      "bundled": "CloudCLI ile birlikte gelir ve onunla birlikte güncellenir.",
+      "platform": "Barındırma platformu tarafından yönetilir.",
+      "updateTo": "v{{version}} sürümüne güncelle",
+      "runUpdater": "Güncelleyiciyi çalıştır",
+      "updating": "Güncelleniyor…",
+      "updatingHint": "Sunucuda {{command}} çalıştırılıyor. Bu birkaç dakika sürebilir.",
+      "runsCommand": "Sunucuda {{command}} komutunu çalıştırır",
+      "output": "{{command}} çıktısı",
+      "result": {
+        "updated": "v{{version}} sürümüne güncellendi.",
+        "alreadyUpToDate": "Zaten güncel (v{{version}}).",
+        "unchanged": "Güncelleyici bitti ama sürüm hâlâ v{{version}}. Nedenini aşağıdaki çıktıda görebilirsin.",
+        "unchangedUnknown": "Güncelleyici bitti. Çıktısı aşağıda.",
+        "permissionDenied": "Sunucunun kullanıcısının bu CLI'nin kurulu olduğu yere yazma izni yok. Sunucuda {{command}} komutunu bu kurulumun sahibi olarak çalıştır (örneğin sudo ile).",
+        "timedOut": "Güncelleme zamanında bitmedi ve durduruldu. Tamamlamak için sunucuda {{command}} komutunu çalıştır.",
+        "failed": "Güncelleme başarısız oldu (çıkış kodu {{exitCode}}). Çıktısı aşağıda.",
+        "failedQuietly": "Güncelleyici bir hata bildirdi. Çıktısı aşağıda.",
+        "notStarted": "Güncelleyici başlatılamadı.",
+        "busy": "Bu ajan bir oturumda çalışıyor. Bitmesini bekle ya da durdur, sonra güncelle.",
+        "requestFailed": "Güncelleme çalıştırılmadı: {{error}}",
+        "unconfirmed": "Sunucudan yanıt gelmedi ({{error}}). Güncelleme yine de çalışmış olabilir; yukarıdaki sürüm, sunucunun en son bildirdiği sürümdür."
+      }
+    },
+    "subscriptionOverride": {
+      "title": "Abonelik girişiniz kullanılmıyor",
+      "description": "{{variable}} değişkeni {{source}} içinde tanımlı. Bu yüzden Claude Code her isteği aboneliğiniz yerine bu anahtara kullandıkça öde API kullanımı olarak faturalıyor.",
+      "descriptionWithEmail": "{{variable}} değişkeni {{source}} içinde tanımlı. Bu yüzden Claude Code her isteği abonelik girişiniz ({{email}}) yerine bu anahtara kullandıkça öde API kullanımı olarak faturalıyor.",
+      "source": {
+        "process_env": "sunucu ortamı",
+        "settings_file": "~/.claude/settings.json"
+      },
+      "fix": {
+        "process_env": "Aboneliği kullanmak için sunucunun başlatıldığı yerde (.env, kabuk profili, servis dosyası) {{variable}} değişkenini kaldırın ve sunucuyu yeniden başlatın.",
+        "settings_file": "Aboneliği kullanmak için ~/.claude/settings.json dosyasının \"env\" bölümünden {{variable}} değişkenini kaldırın."
+      }
+    },
     "login": {
       "title": "Giriş Yap",
       "reAuthenticate": "Yeniden Kimlik Doğrula",
@@ -464,7 +614,8 @@
     "description": {
       "claude": "Model Context Protocol sunucuları Claude'a ek araçlar ve veri kaynakları sağlar",
       "cursor": "Model Context Protocol sunucuları Cursor'a ek araçlar ve veri kaynakları sağlar",
-      "codex": "Model Context Protocol sunucuları Codex'e ek araçlar ve veri kaynakları sağlar"
+      "codex": "Model Context Protocol sunucuları Codex'e ek araçlar ve veri kaynakları sağlar",
+      "opencode": "Model Context Protocol sunucuları OpenCode'a ek araçlar ve veri kaynakları sağlar"
     },
     "addButton": "MCP Sunucusu Ekle",
     "empty": "Yapılandırılmış MCP sunucusu yok",
@@ -487,6 +638,10 @@
     "actions": {
       "edit": "Sunucuyu düzenle",
       "delete": "Sunucuyu sil"
+    },
+    "managed": {
+      "badge": "Yönetilen",
+      "hint": "CloudCLI tarafından yönetiliyor."
     },
     "help": {
       "title": "Codex MCP Hakkında",
@@ -516,6 +671,12 @@
     "starterPluginLabel": "Başlangıç Eklentisi",
     "starter": "Başlangıç",
     "docs": "Dokümanlar",
+    "sections": {
+      "officialTitle": "Resmî Eklentiler",
+      "officialDescription": "CloudCLI ekibi tarafından geliştirilir, doğrudan kurulmaya hazırdır.",
+      "unofficialTitle": "Diğer Eklentiler",
+      "unofficialDescription": "Diğer kullanıcıların resmî olmayan eklenti ve entegrasyonları. Kurmadan önce kaynak kodunu inceleyin."
+    },
     "starterPlugin": {
       "name": "Proje İstatistikleri",
       "badge": "başlangıç",
@@ -528,11 +689,262 @@
       "description": "Arayüzün içinde tam shell erişimiyle entegre terminal.",
       "install": "Yükle"
     },
+    "scheduledPromptPlugin": {
+      "name": "Zamanlanmış İstemler",
+      "badge": "resmî değil",
+      "description": "Çalışma alanı istemlerini zamanlayın, çalışma geçmişini inceleyin ve yinelenen yerel görevleri yönetin.",
+      "install": "Kur"
+    },
+    "prismCloudCLI": {
+      "name": "PRISM CloudCLI",
+      "badge": "resmî değil",
+      "description": "CloudCLI içinde Claude Code için oturum analizi. Oturumlarınızın neden çok token harcadığını tarayıcıdan çıkmadan görün.",
+      "install": "Kur"
+    },
+    "sessionManagerPlugin": {
+      "name": "Oturumlar",
+      "badge": "resmî değil",
+      "description": "Etkin Claude Code oturumlarını görüntüleyin, yönetin ve sonlandırın.",
+      "install": "Kur"
+    },
+    "tokenCostCalculatorPlugin": {
+      "name": "Token Maliyet Hesaplayıcı",
+      "badge": "resmî değil",
+      "description": "Model fiyatları ve token kullanımından API maliyetini hesaplayın; hazır model fiyatları desteklenir.",
+      "install": "Kur"
+    },
+    "taskQueuePlugin": {
+      "name": "Görev Kuyruğu",
+      "badge": "resmî değil",
+      "description": "Ajan görevlerini görüntülemek, filtrelemek ve başlatmak için görev kuyruğu paneli.",
+      "install": "Kur"
+    },
+    "githubIssuesBoardPlugin": {
+      "name": "GitHub Issues Panosu",
+      "badge": "resmî değil",
+      "description": "GitHub Issues için Kanban panosu; TaskMaster ile çift yönlü eşitleme ve /github-task komut becerisinin otomatik kurulumu",
+      "install": "Kur"
+    },
+    "claudeUsagePlugin": {
+      "name": "Claude Kullanımı",
+      "badge": "resmî değil",
+      "description": "Claude Code plan limitlerini canlı izleyin, 30 günlük token ve maliyet geçmişini inceleyin.",
+      "install": "Kur"
+    },
+    "codexUsagePlugin": {
+      "name": "Codex Kullanımı",
+      "badge": "resmî değil",
+      "description": "Codex plan limitlerini, sıfırlanma zamanını ve 30 günlük hesap token etkinliğini canlı izleyin.",
+      "install": "Kur"
+    },
+    "glmUsagePlugin": {
+      "name": "GLM Kullanımı",
+      "badge": "resmî değil",
+      "description": "GLM/Zhipu kodlama planı kotalarını ve 30 günlük token geçmişini canlı izleyin.",
+      "install": "Kur"
+    },
+    "agentMonitorPlugin": {
+      "name": "Ajan İzleyici",
+      "badge": "resmî değil",
+      "description": "Sohbet bittikten sonra çalışmaya devam eden arka plan alt ajanlarını ve kabukları görün ve durdurun.",
+      "install": "Kur"
+    },
     "morePlugins": "Daha Fazla",
     "enable": "Etkinleştir",
     "disable": "Devre Dışı Bırak",
     "installAriaLabel": "Eklenti git deposu URL'si",
     "tab": "sekme",
     "runningStatus": "çalışıyor"
+  },
+  "skillsPage": {
+    "description": "{{provider}} becerilerini yerel dosyalardan, tam klasörlerden ve projeye özel konumlardan yönetin.",
+    "searchPlaceholder": "Beceri ara...",
+    "searchAriaLabel": "Beceri ara",
+    "clearSearch": "Beceri aramasını temizle",
+    "addSkill": "Beceri Ekle",
+    "refresh": "Yenile",
+    "scanningProjectSkills": "Proje becerileri taranıyor...",
+    "addDialogTitle": "{{provider}} Becerisi Ekle",
+    "addDialogDescription": "Bir SKILL.md dosyası veya tam bir beceri klasörü yükleyin.",
+    "closeDialog": "Beceri ekleme penceresini kapat",
+    "savedSuccessfully": "Beceriler kaydedildi.",
+    "footerHint": "Klasör yüklemelerinde seçilen klasörün adı korunur; tek dosyalarda `SKILL.md` içindeki `name` kullanılır.",
+    "installWithCount_one": "{{count}} Beceriyi Kur",
+    "installWithCount_other": "{{count}} Beceriyi Kur",
+    "installPlain": "Beceriyi Kur",
+    "loading": "{{provider}} becerileri yükleniyor…",
+    "emptyTitle": "Henüz beceri bulunamadı",
+    "emptyDescription": "Yukarıdan genel bir beceri ekleyin veya çalışma alanınızda projeye özel beceri klasörleri oluşturun.",
+    "noMatchTitle": "Eşleşen beceri yok",
+    "noMatchDescription": "Farklı bir komut, ad, kapsam, proje veya kaynak yolu deneyin.",
+    "count_one": "{{count}} beceri",
+    "count_other": "{{count}} beceri",
+    "noDescription": "Beceri başlık bilgisinde açıklama yok.",
+    "pluginBadge": "Eklenti: {{name}}",
+    "projectBadge": "Proje: {{name}}",
+    "source": "Kaynak",
+    "upload": {
+      "dropTitle": "Bir beceri klasörünü veya SKILL.md dosyasını bırakın",
+      "dropHint": "Klasörler betik, başvuru ve varlık dosyaları içerebilir.",
+      "chooseFiles": "Dosya Seç",
+      "chooseFolder": "Klasör Seç",
+      "readyToInstall": "Kuruluma hazır",
+      "filesCount_one": "{{count}} dosya",
+      "filesCount_other": "{{count}} dosya",
+      "markdownFile": "Markdown dosyası",
+      "removeFile": "{{name}} dosyasını kaldır",
+      "hideInstallLocation": "Kurulum konumunu gizle",
+      "whereToInstall": "Nereye kurulacak?"
+    },
+    "errors": {
+      "tooManyFiles": "Bir beceri klasörü en fazla {{max}} dosya içerebilir.",
+      "tooLarge": "Seçilen beceri klasörlerinin toplam boyutu 30 MB'tan küçük olmalıdır.",
+      "noSkillMd": "Seçilen klasörde SKILL.md dosyası yok.",
+      "couldNotReadSkillMd": "{{folder}} içindeki SKILL.md okunamadı.",
+      "readFailed": "Beceri klasörü okunamadı",
+      "dropMarkdown": "Bir veya daha fazla markdown dosyası ya da SKILL.md içeren bir klasör bırakın.",
+      "addFirst": "Önce bir veya daha fazla markdown dosyası ekleyin.",
+      "importFailed": "Beceriler içe aktarılamadı"
+    },
+    "scopes": {
+      "user": "Kullanıcı",
+      "plugin": "Eklenti",
+      "repo": "Depo",
+      "project": "Proje",
+      "admin": "Yönetici",
+      "system": "Sistem"
+    }
+  },
+  "browserUse": {
+    "title": "Tarayıcı",
+    "subtitle": "Yapay zekâ ajanlarının açtığı tarayıcı oturumlarını izleyin.",
+    "openSettings": "Tarayıcı ayarlarını aç",
+    "refreshSessions": "Tarayıcı oturumlarını yenile",
+    "runtimeDisabled": "Kapalı",
+    "runtimeReady": "Hazır",
+    "runtimeInstalling": "Kuruluyor",
+    "runtimeSetupRequired": "Kurulum gerekli",
+    "loadFailed": "Tarayıcı yüklenemedi",
+    "actionFailed": "Tarayıcı işlemi başarısız",
+    "inputPlaceholder": "Metni yazın, sayfaya göndermek için Enter'a basın",
+    "inputSend": "Gönder",
+    "inputEnter": "Enter",
+    "inputTab": "Tab",
+    "inputBackspace": "Backspace",
+    "inputHint": "Sayfada tıklamak için ekran görüntüsüne tıklayın ya da üzerine gelip ok tuşlarını (büyük adımlar için Shift) kullanın, sonra Enter veya Boşluk'a basın.",
+    "surfaceAriaLabel": "Tarayıcı ekran görüntüsü. İmleci ok tuşlarıyla taşıyın, tıklamak için Enter veya Boşluk.",
+    "requestFailed": "İstek başarısız ({{status}})",
+    "never": "Hiç",
+    "unknown": "Bilinmiyor",
+    "justNow": "Az önce",
+    "secondsAgo": "{{n}} sn önce",
+    "minutesAgo": "{{n}} dk önce",
+    "hoursAgo": "{{n}} sa önce",
+    "daysAgo": "{{n}} gün önce",
+    "noPageLoaded": "Sayfa yüklenmedi",
+    "waitingAction": "Bekleniyor",
+    "emptyTitleEnabled": "Henüz tarayıcı oturumu yok",
+    "emptyTitleDisabled": "Tarayıcı kapalı",
+    "emptyDescEnabled": "Bir yapay zekâ görevi Tarayıcı'yı kullanırken ajan tarayıcı oturumları burada görünür.",
+    "emptyDescDisabled": "Ajanların izlenen tarayıcı oturumları açabilmesi için ayarlardan Tarayıcı'yı etkinleştirin.",
+    "runtimeSetupTitle": "Çalışma ortamı kurulumu gerekli",
+    "installing": "Kuruluyor...",
+    "installRuntime": "Çalışma Ortamını Kur",
+    "promptLabel": "İstem",
+    "prompt1": "Tarayıcı ile ödeme akışını incele ve bozuk görünen ekranları bildir.",
+    "prompt2": "<url> adresini Tarayıcı ile aç, sayfayla etkileşime gir ve her adımdan sonra neyin değiştiğini özetle.",
+    "screenshotAlt": "Tarayıcı oturumu ekran görüntüsü",
+    "waitingScreenshot": "Ekran görüntüsü bekleniyor",
+    "waitingScreenshotHint": "Ajanın bir sonraki tarayıcı görüntüsü burada gösterilecek.",
+    "activeCount": "{{n}} etkin",
+    "totalCount": "{{n}} toplam",
+    "updated": "Güncellendi: {{time}}",
+    "statusEmpty": "boş",
+    "fullScreen": "Tam ekran",
+    "stopSession": "Oturumu durdur",
+    "deleteSession": "Oturumu sil",
+    "sessions": "Oturumlar",
+    "noSessions": "Ajan tarayıcı oturumu yok.",
+    "selected": "Seçili",
+    "statusLabel": "Durum",
+    "none": "Yok",
+    "lastAction": "Son işlem",
+    "profileLabel": "Profil",
+    "temporaryProfile": "Geçici",
+    "stop": "Durdur",
+    "delete": "Sil",
+    "sessionFallback": "Tarayıcı oturumu",
+    "close": "Kapat",
+    "statusReadySession": "hazır",
+    "statusStoppedSession": "durduruldu",
+    "statusUnavailableSession": "kullanılamıyor",
+    "installFailed": "Tarayıcı çalışma ortamı kurulamadı"
+  },
+  "browserUseSettings": {
+    "sectionTitle": "Tarayıcı",
+    "sectionDescription": "Ajanların, Tarayıcı sekmesinden izleyebileceğiniz korumalı Playwright tarayıcı oturumları açmasına izin verin.",
+    "enableLabel": "Tarayıcıyı Etkinleştir",
+    "enableDescription": "Tarayıcı'yı desteklenen ajanlara tanıtır. Ajanlar tarayıcı oturumu açabilir; siz izleyebilir, durdurabilir ve silebilirsiniz.",
+    "enableAriaLabel": "Tarayıcıyı Etkinleştir",
+    "playwrightLabel": "Playwright",
+    "chromiumLabel": "Chromium",
+    "statusPrefix": "Durum",
+    "checking": "kontrol ediliyor...",
+    "installed": "kurulu",
+    "missing": "eksik",
+    "ready": "hazır",
+    "setupRequired": "kurulum gerekli",
+    "disabled": "kapalı",
+    "runtimeRequiredTitle": "Tarayıcı çalışma ortamı gerekli",
+    "runtimeRequiredFallback": "Ajanların Tarayıcı oturumu açabilmesi için önce tarayıcı çalışma ortamını kurun.",
+    "installing": "Kuruluyor...",
+    "installRuntime": "Çalışma Ortamını Kur",
+    "loadSettingsFailed": "Tarayıcı ayarları yüklenemedi",
+    "loadStatusFailed": "Tarayıcı durumu yüklenemedi",
+    "saveFailed": "Tarayıcı ayarları kaydedilemedi",
+    "installFailed": "Tarayıcı çalışma ortamı kurulamadı"
+  },
+  "mcpServersAdd": {
+    "menuLabel": "MCP Sunucusu Ekle",
+    "globalButtonLabel": "Genel MCP Sunucusu Ekle",
+    "providerButtonLabel": "{{provider}} MCP Sunucusu Ekle",
+    "globalAddDescription": "Genel MCP Sunucusu Ekle; Claude, Cursor, Codex ve OpenCode'a ortak bir stdio veya HTTP sunucusu yazar.",
+    "providerAddDescription": "{{button}} yalnızca {{provider}} ayarını değiştirir.",
+    "globalModalDescription": "Bu MCP sunucusunu tüm sağlayıcılara ekler: Claude, Cursor, Codex ve OpenCode. Aynı ayarın tüm sağlayıcılarda çalışması gerektiğinden yalnızca stdio ve HTTP desteklenir.",
+    "refreshingScopes": "Proje kapsamları yenileniyor...",
+    "loadingServers": "MCP sunucuları yükleniyor...",
+    "configCwd": "Çalışma dizini",
+    "configEnvVars": "Ortam değişkenleri"
+  },
+  "mcpTeamCard": {
+    "title": "Ekip MCP Ayarları",
+    "description": "MCP sunucu ayarlarını ekibinizle paylaşın. Herkes otomatik olarak eşitlenir.",
+    "proLink": "CloudCLI Pro ile kullanılabilir"
+  },
+  "mcpServersAddErrors": {
+    "loadFailedProvider": "{{provider}} MCP sunucuları yüklenemedi",
+    "deleteFailed": "MCP sunucusu silinemedi",
+    "saveFailed": "MCP sunucusu kaydedilemedi",
+    "saveGlobalFailed": "MCP sunucusu tüm sağlayıcılara kaydedilemedi",
+    "selectProjectRequired": "Proje kapsamlı MCP sunucuları için bir proje seçin",
+    "globalScopeUnsupported": "MCP Sunucusu Ekle tüm sağlayıcılarda yalnızca kullanıcı veya proje kapsamını destekler.",
+    "globalAddFailed": "MCP sunucusu tüm sağlayıcılara eklenemedi. {{details}}",
+    "deleteConfirm": "Bu MCP sunucusunu silmek istediğinizden emin misiniz?",
+    "unknownError": "Bilinmeyen hata"
+  },
+  "about": {
+    "tagline": "Açık kaynaklı yapay zekâ kodlama asistanı arayüzü",
+    "starOnGitHub": "GitHub'da yıldız ver",
+    "docs": "Belgeler",
+    "hostedTitle": "CloudCLI Hosted'ı deneyin",
+    "hostedDescription": "Ekip çalışması, paylaşılan MCP ayarları, ortamlar arası ayar eşitleme ve yönetilen altyapı.",
+    "learnMore": "Daha fazla bilgi",
+    "proFeaturesTitle": "CloudCLI Pro Özellikleri",
+    "syncSettingsTitle": "Ayar Eşitleme",
+    "syncSettingsDescription": "Tercihlerinizi, MCP ayarlarınızı ve temanızı tüm ortamlarınızda eşit tutun.",
+    "teamManagementTitle": "Ekip Yönetimi",
+    "teamManagementDescription": "Ekibiniz için birden fazla kullanıcı, rol tabanlı erişim ve paylaşılan projeler.",
+    "licensed": "AGPL-3.0 lisanslıdır",
+    "proCta": "CloudCLI Pro ile kullanılabilir"
   }
 }

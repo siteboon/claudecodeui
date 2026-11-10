@@ -86,6 +86,7 @@ This is the shared vocabulary every document uses. Both unions are declared in
 | `chat_subscribed` | gateway | Ack for `chat.subscribe`: authoritative processing state plus pending permissions. |
 | `session_upserted` | gateway | Sidebar delta. Owned by the projects state, not by chat. |
 | `loading_progress` | gateway | Project scan progress. |
+| `scheduled_messages_changed` | gateway | A session's scheduled messages changed (scheduled, cancelled, sent or failed). Names the session only; the composer banner reads its list again. |
 | `protocol_error` | gateway | The request was rejected or never started. No `complete` follows. |
 
 One more kind never crosses the wire: **`websocket_reconnected`** is synthesized inside
@@ -100,6 +101,7 @@ Handled by `server/modules/websocket/services/chat-websocket.service.ts`.
 | --- | --- |
 | `chat.send` | Start a run for a session. |
 | `chat.edit-send` | Replace an already-sent message and re-run from that anchor. |
+| `chat.steer` | Send a message into the running turn: the model reads it at its next tool call, without the turn stopping. |
 | `chat.abort` | Stop the running run. |
 | `chat.subscribe` | Watch one or more sessions, replaying from `lastSeq`. |
 | `chat.permission-response` | Answer a `permission_request`. |

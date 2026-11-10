@@ -56,7 +56,8 @@
     "cancel": "İptal",
     "clearSearch": "Aramayı temizle",
     "openCommandPalette": "Komut paletini aç",
-    "attentionRequiredIndicator": "Oturum ilgi bekliyor"
+    "attentionRequiredIndicator": "Oturum ilgi bekliyor",
+    "backgroundWorkIndicator": "Arka planda çalışan iş var"
   },
   "navigation": {
     "chat": "Sohbet",
@@ -108,6 +109,8 @@
     "enterProjectPath": "Lütfen bir proje yolu gir",
     "deleteSessionFailed": "Oturum silinemedi. Lütfen tekrar dene.",
     "deleteSessionError": "Oturum silinirken hata oluştu. Lütfen tekrar dene.",
+    "archiveSessionFailed": "Oturum arşivlenemedi. Lütfen tekrar deneyin.",
+    "archiveSessionError": "Oturum arşivlenirken hata oluştu. Lütfen tekrar deneyin.",
     "renameSessionFailed": "Oturum yeniden adlandırılamadı. Lütfen tekrar dene.",
     "renameSessionError": "Oturum yeniden adlandırılırken hata oluştu. Lütfen tekrar dene.",
     "deleteProjectFailed": "Proje kaldırılamadı. Lütfen tekrar dene.",
@@ -143,6 +146,14 @@
     "projectsScanned_one": "{{count}} proje tarandı",
     "projectsScanned_other": "{{count}} proje tarandı"
   },
+  "recent": {
+    "title": "Son konuşmalar",
+    "emptyTitle": "Henüz konuşma yok",
+    "emptyDescription": "En son güncellenen konuşmalarınız burada görünecek.",
+    "loadFailed": "Son konuşmalar yüklenemedi",
+    "loadMore": "Daha eski konuşmaları yükle",
+    "loadingMore": "Daha fazlası yükleniyor..."
+  },
   "deleteConfirmation": {
     "deleteProject": "Projeyi Kaldır",
     "deleteSession": "Oturumu Sil",
@@ -151,10 +162,9 @@
     "sessionCount_other": "Bu proje {{count}} konuşma içeriyor.",
     "removeFromSidebar": "Yalnızca kenar çubuğundan kaldır",
     "archiveProject": "Projeyi arşivle",
-    "archiveSession": "Oturumu arşivle",
-    "archiveSessionNotice": "Arşivleme, oturumu etkin listeden çıkarır ancak geçmişini korur.",
-    "archivedSessionNotice": "Bu oturum zaten arşivlenmiş. Gizli tutabilir veya kalıcı olarak silebilirsin.",
     "deleteSessionPermanently": "Kalıcı olarak sil",
+    "confirmDeleteSession": "Kalıcı olarak sil",
+    "deleteSessionNotice": "Oturum ve geçmişi silinecek. Bu işlem geri alınamaz.",
     "deleteAllData": "Tüm veriyi kalıcı olarak sil",
     "allConversationsDeleted": "Proje kenar çubuğundan kaldırılacak. Dosyaların, bellek verilerin ve oturum verilerin korunacak.",
     "cannotUndo": "Projeyi sonra tekrar ekleyebilirsin.",

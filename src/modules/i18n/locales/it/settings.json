@@ -139,6 +139,61 @@
       "actionRequired": "Azione richiesta",
       "stop": "Esecuzione interrotta",
       "error": "Esecuzione fallita"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Invia gli eventi di esecuzione al tuo endpoint HTTP (ad esempio n8n, Home Assistant o un relay di chat), anche quando nessun browser è aperto.",
+      "urlLabel": "URL di destinazione",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Consenti HTTP non cifrato (solo per questo computer o la tua rete locale)",
+      "enabled": "Attivato",
+      "save": "Salva",
+      "saving": "Salvataggio...",
+      "saved": "Salvato",
+      "remove": "Rimuovi",
+      "confirmRemove": "Rimuovere questo webhook? L'URL e il segreto di firma verranno eliminati.",
+      "payloadNote": "Ogni evento contiene solo tipo, provider, ID sessione ed esito. Prompt, messaggi e output non vengono mai inviati.",
+      "eventsNote": "I webhook seguono le scelte \"Esecuzione interrotta\" ed \"Esecuzione fallita\" in Tipi di evento.",
+      "secret": {
+        "title": "Segreto di firma",
+        "description": "Permette al tuo ricevitore di verificare ogni richiesta (firma Standard Webhooks).",
+        "none": "Non impostato",
+        "set": "Impostato",
+        "generate": "Genera",
+        "rotate": "Rinnova",
+        "remove": "Rimuovi segreto",
+        "showOnce": "Copia questo segreto ora. Non verrà più mostrato.",
+        "copy": "Copia segreto",
+        "copied": "Copiato",
+        "dismiss": "L'ho salvato"
+      },
+      "test": {
+        "send": "Invia evento di prova",
+        "sending": "Invio..."
+      },
+      "status": {
+        "never": "Nessuna consegna finora.",
+        "ok": "Ultima consegna riuscita ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Ultima consegna non riuscita ({{type}}, {{time}}, tentativi: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "L'URL salvato non è valido.",
+        "insecureUrl": "L'HTTP non cifrato non è consentito per questo URL.",
+        "blockedAddress": "L'indirizzo di destinazione non è consentito.",
+        "timeout": "Nessuna risposta entro 5 secondi.",
+        "redirect": "Il ricevitore ha risposto con un reindirizzamento (HTTP {{status}}), che non viene seguito.",
+        "httpStatus": "Il ricevitore ha risposto HTTP {{status}}.",
+        "network": "Impossibile connettersi al ricevitore.",
+        "tls": "Il certificato TLS del ricevitore è stato rifiutato.",
+        "dropped": "Saltato perché erano già in corso troppe consegne."
+      },
+      "errors": {
+        "invalidUrl": "Inserisci un URL http:// o https:// valido.",
+        "insecureUrl": "Gli URL http:// richiedono \"Consenti HTTP non cifrato\".",
+        "blockedAddress": "Questo indirizzo non può essere una destinazione webhook (link-local, metadati cloud, multicast o riservato).",
+        "notConfigured": "Salva prima un URL del webhook.",
+        "requestFailed": "La richiesta non è riuscita. Riprova."
+      }
     }
   },
   "appearanceSettings": {
@@ -353,6 +408,37 @@
       }
     },
     "connectionStatus": "Stato connessione",
+    "cli": {
+      "title": "Versione della CLI",
+      "checking": "Verifica della versione…",
+      "installed": "Installata: v{{version}}",
+      "installedUnknown": "Installata (versione sconosciuta)",
+      "versionUnavailable": "Impossibile leggere la versione",
+      "updateAvailable": "Aggiornamento disponibile: v{{version}}",
+      "upToDate": "Aggiornata",
+      "bundled": "Inclusa in CloudCLI e aggiornata insieme a esso.",
+      "platform": "Gestita dalla piattaforma di hosting.",
+      "updateTo": "Aggiorna a v{{version}}",
+      "runUpdater": "Esegui aggiornamento",
+      "updating": "Aggiornamento…",
+      "updatingHint": "Esecuzione di {{command}} sul server. Può richiedere qualche minuto.",
+      "runsCommand": "Esegue {{command}} sul server",
+      "output": "Output di {{command}}",
+      "result": {
+        "updated": "Aggiornata a v{{version}}.",
+        "alreadyUpToDate": "Già aggiornata (v{{version}}).",
+        "unchanged": "L'aggiornamento è terminato, ma la versione è ancora v{{version}}. L'output qui sotto spiega perché.",
+        "unchangedUnknown": "L'aggiornamento è terminato. L'output è qui sotto.",
+        "permissionDenied": "L'utente del server non può scrivere dove è installata questa CLI. Esegui {{command}} sul server come proprietario di quell'installazione (ad esempio con sudo).",
+        "timedOut": "L'aggiornamento non è terminato in tempo ed è stato interrotto. Esegui {{command}} sul server per completarlo.",
+        "failed": "L'aggiornamento non è riuscito (codice di uscita {{exitCode}}). L'output è qui sotto.",
+        "failedQuietly": "L'aggiornamento ha segnalato un errore. L'output è qui sotto.",
+        "notStarted": "Impossibile avviare l'aggiornamento.",
+        "busy": "Questo agente sta lavorando in una sessione. Attendi che finisca o fermalo, poi aggiorna.",
+        "requestFailed": "L'aggiornamento non è stato eseguito: {{error}}",
+        "unconfirmed": "Nessuna risposta dal server ({{error}}). L'aggiornamento potrebbe essere stato eseguito comunque; la versione qui sopra è l'ultima comunicata dal server."
+      }
+    },
     "login": {
       "title": "Accedi",
       "reAuthenticate": "Ri-autenticati",

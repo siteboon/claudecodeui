@@ -145,6 +145,61 @@
       "actionRequired": "Vyžadována akce",
       "stop": "Běh zastaven",
       "error": "Běh selhal"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Odesílá události běhů na váš vlastní HTTP endpoint (například n8n, Home Assistant nebo chatový relay), i když není otevřený žádný prohlížeč.",
+      "urlLabel": "Cílová URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Povolit nešifrované HTTP (jen pro tento počítač nebo vaši místní síť)",
+      "enabled": "Zapnuto",
+      "save": "Uložit",
+      "saving": "Ukládání...",
+      "saved": "Uloženo",
+      "remove": "Odebrat",
+      "confirmRemove": "Odebrat tento webhook? Jeho URL a podpisový klíč budou smazány.",
+      "payloadNote": "Každá událost obsahuje jen svůj typ, poskytovatele, ID relace a výsledek. Prompty, zprávy ani výstupy se nikdy neodesílají.",
+      "eventsNote": "Webhooky se řídí volbami „Běh zastaven“ a „Běh selhal“ v sekci Typy událostí.",
+      "secret": {
+        "title": "Podpisový klíč",
+        "description": "Umožňuje příjemci ověřit každý požadavek (podpis Standard Webhooks).",
+        "none": "Nenastaven",
+        "set": "Nastaven",
+        "generate": "Vygenerovat",
+        "rotate": "Obnovit",
+        "remove": "Odebrat klíč",
+        "showOnce": "Zkopírujte si tento klíč hned. Znovu se už nezobrazí.",
+        "copy": "Kopírovat klíč",
+        "copied": "Zkopírováno",
+        "dismiss": "Mám uloženo"
+      },
+      "test": {
+        "send": "Odeslat testovací událost",
+        "sending": "Odesílání..."
+      },
+      "status": {
+        "never": "Zatím žádná doručení.",
+        "ok": "Poslední doručení proběhlo ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Poslední doručení selhalo ({{type}}, {{time}}, pokusy: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "Uložená URL není platná.",
+        "insecureUrl": "Nešifrované HTTP není pro tuto URL povoleno.",
+        "blockedAddress": "Cílová adresa není povolena.",
+        "timeout": "Žádná odpověď do 5 sekund.",
+        "redirect": "Příjemce odpověděl přesměrováním (HTTP {{status}}), které se nesleduje.",
+        "httpStatus": "Příjemce odpověděl HTTP {{status}}.",
+        "network": "Nepodařilo se připojit k příjemci.",
+        "tls": "TLS certifikát příjemce byl odmítnut.",
+        "dropped": "Přeskočeno, protože už probíhalo příliš mnoho doručení."
+      },
+      "errors": {
+        "invalidUrl": "Zadejte platnou URL http:// nebo https://.",
+        "insecureUrl": "URL http:// vyžadují volbu „Povolit nešifrované HTTP“.",
+        "blockedAddress": "Tato adresa nemůže být cílem webhooku (link-local, cloudová metadata, multicast nebo rezervovaná).",
+        "notConfigured": "Nejprve uložte URL webhooku.",
+        "requestFailed": "Požadavek selhal. Zkuste to prosím znovu."
+      }
     }
   },
   "appearanceSettings": {
@@ -372,6 +427,37 @@
       }
     },
     "connectionStatus": "Stav připojení",
+    "cli": {
+      "title": "Verze CLI",
+      "checking": "Ověřování verze…",
+      "installed": "Nainstalováno: v{{version}}",
+      "installedUnknown": "Nainstalováno (verze neznámá)",
+      "versionUnavailable": "Verzi se nepodařilo zjistit",
+      "updateAvailable": "K dispozici je aktualizace: v{{version}}",
+      "upToDate": "Aktuální",
+      "bundled": "Dodává se s CloudCLI a aktualizuje se spolu s ním.",
+      "platform": "Spravováno hostingovou platformou.",
+      "updateTo": "Aktualizovat na v{{version}}",
+      "runUpdater": "Spustit aktualizaci",
+      "updating": "Aktualizace…",
+      "updatingHint": "Na serveru běží {{command}}. Může to trvat několik minut.",
+      "runsCommand": "Spustí na serveru {{command}}",
+      "output": "Výstup příkazu {{command}}",
+      "result": {
+        "updated": "Aktualizováno na v{{version}}.",
+        "alreadyUpToDate": "Již aktuální (v{{version}}).",
+        "unchanged": "Aktualizace doběhla, ale verze je stále v{{version}}. Důvod uvádí výstup níže.",
+        "unchangedUnknown": "Aktualizace doběhla. Výstup je níže.",
+        "permissionDenied": "Uživatel serveru nemá oprávnění zapisovat tam, kde je tato CLI nainstalována. Spusťte na serveru {{command}} jako vlastník této instalace (například pomocí sudo).",
+        "timedOut": "Aktualizace nedoběhla včas a byla zastavena. Dokončete ji spuštěním {{command}} na serveru.",
+        "failed": "Aktualizace selhala (návratový kód {{exitCode}}). Výstup je níže.",
+        "failedQuietly": "Aktualizační program ohlásil chybu. Výstup je níže.",
+        "notStarted": "Aktualizační program se nepodařilo spustit.",
+        "busy": "Tento agent právě pracuje v relaci. Počkejte, až skončí, nebo ho zastavte a pak aktualizujte.",
+        "requestFailed": "Aktualizace se nespustila: {{error}}",
+        "unconfirmed": "Ze serveru nepřišla žádná odpověď ({{error}}). Aktualizace mohla přesto proběhnout; verze výše je poslední, kterou server nahlásil."
+      }
+    },
     "login": {
       "title": "Přihlášení",
       "reAuthenticate": "Znovu ověřit",
@@ -567,12 +653,6 @@
       "name": "Plánované prompty",
       "badge": "neoficiální",
       "description": "Plánujte prompty v pracovním prostoru, procházejte historii běhů a spravujte opakované lokální úkoly.",
-      "install": "Instalovat"
-    },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "neoficiální",
-      "description": "Hlídá dlouho běžící relace Claude Code, zda nezamrzly, a zpřístupňuje ovládání procesů.",
       "install": "Instalovat"
     },
     "prismCloudCLI": {

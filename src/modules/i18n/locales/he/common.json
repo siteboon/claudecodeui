@@ -450,6 +450,7 @@
     "backgroundTasks": "משימות ברקע",
     "backgroundAgent": "סוכן",
     "backgroundCommand": "פקודה",
+    "backgroundMonitor": "מוניטור",
     "stopTask": "עצירה",
     "taskRowNotLoaded": "הופעלה מוקדם יותר בשיחה הזו; לחיצה לטעינה",
     "taskOfAgent": "הופעלה על ידי אחד הסוכנים של הסשן הזה"

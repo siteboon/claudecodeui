@@ -50,6 +50,10 @@ Both runtimes use `on-request` approvals with the workspace-write sandbox in
 the default permission mode. App-server supports interactive approval prompts;
 the SDK integration cannot approve those requests interactively.
 
+Side questions use a separate, short-lived app-server process with an ephemeral
+read-only fork, regardless of the selected chat runtime. Cancelling a side
+question releases that process without stopping the main conversation.
+
 App-server RPC requests have a 30-second default deadline, including thread
 forks and initialization. A stalled initialization stops the child process;
 other unanswered requests fail without switching runtimes. This deadline

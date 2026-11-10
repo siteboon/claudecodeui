@@ -140,6 +140,61 @@
       "actionRequired": "需要處理",
       "stop": "執行已停止",
       "error": "執行失敗"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "即使沒有開啟瀏覽器，也會把執行事件傳送到您自己的 HTTP 端點（例如 n8n、Home Assistant 或聊天轉送服務）。",
+      "urlLabel": "目標 URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "允許未加密的 HTTP（僅限本機或本地網路）",
+      "enabled": "已啟用",
+      "save": "儲存",
+      "saving": "正在儲存...",
+      "saved": "已儲存",
+      "remove": "移除",
+      "confirmRemove": "移除此 Webhook？其 URL 和簽章密鑰將被刪除。",
+      "payloadNote": "每個事件只包含類型、提供者、工作階段 ID 和結果。絕不會傳送提示詞、訊息或輸出。",
+      "eventsNote": "Webhook 會依照「事件類型」中「執行已停止」和「執行失敗」的設定。",
+      "secret": {
+        "title": "簽章密鑰",
+        "description": "讓接收端可以驗證每個請求（Standard Webhooks 簽章）。",
+        "none": "未設定",
+        "set": "已設定",
+        "generate": "產生",
+        "rotate": "輪替",
+        "remove": "移除密鑰",
+        "showOnce": "請立即複製此密鑰，它不會再次顯示。",
+        "copy": "複製密鑰",
+        "copied": "已複製",
+        "dismiss": "我已儲存"
+      },
+      "test": {
+        "send": "傳送測試事件",
+        "sending": "正在傳送..."
+      },
+      "status": {
+        "never": "尚無傳遞紀錄。",
+        "ok": "上次傳遞成功（{{type}}，{{time}}）：HTTP {{status}}",
+        "failed": "上次傳遞失敗（{{type}}，{{time}}，嘗試次數：{{attempts}}）：{{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "已儲存的 URL 無效。",
+        "insecureUrl": "此 URL 不允許使用未加密的 HTTP。",
+        "blockedAddress": "不允許使用該目標位址。",
+        "timeout": "5 秒內沒有回應。",
+        "redirect": "接收端回傳了重新導向（HTTP {{status}}），不會跟隨重新導向。",
+        "httpStatus": "接收端回傳了 HTTP {{status}}。",
+        "network": "無法連線到接收端。",
+        "tls": "接收端的 TLS 憑證遭到拒絕。",
+        "dropped": "已略過，因為進行中的傳遞過多。"
+      },
+      "errors": {
+        "invalidUrl": "請輸入有效的 http:// 或 https:// URL。",
+        "insecureUrl": "http:// URL 需要勾選「允許未加密的 HTTP」。",
+        "blockedAddress": "此位址不能作為 Webhook 目標（鏈路本地、雲端中繼資料、多點傳送或保留位址）。",
+        "notConfigured": "請先儲存 Webhook URL。",
+        "requestFailed": "請求失敗，請再試一次。"
+      }
     }
   },
   "appearanceSettings": {
@@ -354,6 +409,37 @@
       }
     },
     "connectionStatus": "連線狀態",
+    "cli": {
+      "title": "CLI 版本",
+      "checking": "正在檢查版本…",
+      "installed": "已安裝：v{{version}}",
+      "installedUnknown": "已安裝（版本不明）",
+      "versionUnavailable": "無法讀取版本",
+      "updateAvailable": "有可用更新：v{{version}}",
+      "upToDate": "已是最新",
+      "bundled": "隨 CloudCLI 一起提供，並與其一同更新。",
+      "platform": "由代管平台管理。",
+      "updateTo": "更新至 v{{version}}",
+      "runUpdater": "執行更新程式",
+      "updating": "正在更新…",
+      "updatingHint": "正在伺服器上執行 {{command}}，可能需要幾分鐘。",
+      "runsCommand": "在伺服器上執行 {{command}}",
+      "output": "{{command}} 的輸出",
+      "result": {
+        "updated": "已更新至 v{{version}}。",
+        "alreadyUpToDate": "已是最新版本（v{{version}}）。",
+        "unchanged": "更新程式已結束，但版本仍為 v{{version}}。原因請見下方輸出。",
+        "unchangedUnknown": "更新程式已結束，輸出請見下方。",
+        "permissionDenied": "伺服器使用者沒有權限寫入此 CLI 的安裝位置。請以該安裝的擁有者身分在伺服器上執行 {{command}}（例如使用 sudo）。",
+        "timedOut": "更新未能及時完成，已被停止。請在伺服器上執行 {{command}} 以完成更新。",
+        "failed": "更新失敗（結束代碼 {{exitCode}}），輸出請見下方。",
+        "failedQuietly": "更新程式回報了失敗，輸出請見下方。",
+        "notStarted": "無法啟動更新程式。",
+        "busy": "此代理正在某個工作階段中執行。請等待其完成或將其停止，然後再更新。",
+        "requestFailed": "未執行更新：{{error}}",
+        "unconfirmed": "伺服器沒有回應（{{error}}）。更新可能已經執行；上方是伺服器最後回報的版本。"
+      }
+    },
     "login": {
       "title": "登入",
       "reAuthenticate": "重新驗證",

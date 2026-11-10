@@ -165,6 +165,61 @@
       "actionRequired": "Action required",
       "stop": "Run stopped",
       "error": "Run failed"
+    },
+    "webhook": {
+      "title": "Webhook",
+      "description": "Send run events to your own HTTP endpoint (for example n8n, Home Assistant or a chat relay), even while no browser is open.",
+      "urlLabel": "Destination URL",
+      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "allowHttp": "Allow plain HTTP (unencrypted; only for this machine or your local network)",
+      "enabled": "Enabled",
+      "save": "Save",
+      "saving": "Saving...",
+      "saved": "Saved",
+      "remove": "Remove",
+      "confirmRemove": "Remove this webhook? Its URL and signing secret will be deleted.",
+      "payloadNote": "Each event carries only its type, provider, session ID and outcome. Prompts, messages and output are never sent.",
+      "eventsNote": "Webhooks follow the \"Run stopped\" and \"Run failed\" choices under Event Types.",
+      "secret": {
+        "title": "Signing secret",
+        "description": "Lets your receiver verify each request (Standard Webhooks signature).",
+        "none": "Not set",
+        "set": "Set",
+        "generate": "Generate",
+        "rotate": "Rotate",
+        "remove": "Remove secret",
+        "showOnce": "Copy this secret now. It will not be shown again.",
+        "copy": "Copy secret",
+        "copied": "Copied",
+        "dismiss": "I've saved it"
+      },
+      "test": {
+        "send": "Send test event",
+        "sending": "Sending..."
+      },
+      "status": {
+        "never": "No deliveries yet.",
+        "ok": "Last delivery succeeded ({{type}}, {{time}}): HTTP {{status}}",
+        "failed": "Last delivery failed ({{type}}, {{time}}, attempts: {{attempts}}): {{reason}}"
+      },
+      "reasons": {
+        "invalidUrl": "The saved URL is not valid.",
+        "insecureUrl": "Plain HTTP is not allowed for this URL.",
+        "blockedAddress": "The destination address is not allowed.",
+        "timeout": "No answer within 5 seconds.",
+        "redirect": "The receiver answered with a redirect (HTTP {{status}}), which is not followed.",
+        "httpStatus": "The receiver answered HTTP {{status}}.",
+        "network": "Could not connect to the receiver.",
+        "tls": "The receiver's TLS certificate was rejected.",
+        "dropped": "Skipped because too many deliveries were already in progress."
+      },
+      "errors": {
+        "invalidUrl": "Enter a valid http:// or https:// URL.",
+        "insecureUrl": "Plain http:// URLs need \"Allow plain HTTP\".",
+        "blockedAddress": "This address cannot be a webhook destination (link-local, cloud metadata, multicast or reserved).",
+        "notConfigured": "Save a webhook URL first.",
+        "requestFailed": "The request failed. Please try again."
+      }
     }
   },
   "appearanceSettings": {
@@ -207,6 +262,11 @@
         "label": "Font Size",
         "description": "Editor font size in pixels"
       }
+    },
+    "keepProjectsExpanded": {
+      "section": "Sidebar",
+      "label": "Keep projects expanded",
+      "description": "Open several projects together and remember them after reloading."
     }
   },
   "mcpForm": {
@@ -399,6 +459,37 @@
       }
     },
     "connectionStatus": "Connection Status",
+    "cli": {
+      "title": "CLI version",
+      "checking": "Checking version…",
+      "installed": "Installed: v{{version}}",
+      "installedUnknown": "Installed (version unknown)",
+      "versionUnavailable": "Could not read the version",
+      "updateAvailable": "Update available: v{{version}}",
+      "upToDate": "Up to date",
+      "bundled": "Ships with CloudCLI and is updated together with it.",
+      "platform": "Managed by the hosting platform.",
+      "updateTo": "Update to v{{version}}",
+      "runUpdater": "Run updater",
+      "updating": "Updating…",
+      "updatingHint": "Running {{command}} on the server. This can take a few minutes.",
+      "runsCommand": "Runs {{command}} on the server",
+      "output": "Output of {{command}}",
+      "result": {
+        "updated": "Updated to v{{version}}.",
+        "alreadyUpToDate": "Already up to date (v{{version}}).",
+        "unchanged": "The updater finished and the version is still v{{version}}. Its output below says why.",
+        "unchangedUnknown": "The updater finished. Its output is below.",
+        "permissionDenied": "The server's user is not allowed to write where this CLI is installed. Run {{command}} on the server as the owner of that install (for example with sudo).",
+        "timedOut": "The update did not finish in time and was stopped. Run {{command}} on the server to finish it.",
+        "failed": "The update failed (exit code {{exitCode}}). Its output is below.",
+        "failedQuietly": "The updater reported a failure. Its output is below.",
+        "notStarted": "The updater could not be started.",
+        "busy": "This agent is working in a session. Wait for it to finish or stop it, then update.",
+        "requestFailed": "The update did not run: {{error}}",
+        "unconfirmed": "No answer came back from the server ({{error}}). The update may have run anyway; the version above is the last one the server reported."
+      }
+    },
     "subscriptionOverride": {
       "title": "Your subscription login is not being used",
       "description": "{{variable}} is set in {{source}}, so Claude Code bills every request to that key as pay-as-you-go API usage instead of using your subscription login.",
@@ -631,12 +722,6 @@
       "description": "Schedule workspace prompts, review run history, and manage recurring local tasks.",
       "install": "Install"
     },
-    "claudeWatchPlugin": {
-      "name": "Claude Watch",
-      "badge": "unofficial",
-      "description": "Watch long-running Claude Code sessions for hangs and expose process controls.",
-      "install": "Install"
-    },
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "unofficial",
@@ -768,6 +853,13 @@
     "runtimeSetupRequired": "Setup required",
     "loadFailed": "Failed to load Browser",
     "actionFailed": "Browser action failed",
+    "inputPlaceholder": "Type text, then press Enter to send it to the page",
+    "inputSend": "Send",
+    "inputEnter": "Enter",
+    "inputTab": "Tab",
+    "inputBackspace": "Backspace",
+    "inputHint": "Click the screenshot to click in the page, or focus it and use the arrow keys (Shift for larger steps) then Enter or Space.",
+    "surfaceAriaLabel": "Browser screenshot. Use arrow keys to move the pointer, Enter or Space to click.",
     "requestFailed": "Request failed ({{status}})",
     "never": "Never",
     "unknown": "Unknown",

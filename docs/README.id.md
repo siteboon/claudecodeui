@@ -175,13 +175,13 @@ CloudCLI memiliki sistem plugin yang memungkinkan Anda menambahkan tab kustom de
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | Menampilkan jumlah file, baris kode, rincian jenis file, file terbesar, dan file yang baru diubah untuk project saat ini |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | Terminal xterm.js lengkap dengan dukungan multi-tab |
-| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | Memantau session Claude Code yang berjalan lama untuk mendeteksi hang dan menyediakan kontrol proses |
 | **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | Membuat prompt terjadwal dalam lingkup workspace dan menjalankannya melalui CLI lokal seperti Codex atau Claude Code |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | Menyediakan informasi session untuk Claude Code di dalam CloudCLI, termasuk visibilitas penggunaan token |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | Melihat, mengelola, dan menghentikan session Claude Code yang aktif |
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Menghitung biaya API dari harga model dan penggunaan token, dengan dukungan preset harga model |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Dashboard antrean tugas untuk melihat, memfilter, dan menjalankan tugas agent |
 | **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | Papan Kanban untuk GitHub Issues dengan sinkronisasi TaskMaster dua arah dan instalasi otomatis skill CLI /github-task |
+| **[ccx](https://github.com/AaronWong1999/cloudcli-plugin-ccx)** | Menampilkan penggunaan Claude dan Codex serta menyerahkan session yang sedang terbuka ke agent lainnya beserta riwayat percakapannya (macOS, memerlukan ccx) |
 
 ### Buat Plugin Anda Sendiri
 

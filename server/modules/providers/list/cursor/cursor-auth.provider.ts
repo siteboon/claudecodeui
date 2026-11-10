@@ -1,7 +1,8 @@
 import spawn from 'cross-spawn';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
-import type { ProviderAuthStatus } from '@/shared/types.js';
+import type { CliVersionProbe, ProviderAuthStatus } from '@/shared/types.js';
+import { probeCliVersion } from '@/shared/utils.js';
 
 type CursorLoginStatus = {
   authenticated: boolean;
@@ -18,27 +19,23 @@ const STATUS_TIMEOUT_MS = 20_000;
 
 export class CursorProviderAuth implements IProviderAuth {
   /**
-   * Checks whether the cursor-agent CLI is available on this host.
+   * Checks whether the cursor-agent CLI is available on this host, and which version it is.
    */
-  private checkInstalled(): boolean {
-    try {
-      spawn.sync('cursor-agent', ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return true;
-    } catch {
-      return false;
-    }
+  checkInstalled(): CliVersionProbe {
+    return probeCliVersion('cursor-agent');
   }
 
   /**
    * Returns Cursor CLI installation and login status.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const { installed, version: installedVersion } = this.checkInstalled();
 
     if (!installed) {
       return {
         installed,
         provider: 'cursor',
+        installedVersion,
         authenticated: false,
         email: null,
         method: null,
@@ -51,6 +48,7 @@ export class CursorProviderAuth implements IProviderAuth {
     return {
       installed,
       provider: 'cursor',
+      installedVersion,
       authenticated: login.authenticated,
       email: login.email,
       method: login.method,

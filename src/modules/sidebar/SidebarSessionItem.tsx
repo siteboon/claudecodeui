@@ -1,11 +1,12 @@
 import { memo, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { Check, CheckSquare, Edit2, Loader2, MoreHorizontal, Square, Trash2, X } from 'lucide-react';
+import { Archive, Check, CheckSquare, Edit2, GitBranch, Loader2, MoreHorizontal, Square, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
+import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
 import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
@@ -29,6 +30,7 @@ type SidebarSessionItemProps = {
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
+  onArchiveSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Branches this session into an independent one; absent when its provider cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
@@ -41,7 +43,7 @@ type SidebarSessionItemProps = {
   t: TFunction;
 };
 
-/** Rendered by SidebarProjectSessions for one session row, including its rename, copy and delete controls. */
+/** Rendered by SidebarProjectSessions for one session row, including its rename, copy, fork, archive and delete controls. */
 function SidebarSessionItem({
   project,
   session,
@@ -58,6 +60,7 @@ function SidebarSessionItem({
   onSaveEditingSession,
   onProjectSelect,
   onSessionSelect,
+  onArchiveSession,
   onDeleteSession,
   onForkSession,
   isSelecting,
@@ -87,6 +90,11 @@ function SidebarSessionItem({
   // which owns its own.
   const { copyState, copyLabel, setOptionsOpen, handleCopyAction, isCopyPending, CopyStateIcon } =
     useProviderSessionIdCopy(session.id, providerLabel);
+
+  // The mobile sheet follows the same capability and running-session rules as
+  // the desktop SessionOptions menu. The capability request is shared by rows.
+  const forkableProviders = useSessionForkingProviders();
+  const canFork = Boolean(onForkSession) && forkableProviders.has(session.__provider) && !isProcessing;
 
   // Sessions are owned by a project identified by `projectId` (DB primary key)
   // after the projectName → projectId migration.
@@ -347,18 +355,51 @@ function SidebarSessionItem({
                   </span>
                 </button>
 
-                {!isProcessing && (
+                {canFork && (
                   <button
                     type="button"
                     onClick={() => {
                       setMobileOptionsOpen(false);
-                      requestDeleteSession();
+                      onForkSession?.(session);
                     }}
-                    className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-red-600 transition-colors active:bg-red-500/10 dark:text-red-400"
+                    className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
                   >
-                    <Trash2 className="h-5 w-5 flex-shrink-0" />
-                    <span className="text-sm font-medium">Archive or delete session</span>
+                    <GitBranch className="h-5 w-5 flex-shrink-0" />
+                    <span>
+                      <span className="block text-sm font-medium">Fork session</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Continue from a copy, leaving this one untouched.
+                      </span>
+                    </span>
                   </button>
+                )}
+
+                {!isProcessing && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileOptionsOpen(false);
+                        onArchiveSession(session.id);
+                      }}
+                      className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
+                    >
+                      <Archive className="h-5 w-5 flex-shrink-0" />
+                      <span className="text-sm font-medium">Archive session</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileOptionsOpen(false);
+                        requestDeleteSession();
+                      }}
+                      className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-red-600 transition-colors active:bg-red-500/10 dark:text-red-400"
+                    >
+                      <Trash2 className="h-5 w-5 flex-shrink-0" />
+                      <span className="text-sm font-medium">Delete session</span>
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -409,6 +450,7 @@ function SidebarSessionItem({
             }
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
+            if (event.detail > 1) return;
             onSessionSelect(session, project.projectId);
           }}
           onKeyDown={isSelecting ? handleSelectionKeyDown : undefined}
@@ -428,6 +470,12 @@ function SidebarSessionItem({
                 <div
                   className="min-w-0 flex-1 truncate text-sm font-normal text-foreground"
                   title={sessionView.sessionName}
+                  onDoubleClick={(event) => {
+                    if (isSelecting || isEditing || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onStartEditingSession(project.projectId, session.id, sessionView.sessionName);
+                  }}
                 >
                   {sessionView.sessionName}
                 </div>
@@ -476,6 +524,7 @@ function SidebarSessionItem({
             onStartEditingSession={onStartEditingSession}
             onCancelEditingSession={onCancelEditingSession}
             onSaveEditingSession={onSaveEditingSession}
+            onArchiveSession={onArchiveSession}
             onDeleteSession={onDeleteSession}
             onFork={onForkSession ? () => onForkSession(session) : undefined}
             t={t}

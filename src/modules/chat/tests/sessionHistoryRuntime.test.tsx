@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, test, vi } from 'vitest';
 
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
 import { readUserPreference } from '@/shared/userSettings';
 import type { CodexRuntimeMode, NormalizedMessage } from '@/shared/types';
 
@@ -28,7 +29,7 @@ function historyMessages(mode: CodexRuntimeMode, count: number): NormalizedMessa
 }
 
 function historyResponse(messages: NormalizedMessage[], hasMore = false, tokenUsage?: unknown) {
-  return { ok: true, json: async () => ({ data: { messages, total: messages.length, hasMore, tokenUsage } }) };
+  return { ok: true, json: async () => ({ data: { messages, total: messages.length, hasMore, tokenUsage, sideQuestions: [] } }) };
 }
 
 function serveHistory(histories: Record<CodexRuntimeMode, NormalizedMessage[]>) {
@@ -96,6 +97,7 @@ test('a completed old reader does not prevent a new reader from loading, and str
 });
 
 test('late responses from the previous reader cannot overwrite a rebuilt slot', async () => {
+  const replaceSideQuestions = vi.spyOn(sideQuestionStore, 'replaceForSession');
   let releaseOldPage!: (response: ReturnType<typeof historyResponse>) => void;
   sessionMessages.mockImplementationOnce(() => new Promise((resolve) => { releaseOldPage = resolve; }));
   const { result } = renderHook(() => useSessionStore());
@@ -114,6 +116,7 @@ test('late responses from the previous reader cannot overwrite a rebuilt slot', 
   const slot = result.current.getSessionSlot('same-session');
   assert.deepEqual(slot?.serverMessages.map((message) => message.id), ['app-server-0', 'app-server-1']);
   assert.deepEqual(slot?.tokenUsage, { used: 20 });
+  assert.deepEqual(replaceSideQuestions.mock.calls, [['same-session', []]]);
 });
 
 test('a mode change during a latest-page request discards that response and resets on retry', async () => {

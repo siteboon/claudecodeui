@@ -159,13 +159,13 @@ CloudCLI는 커스텀 탭과 선택적 Node.js 백엔드가 포함된 플러그�
 |---|---|
 | **[Project Stats](https://github.com/cloudcli-ai/cloudcli-plugin-starter)** | 현재 프로젝트의 파일 수, 코드 줄 수, 파일 유형 분포, 가장 큰 파일, 최근 수정 파일을 표시 |
 | **[Web Terminal](https://github.com/cloudcli-ai/cloudcli-plugin-terminal)** | 다중 탭을 지원하는 전체 xterm.js 터미널 |
-| **[Claude Watch](https://github.com/satsuki19980613/cloudcli-claude-watch)** | 장시간 실행 중인 Claude Code 세션의 중단 상태를 감시하고 프로세스 제어를 제공 |
 | **[CloudCLI Scheduler](https://github.com/grostim/cloudcli-cron)** | 워크스페이스 범위 예약 프롬프트를 만들고 Codex, Claude Code 같은 로컬 CLI로 실행 |
 | **[PRISM CloudCLI](https://github.com/jakeefr/cloudcli-plugin-prism)** | CloudCLI 안에서 Claude Code 세션 인텔리전스와 토큰 소모 가시성을 제공 |
 | **[Sessions](https://github.com/strykereye2/cloudcli-plugin-session-manager)** | 활성 Claude Code 세션을 보고, 관리하고, 종료 |
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | 모델 가격과 토큰 사용량으로 API 비용을 계산하고 모델 가격 프리셋을 지원 |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | 에이전트 작업을 보고, 필터링하고, 실행하는 작업 큐 대시보드 |
 | **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | GitHub Issues용 Kanban 보드. TaskMaster 양방향 동기화와 /github-task CLI 스킬 자동 설치 지원 |
+| **[ccx](https://github.com/AaronWong1999/cloudcli-plugin-ccx)** | Claude와 Codex 사용량을 표시하고, 열린 세션을 대화 기록과 함께 다른 에이전트에 인계 (macOS, ccx 필요) |
 
 ### 직접 만들기
 

@@ -88,6 +88,35 @@
   "json": {
     "response": "JSON Response"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} needs your input",
+    "dismiss": "Dismiss",
+    "alwaysAllow": "Always allow",
+    "alwaysAllowCovers": "Always allow covers"
+  },
+  "mcpElicitation": {
+    "asks": "{{server}} asks for your input",
+    "submit": "Submit",
+    "decline": "Decline",
+    "openLink": "Open link",
+    "unsafeUrl": "Only http and https links can be opened from here.",
+    "optional": "optional",
+    "choose": "Choose…",
+    "required": "Required",
+    "notANumber": "Enter a number",
+    "notAnInteger": "Enter a whole number",
+    "tooSmall": "At least {{value}}",
+    "tooLarge": "At most {{value}}",
+    "tooShort": "At least {{count}} characters",
+    "tooLong": "At most {{count}} characters",
+    "tooFew": "Pick at least {{count}}",
+    "tooMany": "Pick at most {{count}}",
+    "notAnEmail": "Enter an email address",
+    "notAUri": "Enter a full address, such as https://example.com",
+    "notADate": "Enter a date",
+    "notADateTime": "Enter a date and time",
+    "notTheFormat": "Not a valid {{format}}"
+  },
   "permissions": {
     "grant": "Grant permission for {{tool}}",
     "added": "Permission added",
@@ -145,7 +174,7 @@
       "ctrlEnter": "Ctrl+Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "enter": "Enter to send • Shift+Enter for new line • Tab to change modes • / for slash commands",
       "queue": "Enter to queue your next message",
-      "updateQueued": "Enter to update queued message"
+      "appendQueued": "Enter to add to the queued message"
     },
     "clickToChangeMode": "Click to change permission mode (or press Tab in input)",
     "showAllCommands": "Show all commands",
@@ -153,11 +182,19 @@
     "scrollToBottom": "Scroll to bottom",
     "queue": {
       "sendNext": "Queue next message",
-      "update": "Update queued message",
+      "append": "Add to queued message",
+      "notCombinable": "Failed to queue message: A slash command runs as a turn of its own, so it cannot be combined with the queued message. Send it after the queued message has gone.",
       "label": "Queued",
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
       "delete": "Delete queued message"
+    },
+    "steer": {
+      "label": "Steering",
+      "sending": "Sending…",
+      "willRead": "{{provider}} reads it at its next tool call",
+      "attachments_one": "{{count}} file attached",
+      "attachments_other": "{{count}} files attached"
     }
   },
   "composer": {
@@ -167,6 +204,8 @@
     "loadingModels": "Loading models…",
     "modelMenu": "Select model and reasoning effort",
     "permissionHeading": "How should {{provider}} actions be approved?",
+    "permissionCycleHint": "Press Tab in the message box to switch modes",
+    "permissionTriggerLabel": "{{mode}}: {{heading}}",
     "editing": {
       "title": "Replacing an earlier message",
       "filesNotReverted": "files the agent already changed are not reverted",
@@ -193,6 +232,7 @@
     "pressToSearch": "Press <kbd>{{shortcut}}</kbd> to search sessions, files, and commits",
     "chooseModel": "Choose a model",
     "chooseModelDescription": "Built-in and custom models in one list",
+    "chooseModelDescriptionCustomOnly": "Only your models are listed for {{providers, list}}",
     "addModel": "Add model",
     "searchModels": "Search models...",
     "manageModels": "Manage models",
@@ -218,6 +258,38 @@
       "loadingAll": "Loading all messages...",
       "allLoaded": "All messages loaded",
       "perfWarning": "All messages loaded — scrolling may be slower. Click \"Scroll to bottom\" to restore performance."
+    }
+  },
+  "sideQuestion": {
+    "label": "Side question · not part of the session",
+    "pending": "Answering on the side",
+    "failed": "The side question failed.",
+    "dismiss": "Dismiss",
+    "unsupported": "This provider cannot answer side questions.",
+    "noSession": "Side questions need an existing chat; this one has not started yet."
+  },
+  "sendMenu": {
+    "trigger": "Send options",
+    "queue": {
+      "label": "Queue",
+      "descriptionResponding": "Send when this turn ends",
+      "descriptionBackground": "Send when the background work ends"
+    },
+    "steer": {
+      "label": "Steer",
+      "description": "Send into this turn; read at the next tool call"
+    },
+    "sideQuestion": {
+      "label": "Side question",
+      "description": "Ask on the side now; the session never sees it"
+    },
+    "stop": {
+      "label": "Stop",
+      "description": "End the response being written"
+    },
+    "sendAnyway": {
+      "label": "Send anyway",
+      "description": "Send now; this stops the background work"
     }
   },
   "shell": {
@@ -276,7 +348,14 @@
       "agent": "Agent {{description}}",
       "command": "Command {{description}}",
       "count": "{{count}} tasks",
-      "sendAnyway": "This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?"
+      "prompt": {
+        "title": "This session still has background work running",
+        "description": "A new message starts a new turn, which stops that work; anything it has not reported yet is lost. Queue the message to send it when the work finishes.",
+        "cancel": "Cancel",
+        "queue": "Queue",
+        "sendAnyway": "Send anyway",
+        "sideQuestion": "Side question"
+      }
     },
     "controls": {
       "stopGeneration": "Stop Generation",
@@ -312,7 +391,8 @@
     "json": {
       "label": "JSON (.json)",
       "description": "Every message, unformatted, for tooling."
-    }
+    },
+    "includeSideQuestions": "Include side questions"
   },
   "schedule": {
     "trigger": "Schedule this message",
@@ -391,6 +471,10 @@
   "modelLibrary": {
     "effortLevels": "Reasoning levels",
     "effortLevelsHint": "Select the reasoning-effort levels this model accepts. If none are selected, no effort level can be chosen for this model in the composer.",
-    "effortSummary": "Reasoning: {{levels}}"
+    "effortSummary": "Reasoning: {{levels}}",
+    "customModelsOnly": "Use only my models",
+    "customModelsOnlyHint": "Hide the built-in {{provider}} models from every model picker and make your first model the default. Built-in models stay listed until you add a model.",
+    "builtInModelsHidden": "Hidden from model pickers while “Use only my models” is on.",
+    "customModelsOnlyFailed": "Unable to change this setting."
   }
 }

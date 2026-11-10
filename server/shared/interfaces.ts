@@ -1,6 +1,7 @@
 import type {
   AnyRecord,
   BackgroundTaskSummary,
+  CliVersionProbe,
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
@@ -17,6 +18,9 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  SideQuestionOutcome,
+  SideQuestionRequest,
+  SideQuestionSink,
   UpsertProviderMcpServerInput,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
@@ -50,9 +54,33 @@ export interface IProviderRuntime {
   /**
    * Stops one outstanding background task. Resolves false when the session has
    * no live process or that process is not tracking the task — it already
-   * settled, or the id was never one of its own.
+   * settled, or the id was never one of its own. Rejects when the stop does
+   * not take, so the caller can report it (`TASK_STOP_FAILED`).
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
+  /**
+   * Asks a side question on the provider runtime while a session is active.
+   *
+   * A provider with this method uses its native fork capability; one without it
+   * falls back to the history path (the provider runtime service supplies the history
+   * and drives the Claude adapter instead). This method never rejects: all outcomes
+   * are returned as SideQuestionOutcome (done or error), never thrown.
+   */
+  askSideQuestion?(
+    request: SideQuestionRequest,
+    sink: SideQuestionSink,
+    context: ProviderRuntimeContext,
+  ): Promise<SideQuestionOutcome>;
+  /**
+   * Delivers a user message into the session's running turn instead of
+   * starting a new one: the model reads it at its next tool-call boundary and
+   * carries on, with nothing stopped. `options` carries the verified
+   * `images`/`files` descriptors and the `messageId` (a UUID) the message is
+   * tracked by. Resolves false when the session has no turn that
+   * can still take it; the caller then sends it as an ordinary new turn. Only
+   * a runtime that keeps its CLI's input open during a turn implements this.
+   */
+  steer?(sessionId: string, command: string, options: AnyRecord): Promise<boolean>;
 }
 
 /**
@@ -142,6 +170,13 @@ export interface IProviderAuth {
    * Checks whether the provider is installed and has usable credentials.
    */
   getStatus(): Promise<ProviderAuthStatus>;
+  /**
+   * Runs `--version` on the CLI this provider's chats use: the same check
+   * `getStatus()` reports as `installed` and `installedVersion`, without the
+   * credential lookup (which can take seconds). The providers module's CLI
+   * update service reads versions through it.
+   */
+  checkInstalled(): CliVersionProbe;
 }
 
 // ---------------------------

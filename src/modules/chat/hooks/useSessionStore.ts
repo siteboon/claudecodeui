@@ -12,6 +12,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { api } from '@/shared/api';
 import { readUserPreference } from '@/shared/userSettings';
 import type { CodexRuntimeMode, LLMProvider, NormalizedMessage } from '@/shared/types';
+import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
 import { removeOptimisticUserEchoes } from '@/modules/chat/utils/sessionMessageReconciliation';
 import {
   hasReachedCachedTailTimeBoundary,
@@ -107,6 +108,7 @@ async function requestSessionHistoryPage(
   sessionId: string,
   options: SessionMessagesRequestOptions,
   runtimeMode: CodexRuntimeMode,
+  canApply: () => boolean,
 ): Promise<SessionHistoryPage> {
   const response = await api.providers.sessionMessages(sessionId, {
     ...options,
@@ -119,6 +121,15 @@ async function requestSessionHistoryPage(
   const body = await response.json();
   const data = body?.data ?? body;
   const messages: NormalizedMessage[] = Array.isArray(data.messages) ? data.messages : [];
+
+  // The server sends the session's whole side-question list on every page
+  // (not just the page's own rows), so the store is replaced here rather
+  // than merged, regardless of which page this request fetched.
+  // Apply the same reader guard as the transcript so a late response from a
+  // previous runtime cannot overwrite side questions loaded by the new reader.
+  if (canApply() && Array.isArray(data.sideQuestions)) {
+    sideQuestionStore.replaceForSession(sessionId, data.sideQuestions);
+  }
 
   return {
     messages,
@@ -448,7 +459,7 @@ async function refreshLatestSlotFromServer(
   const latestPage = await requestSessionHistoryPage(sessionId, {
     limit,
     offset: 0,
-  }, slot.historyRuntimeMode);
+  }, slot.historyRuntimeMode, canRequest);
   if (!canRequest()) {
     return { applied: false, changed: false, deferred: true };
   }
@@ -487,7 +498,7 @@ async function refreshLatestSlotFromServer(
         return { applied: false, changed: false, deferred: true };
       }
 
-      const bridgePage = await requestSessionHistoryPage(sessionId, bridgeRequest, slot.historyRuntimeMode);
+      const bridgePage = await requestSessionHistoryPage(sessionId, bridgeRequest, slot.historyRuntimeMode, canRequest);
       if (!canRequest()) {
         return { applied: false, changed: false, deferred: true };
       }
@@ -639,7 +650,7 @@ export function useSessionStore() {
       }
 
       try {
-        const data = await requestSessionHistoryPage(sessionId, requestOptions, slot.historyRuntimeMode);
+        const data = await requestSessionHistoryPage(sessionId, requestOptions, slot.historyRuntimeMode, canRequest);
         if (!canRequest()) {
           slot.status = 'idle';
           notify(sessionId);
@@ -712,7 +723,7 @@ export function useSessionStore() {
           const data = await requestSessionHistoryPage(sessionId, {
             limit: opts.limit ?? SESSION_MESSAGES_PAGE_SIZE,
             offset: slot.offset,
-          }, slot.historyRuntimeMode);
+          }, slot.historyRuntimeMode, canRequest);
           if (!canRequest()) break;
           const olderMerge = mergeOlderServerPage(cachedMessages, data.messages);
           const shiftedWhileFetching = (

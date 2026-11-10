@@ -101,6 +101,14 @@ export type ProviderModelsDefinition = {
    * library offers the same levels on every machine. Adapter catalogs omit it.
    */
   EFFORT_LEVELS?: string[];
+  /**
+   * The user's "use only my models" flag for this provider, set by the
+   * Providers service on merged catalogs. While it is true and at least one
+   * custom model exists, `OPTIONS` holds only custom models and `DEFAULT` is
+   * the first of them; with no custom models the built-ins are listed anyway.
+   * Adapter catalogs omit it.
+   */
+  CUSTOM_MODELS_ONLY?: boolean;
 };
 
 /**
@@ -226,16 +234,18 @@ export type MessageKind =
  * Event kinds added by the chat gateway layer on top of provider message kinds.
  *
  * These are app-level realtime events (subscription acks, sidebar deltas,
- * project loading progress, protocol failures) that are not produced by any
- * provider adapter. Together with `MessageKind` they form the complete set of
- * `kind` values a websocket client can receive, so the frontend only ever
- * needs one kind-based switch.
+ * project loading progress, protocol failures, scheduled-message changes) that
+ * are not produced by any provider adapter. Together with `MessageKind` they
+ * form the complete set of `kind` values a websocket client can receive, so
+ * the frontend only ever needs one kind-based switch.
  */
 export type GatewayEventKind =
   | 'chat_subscribed'
   | 'session_upserted'
   | 'loading_progress'
-  | 'protocol_error';
+  | 'protocol_error'
+  | 'side_question'
+  | 'scheduled_messages_changed';
 
 /**
  * Complete set of `kind` values emitted to websocket clients.
@@ -245,6 +255,129 @@ export type GatewayEventKind =
  * `GatewayEventKind` values.
  */
 export type ServerEventKind = MessageKind | GatewayEventKind;
+
+// ---------------------------
+//----------------- SIDE QUESTION TYPES ------------
+/**
+ * Status of a side question being answered on the side in parallel.
+ */
+export type SideQuestionStatus = 'running' | 'done' | 'error';
+
+/**
+ * A question asked while a session runs, with its answer accumulated as it streams.
+ *
+ * Side questions run independently on the provider's runtime and are never
+ * part of the main conversation history. The client can inspect their state
+ * in real time and dismiss them if needed.
+ */
+export type SideQuestion = {
+  id: string;
+  sessionId: string;        // app session id
+  question: string;
+  answer: string;           // '' until text arrives; partial while running
+  status: SideQuestionStatus;
+  error: string | null;
+  model: string | null;
+  createdAt: string;        // ISO
+  finishedAt: string | null;
+};
+
+/**
+ * Real-time event for side question state changes, broadcast to all chat clients.
+ *
+ * `started` and `done` include the whole row; `delta` carries incremental text;
+ * `error` marks failure and may carry the existing row on a duplicate id or null
+ * on other refusals. `dismissed` is sent when a side question is dismissed,
+ * running or not, so every tab drops the id instead of leaving it pending
+ * until a full reload. Every event is broadcast to every connected chat client
+ * so side-by-side tabs stay in sync.
+ */
+export type SideQuestionEvent = {
+  kind: 'side_question';
+  sessionId: string;            // app session id
+  sideQuestionId: string;
+  phase: 'started' | 'delta' | 'done' | 'error' | 'dismissed';
+  text?: string;                // delta only: the next piece of the answer
+  error?: string;               // error only
+  sideQuestion?: SideQuestion;  // started, done, and error when a row exists: the whole row
+  timestamp: string;            // ISO, when the server sent it
+};
+
+/**
+ * Request payload for asking a side question on the provider runtime.
+ *
+ * `appSessionId` is the user-facing session being asked about; `providerSessionId`
+ * is the provider's own native session id needed for context (or null). `projectPath`
+ * is the working directory for read-only tools. `model` is what the client asked for.
+ */
+export type SideQuestionRequest = {
+  appSessionId: string;
+  providerSessionId: string | null;
+  projectPath: string | null;
+  question: string;
+  model: string | null;     // what the client asked for
+  signal: AbortSignal;
+};
+
+/**
+ * Output callback for receiving streamed text of a side question answer.
+ *
+ * Implementations call `delta(text)` each time a piece of the answer arrives.
+ */
+export type SideQuestionSink = { delta(text: string): void };
+
+/**
+ * Result of asking a side question on the provider runtime.
+ *
+ * `status: 'done'` carries the complete final answer; `status: 'error'` carries
+ * what text was delivered before failure plus the error message.
+ */
+export type SideQuestionOutcome =
+  | { status: 'done'; answer: string }
+  | { status: 'error'; error: string; answer: string };
+
+/**
+ * Side-question capability of a provider runtime.
+ *
+ * The service layer calls this method on the runtime to ask a question on the
+ * side while a session is active, using whatever path the provider's own
+ * runtime implements. It never rejects: all failures are returned as error
+ * outcomes.
+ */
+export type SideQuestionRuntime = {
+  askSideQuestion(provider: LLMProvider, request: SideQuestionRequest, sink: SideQuestionSink): Promise<SideQuestionOutcome>;
+};
+
+/**
+ * The one place a side question's mutable state lives.
+ *
+ * It holds `SideQuestion` objects directly, so the service, the history
+ * route and the websocket handler all read and write the same object and no
+ * row-to-wire mapping is needed. Side questions are deliberately in memory
+ * only: a CloudCLI restart is a clean slate, and `createdAt`/`finishedAt` are
+ * ISO strings, not database timestamps. Used by
+ * `server/modules/providers/services/side-questions.store.ts` (the only
+ * implementation) and `side-questions.service.ts` (the only consumer).
+ */
+export type InMemorySideQuestionsStore = {
+  /** Inserts a fresh question as `running` and returns it. */
+  create(input: {
+    id: string;
+    sessionId: string;
+    question: string;
+    model: string | null;
+  }): SideQuestion;
+  /** The whole question, whatever its status, or null once deleted. */
+  getById(id: string): SideQuestion | null;
+  /** Appends streamed text to the answer; a no-op once deleted. */
+  appendAnswer(id: string, text: string): void;
+  /** Settles a running question; a no-op once deleted. */
+  finish(id: string, outcome: SideQuestionOutcome): void;
+  /** The session's questions, oldest first. */
+  listForSession(sessionId: string): SideQuestion[];
+  /** Deletes one question of one session. Reports whether anything went. */
+  delete(sessionId: string, id: string): boolean;
+};
 
 /** The owning project as it appears inside a `session_upserted` delta. */
 export type SessionUpsertedProject = {
@@ -642,8 +775,13 @@ export type ProviderRuntimeContext = {
    * runtime uses the SDK's own; tests supply a scripted stream so the hold
    * and background-work paths can be driven without a CLI process.
    */
+  // `interrupt()`'s return type is `unknown` rather than the SDK's own
+  // `SDKControlInterruptResponse | undefined` (@anthropic-ai/claude-agent-sdk
+  // 0.3.311): no caller here reads the resolved value, and widening it keeps
+  // this structural type assignable from both the real `query()` (whose
+  // return type is the SDK's own `Query`) and a test's scripted stand-in.
   createQuery?: (input: { prompt: AsyncIterable<unknown>; options: AnyRecord }) => AsyncIterable<unknown> & {
-    interrupt(): Promise<void>;
+    interrupt(): Promise<unknown>;
     stopTask?(taskId: string): Promise<void>;
   };
 };
@@ -905,6 +1043,12 @@ export type ProviderAuthSubscriptionOverride = {
 export type ProviderAuthStatus = {
   installed: boolean;
   provider: LLMProvider;
+  /**
+   * Version of the CLI the provider runs, as its `--version` printed it
+   * (`2.1.295`, `2026.07.20-8cc9c0b`), or null when it is not installed or
+   * printed no version.
+   */
+  installedVersion: string | null;
   authenticated: boolean;
   email: string | null;
   method: string | null;
@@ -915,6 +1059,20 @@ export type ProviderAuthStatus = {
    * existing consumers that never look for it are unaffected.
    */
   subscriptionOverride?: ProviderAuthSubscriptionOverride;
+};
+
+/**
+ * What running a CLI's `--version` revealed, as returned by `probeCliVersion`.
+ *
+ * `installed` says only that the command could be started (or started and was
+ * too slow to answer); it ignores the exit code, which is reported separately
+ * for callers that also require a clean exit. `version` is null whenever the
+ * command did not exit 0 or printed nothing that looks like a version.
+ */
+export type CliVersionProbe = {
+  installed: boolean;
+  exitCode: number | null;
+  version: string | null;
 };
 
 // ---------------------------
@@ -944,6 +1102,26 @@ export type CreateCredentialResult = {
   id: number | bigint;
   credentialName: string;
   credentialType: string;
+};
+
+// ---------------------------
+//----------------- CHAT DRAFT QUEUE TYPES ------------
+/**
+ * A chat message queued to be sent when its session is next idle, in the shape
+ * the composer submits it and `session_drafts.queued_message` stores it.
+ *
+ * `content` is the message text, `attachments` the JSON-safe descriptors
+ * returned by POST /api/assets/files, and `options` the composer's send options
+ * (model, effort, permission mode, ...) captured when it was queued. A session
+ * has at most one: a message queued while another is waiting is merged into it
+ * by the drafts repository. The User module accepts it, the Database module
+ * stores and merges it, and the Scheduled Messages dispatcher sends it (read
+ * through `readQueuedChatMessage`).
+ */
+export type QueuedChatMessage = {
+  content: string;
+  options?: Record<string, unknown>;
+  attachments: unknown[];
 };
 
 // ---------------------------
