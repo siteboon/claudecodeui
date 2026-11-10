@@ -46,7 +46,7 @@ const backgroundInA: SessionActivityMap = new Map([[
 ]]);
 
 const renderComposer = (initialSession: ProjectSession | null, processingSessions?: SessionActivityMap) => {
-  const sent: Array<{ type: string; sessionId?: string; content?: string }> = [];
+  const sent: Array<{ type: string; sessionId?: string; content?: string; anchorId?: string }> = [];
   let rerender: ((props: Props) => void) | undefined;
   const view = renderHook(({ session }: Props) =>
     useChatComposerState({
@@ -74,7 +74,11 @@ const renderComposer = (initialSession: ProjectSession | null, processingSession
     }),
   { initialProps: { session: initialSession } });
   rerender = view.rerender;
-  return { view, chatSends: () => sent.filter((message) => message.type === 'chat.send') };
+  return {
+    view,
+    chatSends: () => sent.filter((message) => message.type === 'chat.send'),
+    editSends: () => sent.filter((message) => message.type === 'chat.edit-send'),
+  };
 };
 
 const submit = (view: ReturnType<typeof renderComposer>['view']) =>
@@ -159,4 +163,24 @@ test('a side question asked for the sending chat after a chat switch leaves the 
   assert.equal(readDraftText('session-a'), '', 'the asking chat\'s draft is cleared');
   assert.equal(view.result.current.input, 'typed in b', 'the open chat keeps its text');
   assert.equal(readDraftText('session-b'), 'typed in b', 'and its draft');
+});
+
+test('an edit begun in another chat during the upload survives the send', async () => {
+  const { view, chatSends, editSends } = renderComposer(SESSION_A);
+  await act(async () => {
+    view.result.current.setInput('from a');
+    view.result.current.setAttachedFiles([new File(['a'], 'a.txt')]);
+  });
+  await act(async () => { void submit(view); });
+  await act(async () => { view.rerender({ session: SESSION_B }); });
+  await act(async () => {
+    view.result.current.beginEditMessage({ type: 'user', content: 'old b', transcriptAnchorId: 'anchor-b', timestamp: new Date() } as never);
+  });
+  await release(pendingUploads, { attachments: [{ id: 'asset-a' }] });
+
+  assert.equal(view.result.current.editingAnchorId, 'anchor-b', 'the open chat is still editing');
+  await act(async () => { view.result.current.setInput('new b'); });
+  await act(async () => { await submit(view); });
+  assert.deepEqual(chatSends().map((message) => message.sessionId), ['session-a']);
+  assert.deepEqual(editSends().map((message) => [message.sessionId, message.anchorId]), [['session-b', 'anchor-b']]);
 });
