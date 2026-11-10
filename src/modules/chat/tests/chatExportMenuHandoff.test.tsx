@@ -21,13 +21,15 @@ vi.mock('@/shared/chatDrafts', () => ({
   writeDraftText: (scope: string, text: string) => { drafts.set(scope, text); },
 }));
 
-const project = { projectId: 'p1' } as Project;
-const scope = 'project:p1';
+// The menu remembers its last digest per project for the page's life, so each test takes its own project.
+let projectIndex = 0;
+let project: Project;
+let scope: string;
 const turns = (text: string): ChatMessage[] => [
   { id: 'm1', type: 'user', content: text, timestamp: '2026-10-26T10:00:00.000Z' },
 ];
 
-const handoff = async (sessionId: string, text: string) => {
+const handoff = async (sessionId: string | undefined, text: string) => {
   const onNewSession = vi.fn();
   const view = render(
     <ChatExportMenu
@@ -48,7 +50,12 @@ const handoff = async (sessionId: string, text: string) => {
 
 const count = (needle: string) => (drafts.get(scope) ?? '').split(needle).length - 1;
 
-beforeEach(() => { drafts.clear(); });
+beforeEach(() => {
+  drafts.clear();
+  projectIndex += 1;
+  project = { projectId: `p${projectIndex}` } as Project;
+  scope = `project:${project.projectId}`;
+});
 
 describe('ChatExportMenu continue in new chat', () => {
   it('replaces an untouched digest of the same session on a repeat click', async () => {
@@ -74,5 +81,12 @@ describe('ChatExportMenu continue in new chat', () => {
     assert.ok(draft.includes('session one again'));
     assert.ok(draft.includes('session two'));
     assert.equal(count('I am continuing'), 3);
+  });
+
+  it('never replaces a digest when the session has no id yet', async () => {
+    await handoff(undefined, 'chat one');
+    await handoff(undefined, 'chat two');
+
+    assert.equal(count('I am continuing'), 2);
   });
 });

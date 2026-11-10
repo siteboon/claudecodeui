@@ -38,7 +38,8 @@ const FORMATS: Array<{ id: TranscriptExportFormat; icon: typeof FileText; labelK
 ];
 
 // Last digest written per draft scope, so a repeat click replaces only that digest, untouched and at the end.
-const lastHandoffDigests = new Map<string, { sessionKey: string; digest: string }>();
+// shortcut: page memory only, so after a reload a repeat click appends; keep it with the draft if that bites.
+const lastHandoffDigests = new Map<string, { sessionId: string; digest: string }>();
 
 /**
  * Rendered by chat's ChatMessagesPane header so the open conversation can be
@@ -103,13 +104,13 @@ export default function ChatExportMenu({
       // Keep whatever was already typed for a new chat in this project, but
       // replace an unsent, unedited digest of this same session instead of stacking a second one.
       const draft = readDraftText(scope);
-      const sessionKey = sessionId || digest.split('\n', 1)[0];
-      const previous = lastHandoffDigests.get(scope);
-      const existing = (previous && previous.sessionKey === sessionKey && draft.endsWith(previous.digest)
+      // Without a session id two chats cannot be told apart, so nothing is replaced.
+      const previous = sessionId ? lastHandoffDigests.get(scope) : undefined;
+      const existing = (previous && previous.sessionId === sessionId && draft.endsWith(previous.digest)
         ? draft.slice(0, -previous.digest.length)
         : draft).trim();
       writeDraftText(scope, existing ? `${existing}\n\n${digest}` : digest);
-      lastHandoffDigests.set(scope, { sessionKey, digest });
+      if (sessionId) lastHandoffDigests.set(scope, { sessionId, digest });
       openNewSession(project);
     } catch (error) {
       console.error('Failed to continue conversation in a new chat:', error);
