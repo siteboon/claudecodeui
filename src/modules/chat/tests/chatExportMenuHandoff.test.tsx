@@ -1,0 +1,78 @@
+import assert from 'node:assert/strict';
+
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, it, vi } from 'vitest';
+import type * as ReactI18nextModule from 'react-i18next';
+
+import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
+import type { ChatMessage, Project } from '@/shared/types';
+
+/** "Continue in new chat" replaces only its own untouched digest and never drops other draft text. */
+
+const drafts = new Map<string, string>();
+
+vi.mock('react-i18next', async (importOriginal) => ({
+  ...(await importOriginal<typeof ReactI18nextModule>()),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
+}));
+
+vi.mock('@/shared/chatDrafts', () => ({
+  readDraftText: (scope: string) => drafts.get(scope) ?? '',
+  writeDraftText: (scope: string, text: string) => { drafts.set(scope, text); },
+}));
+
+const project = { projectId: 'p1' } as Project;
+const scope = 'project:p1';
+const turns = (text: string): ChatMessage[] => [
+  { id: 'm1', type: 'user', content: text, timestamp: '2026-10-26T10:00:00.000Z' },
+];
+
+const handoff = async (sessionId: string, text: string) => {
+  const onNewSession = vi.fn();
+  const view = render(
+    <ChatExportMenu
+      messages={turns(text)}
+      sessionTitle="Same title"
+      sessionId={sessionId}
+      provider="claude"
+      selectedProject={project}
+      createDiff={() => []}
+      onNewSession={onNewSession}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'export.trigger' }));
+  await act(async () => { fireEvent.click(screen.getByText('export.handoff.label')); });
+  await waitFor(() => assert.equal(onNewSession.mock.calls.length, 1));
+  view.unmount();
+};
+
+const count = (needle: string) => (drafts.get(scope) ?? '').split(needle).length - 1;
+
+beforeEach(() => { drafts.clear(); });
+
+describe('ChatExportMenu continue in new chat', () => {
+  it('replaces an untouched digest of the same session on a repeat click', async () => {
+    drafts.set(scope, 'typed before');
+    await handoff('s1', 'first state');
+    await handoff('s1', 'second state');
+
+    const draft = drafts.get(scope) ?? '';
+    assert.ok(draft.startsWith('typed before\n\n'));
+    assert.equal(count('I am continuing'), 1);
+    assert.ok(draft.includes('second state') && !draft.includes('first state'));
+  });
+
+  it('keeps text typed after the digest and digests of other sessions with the same title', async () => {
+    await handoff('s1', 'session one');
+    drafts.set(scope, `${drafts.get(scope)}\n\nmy note`);
+    await handoff('s1', 'session one again');
+    await handoff('s2', 'session two');
+
+    const draft = drafts.get(scope) ?? '';
+    assert.ok(draft.includes('my note'));
+    assert.ok(draft.includes('session one\n\nmy note'), 'the edited digest stays');
+    assert.ok(draft.includes('session one again'));
+    assert.ok(draft.includes('session two'));
+    assert.equal(count('I am continuing'), 3);
+  });
+});

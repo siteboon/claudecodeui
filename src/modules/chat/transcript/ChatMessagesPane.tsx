@@ -214,6 +214,7 @@ function ChatMessagesPane({
             <ChatExportMenu
               messages={chatMessages}
               sessionTitle={selectedSession?.summary || selectedSession?.title}
+              sessionId={selectedSession?.id || currentSessionId}
               provider={provider}
               selectedProject={selectedProject}
               createDiff={createDiff}

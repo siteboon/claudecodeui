@@ -14,6 +14,8 @@ import { buildHandoffMarkdown } from '@/modules/chat/export/buildTranscriptMarkd
 type ChatExportMenuProps = {
   messages: ChatMessage[];
   sessionTitle?: string;
+  /** Tells two sessions' digests apart when their titles match. */
+  sessionId?: string | null;
   provider: LLMProvider | string;
   selectedProject?: Project | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
@@ -35,6 +37,9 @@ const FORMATS: Array<{ id: TranscriptExportFormat; icon: typeof FileText; labelK
   { id: 'json', icon: Braces, labelKey: 'export.json.label', descriptionKey: 'export.json.description' },
 ];
 
+// Last digest written per draft scope, so a repeat click replaces only that digest, untouched and at the end.
+const lastHandoffDigests = new Map<string, { sessionKey: string; digest: string }>();
+
 /**
  * Rendered by chat's ChatMessagesPane header so the open conversation can be
  * downloaded as a self-contained web page, as Markdown, or as JSON.
@@ -42,6 +47,7 @@ const FORMATS: Array<{ id: TranscriptExportFormat; icon: typeof FileText; labelK
 export default function ChatExportMenu({
   messages,
   sessionTitle,
+  sessionId,
   provider,
   selectedProject,
   createDiff,
@@ -95,11 +101,15 @@ export default function ChatExportMenu({
         provider,
       });
       // Keep whatever was already typed for a new chat in this project, but
-      // replace an unsent digest of this same session instead of stacking a second one.
+      // replace an unsent, unedited digest of this same session instead of stacking a second one.
       const draft = readDraftText(scope);
-      const earlierDigest = draft.indexOf(digest.split('\n', 1)[0]);
-      const existing = (earlierDigest >= 0 ? draft.slice(0, earlierDigest) : draft).trim();
+      const sessionKey = sessionId || digest.split('\n', 1)[0];
+      const previous = lastHandoffDigests.get(scope);
+      const existing = (previous && previous.sessionKey === sessionKey && draft.endsWith(previous.digest)
+        ? draft.slice(0, -previous.digest.length)
+        : draft).trim();
       writeDraftText(scope, existing ? `${existing}\n\n${digest}` : digest);
+      lastHandoffDigests.set(scope, { sessionKey, digest });
       openNewSession(project);
     } catch (error) {
       console.error('Failed to continue conversation in a new chat:', error);

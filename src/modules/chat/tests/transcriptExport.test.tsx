@@ -249,6 +249,23 @@ describe('handoff digest', () => {
     expect(digest).toContain('latest reply');
   });
 
+  it('keeps a file touched again late inside the newest-files cap', () => {
+    const edit = (path: string) => ({
+      type: 'assistant',
+      isToolUse: true,
+      toolName: 'Edit',
+      toolInput: { file_path: path, old_string: '', new_string: '' },
+      timestamp: new Date('2026-08-24T09:00:00.000Z'),
+    }) as unknown as ChatMessage;
+    const early = Array.from({ length: 50 }, (_, index) => edit(`/repo/module-${index}.ts`));
+    const messages = [turn('user', 'the task'), ...early, edit('/repo/module-0.ts')];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude' });
+
+    expect(digest).toContain('- `/repo/module-0.ts`');
+    expect(digest).not.toContain('- `/repo/module-1.ts`');
+  });
+
   it('leaves out side-question asides', () => {
     const aside = { ...turn('user', 'what does X mean?'), sideQuestion: { id: 'q1' } } as unknown as ChatMessage;
     const messages = [turn('user', 'the task'), aside, turn('assistant', 'latest reply')];

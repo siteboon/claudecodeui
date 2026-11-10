@@ -178,7 +178,11 @@ export function buildHandoffMarkdown({
   for (const message of messages) {
     if (message.isToolUse) {
       const filePath = toolFilePath(message);
-      if (filePath) files.add(filePath);
+      if (filePath) {
+        // Re-add so the Set's order is last touch, which the newest-40 cap below relies on.
+        files.delete(filePath);
+        files.add(filePath);
+      }
       continue;
     }
     // Side-question asides never reached the session itself, so they are not part of its work.
