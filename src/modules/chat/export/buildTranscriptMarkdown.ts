@@ -181,7 +181,8 @@ export function buildHandoffMarkdown({
       if (filePath) files.add(filePath);
       continue;
     }
-    if (message.isThinking || message.isLocalCommand || message.isLocalCommandStdout) continue;
+    // Side-question asides never reached the session itself, so they are not part of its work.
+    if (message.sideQuestion || message.isThinking || message.isLocalCommand || message.isLocalCommandStdout) continue;
     if (message.type !== 'user' && message.type !== 'assistant') continue;
     // A compaction row keeps its summary of everything before it apart from the content.
     let text = message.compactSummary
@@ -209,8 +210,10 @@ export function buildHandoffMarkdown({
   }
 
   // Newest turns first until the budget runs out, then back into reading order.
-  // 80 reserves room for the section heading and the omitted-turns marker.
-  let budget = maxChars - head.join('\n').length - 80;
+  // 80 reserves room for the section heading and the omitted-turns marker. The
+  // floor keeps the latest turn when a long task and file list fill the head,
+  // at the cost of running past maxChars.
+  let budget = Math.max(maxChars - head.join('\n').length - 80, Math.floor(maxChars / 4));
   const recent: string[] = [];
   for (let index = turns.length - 1; index > taskIndex; index -= 1) {
     const turn = turns[index];

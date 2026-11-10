@@ -94,8 +94,11 @@ export default function ChatExportMenu({
         sessionTitle: sessionTitle?.trim() || t('export.untitled'),
         provider,
       });
-      // Keep whatever was already typed for a new chat in this project.
-      const existing = readDraftText(scope).trim();
+      // Keep whatever was already typed for a new chat in this project, but
+      // replace an unsent digest of this same session instead of stacking a second one.
+      const draft = readDraftText(scope);
+      const earlierDigest = draft.indexOf(digest.split('\n', 1)[0]);
+      const existing = (earlierDigest >= 0 ? draft.slice(0, earlierDigest) : draft).trim();
       writeDraftText(scope, existing ? `${existing}\n\n${digest}` : digest);
       openNewSession(project);
     } catch (error) {

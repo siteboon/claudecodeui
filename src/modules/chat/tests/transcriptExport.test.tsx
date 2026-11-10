@@ -249,6 +249,31 @@ describe('handoff digest', () => {
     expect(digest).toContain('latest reply');
   });
 
+  it('leaves out side-question asides', () => {
+    const aside = { ...turn('user', 'what does X mean?'), sideQuestion: { id: 'q1' } } as unknown as ChatMessage;
+    const messages = [turn('user', 'the task'), aside, turn('assistant', 'latest reply')];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude' });
+
+    expect(digest).not.toContain('what does X mean?');
+    expect(digest).toContain('latest reply');
+  });
+
+  it('keeps the latest turn when the task and files fill the head', () => {
+    const edits = Array.from({ length: 40 }, (_, index) => ({
+      type: 'assistant',
+      isToolUse: true,
+      toolName: 'MultiEdit',
+      toolInput: { file_path: `/repo/${'deep/'.repeat(60)}module-${index}.ts`, edits: [] },
+      timestamp: new Date('2026-08-24T09:00:00.000Z'),
+    }) as unknown as ChatMessage);
+    const messages = [turn('user', 't'.repeat(5000)), ...edits, turn('assistant', 'where it got to')];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude' });
+
+    expect(digest.endsWith('where it got to')).toBe(true);
+  });
+
   it('handles an empty transcript', () => {
     expect(buildHandoffMarkdown({ messages: [], sessionTitle: 'T', provider: 'claude' }))
       .toBe('I am continuing a Claude session ("T") here. The context is below. Pick up where it left off.');
