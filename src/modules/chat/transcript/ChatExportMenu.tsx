@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRightLeft, Braces, Download, FileCode2, FileText, Loader2 } from 'lucide-react';
 
@@ -68,7 +68,9 @@ export default function ChatExportMenu({
   const failedItem = failure && failure.sessionId === sessionId ? failure.item : null;
   // The chat open now, read after the transcript loads to tell whether the user has moved on.
   const sessionIdRef = useRef(sessionId);
-  sessionIdRef.current = sessionId;
+  useLayoutEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
   if (messages.length === 0) {
     return null;
