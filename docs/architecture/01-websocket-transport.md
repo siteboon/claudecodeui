@@ -247,6 +247,7 @@ Every code that exists, with the line that emits it:
 | `STEER_UNAVAILABLE` | | `chat.steer` when no turn can take the message: the run ended, its turn was already reported complete, or the provider cannot steer. Carries the `messageId`; the client queues the message as the next turn instead of showing an error |
 | `TASK_ID_REQUIRED` | | `chat.stop-task` without a task id |
 | `NO_SUCH_TASK` | | `chat.stop-task` for a task the runtime is not tracking (already settled, or never this session's) |
+| `TASK_STOP_FAILED` | | `chat.stop-task` that the runtime could not carry out: the CLI acknowledged the stop but the task kept running, or the process could not be reached. Carries the `taskId` |
 | `UNKNOWN_MESSAGE_TYPE` | `:620` | Unrecognised `type` |
 | `INTERNAL_ERROR` | `:626` | Anything thrown out of a handler |
 
@@ -295,7 +296,7 @@ Two kinds in those unions never appear where you would look for them:
 | `permission_request`, `permission_resolved`, `permission_cancelled` | Provider runtime | The permission banner and its pending list (`:285-328`) |
 | `history_truncated` | `chat-websocket.service.ts:388-393` | `sessionStore.truncateAt` (`:116-124`) |
 | `chat_subscribed` | `chat-websocket.service.ts:485-492` | Authoritative processing state plus pending permissions (`:126-155`) |
-| `protocol_error` | `chat-websocket.service.ts:127` | Error row, spinner cleared — except `STEER_UNAVAILABLE`, which only hands the named message back to the composer to queue |
+| `protocol_error` | `chat-websocket.service.ts:127` | Error row, spinner cleared — except `STEER_UNAVAILABLE`, which only hands the named message back to the composer to queue, and the stop-task codes (`NO_SUCH_TASK`, `TASK_ID_REQUIRED`, `TASK_STOP_FAILED`), which leave the spinner alone since they are not about the run |
 | `chat_steer_accepted` | `chat-websocket.service.ts` (`handleChatSteer`) | Sent to the asking socket only: the steered message is in the turn; its card waits for the echo |
 | `session_upserted` | `session-upsert-broadcast.service.ts:81-105` | `useProjectsState` — sidebar rows and alias folding |
 | `loading_progress` | `projects-with-sessions-fetch.service.ts:164-175` | `useProjectsState` — project scan progress (`:720-736`) |

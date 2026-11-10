@@ -52,7 +52,8 @@ export interface IProviderRuntime {
   /**
    * Stops one outstanding background task. Resolves false when the session has
    * no live process or that process is not tracking the task — it already
-   * settled, or the id was never one of its own.
+   * settled, or the id was never one of its own. Rejects when the stop does
+   * not take, so the caller can report it (`TASK_STOP_FAILED`).
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
   /**
