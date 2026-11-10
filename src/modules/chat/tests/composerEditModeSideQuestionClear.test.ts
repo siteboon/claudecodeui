@@ -128,3 +128,17 @@ test('Sending in another chat leaves an edit open in the first chat', async () =
   await act(async () => { view.rerender({ session: SESSION }); });
   assert.equal(view.result.current.editingAnchorId, 'anchor-1', 'the first chat\'s edit is still open');
 });
+
+test('An edit in a second chat leaves the first chat\'s edit open', async () => {
+  const { view } = render();
+
+  await act(async () => { view.result.current.beginEditMessage(EDITED_MESSAGE); });
+  await act(async () => { view.rerender({ session: { id: 'session-2' } }); });
+  await act(async () => {
+    view.result.current.beginEditMessage({ ...EDITED_MESSAGE, transcriptAnchorId: 'anchor-2' });
+  });
+  assert.equal(view.result.current.editingAnchorId, 'anchor-2', 'the second chat edits its own message');
+
+  await act(async () => { view.rerender({ session: SESSION }); });
+  assert.equal(view.result.current.editingAnchorId, 'anchor-1', 'the first chat\'s edit is still open');
+});
