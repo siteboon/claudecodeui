@@ -67,6 +67,7 @@ import {
   getOpenCodeDatabasePath,
   readObjectRecord,
   SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+  SIDE_QUESTION_ANSWER_SEPARATOR,
   stripJsonComments,
   stripTrailingCommas,
 } from '@/shared/utils.js';
@@ -1624,6 +1625,23 @@ async function askOpenCodeSideQuestion(
     );
     const assistantMessageIds = new Set<string>();
     const streamedByPart = new Map<string, string>();
+    // `message.part.delta` names only a part id and a field, and reasoning
+    // parts stream on the field `text` too (opencode 1.18.30 with a thinking
+    // model). The type comes from the part's own `message.part.updated`,
+    // which opencode publishes empty at text-start, before any delta.
+    const partTypes = new Map<string, string>();
+    // A model often writes a progress note and the answer as separate text
+    // parts; a new part after text already sent starts a new paragraph.
+    let currentTextPartId: string | null = null;
+    const appendAnswerText = (partId: string, chunk: string) => {
+      if (answer && partId !== currentTextPartId) {
+        answer += SIDE_QUESTION_ANSWER_SEPARATOR;
+        sink.delta(SIDE_QUESTION_ANSWER_SEPARATOR);
+      }
+      currentTextPartId = partId;
+      answer += chunk;
+      sink.delta(chunk);
+    };
 
     await client.session.promptAsync({
       sessionID: forkId,
@@ -1661,13 +1679,15 @@ async function askOpenCodeSideQuestion(
       }
       if (event.type === 'message.part.updated') {
         const part = event.properties.part;
+        if (part.sessionID === forkId) {
+          partTypes.set(part.id, part.type);
+        }
         if (part.sessionID === forkId && part.type === 'text' && assistantMessageIds.has(part.messageID)) {
           const already = streamedByPart.get(part.id) ?? '';
           const delta = part.text.slice(already.length);
           streamedByPart.set(part.id, part.text);
           if (delta) {
-            answer += delta;
-            sink.delta(delta);
+            appendAnswerText(part.id, delta);
           }
         }
         continue;
@@ -1677,14 +1697,18 @@ async function askOpenCodeSideQuestion(
       // full at `text-end`). Tracked in the same `streamedByPart` map so the
       // `text-end` update above adds only whatever this loop has not already
       // sent — it recomputes the remainder from `part.text`, so it never
-      // double-counts regardless of which event got there first.
+      // double-counts regardless of which event got there first. A delta for
+      // a part of unknown type is dropped rather than guessed: nothing is
+      // lost, because that part's text-end update still sends its whole text.
       if (event.type === 'message.part.delta') {
         const { sessionID, messageID, partID, field, delta } = event.properties;
-        if (sessionID === forkId && field === 'text' && assistantMessageIds.has(messageID) && delta) {
+        if (
+          sessionID === forkId && field === 'text' && partTypes.get(partID) === 'text'
+          && assistantMessageIds.has(messageID) && delta
+        ) {
           const already = streamedByPart.get(partID) ?? '';
           streamedByPart.set(partID, already + delta);
-          answer += delta;
-          sink.delta(delta);
+          appendAnswerText(partID, delta);
         }
         continue;
       }

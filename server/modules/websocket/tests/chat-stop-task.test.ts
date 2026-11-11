@@ -58,6 +58,9 @@ async function withGateway(
         runtime: {
           stopBackgroundTask: async (provider: string, sessionId: string, taskId: string) => {
             stops.push({ provider, sessionId, taskId });
+            if (taskId === 'stuck') {
+              throw new Error('background task "stuck" is still running.');
+            }
             return taskId === knownTaskId;
           },
         } as never,
@@ -104,6 +107,18 @@ test('a task the runtime is not tracking is refused with NO_SUCH_TASK', async ()
     assert.equal(socket.frames[0].code, 'NO_SUCH_TASK');
     assert.equal(socket.frames[0].sessionId, SESSION_ID);
     assert.equal(socket.frames[0].taskId, 'already-settled');
+  });
+});
+
+test('a stop the task outlives is reported as TASK_STOP_FAILED', async () => {
+  await withGateway('task-1', async ({ socket }) => {
+    socket.emit('message', JSON.stringify({ type: 'chat.stop-task', sessionId: SESSION_ID, taskId: 'stuck' }));
+    await settle();
+
+    assert.equal(socket.frames.length, 1);
+    assert.equal(socket.frames[0].code, 'TASK_STOP_FAILED');
+    assert.equal(socket.frames[0].taskId, 'stuck');
+    assert.match(String(socket.frames[0].error), /still running/);
   });
 });
 

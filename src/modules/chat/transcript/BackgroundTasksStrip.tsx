@@ -66,7 +66,9 @@ function describeTask(message: ChatMessage, t: TFunction) {
     ? t('workflow.title', 'Workflow')
     : message.toolName === 'Bash'
       ? t('workflow.backgroundCommand', 'Command')
-      : t('workflow.backgroundAgent', 'Agent');
+      : message.toolName === 'Monitor'
+        ? t('workflow.backgroundMonitor', 'Monitor')
+        : t('workflow.backgroundAgent', 'Agent');
 
   // A workflow reports on each agent it spawned — "2/6 agents · audit:sidebar"
   // says how many have finished and the one it is on. Short of that, its own
