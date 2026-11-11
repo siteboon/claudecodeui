@@ -180,6 +180,8 @@
   },
   "projectGroup": {
     "locations_one": "{{count}} yol",
-    "locations_other": "{{count}} yol"
+    "locations_other": "{{count}} yol",
+    "sessions_one": "{{count}} oturum",
+    "sessions_other": "{{count}} oturum"
   }
 }

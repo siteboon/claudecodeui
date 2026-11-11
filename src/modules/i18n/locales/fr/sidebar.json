@@ -167,6 +167,8 @@
   },
   "projectGroup": {
     "locations_one": "{{count}} chemin",
-    "locations_other": "{{count}} chemins"
+    "locations_other": "{{count}} chemins",
+    "sessions_one": "{{count}} session",
+    "sessions_other": "{{count}} sessions"
   }
 }

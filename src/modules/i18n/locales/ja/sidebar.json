@@ -148,6 +148,7 @@
     "archiveSessionsNotice": "アーカイブすると、セッションはアクティブな一覧から外れますが、履歴は保持されます。"
   },
   "projectGroup": {
-    "locations_other": "{{count}} 件のパス"
+    "locations_other": "{{count}} 件のパス",
+    "sessions_other": "{{count}} 件のセッション"
   }
 }

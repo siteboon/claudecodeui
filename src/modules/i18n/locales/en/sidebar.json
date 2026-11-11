@@ -180,6 +180,8 @@
   },
   "projectGroup": {
     "locations_one": "{{count}} path",
-    "locations_other": "{{count}} paths"
+    "locations_other": "{{count}} paths",
+    "sessions_one": "{{count}} session",
+    "sessions_other": "{{count}} sessions"
   }
 }

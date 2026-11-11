@@ -167,6 +167,8 @@
   },
   "projectGroup": {
     "locations_one": "{{count}} Pfad",
-    "locations_other": "{{count}} Pfade"
+    "locations_other": "{{count}} Pfade",
+    "sessions_one": "{{count}} Sitzung",
+    "sessions_other": "{{count}} Sitzungen"
   }
 }

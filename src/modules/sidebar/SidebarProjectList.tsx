@@ -93,7 +93,7 @@ export default function SidebarProjectList({
 
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
 
-  const renderProjectItem = (project: Project) => {
+  const renderProjectItem = (project: Project, isGrouped = false) => {
     // Both renames are resolved here rather than inside the row, so
     // every other row is handed the same scalars on each keystroke and
     // its memo boundary holds.
@@ -119,6 +119,7 @@ export default function SidebarProjectList({
         project={project}
         selectedProject={selectedProject}
         selectedSession={selectedSession}
+        isGrouped={isGrouped}
         isExpanded={isProjectExpanded(project.projectId)}
         isDeleting={deletingProjects.has(project.projectId)}
         isStarred={isProjectStarred(project.projectId)}
@@ -194,12 +195,12 @@ export default function SidebarProjectList({
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{group.key}</span>
             <span className="shrink-0 text-xs text-muted-foreground">
               {t('projectGroup.locations', { count: group.projects.length })}
-              {` · ${totalSessions}`}
+              {` · ${t('projectGroup.sessions', { count: totalSessions })}`}
             </span>
           </button>
           {!isCollapsed && (
             <div className="ml-3 border-l border-border pl-1 md:space-y-1">
-              {group.projects.map((project) => renderProjectItem(project))}
+              {group.projects.map((project) => renderProjectItem(project, true))}
             </div>
           )}
         </div>
