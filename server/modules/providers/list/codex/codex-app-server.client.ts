@@ -5,6 +5,9 @@ import readline from 'node:readline';
 
 import {
   AppError,
+  resolveCodexCliPath,
+} from '@/shared/index.js';
+import {
   SIDE_CONVERSATION_BOUNDARY_PROMPT,
   SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
   SIDE_QUESTION_ANSWER_SEPARATOR,
@@ -93,14 +96,18 @@ async function withAppServer<T>(
   }) => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
-  // Resolved through the exported object, not a module-local function, so
-  // tests can replace `codexAppServer.resolveLauncher` with a fake app-server
-  // script the same way they already replace `forkThread`.
-  const launcher = codexAppServer.resolveLauncher();
-  const child = spawn(process.execPath, [launcher, 'app-server'], {
-    env: process.env,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  // Keep the exported launcher seam for the bundled CLI path so the upstream
+  // app-server tests can substitute a fake executable.
+  const configuredPath = resolveCodexCliPath();
+  const child = configuredPath
+    ? spawn(configuredPath, ['app-server'], {
+      env: process.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    : spawn(process.execPath, [codexAppServer.resolveLauncher(), 'app-server'], {
+      env: process.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
 
   // The server logs sandbox and skill warnings to stderr on every start. They
   // are not failures and drowning the app log in them helps nobody, so stderr
