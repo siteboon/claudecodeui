@@ -11,6 +11,7 @@ import { providerSkillsService } from '@/modules/providers/services/skills.servi
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sideQuestionsService } from '@/modules/providers/services/side-questions.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { sendSessionHistoryResponse } from '@/modules/providers/services/history-response.service.js';
 import type {
   CustomProviderModelEffort,
   CustomProviderModelInput,
@@ -1039,7 +1040,7 @@ router.get(
     // are not part of the paged transcript, and the client wants to draw
     // every one of them regardless of which page it is looking at.
     const sideQuestions = sideQuestionsService.listForSession(sessionId);
-    res.json(createApiSuccessResponse({ ...result, sideQuestions }));
+    await sendSessionHistoryResponse(req, res, createApiSuccessResponse({ ...result, sideQuestions }));
   }),
 );
 
