@@ -63,12 +63,26 @@ const readConfigFile = async (
 };
 
 /**
+ * OpenCode's global config directory: `OPENCODE_CONFIG_DIR` when set,
+ * otherwise `opencode` under `XDG_CONFIG_HOME`, falling back to `~/.config`.
+ */
+export const getOpenCodeConfigDir = (): string => {
+  const overrideDir = readOptionalString(process.env.OPENCODE_CONFIG_DIR);
+  if (overrideDir) {
+    return path.resolve(overrideDir);
+  }
+
+  const configHome = readOptionalString(process.env.XDG_CONFIG_HOME) ?? path.join(os.homedir(), '.config');
+  return path.join(configHome, 'opencode');
+};
+
+/**
  * Reads the global config files, `OPENCODE_CONFIG` (a file path) and
  * `OPENCODE_CONFIG_CONTENT` (inline config). Malformed or unreadable sources
  * are skipped rather than failing the caller.
  */
 export const readOpenCodeConfigs = async (): Promise<OpenCodeConfigSource[]> => {
-  const configDir = path.join(os.homedir(), '.config', 'opencode');
+  const configDir = getOpenCodeConfigDir();
   const filePaths = OPENCODE_CONFIG_FILES.map((fileName) => path.join(configDir, fileName));
 
   const customConfigPath = readOptionalString(process.env.OPENCODE_CONFIG);

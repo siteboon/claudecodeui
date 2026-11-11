@@ -20,6 +20,8 @@ const AUTH_ENV_KEYS = [
   'OPENROUTER_API_KEY',
   'OPENCODE_CONFIG',
   'OPENCODE_CONFIG_CONTENT',
+  'OPENCODE_CONFIG_DIR',
+  'XDG_CONFIG_HOME',
   SET_VAR,
   UNSET_VAR,
   BLANK_VAR,
@@ -140,6 +142,30 @@ test('OpenCode resolves {file:} paths from inline and OPENCODE_CONFIG config', a
     await writeConfig(customDir, v2Config('{file:secrets/res.key}'), 'custom.json');
     process.env.OPENCODE_CONFIG = path.join(customDir, 'custom.json');
   }));
+});
+
+test('OpenCode reads the global config from XDG_CONFIG_HOME and OPENCODE_CONFIG_DIR', async () => {
+  assertAuthenticated(await readStatus(async (homeDir) => {
+    const xdgDir = path.join(homeDir, 'xdg');
+    await mkdir(path.join(xdgDir, 'opencode'), { recursive: true });
+    await writeConfig(path.join(xdgDir, 'opencode'), v2Config(FAKE_KEY));
+    process.env.XDG_CONFIG_HOME = xdgDir;
+  }));
+
+  // OPENCODE_CONFIG_DIR replaces the global directory rather than adding to it.
+  assertAuthenticated(await readStatus(async (homeDir, configDir) => {
+    const overrideDir = path.join(homeDir, 'oc-config');
+    await mkdir(overrideDir, { recursive: true });
+    await writeConfig(overrideDir, v2Config(FAKE_KEY));
+    await writeConfig(configDir, v2Config(`{env:${UNSET_VAR}}`));
+    process.env.OPENCODE_CONFIG_DIR = overrideDir;
+  }));
+
+  const status = await readStatus(async (homeDir, configDir) => {
+    await writeConfig(configDir, v2Config(FAKE_KEY));
+    process.env.XDG_CONFIG_HOME = path.join(homeDir, 'empty-xdg');
+  });
+  assert.equal(status.authenticated, false);
 });
 
 test('OpenCode does not count {file:} targets that are empty, directories or missing', async () => {

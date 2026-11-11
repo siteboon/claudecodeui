@@ -19,6 +19,8 @@ const OPENCODE_ENV_KEYS = [
   'OPENAI_API_KEY',
   'OPENCODE_CONFIG',
   'OPENCODE_CONFIG_CONTENT',
+  'OPENCODE_CONFIG_DIR',
+  'XDG_CONFIG_HOME',
 ];
 
 /**
@@ -279,7 +281,7 @@ test('OpenCode keeps curated metadata for discovered models it already knows', a
   );
 });
 
-test('OpenCode counts providers from OPENCODE_CONFIG and OPENCODE_CONFIG_CONTENT', async () => {
+test('OpenCode counts providers from OPENCODE_CONFIG, OPENCODE_CONFIG_CONTENT and a moved config dir', async () => {
   const listing = async () => ['my-proxy/foo', 'anthropic/claude-sonnet-5', 'opencode/gpt-5.6-terra'];
   const expectProxyAndAnthropic = async (adapter: OpenCodeProviderModels): Promise<void> => {
     const catalog = await adapter.getSupportedModels();
@@ -308,6 +310,21 @@ test('OpenCode counts providers from OPENCODE_CONFIG and OPENCODE_CONFIG_CONTENT
     expectProxyAndAnthropic,
     listing,
   );
+
+  for (const envKey of ['XDG_CONFIG_HOME', 'OPENCODE_CONFIG_DIR'] as const) {
+    await withOpenCodeHome(
+      async (homeDir) => {
+        await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } });
+        const baseDir = path.join(homeDir, 'moved-config');
+        const configDir = envKey === 'XDG_CONFIG_HOME' ? path.join(baseDir, 'opencode') : baseDir;
+        await mkdir(configDir, { recursive: true });
+        await writeFile(path.join(configDir, 'opencode.json'), JSON.stringify({ provider: { 'my-proxy': {} } }), 'utf8');
+        process.env[envKey] = baseDir;
+      },
+      expectProxyAndAnthropic,
+      listing,
+    );
+  }
 });
 
 // The config from issue #1771: OpenCode v2's `providers` / `settings.apiKey` shape.
