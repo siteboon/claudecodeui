@@ -11,7 +11,7 @@ export function useBranchesSource(projectId: string | undefined, enabled: boolea
   return useApiSource<BranchResult, BranchesResponse>({
     enabled: enabled && !!projectId,
     deps: [projectId],
-    fetcher: (signal) => api.git.branches(projectId!, { signal }),
+    fetcher: (signal) => api.git.branches({ projectId: projectId! }, { signal }),
     parse: (data) => (data.localBranches ?? []).map((name) => ({ name })),
   });
 }
