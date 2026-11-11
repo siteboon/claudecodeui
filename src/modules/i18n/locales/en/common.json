@@ -102,6 +102,13 @@
     "renameSessionLabel": "Session title"
   },
   "fileTree": {
+    "loadingFolder": "Loading folder…",
+    "reloadFolder": "Reload folder",
+    "emptyFolder": "Empty folder",
+    "previousPage": "Previous 200",
+    "nextPage": "Next 200",
+    "loadedSearchHint": "Search filters loaded pages. Expand folders or change pages to browse more files.",
+    "folderReferenceUnavailable": "Folder reference is unavailable under the current ignore rules.",
     "loading": "Loading files...",
     "files": "Files",
     "simpleView": "Simple view",

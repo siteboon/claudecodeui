@@ -311,6 +311,8 @@ export const api = {
     get(fileContentPath(projectId, filePath), options),
   saveFile: (projectId: string, filePath: string, content: string) =>
     put(`/api/file-tree/projects/${projectId}/file`, { filePath, content }),
+  getDirectoryPage: (projectId: string, directory: string, cursor = '', options: ApiRequestOptions = {}) =>
+    get(`/api/file-tree/projects/${projectId}/directory${query({ path: directory, cursor, limit: 200, respectGitignore: true })}`, options),
   getFiles: (projectId: string, options: ApiRequestOptions = {}) =>
     get(`/api/file-tree/projects/${projectId}/files${query({ respectGitignore: true })}`, options),
 

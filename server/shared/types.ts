@@ -1620,6 +1620,10 @@ export type FileTreeServices = {
     path: string;
     message: string;
   }>;
+  /** Lists one confined directory, with a bounded page and a change-sensitive cursor. */
+  listProjectDirectory(projectId: string, options: {
+    path?: string; cursor?: string; limit?: number; respectGitignore: boolean;
+  }): Promise<{ path: string; entries: FileTreeNode[]; nextCursor: string | null }>;
   listProjectFiles(
     projectId: string,
     options?: { respectGitignore: boolean },
