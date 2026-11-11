@@ -35,6 +35,8 @@ test('external Antigravity activity survives subscribe and rejects a second prom
     handleChatConnection(connection as never, { user: { id: 1 } } as never, {
       runtime: {
         hasRuntime: () => true,
+        steer: async () => false,
+        askSideQuestion: async () => { throw new Error('Antigravity has no side-question runtime.'); },
         run: async () => { started = true; },
         abort: async () => { throw new Error('Do not signal an interactive AGY process.'); },
         stopBackgroundTask: async () => false,

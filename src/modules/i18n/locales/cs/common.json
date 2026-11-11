@@ -465,6 +465,7 @@
     "backgroundTasks": "Úlohy na pozadí",
     "backgroundAgent": "Agent",
     "backgroundCommand": "Příkaz",
+    "backgroundMonitor": "Monitor",
     "stopTask": "Zastavit",
     "taskRowNotLoaded": "Spuštěno dříve v této konverzaci; kliknutím načtete",
     "taskOfAgent": "Spuštěno jedním z agentů této relace"

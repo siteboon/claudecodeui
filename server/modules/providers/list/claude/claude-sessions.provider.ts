@@ -1248,7 +1248,9 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     // A synthesized id is useless as an anchor — it changes on every read — so
     // a row without its own uuid produces messages with no anchor at all.
     const raw = readObjectRecord(rawMessage);
-    const anchorId = typeof raw?.uuid === 'string' && raw.uuid ? raw.uuid : null;
+    // An attachment row (a message steered into a running turn) is part of the
+    // turn it joined, not a turn of its own, so it is no place to edit from.
+    const anchorId = raw?.type !== 'attachment' && typeof raw?.uuid === 'string' && raw.uuid ? raw.uuid : null;
     if (anchorId) {
       for (const message of messages) {
         if (message.role === 'user') {
@@ -1276,6 +1278,26 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     const messages: NormalizedMessage[] = [];
     const ts = raw.timestamp || new Date().toISOString();
     const baseId = raw.uuid || generateMessageId('claude');
+
+    // A message steered into a running turn that Claude read at a tool-call
+    // boundary is stored as a `queued_command` attachment of that turn rather
+    // than as a user row. It reads as the user's message, at the point Claude
+    // read it — under the id it was sent with (`source_uuid`), which is the id
+    // the live echo carried, so the two reconcile into one bubble.
+    // `commandMode` other than `prompt` (task notifications and the like) is
+    // the CLI talking to itself, not the user.
+    if (raw.type === 'attachment') {
+      const attachment = readObjectRecord(raw.attachment);
+      const commandMode = attachment?.commandMode ?? 'prompt';
+      if (attachment?.type === 'queued_command' && commandMode === 'prompt' && attachment.prompt) {
+        return this.normalizeMessageRows({
+          type: 'user',
+          uuid: typeof attachment.source_uuid === 'string' && attachment.source_uuid ? attachment.source_uuid : baseId,
+          timestamp: ts,
+          message: { role: 'user', content: attachment.prompt },
+        }, sessionId);
+      }
+    }
 
     // The live stream reports on background work — a launched workflow, agent
     // or shell command — through four `system` subtypes that the transcript

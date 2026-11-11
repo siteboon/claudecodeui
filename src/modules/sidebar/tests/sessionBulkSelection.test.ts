@@ -116,6 +116,7 @@ const renderSessions = (overrides: ListOverrides = {}) =>
       onSaveEditingSession: noop,
       onProjectSelect: noop,
       onSessionSelect: noop,
+      onArchiveSession: noop,
       onDeleteSession: noop,
       onLoadMoreSessions: noop,
       onNewSession: noop,

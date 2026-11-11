@@ -133,10 +133,26 @@
   "priorities": {
     "high": "Yüksek",
     "medium": "Orta",
-    "low": "Düşük"
+    "low": "Düşük",
+    "highTitle": "Yüksek Öncelik",
+    "mediumTitle": "Orta Öncelik",
+    "lowTitle": "Düşük Öncelik"
   },
   "noMatchingTasks": {
     "title": "Filtrelerine uygun görev yok",
     "description": "Arama veya filtre kriterlerini değiştirmeyi dene."
+  },
+  "banner": {
+    "initialize": "Başlat",
+    "hideDetails": "Ayrıntıları gizle",
+    "whatIsTaskmaster": "TaskMaster nedir?",
+    "detailAiPowered": "- Bağımlılıklar ve alt görevlerle yapay zekâ destekli görev yönetimi.",
+    "detailPrdDriven": "- Projeye hızlı başlamak için PRD (ürün gereksinim belgesi) tabanlı görev oluşturma.",
+    "detailKanbanList": "- Günlük iş takibi için Kanban ve liste görünümleri.",
+    "startTask": "Görevi Başlat",
+    "viewTaskDetails": "Görev ayrıntılarını gör",
+    "viewAllTasks": "Tüm görevleri gör",
+    "allComplete": "Tüm görevler tamamlandı",
+    "noPending": "Bekleyen görev yok"
   }
 }

@@ -390,6 +390,7 @@
     "backgroundTasks": "Background tasks",
     "backgroundAgent": "Agent",
     "backgroundCommand": "Command",
+    "backgroundMonitor": "Monitor",
     "stopTask": "Stop",
     "taskRowNotLoaded": "Launched earlier in this conversation; click to load it",
     "taskOfAgent": "Launched by one of this session's agents"

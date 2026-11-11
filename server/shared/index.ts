@@ -30,10 +30,14 @@ export type {
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
   ProviderSkillSource,
+  SideQuestion,
+  SideQuestionEvent,
+  SideQuestionRuntime,
   UpsertProviderMcpServerInput,
 } from './types.js';
 export {
   AppError,
+  SIDE_QUESTION_ID_PATTERN,
   buildDefaultProviderCurrentActiveModel,
   buildLookupMap,
   extractFirstValidJsonlData,
