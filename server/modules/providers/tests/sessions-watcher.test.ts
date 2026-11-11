@@ -40,6 +40,18 @@ test('a child whose name starts with two dots is still inside the root', () => {
   assert.equal(isIgnored(path.join(root, '..archive', 'abc.jsonl')), false);
 });
 
+test('the ignored matcher can limit a root to one subdirectory per folder', () => {
+  // Cursor's projects root: only `<slug>/agent-transcripts` holds chat transcripts.
+  const root = path.join(os.tmpdir(), 'cursor-projects');
+  const isIgnored = createWatcherIgnoredMatcher(root, 'agent-transcripts');
+
+  assert.equal(isIgnored(path.join(root, 'Users-me-app')), false);
+  assert.equal(isIgnored(path.join(root, 'Users-me-app', 'agent-transcripts', 'id', 'id.jsonl')), false);
+  assert.equal(isIgnored(path.join(root, 'Users-me-app', 'terminals', '1.txt')), true);
+  assert.equal(isIgnored(path.join(root, 'Users-me-app', 'worker.log')), true);
+  assert.equal(isIgnored(path.join(root, 'Users-me-app', 'agent-transcripts', 'id', 'subagents', 'a.jsonl')), true);
+});
+
 test('chokidar reports only session files through the matcher (#1156)', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'sessions-watcher-'));
   const files = [

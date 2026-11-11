@@ -49,6 +49,7 @@ async function buildSessionUpsertedEvent(
       summary: row.custom_name || '',
       messageCount: 0,
       lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+      readOnly: Boolean(row.read_only),
     },
     project: project
       ? {
