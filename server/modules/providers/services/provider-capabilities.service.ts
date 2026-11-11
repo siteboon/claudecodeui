@@ -44,8 +44,8 @@ type ProviderCapabilities = {
   supportsSessionForking: boolean;
   /**
    * Whether the provider can answer a question on the side without touching
-   * the session's main turn. False for Cursor and Antigravity, whose runtimes
-   * do not implement the side-question protocol.
+   * the session's main turn. False for runtimes without the side-question
+   * contract, such as Cursor.
    */
   supportsSideQuestions: boolean;
   /**
@@ -156,7 +156,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: [],
     supportsMessageEditing: false,
     supportsSessionForking: true,
-    supportsSideQuestions: false,
+    supportsSideQuestions: true,
     supportsSteering: false,
   },
 };

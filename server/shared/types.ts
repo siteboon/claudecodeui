@@ -348,6 +348,23 @@ export type SideQuestionRuntime = {
   askSideQuestion(provider: LLMProvider, request: SideQuestionRequest, sink: SideQuestionSink): Promise<SideQuestionOutcome>;
 };
 
+// ---------------------------
+//----------------- CHAT RUN ADMISSION ------------
+/**
+ * Websocket dispatch and the scheduled-message queue use this result to retain
+ * a queued turn when another managed or native run wins admission. Retryable
+ * failures have not sent any input to the provider; all other failures must be
+ * surfaced instead of replaying a possibly accepted prompt.
+ */
+export type ChatTurnDispatchResult = {
+  started: boolean;
+  error: string | null;
+  retryable?: boolean;
+};
+
+// ---------------------------
+//----------------- SIDE-QUESTION STORE ------------
+
 /**
  * The one place a side question's mutable state lives.
  *

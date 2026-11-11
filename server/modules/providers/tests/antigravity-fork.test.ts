@@ -10,6 +10,7 @@ import Database from 'better-sqlite3';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { AntigravityForkProvider } from '@/modules/providers/list/antigravity/antigravity-fork.provider.js';
 import { AntigravitySessionsProvider } from '@/modules/providers/list/antigravity/antigravity-sessions.provider.js';
+import { AntigravitySessionSynchronizer } from '@/modules/providers/list/antigravity/antigravity-session-synchronizer.provider.js';
 import { antigravityCliLivenessService } from '@/modules/providers/services/antigravity-cli-liveness.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
@@ -96,6 +97,32 @@ test('AGY full forks preserve native context, independent identities, artifacts 
     } finally { db.close(); }
     assert.deepEqual(await readFile(path.join(root, 'conversations', `${SOURCE}.db`)), before);
     assert.equal(await readFile(input.jsonlPath, 'utf8'), await readFile(row.jsonl_path!, 'utf8'));
+  });
+});
+
+test('AGY ephemeral snapshots never become sidebar sessions and dispose only their own native storage', async () => {
+  await fixture(async (input, root) => {
+    const before = await readFile(path.join(root, 'conversations', `${SOURCE}.db`));
+    chatRunRegistry.startRun({ appSessionId: APP, provider: 'antigravity', providerSessionId: SOURCE, connection: null, userId: null });
+    const fork = await new AntigravityForkProvider().forkSideQuestion(input);
+    const brain = path.join(root, 'brain', fork.providerSessionId);
+    try {
+      const agent = await readFile(path.join(fork.workingDirectory, '.agents', 'agents', `${fork.agentName}.md`), 'utf8');
+      assert.match(agent, /tools:\n  - view_file\n  - grep_search\n/);
+      assert.match(agent, /subagent: false/);
+      await writeFile(path.join(root, 'history.jsonl'), JSON.stringify({ conversationId: fork.providerSessionId, workspace: input.projectPath }) + '\n');
+      assert.equal(await new AntigravitySessionSynchronizer().synchronizeFile(fork.jsonlPath), null);
+      assert.equal(sessionsDb.getSessionByProviderSessionId(fork.providerSessionId), null);
+      assert.equal(await readFile(path.join(brain, 'plan.md'), 'utf8'), 'shared context');
+      assert.equal(chatRunRegistry.isProcessing(APP), true, 'the parent stays active');
+    } finally {
+      await fork.dispose();
+    }
+    await fork.dispose();
+    await assert.rejects(readdir(fork.workingDirectory), { code: 'ENOENT' });
+    assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
+    assert.deepEqual(await readdir(path.join(root, 'brain')), [SOURCE]);
+    assert.deepEqual(await readFile(path.join(root, 'conversations', `${SOURCE}.db`)), before);
   });
 });
 

@@ -1,6 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { sessionsDb } from '@/modules/database/index.js';
@@ -98,6 +98,13 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
     const parts = relative.split(path.sep);
     if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative) || parts.length < 2) return null;
     const sessionId = parts[0];
+    try {
+      await access(path.join(this.brainDir, sessionId, '.cloudcli-side-question'));
+      this.deferredFiles.delete(filePath);
+      return null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
     const fromHistory = history.get(sessionId);
     let firstUserMessage = fromHistory?.sessionName;
     // The app mapping owns the workspace even if native history still names

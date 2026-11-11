@@ -21,6 +21,7 @@ import {
 } from '@/shared/index.js';
 import type {
   AnyRecord,
+  ChatTurnDispatchResult,
   AuthenticatedWebSocketRequest,
   LLMProvider,
   ProviderPermissionDecision,
@@ -247,13 +248,13 @@ async function dispatchRun(
   dependencies: ChatWebSocketDependencies,
   extraRuntimeOptions: AnyRecord = {},
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
-): Promise<{ started: boolean; error: string | null }> {
+): Promise<ChatTurnDispatchResult> {
   const provider = session.provider as LLMProvider;
 
   if (await sessionsService.getExternalSessionActivity(sessionId)) {
     const error = 'This session is running in the Antigravity CLI.';
     if (ws) sendProtocolError(ws, 'RUN_IN_PROGRESS', error, sessionId);
-    return { started: false, error };
+    return { started: false, error, retryable: true };
   }
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,
@@ -272,7 +273,7 @@ async function dispatchRun(
         sessionId
       );
     }
-    return { started: false, error: 'A run is already in progress for this session.' };
+    return { started: false, error: 'A run is already in progress for this session.', retryable: true };
   }
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
@@ -881,7 +882,7 @@ export async function runDetachedChatTurn(
     interruptActiveRun?: boolean;
   },
   dependencies: ChatWebSocketDependencies,
-): Promise<{ started: boolean; error: string | null }> {
+): Promise<ChatTurnDispatchResult> {
   const session = sessionsDb.getSessionById(input.sessionId);
   if (!session) {
     return { started: false, error: 'The session no longer exists.' };
@@ -895,7 +896,7 @@ export async function runDetachedChatTurn(
   const activeRun = chatRunRegistry.getRun(input.sessionId);
   if (activeRun && activeRun.status === 'running') {
     if (!input.interruptActiveRun) {
-      return { started: false, error: 'A run was already in progress for this session.' };
+      return { started: false, error: 'A run was already in progress for this session.', retryable: true };
     }
     // Same shape as `chat.abort`: cancel the provider run and emit the
     // terminal `complete` on its behalf, so every watching client sees the

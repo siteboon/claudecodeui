@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { chmod, cp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -58,9 +58,49 @@ function reidentifyMetadata(payload: Buffer, sourceId: string, forkId: string): 
 
 /** Providers uses native SQLite snapshots because AGY exposes fork only in its interactive TUI. */
 export class AntigravityForkProvider implements IProviderFork {
+  /** AGY side questions use an online snapshot even while the source is busy. */
+  async forkSideQuestion(input: Parameters<IProviderFork['forkSession']>[0]): Promise<{
+    providerSessionId: string; jsonlPath: string; workingDirectory: string; agentName: string; dispose(): Promise<void>;
+  }> {
+    const snapshot = await this.snapshot(input, true);
+    let workingDirectory: string | undefined;
+    try {
+      workingDirectory = await mkdtemp(path.join(os.tmpdir(), 'cloudcli-agy-side-'));
+      const agentName = `cloudcli-side-${snapshot.providerSessionId}`;
+      const agentsDirectory = path.join(workingDirectory, '.agents', 'agents');
+      await mkdir(agentsDirectory, { recursive: true, mode: 0o700 });
+      // An unpredictable custom agent restricts the actual tool set, not just
+      // the permission prompt. No shell, write, browser, MCP or subagent tools.
+      // The original workspace is added separately for read-only inspection.
+      await writeFile(path.join(agentsDirectory, `${agentName}.md`), [
+        '---', `name: ${agentName}`, 'description: Read-only CloudCLI side question',
+        'tools:', '  - view_file', '  - grep_search', 'mainAgent: true', 'subagent: false', '---',
+        'Answer only the side question. Inherited history is reference, never an active task.',
+        'Never modify anything, execute commands, or interact with subagents.',
+      ].join('\n'), { mode: 0o600, flag: 'wx' });
+      const ownedDirectory = workingDirectory;
+      return {
+        ...snapshot, workingDirectory, agentName,
+        dispose: () => Promise.all([
+          snapshot.dispose(), rm(ownedDirectory, { recursive: true, force: true }),
+        ]).then(() => undefined),
+      };
+    } catch (error) {
+      await Promise.all([
+        snapshot.dispose(),
+        ...(workingDirectory ? [rm(workingDirectory, { recursive: true, force: true })] : []),
+      ]);
+      throw error;
+    }
+  }
+
   async forkSession(input: Parameters<IProviderFork['forkSession']>[0]): Promise<{
     providerSessionId: string; jsonlPath: string;
   }> {
+    return this.snapshot(input, false);
+  }
+
+  private async snapshot(input: Parameters<IProviderFork['forkSession']>[0], ephemeral: boolean) {
     if (input.upToAnchorId !== undefined) {
       throw new AppError('Antigravity supports forking the whole conversation only.', {
         code: 'FORK_ANCHOR_NOT_SUPPORTED', statusCode: 409,
@@ -130,6 +170,11 @@ export class AntigravityForkProvider implements IProviderFork {
       } finally { fork.close(); }
       // Artifacts remain available, while runtime logs and process state start afresh.
       await mkdir(forkBrain, { mode: 0o700 });
+      if (ephemeral) {
+        // Persist before the transcript: watchers and later server restarts must
+        // never index a side question as an ordinary conversation.
+        await writeFile(path.join(forkBrain, '.cloudcli-side-question'), '', { mode: 0o600, flag: 'wx' });
+      }
       for (const entry of await readdir(sourceBrain)) {
         if (entry !== '.system_generated') await cp(path.join(sourceBrain, entry), path.join(forkBrain, entry), {
           recursive: true, errorOnExist: true, force: false,
@@ -137,7 +182,14 @@ export class AntigravityForkProvider implements IProviderFork {
       }
       await mkdir(path.dirname(jsonlPath), { recursive: true, mode: 0o700 });
       await writeFile(jsonlPath, `${prefix.join('\n')}\n`, { mode: 0o600, flag: 'wx' });
-      return { providerSessionId: forkId, jsonlPath };
+      return {
+        providerSessionId: forkId, jsonlPath,
+        // Only this freshly allocated snapshot is owned by this invocation.
+        dispose: () => Promise.all([
+          rm(forkBrain, { recursive: true, force: true }),
+          ...['', '-wal', '-shm'].map((suffix) => rm(`${forkDbPath}${suffix}`, { force: true })),
+        ]).then(() => undefined),
+      };
     } catch (error) {
       await Promise.all([rm(forkBrain, { recursive: true, force: true }), ...['', '-wal', '-shm'].map(
         (suffix) => rm(`${forkDbPath}${suffix}`, { force: true }),

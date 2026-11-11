@@ -66,6 +66,27 @@ exposes `/fork` only in its interactive TUI, so this adapter validates the known
 native storage layout and rejects unsupported layouts. Message-prefix forks
 are explicitly unsupported; their cache boundaries require a native API.
 
+Antigravity also implements the shared runtime `askSideQuestion` contract, so
+the existing send menu, `/btw`, streaming cards, reconnect and dismiss handling
+work without provider-specific frontend branches. Its CLI's native `/btw` is
+[interactive-only](https://antigravity.google/docs/cli/commands/btw/), so the
+adapter takes an online SQLite snapshot into a disposable native conversation,
+retains the source model, and sends the side-conversation boundary on stdin.
+Unlike the explicit user fork endpoint, this read-only snapshot can be taken
+while the parent is running. Unknown or not-yet-persisted native state fails
+explicitly. A temporary custom agent exposes only file reading and search;
+plan mode and per-process deny rules also block writes, commands, MCP and
+browser tools even when the parent uses bypass permissions. Side runs do
+not bind or complete the parent, reserve its run slot, or send run notifications.
+A marker written before the transcript keeps temporary copies out of session
+indexing, including after restart. Copies are removed after process close on
+success, failure or dismiss; a cleanup failure is reported with the side answer.
+
+Queued follow-ups use the same persisted queue and dispatcher for all providers.
+They wait for both managed turns and externally running native turns. Dispatch
+admission returns a provider-independent `retryable` result when a competing
+turn wins after a queue claim, so the queue restores that unsent message.
+
 On Linux, external AGY activity requires both a busy native summary and a live,
 same-user AGY process holding that conversation's exclusive presence lock.
 These turns appear as external activity, cannot be interrupted by CloudCLI,

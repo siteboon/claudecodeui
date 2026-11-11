@@ -12,6 +12,8 @@ export type {
 } from './interfaces.js';
 export type {
   AnyRecord,
+  ChatTurnDispatchResult,
+  SideQuestionOutcome,
   AuthenticatedWebSocketRequest,
   BackgroundTaskSummary,
   LLMProvider,
@@ -38,6 +40,8 @@ export type {
 export {
   AppError,
   SIDE_QUESTION_ID_PATTERN,
+  SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+  SIDE_CONVERSATION_BOUNDARY_PROMPT,
   buildDefaultProviderCurrentActiveModel,
   buildLookupMap,
   extractFirstValidJsonlData,

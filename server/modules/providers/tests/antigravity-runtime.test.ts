@@ -9,6 +9,7 @@ import test from 'node:test';
 import { AntigravitySessionsProvider } from '@/modules/providers/list/antigravity/antigravity-sessions.provider.js';
 import { createAntigravityRuntime, resolveAntigravityPermissionArgs } from '@/modules/providers/list/antigravity/antigravity-runtime.provider.js';
 import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
+import type { SideQuestionRequest } from '@/shared/types.js';
 
 const sessionsProvider = new AntigravitySessionsProvider();
 function createRuntimeContext(overrides: Partial<ProviderRuntimeContext> = {}): ProviderRuntimeContext {
@@ -61,6 +62,103 @@ function createWriter(onMessage?: (message: AnyRecord) => void) {
   return { writer, messages, getProviderSessionId: () => id };
 }
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+function sideQuestion(overrides: Partial<SideQuestionRequest> = {}): SideQuestionRequest {
+  return {
+    appSessionId: 'parent-app', providerSessionId: 'parent-native', projectPath: '/workspace',
+    question: 'Which file was discussed?', model: 'agy-model', signal: new AbortController().signal,
+    ...overrides,
+  };
+}
+
+test('AGY side questions stream on an independent native snapshot with enforced read-only settings', async () => {
+  const child = createFakeProcess();
+  let disposed = false;
+  let args: string[] = [];
+  let stdin = '';
+  child.stdin.on('data', (data) => { stdin += String(data); });
+  const runtime = createAntigravityRuntime({
+    forkProvider: { forkSideQuestion: async (input) => {
+      assert.equal(input.providerSessionId, 'parent-native');
+      return { providerSessionId: 'side-native', jsonlPath: '/side/transcript.jsonl', workingDirectory: '/isolated-agent', agentName: 'readonly-agent', dispose: async () => { disposed = true; } };
+    } },
+    spawnProcess: (_command, flags) => { args = flags; return child as never; },
+  });
+  const chunks: string[] = [];
+  const pending = runtime.askSideQuestion!(sideQuestion(), { delta: (text) => chunks.push(text) }, createRuntimeContext());
+  await tick();
+  assert.equal(args[args.indexOf('--conversation') + 1], 'side-native');
+  assert.equal(args[args.indexOf('--model') + 1], 'agy-model');
+  assert.equal(args[args.indexOf('--mode') + 1], 'plan');
+  assert.equal(args[args.indexOf('--agent') + 1], 'readonly-agent');
+  assert.equal(args[args.indexOf('--add-dir') + 1], '/workspace');
+  assert.ok(args.includes('--disable-slash-commands'));
+  assert.ok(!args.includes('--dangerously-skip-permissions'));
+  const settings = JSON.parse(args[args.indexOf('--settings') + 1]);
+  assert.deepEqual(settings.permissions.deny, ['write_file(*)', 'command(*)', 'unsandboxed(*)', 'mcp(*)', 'read_url(*)', 'execute_url(*)']);
+  assert.equal(settings.toolPermission, 'strict');
+  assert.match(JSON.parse(stdin).message.content, /Side conversation boundary/);
+  assert.match(JSON.parse(stdin).message.content, /Which file was discussed/);
+  assert.equal(runtime.abort('parent-app'), false, 'side questions never claim the parent process slot');
+  emitEvent(child, { event: 'step_update', step_update: { conversation_id: 'side-native', step_type: 'agent_response', text_delta: 'src/main.ts' } });
+  finish(child, 'side-native', 'src/main.ts');
+  assert.deepEqual(await pending, { status: 'done', answer: 'src/main.ts' });
+  assert.deepEqual(chunks, ['src/main.ts']);
+  assert.equal(disposed, true);
+});
+
+test('dismissing an AGY side question retains its snapshot until the process closes and leaves the parent running', async () => {
+  const parent = createFakeProcess();
+  const side = createFakeProcess(false);
+  let calls = 0;
+  let disposed = false;
+  const controller = new AbortController();
+  const runtime = createAntigravityRuntime({
+    forkProvider: { forkSideQuestion: async () => ({
+      providerSessionId: 'side-native', jsonlPath: '/side/transcript.jsonl', workingDirectory: '/isolated-agent', agentName: 'readonly-agent', dispose: async () => { disposed = true; },
+    }) },
+    spawnProcess: () => (++calls === 1 ? parent : side) as never,
+  });
+  const main = runtime.run('continue', { sessionId: 'parent-app' }, createWriter().writer,
+    createRuntimeContext({ resolveProviderSessionId: () => 'parent-native' }));
+  await tick();
+  const chunks: string[] = [];
+  const pending = runtime.askSideQuestion!(sideQuestion({ signal: controller.signal }), { delta: (text) => chunks.push(text) }, createRuntimeContext());
+  await tick();
+  controller.abort();
+  await tick();
+  assert.deepEqual(side.signals, ['SIGTERM']);
+  assert.deepEqual(parent.signals, []);
+  assert.equal(disposed, false);
+  emitEvent(side, { event: 'step_update', step_update: { step_type: 'agent_response', text_delta: 'late' } });
+  side.emit('close', null, 'SIGTERM');
+  assert.equal((await pending).status, 'error');
+  assert.equal(disposed, true);
+  assert.deepEqual(chunks, []);
+  finish(parent, 'parent-native');
+  await main;
+});
+
+test('AGY side-question startup failures and dismiss during snapshot always dispose the owned copy', async () => {
+  for (const failure of ['dismiss', 'spawn', 'model'] as const) {
+    const controller = new AbortController();
+    let disposed = false;
+    let forked = false;
+    const runtime = createAntigravityRuntime({
+      forkProvider: { forkSideQuestion: async () => {
+        forked = true;
+        if (failure === 'dismiss') controller.abort();
+        return { providerSessionId: 'side-native', jsonlPath: '/side/transcript.jsonl', workingDirectory: '/isolated-agent', agentName: 'readonly-agent', dispose: async () => { disposed = true; } };
+      } },
+      spawnProcess: () => { throw new Error('spawn failed'); },
+    });
+    const outcome = await runtime.askSideQuestion!(sideQuestion({ signal: controller.signal }), { delta() {} }, createRuntimeContext({
+      resolveResumeModel: async () => { if (failure === 'model') throw new Error('model failed'); return 'agy-model'; },
+    }));
+    assert.equal(outcome.status, 'error');
+    assert.equal(disposed, forked);
+  }
+});
 
 test('Antigravity permission modes map to native controls', () => {
   assert.deepEqual(resolveAntigravityPermissionArgs('plan'), ['--mode', 'plan']);

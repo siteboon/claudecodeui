@@ -39,7 +39,7 @@ test('capability effort levels cover every level a curated model declares', () =
 });
 
 
-test('side questions are supported by claude, codex and opencode, not by cursor or antigravity', () => {
+test('side questions use the shared capability gate for every supported runtime', () => {
   // Cursor has no headless way to ask on the side; its menu then offers only
   // Queue · Stop / Send anyway.
   const expected: Record<LLMProvider, boolean> = {
@@ -47,7 +47,7 @@ test('side questions are supported by claude, codex and opencode, not by cursor 
     codex: true,
     cursor: false,
     opencode: true,
-    antigravity: false,
+    antigravity: true,
   };
   for (const [provider, supported] of Object.entries(expected) as Array<[LLMProvider, boolean]>) {
     const capabilities = providerCapabilitiesService.getProviderCapabilities(provider) as unknown as Record<string, unknown>;

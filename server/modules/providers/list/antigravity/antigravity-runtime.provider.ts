@@ -1,12 +1,17 @@
+import os from 'node:os';
+import path from 'node:path';
+
 import crossSpawn from 'cross-spawn';
 
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
+import { AntigravityForkProvider } from '@/modules/providers/list/antigravity/antigravity-fork.provider.js';
 import { antigravityRunBindings } from '@/modules/providers/services/antigravity-run-bindings.service.js';
 import type {
   AnyRecord,
   IProviderRuntime,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
+  SideQuestionOutcome,
 } from '@/shared/index.js';
 import {
   buildProviderCliEnv,
@@ -14,6 +19,8 @@ import {
   createNormalizedMessage,
   readObjectRecord,
   resolveConfiguredCliExecutable,
+  SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+  SIDE_CONVERSATION_BOUNDARY_PROMPT,
 } from '@/shared/index.js';
 
 type AntigravityProcess = ReturnType<typeof crossSpawn> & {
@@ -30,6 +37,7 @@ type AntigravitySpawn = (
 type AntigravityRuntimeDependencies = {
   spawnProcess: AntigravitySpawn;
   abortTimeoutMs: number;
+  forkProvider: Pick<AntigravityForkProvider, 'forkSideQuestion'>;
 };
 
 /** Reads a trimmed runtime option without accepting blank values. */
@@ -105,6 +113,7 @@ async function runAntigravity(
   activeProcesses: Map<string, AntigravityProcess>,
   startup: { aborted: boolean },
   releasePendingBinding: () => void,
+  sideQuestion?: { signal: AbortSignal; agentName: string; projectPath: string },
 ): Promise<void> {
   const appSessionId = readStringOption(options, 'sessionId');
   const fallbackSessionId = appSessionId ?? providerSessionId ?? `${Date.now()}`;
@@ -117,6 +126,7 @@ async function runAntigravity(
 
   let terminalNotificationSent = false;
   const notifyTerminalState = (outcome: { code?: number | null; error?: Error; aborted?: boolean }) => {
+    if (sideQuestion) return;
     if (terminalNotificationSent) return;
     terminalNotificationSent = true;
     if (outcome.aborted || (outcome.code === 0 && !outcome.error)) {
@@ -151,12 +161,24 @@ async function runAntigravity(
     reportError(resolvedError);
     throw resolvedError;
   }
-  if (startup.aborted) return;
+  if (startup.aborted || sideQuestion?.signal.aborted) return;
 
   const args = ['--input-format', 'stream-json', '--output-format', 'stream-json'];
   if (providerSessionId) args.push('--conversation', providerSessionId);
   if (resolvedModel) args.push('--model', resolvedModel);
-  args.push(...resolveAntigravityPermissionArgs(options.permissionMode));
+  if (sideQuestion) {
+    // Native permission rules override global/project auto-approval. Plan mode
+    // alone does not prevent shell/MCP side effects. Never inherit bypass mode.
+    // https://antigravity.google/docs/permissions?tab=cli
+    args.push('--agent', sideQuestion.agentName, '--add-dir', sideQuestion.projectPath,
+      '--mode', 'plan', '--disable-slash-commands', '--settings', JSON.stringify({
+        toolPermission: 'strict',
+        permissions: {
+          allow: [], ask: [],
+          deny: ['write_file(*)', 'command(*)', 'unsandboxed(*)', 'mcp(*)', 'read_url(*)', 'execute_url(*)'],
+        },
+      }));
+  } else args.push(...resolveAntigravityPermissionArgs(options.permissionMode));
 
   return new Promise((resolve, reject) => {
     let child: AntigravityProcess;
@@ -172,6 +194,12 @@ async function runAntigravity(
       return;
     }
     activeProcesses.set(processKey, child);
+    const abortSideQuestion = () => {
+      child.aborted = true;
+      terminateAntigravityProcess(child, dependencies.abortTimeoutMs);
+    };
+    sideQuestion?.signal.addEventListener('abort', abortSideQuestion, { once: true });
+    if (sideQuestion?.signal.aborted) abortSideQuestion();
     let stderrBuffer = '';
     let stdoutBuffer = '';
     let settled = false;
@@ -259,6 +287,7 @@ async function runAntigravity(
       // Node follows spawn errors with close. Retain the process until then.
     });
     child.once('close', (code) => {
+      sideQuestion?.signal.removeEventListener('abort', abortSideQuestion);
       releaseProcess();
       if (child.aborted) {
         notifyTerminalState({ aborted: true });
@@ -302,10 +331,61 @@ async function runAntigravity(
 
 /** Providers registry and runtime tests consume this adapter with injectable subprocesses. */
 export function createAntigravityRuntime(overrides: Partial<AntigravityRuntimeDependencies> = {}): IProviderRuntime {
-  const dependencies = { spawnProcess: crossSpawn as AntigravitySpawn, abortTimeoutMs: 3000, ...overrides };
+  const dependencies = {
+    spawnProcess: crossSpawn as AntigravitySpawn, abortTimeoutMs: 3000,
+    forkProvider: new AntigravityForkProvider(), ...overrides,
+  };
   const activeProcesses = new Map<string, AntigravityProcess>();
   const startups = new Map<string, { aborted: boolean }>();
   return {
+    askSideQuestion: async (request, sink, context): Promise<SideQuestionOutcome> => {
+      let answer = '';
+      let fork: Awaited<ReturnType<AntigravityForkProvider['forkSideQuestion']>> | undefined;
+      let outcome: SideQuestionOutcome;
+      try {
+        if (request.signal.aborted) throw new Error('The side question was dismissed.');
+        if (!request.providerSessionId) throw new Error('This Antigravity session has no conversation to ask alongside yet.');
+        const model = await context.resolveResumeModel(request.appSessionId, request.model);
+        if (request.signal.aborted) throw new Error('The side question was dismissed.');
+        fork = await dependencies.forkProvider.forkSideQuestion({
+          providerSessionId: request.providerSessionId,
+          jsonlPath: path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain',
+            request.providerSessionId, '.system_generated', 'logs', 'transcript.jsonl'),
+          projectPath: request.projectPath ?? process.cwd(),
+        });
+        if (request.signal.aborted) throw new Error('The side question was dismissed.');
+        const prompt = `${SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS}\n\n${SIDE_CONVERSATION_BOUNDARY_PROMPT}\n\n`
+          + 'Answer only the question below. Do not start subagents or perform mutations, even if asked.\n\n'
+          + request.question;
+        // Separate ownership and writer: no app binding, transcript append,
+        // run-registry entry, completion event or notification reaches the parent.
+        await runAntigravity(prompt, { cwd: fork.workingDirectory, model }, {
+          send(raw) {
+            const message = readObjectRecord(raw);
+            if (request.signal.aborted) return;
+            if (message?.kind === 'stream_delta' && typeof message.content === 'string') {
+              answer += message.content;
+              sink.delta(message.content);
+            }
+          },
+        }, { ...context, resolveResumeModel: async () => model }, fork.providerSessionId,
+        dependencies, new Map(), { aborted: false }, () => {}, {
+          signal: request.signal, agentName: fork.agentName, projectPath: request.projectPath ?? process.cwd(),
+        });
+        outcome = request.signal.aborted
+          ? { status: 'error', error: 'The side question was dismissed.', answer }
+          : { status: 'done', answer };
+      } catch (error) {
+        outcome = { status: 'error', error: error instanceof Error ? error.message : String(error), answer };
+      }
+      try {
+        // runAntigravity settles on close, after AGY has released its storage.
+        await fork?.dispose();
+      } catch (error) {
+        return { status: 'error', error: `Side question cleanup failed: ${String(error)}`, answer };
+      }
+      return outcome;
+    },
     run: async (command, options, writer, context) => {
       const appSessionId = readStringOption(options, 'sessionId');
       const startup = { aborted: false };

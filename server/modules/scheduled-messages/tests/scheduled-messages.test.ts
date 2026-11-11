@@ -14,6 +14,7 @@ import {
 } from '@/modules/scheduled-messages/services/scheduled-message-dispatcher.service.js';
 import { scheduledMessagesService } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry, connectedClients } from '@/modules/websocket/index.js';
+import { sessionsService } from '@/modules/providers/index.js';
 
 const SESSION_ID = 'scheduled-session';
 
@@ -161,6 +162,38 @@ test('a queued message stays pending while its session is busy', async () => {
     assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, {
       content: 'send after this run',
     });
+  });
+});
+
+test('AGY queued messages wait for an external native turn and survive an admission race', async (t) => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionsDb.createAppSession('queued-agy', 'antigravity', '/workspace', 'AGY queue');
+    const queuedMessage = { content: 'follow up', options: { model: 'agy-model' } };
+    sessionDraftsDb.saveDraft(userId, 'queued-agy', { text: '', queuedMessage });
+    const busy = { providerSessionId: 'native-agy', provider: 'antigravity' as const, startedAt: 1, canInterrupt: false };
+    let probes = 0;
+    let external = true;
+    let racing = false;
+    t.mock.method(sessionsService, 'getExternalSessionActivity', async (sessionId: string) => {
+      if (sessionId !== 'queued-agy') return null;
+      probes += 1;
+      return external || (racing && probes % 2 === 0) ? busy : null;
+    });
+    const runs: RunCall[] = [];
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0);
+    assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, queuedMessage);
+    external = false;
+    racing = true;
+    probes = 0;
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    assert.equal(runs.length, 0, 'native activity won admission after the queue claim');
+    assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, queuedMessage);
+    racing = false;
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    assert.equal(runs[0]?.provider, 'antigravity');
+    assert.equal(runs[0]?.command, 'follow up');
+    assert.equal(runs[0]?.options.model, 'agy-model');
+    assert.equal(sessionDraftsDb.getDrafts(userId).length, 0);
   });
 });
 

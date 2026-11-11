@@ -59,9 +59,9 @@ export interface IProviderRuntime {
   /**
    * Asks a side question on the provider runtime while a session is active.
    *
-   * A provider with this method uses its native fork capability; one without it
-   * falls back to the history path (the provider runtime service supplies the history
-   * and drives the Claude adapter instead). This method never rejects: all outcomes
+   * Each adapter owns its context isolation, read-only execution and cleanup.
+   * A provider without this method is unsupported; the dispatcher never changes
+   * providers or silently answers with another model. This method never rejects: all outcomes
    * are returned as SideQuestionOutcome (done or error), never thrown.
    */
   askSideQuestion?(
