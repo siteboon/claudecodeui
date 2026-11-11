@@ -5,10 +5,15 @@ import readline from 'node:readline';
 
 import {
   AppError,
+  readObjectRecord,
+  readOptionalString,
+} from '@/shared/index.js';
+import {
   SIDE_CONVERSATION_BOUNDARY_PROMPT,
   SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
   SIDE_QUESTION_ANSWER_SEPARATOR,
 } from '@/shared/utils.js';
+import type { ProviderModelsDefinition } from '@/shared/index.js';
 
 /**
  * Minimal JSON-RPC client for `codex app-server`.
@@ -23,7 +28,8 @@ import {
  *
  * So this is a second transport to the same CLI, opened only for the
  * operations the SDK cannot express. Everything else still goes through the
- * SDK.
+ * SDK. Model discovery uses its stable `model/list` method, without loading
+ * a thread or acquiring a conversation writer.
  */
 
 /** How long a single request may take before the child is killed. */
@@ -260,7 +266,67 @@ async function withAppServer<T>(
   }
 }
 
+/** Used by Codex fork and model adapters for operations absent from the exec SDK. */
 export const codexAppServer = {
+  /** Reads the CLI's visible catalog without opening or resuming a thread. */
+  async listModels(): Promise<ProviderModelsDefinition> {
+    return withAppServer(async ({ call }) => {
+      const options: ProviderModelsDefinition['OPTIONS'] = [];
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      let defaultModel: string | undefined;
+
+      do {
+        const result = readObjectRecord(await call('model/list', {
+          limit: 100,
+          includeHidden: false,
+          ...(cursor ? { cursor } : {}),
+        }));
+        if (!Array.isArray(result?.data)) {
+          throw new Error('Codex returned an invalid model catalog.');
+        }
+
+        for (const entry of result.data) {
+          const model = readObjectRecord(entry);
+          const value = readOptionalString(model?.model);
+          if (!value || model?.hidden === true || options.some((option) => option.value === value)) {
+            continue;
+          }
+          const efforts = Array.isArray(model?.supportedReasoningEfforts)
+            ? model.supportedReasoningEfforts.flatMap((entry) => {
+              const effort = readObjectRecord(entry);
+              const value = readOptionalString(effort?.reasoningEffort);
+              return value ? [{ value, description: readOptionalString(effort?.description) }] : [];
+            })
+            : [];
+          options.push({
+            value,
+            label: readOptionalString(model?.displayName) ?? value,
+            description: readOptionalString(model?.description),
+            ...(efforts.length ? { effort: {
+              default: readOptionalString(model?.defaultReasoningEffort),
+              values: efforts,
+            } } : {}),
+          });
+          if (model?.isDefault === true) {
+            defaultModel = value;
+          }
+        }
+
+        cursor = readOptionalString(result.nextCursor);
+        if (cursor && cursors.has(cursor)) {
+          throw new Error('Codex repeated a model catalog cursor.');
+        }
+        if (cursor) cursors.add(cursor);
+      } while (cursor);
+
+      if (!options.length) {
+        throw new Error('Codex returned no visible models.');
+      }
+      return { OPTIONS: options, DEFAULT: defaultModel ?? options[0].value };
+    });
+  },
+
   /**
    * Resolves the `codex` launcher shipped in node_modules.
    *
