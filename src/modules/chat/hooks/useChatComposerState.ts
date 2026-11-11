@@ -817,13 +817,16 @@ export function useChatComposerState({
   //
   // `scope` is the chat the question was typed in: a send that waited for an
   // upload can be answered from the background-work dialog after a chat
-  // switch, and the chat open by then keeps its text.
-  const clearComposerAfterSideQuestion = useCallback((scope: string | null = draftScopeRef.current) => {
+  // switch, and the chat open by then keeps its text. The chat left keeps text edited since, too.
+  const clearComposerAfterSideQuestion = useCallback((text: string, scope: string | null = draftScopeRef.current) => {
+    if (scope !== draftScopeRef.current) {
+      if (scope && readDraftText(scope) === text) {
+        writeDraftText(scope, '');
+      }
+      return;
+    }
     if (scope) {
       writeDraftText(scope, '');
-    }
-    if (scope !== draftScopeRef.current) {
-      return;
     }
     setInput('');
     inputValueRef.current = '';
@@ -864,7 +867,7 @@ export function useChatComposerState({
         return;
       }
       if (askSideQuestion(sessionId, text, { model: currentProviderModel }, isConnected)) {
-        clearComposerAfterSideQuestion(scope);
+        clearComposerAfterSideQuestion(text, scope);
       }
     },
     [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, supportsSideQuestions, t],
@@ -894,7 +897,8 @@ export function useChatComposerState({
     async (durableDraft: QueuedDraft, queuedSessionKey: string | null, { fromComposer = true } = {}) => {
       const queuedFromOpenComposer = fromComposer
         && (!queuedSessionKey || sessionKeyRef.current === queuedSessionKey);
-      // Attachments are not kept per chat: the queued ones leave even when another chat is open now.
+      // Attachments are not kept per chat: the queued ones leave even when another chat is
+      // open now, or a send from there would take them along.
       if (fromComposer) {
         setAttachedFiles((files) => files.filter((file) => !durableDraft.attachments.includes(file)));
       }
@@ -952,11 +956,9 @@ export function useChatComposerState({
             const restored = withTypedSince(inputValueRef.current);
             setInput(restored);
             inputValueRef.current = restored;
-            // A message that already left this composer (a refused steer)
-            // brings its files back too: they were taken from this composer.
-            if (queuedFromOpenComposer || !fromComposer) {
-              setAttachedFiles((current) => [...durableDraft.attachments, ...current]);
-            }
+            // The message's files come back with it, also after a switch away and back
+            // and for a refused steer: all were taken from this composer.
+            setAttachedFiles((current) => [...durableDraft.attachments, ...current]);
             if (draftScopeRef.current) {
               writeDraftText(draftScopeRef.current, restored);
             }
@@ -1417,15 +1419,19 @@ export function useChatComposerState({
       // navigated to. Queued drafts were recorded when they were queued; the
       // consecutive-duplicate check keeps this second call a no-op.
       recordSentMessage(currentInput, targetSessionId);
-      if (submittedScope) {
-        writeDraftText(submittedScope, '');
-      }
       // Attachments are not kept per chat, so only the ones just sent go.
       setAttachedFiles((files) => files.filter((file) => !currentAttachments.includes(file)));
       // A brand-new chat moves from its project scope to its allocated session id meanwhile.
       const stillOpen = draftScopeRef.current === submittedScope || draftScopeRef.current === targetSessionId;
       if (!stillOpen) {
+        // The chat left keeps text the user went back and edited during the upload.
+        if (submittedScope && readDraftText(submittedScope) === currentInput) {
+          writeDraftText(submittedScope, '');
+        }
         return;
+      }
+      if (submittedScope) {
+        writeDraftText(submittedScope, '');
       }
       setInput('');
       inputValueRef.current = '';

@@ -166,7 +166,7 @@ test('a side question asked for the sending chat after a chat switch leaves the 
   await act(async () => { view.result.current.setInput('typed in b'); });
   await release(pendingUploads, { attachments: [{ id: 'asset-a' }] });
   assert.ok(view.result.current.backgroundSendPrompt, 'the background-work dialog asks about the send');
-  await act(async () => { view.result.current.resolveBackgroundSendPrompt('sideQuestion' as never); });
+  await act(async () => { view.result.current.resolveBackgroundSendPrompt('sideQuestion'); });
 
   assert.deepEqual(chatSends(), [], 'a side question is not a turn');
   assert.equal(readDraftText('session-a'), '', 'the asking chat\'s draft is cleared');
@@ -220,3 +220,63 @@ for (const [name, submitOptions] of [
     assert.equal(view.result.current.input, 'typed in b');
   });
 }
+
+test('a queue refused after a switch away and back brings its files back for a retry', async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  const { view } = renderComposer(SESSION_A, undefined, { isLoading: true });
+  const fileA = new File(['a'], 'a.txt');
+  await act(async () => {
+    view.result.current.setInput('from a');
+    view.result.current.setAttachedFiles([fileA]);
+  });
+  // Hold the queue request so the user can come back before it is refused.
+  let refuse: () => void = () => undefined;
+  const fetchStub = vi.mocked(fetch);
+  const passThrough = fetchStub.getMockImplementation()!;
+  fetchStub.mockImplementation((url, init) => (String(url) === '/api/user/drafts/queued-message'
+    ? new Promise<Response>((resolve) => { refuse = () => resolve(jsonResponse({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } }, 500)); })
+    : passThrough(url, init)));
+  await act(async () => { void submit(view); });
+  await act(async () => { view.rerender({ session: SESSION_B }); });
+  await release(pendingUploads, { attachments: [{ id: 'asset-a' }] });
+  assert.deepEqual(view.result.current.attachedFiles, [], 'chat B never holds the queued file');
+
+  await act(async () => { view.rerender({ session: SESSION_A }); });
+  await act(async () => { refuse(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+  assert.deepEqual(view.result.current.attachedFiles, [fileA], 'the refused message brings its file back');
+  assert.equal(view.result.current.input, 'from a', 'and its text');
+});
+
+test('a send finishing after a chat switch keeps text edited meanwhile in the chat it came from', async () => {
+  const { view } = renderComposer(SESSION_A);
+  await act(async () => {
+    view.result.current.setInput('from a');
+    view.result.current.setAttachedFiles([new File(['a'], 'a.txt')]);
+  });
+  await act(async () => { void submit(view); });
+  await act(async () => { view.rerender({ session: SESSION_B }); });
+  await act(async () => { view.rerender({ session: SESSION_A }); });
+  await act(async () => { view.result.current.setInput('edited in a'); });
+  await act(async () => { view.rerender({ session: SESSION_B }); });
+  await release(pendingUploads, { attachments: [{ id: 'asset-a' }] });
+
+  assert.equal(readDraftText('session-a'), 'edited in a');
+});
+
+test('a side question finishing after a chat switch keeps text edited meanwhile in the chat it came from', async () => {
+  const { view } = renderComposer(SESSION_A, backgroundInA);
+  await act(async () => {
+    view.result.current.setInput('from a');
+    view.result.current.setAttachedFiles([new File(['a'], 'a.txt')]);
+  });
+  await act(async () => { void submit(view); });
+  await act(async () => { view.rerender({ session: SESSION_B }); });
+  await act(async () => { view.rerender({ session: SESSION_A }); });
+  await act(async () => { view.result.current.setInput('edited in a'); });
+  await act(async () => { view.rerender({ session: SESSION_B }); });
+  await release(pendingUploads, { attachments: [{ id: 'asset-a' }] });
+  await act(async () => { view.result.current.resolveBackgroundSendPrompt('sideQuestion'); });
+
+  assert.equal(readDraftText('session-a'), 'edited in a');
+});
