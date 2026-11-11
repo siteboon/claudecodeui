@@ -9,6 +9,7 @@ import {
 } from '@/shared/codeEditorSettings';
 import {
   readUserPreference,
+  subscribeToUserPreferences,
   writeUserPreferences,
 } from '@/shared/userSettings';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
@@ -288,6 +289,29 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     [],
   );
 
+  // The dialog can open before the server preferences hydrate. Without this,
+  // it keeps the pre-hydrate default and the next autosave writes it back over
+  // the hydrated value. A value the user picked while loading still wins.
+  const groupProjectsEditedRef = useRef(false);
+  const updateGroupProjectsByName = useCallback((value: boolean) => {
+    groupProjectsEditedRef.current = true;
+    setGroupProjectsByName(value);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    groupProjectsEditedRef.current = false;
+    return subscribeToUserPreferences(() => {
+      if (groupProjectsEditedRef.current) {
+        return;
+      }
+      setGroupProjectsByName(readUserPreference<boolean>('groupProjectsByName', false) === true);
+    });
+  }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -365,7 +389,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     projectSortOrder,
     setProjectSortOrder,
     groupProjectsByName,
-    setGroupProjectsByName,
+    setGroupProjectsByName: updateGroupProjectsByName,
     codeEditorSettings,
     updateCodeEditorSetting,
     claudePermissions,
