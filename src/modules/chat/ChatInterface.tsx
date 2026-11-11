@@ -110,6 +110,8 @@ function ChatInterface({
     currentProviderEffortOptions,
     currentProviderModel,
     currentProviderModelOptions,
+    currentProviderSpeed,
+    currentProviderSpeedOptions,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -121,6 +123,7 @@ function ChatInterface({
     providerModelActions,
     selectProviderModel,
     selectProviderEffort,
+    selectProviderSpeed,
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
@@ -252,6 +255,7 @@ function ChatInterface({
     cyclePermissionMode,
     currentProviderModel,
     currentProviderEffort,
+    currentProviderSpeed,
     isLoading: isProcessing,
     processingSessions,
     canAbortSession,
@@ -395,12 +399,12 @@ function ChatInterface({
     const scheduled = await scheduleMessage({
       content,
       scheduledFor,
-      options: { model: currentProviderModel, effort: currentProviderEffort, permissionMode },
+      options: { model: currentProviderModel, effort: currentProviderEffort, speed: currentProviderSpeed, permissionMode },
     });
     if (scheduled) {
       setInput('');
     }
-  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, setInput]);
+  }, [currentProviderEffort, currentProviderModel, currentProviderSpeed, input, permissionMode, scheduleMessage, setInput]);
 
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,
@@ -557,6 +561,9 @@ function ChatInterface({
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}
           onSelectEffort={handleSelectComposerEffort}
+          speed={currentProviderSpeed}
+          availableSpeedOptions={currentProviderSpeedOptions}
+          onSelectSpeed={(speed) => selectProviderSpeed(provider, speed)}
           model={currentProviderModel}
           availableModelOptions={currentProviderModelOptions}
           onSelectModel={handleSelectComposerModel}

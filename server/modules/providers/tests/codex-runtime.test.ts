@@ -92,3 +92,39 @@ for (const command of ['', '  \n\t']) {
     ]);
   });
 }
+
+for (const [speed, expectedTier] of [['ultrafast', 'ultrafast'], ['unknown-tier', undefined], [undefined, undefined]] as const) {
+  test(`Codex runs a turn on the requested service tier only when the model lists it (${speed ?? 'omitted'})`, async (t) => {
+    let clientOptions: { config?: Record<string, unknown> } | undefined;
+    const thread = {
+      id: 'native-thread',
+      async runStreamed() {
+        return { events: (async function* () {
+          yield { type: 'thread.started', thread_id: 'native-thread' };
+        })() };
+      },
+    } as unknown as Thread;
+    t.mock.method(Codex.prototype, 'startThread', function (this: unknown) {
+      clientOptions = (this as { options?: { config?: Record<string, unknown> } }).options;
+      return thread;
+    });
+    const context: ProviderRuntimeContext = {
+      resolveProviderSessionId: () => null,
+      resolveResumeModel: async () => 'gpt-5.6-sol',
+      getProviderModels: async () => ({
+        OPTIONS: [{
+          value: 'gpt-5.6-sol',
+          label: 'GPT-5.6 Sol',
+          speed: { values: [{ value: 'priority', label: 'Fast' }, { value: 'ultrafast', label: 'Ultrafast' }] },
+        }],
+        DEFAULT: 'gpt-5.6-sol',
+      }),
+      normalizeMessage: () => [],
+      isProviderInstalled: async () => true,
+    };
+
+    await codexRuntime.run('hey there', { speed, cwd: process.cwd() }, { isWebSocketWriter: true, send: () => {} }, context);
+
+    assert.equal(clientOptions?.config?.service_tier, expectedTier);
+  });
+}

@@ -11,6 +11,7 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
+import { findProviderModelOption } from '@/shared/utils';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
   // Superset used only before the model catalog loads; `ultracode` belongs to the
@@ -152,6 +153,15 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       return acc;
     }, {});
   });
+  // The speed tier (Claude fast mode, a Codex service tier) is a per-provider
+  // preference like the default effort. It is not recorded per session: a
+  // session the user reopens runs at whatever speed is picked now.
+  const [providerSpeeds, setProviderSpeeds] = useState<Partial<Record<LLMProvider, string>>>(() => {
+    return PROVIDERS.reduce<Partial<Record<LLMProvider, string>>>((acc, targetProvider) => {
+      acc[targetProvider] = localStorage.getItem(`${targetProvider}-speed`) || DEFAULT_EFFORT_VALUE;
+      return acc;
+    }, {});
+  });
 
   /**
    * Backend-owned capability matrix keyed by provider. Drives the permission
@@ -190,6 +200,15 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
         : { ...previous, [targetProvider]: effort }
     ));
     localStorage.setItem(`${targetProvider}-effort`, effort);
+  }, []);
+
+  const selectProviderSpeed = useCallback((targetProvider: LLMProvider, speed: string) => {
+    setProviderSpeeds((previous) => (
+      previous[targetProvider] === speed
+        ? previous
+        : { ...previous, [targetProvider]: speed }
+    ));
+    localStorage.setItem(`${targetProvider}-speed`, speed);
   }, []);
 
   const loadProviderModels = useCallback(async () => {
@@ -303,7 +322,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       return null;
     }
 
-    return definition.OPTIONS.find((option) => option.value === model) ?? null;
+    return findProviderModelOption(definition.OPTIONS, model);
   }, [providerModelCatalog]);
 
   const getEffortOptionsForModel = useCallback((
@@ -701,6 +720,25 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     () => providerModelCatalog[provider]?.OPTIONS ?? [],
     [provider, providerModelCatalog],
   );
+  const currentProviderSpeedOptions = useMemo(
+    () => getModelOption(provider, currentProviderModel)?.speed?.values ?? [],
+    [currentProviderModel, getModelOption, provider],
+  );
+  // A tier the current model does not offer falls back to Default without
+  // forgetting the stored choice, so switching back to a model that has it
+  // restores it. Until the provider's catalog has loaded (or when it failed to)
+  // the model's tiers are unknown, so the stored tier is sent as is: the server
+  // applies a tier only when the model's catalog entry lists it.
+  const hasProviderCatalog = Boolean(providerModelCatalog[provider]);
+  const currentProviderSpeed = useMemo(() => {
+    const stored = providerSpeeds[provider] ?? DEFAULT_EFFORT_VALUE;
+    if (!hasProviderCatalog) {
+      return stored;
+    }
+    return currentProviderSpeedOptions.some((option) => option.value === stored)
+      ? stored
+      : DEFAULT_EFFORT_VALUE;
+  }, [currentProviderSpeedOptions, hasProviderCatalog, provider, providerSpeeds]);
 
   const applyProviderCatalog = useCallback((
     targetProvider: LLMProvider,
@@ -830,6 +868,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     currentProviderEffortOptions,
     currentProviderModel,
     currentProviderModelOptions,
+    currentProviderSpeed,
+    currentProviderSpeedOptions,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -841,6 +881,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     providerModelActions,
     selectProviderModel,
     selectProviderEffort,
+    selectProviderSpeed,
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,

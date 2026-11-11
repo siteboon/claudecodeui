@@ -15,7 +15,10 @@ import {
   readOptionalString,
 } from '@/shared/utils.js';
 
-/** Curated Codex catalog shipped as immutable CloudCLI defaults. */
+/**
+ * Curated Codex catalog shipped as immutable CloudCLI defaults. Speed tiers
+ * mirror the `service_tiers` the bundled Codex CLI's model metadata lists.
+ */
 export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
   // Chats run the bundled `@openai/codex` CLI, which takes model metadata from
   // its own bundled catalog (`codex debug models --bundled`), from a slug-prefix
@@ -38,6 +41,11 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'ultra' },
         ],
       },
+      speed: {
+        values: [
+          { value: 'priority', label: 'Fast', description: '2x speed, increased usage' },
+        ],
+      },
     },
     {
       value: 'gpt-6.1-sol',
@@ -52,6 +60,11 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'xhigh' },
           { value: 'max' },
           { value: 'ultra' },
+        ],
+      },
+      speed: {
+        values: [
+          { value: 'priority', label: 'Fast', description: '2x speed, increased usage' },
         ],
       },
     },
@@ -70,6 +83,11 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'ultra' },
         ],
       },
+      speed: {
+        values: [
+          { value: 'priority', label: 'Fast', description: '1.5x speed' },
+        ],
+      },
     },
     {
       value: 'gpt-6-sol',
@@ -86,6 +104,11 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'ultra' },
         ],
       },
+      speed: {
+        values: [
+          { value: 'priority', label: 'Fast', description: '1.5x speed' },
+        ],
+      },
     },
     {
       value: 'gpt-6-luna',
@@ -99,6 +122,11 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'high' },
           { value: 'xhigh' },
           { value: 'max' },
+        ],
+      },
+      speed: {
+        values: [
+          { value: 'priority', label: 'Fast', description: '1.5x speed' },
         ],
       },
     },
@@ -117,6 +145,11 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'ultra' },
         ],
       },
+      speed: {
+        values: [
+          { value: 'priority', label: 'Fast', description: '1.5x speed, increased usage' },
+        ],
+      },
     },
     {
       value: 'gpt-5.6-terra',
@@ -131,6 +164,11 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'xhigh' },
           { value: 'max' },
           { value: 'ultra' },
+        ],
+      },
+      speed: {
+        values: [
+          { value: 'priority', label: 'Fast', description: '1.5x speed, increased usage' },
         ],
       },
     },
@@ -148,6 +186,11 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
           { value: 'max' },
         ],
       },
+      speed: {
+        values: [
+          { value: 'priority', label: 'Fast', description: '1.5x speed, increased usage' },
+        ],
+      },
     },
     {
       value: 'gpt-5.5',
@@ -156,6 +199,11 @@ export const CODEX_PREDEFINED_MODELS: ProviderModelsDefinition = {
       effort: {
         default: 'medium',
         values: [{ value: 'low' }, { value: 'medium' }, { value: 'high' }, { value: 'xhigh' }],
+      },
+      speed: {
+        values: [
+          { value: 'priority', label: 'Fast', description: '1.5x speed, increased usage' },
+        ],
       },
     },
   ],
