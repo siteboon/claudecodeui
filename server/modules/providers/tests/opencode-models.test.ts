@@ -21,6 +21,7 @@ const OPENCODE_ENV_KEYS = [
   'OPENCODE_CONFIG_CONTENT',
   'OPENCODE_CONFIG_DIR',
   'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
 ];
 
 /**
@@ -325,6 +326,22 @@ test('OpenCode counts providers from OPENCODE_CONFIG, OPENCODE_CONFIG_CONTENT an
       listing,
     );
   }
+
+  // The usual XDG setup moves both: the login in auth.json still counts next to the moved config.
+  await withOpenCodeHome(
+    async (homeDir) => {
+      const dataDir = path.join(homeDir, 'xdg-data', 'opencode');
+      await mkdir(dataDir, { recursive: true });
+      await writeFile(path.join(dataDir, 'auth.json'), JSON.stringify({ anthropic: { type: 'api', key: 'test' } }), 'utf8');
+      const configDir = path.join(homeDir, 'xdg-config', 'opencode');
+      await mkdir(configDir, { recursive: true });
+      await writeFile(path.join(configDir, 'opencode.json'), JSON.stringify({ provider: { 'my-proxy': {} } }), 'utf8');
+      process.env.XDG_DATA_HOME = path.join(homeDir, 'xdg-data');
+      process.env.XDG_CONFIG_HOME = path.join(homeDir, 'xdg-config');
+    },
+    expectProxyAndAnthropic,
+    listing,
+  );
 });
 
 // The config from issue #1771: OpenCode v2's `providers` / `settings.apiKey` shape.
@@ -403,6 +420,18 @@ test('OpenCode lists a keyless v2 `providers` entry next to another connected pr
       assert.deepEqual(await listedModels(adapter), ['res/gemini-4-argon', 'other/x']);
     },
     async () => ['res/gemini-4-argon', 'other/x', 'opencode/gpt-5.6-terra'],
+  );
+});
+
+test('OpenCode does not filter the listing on a v2 `providers` entry alone', async () => {
+  // A v2 login lives in OpenCode's database, which is not read, so openai here
+  // may well be connected; the listing stays unfiltered, as it was before.
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeConfigFile(homeDir, 'opencode.json', JSON.stringify(REPORTER_V2_CONFIG)),
+    async (adapter) => {
+      assert.deepEqual(await listedModels(adapter), ['openai/gpt-5.6', 'res/gemini-4-argon']);
+    },
+    async () => ['openai/gpt-5.6', 'res/gemini-4-argon'],
   );
 });
 

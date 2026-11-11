@@ -22,6 +22,7 @@ const AUTH_ENV_KEYS = [
   'OPENCODE_CONFIG_CONTENT',
   'OPENCODE_CONFIG_DIR',
   'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
   SET_VAR,
   UNSET_VAR,
   BLANK_VAR,
@@ -152,13 +153,18 @@ test('OpenCode reads the global config from XDG_CONFIG_HOME and OPENCODE_CONFIG_
     process.env.XDG_CONFIG_HOME = xdgDir;
   }));
 
-  // OPENCODE_CONFIG_DIR replaces the global directory rather than adding to it.
+  // v2 reads OPENCODE_CONFIG_DIR instead of the global directory and v1 on top of it, so both count.
   assertAuthenticated(await readStatus(async (homeDir, configDir) => {
-    const overrideDir = path.join(homeDir, 'oc-config');
-    await mkdir(overrideDir, { recursive: true });
-    await writeConfig(overrideDir, v2Config(FAKE_KEY));
+    const extraDir = path.join(homeDir, 'oc-config');
+    await mkdir(extraDir, { recursive: true });
+    await writeConfig(extraDir, v2Config(FAKE_KEY));
     await writeConfig(configDir, v2Config(`{env:${UNSET_VAR}}`));
-    process.env.OPENCODE_CONFIG_DIR = overrideDir;
+    process.env.OPENCODE_CONFIG_DIR = extraDir;
+  }));
+
+  assertAuthenticated(await readStatus(async (homeDir, configDir) => {
+    await writeConfig(configDir, v2Config(FAKE_KEY));
+    process.env.OPENCODE_CONFIG_DIR = path.join(homeDir, 'empty-oc-config');
   }));
 
   const status = await readStatus(async (homeDir, configDir) => {
@@ -166,6 +172,17 @@ test('OpenCode reads the global config from XDG_CONFIG_HOME and OPENCODE_CONFIG_
     process.env.XDG_CONFIG_HOME = path.join(homeDir, 'empty-xdg');
   });
   assert.equal(status.authenticated, false);
+});
+
+test('OpenCode reads auth.json from XDG_DATA_HOME', async () => {
+  const status = await readStatus(async (homeDir) => {
+    const dataDir = path.join(homeDir, 'xdg-data');
+    await mkdir(path.join(dataDir, 'opencode'), { recursive: true });
+    await writeFile(path.join(dataDir, 'opencode', 'auth.json'), JSON.stringify({ res: { type: 'api', key: FAKE_KEY } }), 'utf8');
+    process.env.XDG_DATA_HOME = dataDir;
+  });
+  assert.equal(status.authenticated, true);
+  assert.equal(status.method, 'credentials_file');
 });
 
 test('OpenCode does not count {file:} targets that are empty, directories or missing', async () => {

@@ -8,7 +8,11 @@ import Database from 'better-sqlite3';
 import spawn from 'cross-spawn';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { listConfiguredProviders, readOpenCodeConfigs } from '@/modules/providers/list/opencode/opencode-config.js';
+import {
+  getOpenCodeDataDir,
+  listConfiguredProviders,
+  readOpenCodeConfigs,
+} from '@/modules/providers/list/opencode/opencode-config.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
@@ -418,7 +422,8 @@ const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, un
  * Custom config passed through `OPENCODE_CONFIG` (a file path) or
  * `OPENCODE_CONFIG_CONTENT` (inline JSONC) is read too, so providers declared
  * there are not filtered out of the CLI listing. Providers count whether they
- * are declared under v1's `provider` or v2's `providers`, with or without a key.
+ * are declared under v1's `provider` or v2's `providers`, with or without a key,
+ * except that a v2 entry never starts a filter on its own (see below).
  *
  * Returns null when nothing can be read. Providers declared only in a
  * project-level `opencode.json` are not visible here, so callers retain the
@@ -427,17 +432,18 @@ const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, un
 const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> => {
   const providerIds = new Set<string>();
 
-  const auth = await readOpenCodeJsonFile(
-    path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json'),
-  );
+  const auth = await readOpenCodeJsonFile(path.join(getOpenCodeDataDir(), 'auth.json'));
   for (const [providerId, credential] of Object.entries(auth ?? {})) {
     if (readObjectRecord(credential)) {
       providerIds.add(providerId);
     }
   }
 
-  for (const { id } of listConfiguredProviders(await readOpenCodeConfigs())) {
-    providerIds.add(id);
+  const configuredProviders = listConfiguredProviders(await readOpenCodeConfigs());
+  for (const { id, section } of configuredProviders) {
+    if (section === 'provider') {
+      providerIds.add(id);
+    }
   }
 
   for (const [envKey, providerId] of Object.entries(OPENCODE_ENV_PROVIDER_IDS)) {
@@ -446,7 +452,21 @@ const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> =
     }
   }
 
-  return providerIds.size > 0 ? providerIds : null;
+  if (providerIds.size === 0) {
+    return null;
+  }
+
+  // v2 keeps its logins in its own database, which is not read here, so a v2
+  // `providers` entry cannot show what else is connected. It joins a filter
+  // something else started, but never starts one: alone it would hide the
+  // models of every provider logged in through v2.
+  for (const { id, section } of configuredProviders) {
+    if (section === 'providers') {
+      providerIds.add(id);
+    }
+  }
+
+  return providerIds;
 };
 
 /**

@@ -13,8 +13,11 @@ import {
 /** Global OpenCode config files, in the order the CLI loads them. */
 const OPENCODE_CONFIG_FILES = ['config.json', 'opencode.json', 'opencode.jsonc'];
 
+/** Config files OpenCode reads from `OPENCODE_CONFIG_DIR`. */
+const OPENCODE_DIR_CONFIG_FILES = ['opencode.json', 'opencode.jsonc'];
+
 /** v1 declares providers under `provider`, v2 under `providers`. */
-const PROVIDER_SECTION_KEYS = ['provider', 'providers'];
+const PROVIDER_SECTION_KEYS = ['provider', 'providers'] as const;
 
 /** v2 keeps the key in `settings`, v1 in `options`. */
 const API_KEY_SECTION_KEYS = ['settings', 'options'];
@@ -37,7 +40,11 @@ export type OpenCodeCredential =
   | { kind: 'env'; name: string }
   | OpenCodeFileCredential;
 
-export type OpenCodeConfiguredProvider = { id: string; credential: OpenCodeCredential };
+export type OpenCodeConfiguredProvider = {
+  id: string;
+  section: (typeof PROVIDER_SECTION_KEYS)[number];
+  credential: OpenCodeCredential;
+};
 
 const NO_CREDENTIAL: OpenCodeCredential = { kind: 'none' };
 
@@ -62,28 +69,32 @@ const readConfigFile = async (
   }
 };
 
-/**
- * OpenCode's global config directory: `OPENCODE_CONFIG_DIR` when set,
- * otherwise `opencode` under `XDG_CONFIG_HOME`, falling back to `~/.config`.
- */
-export const getOpenCodeConfigDir = (): string => {
-  const overrideDir = readOptionalString(process.env.OPENCODE_CONFIG_DIR);
-  if (overrideDir) {
-    return path.resolve(overrideDir);
-  }
+/** An XDG base directory, falling back to its default under the home directory. */
+const readXdgDir = (envKey: string, ...fallback: string[]): string =>
+  readOptionalString(process.env[envKey]) ?? path.join(os.homedir(), ...fallback);
 
-  const configHome = readOptionalString(process.env.XDG_CONFIG_HOME) ?? path.join(os.homedir(), '.config');
-  return path.join(configHome, 'opencode');
-};
+/** OpenCode's global config directory, under `XDG_CONFIG_HOME` or `~/.config`. */
+const getOpenCodeGlobalConfigDir = (): string => path.join(readXdgDir('XDG_CONFIG_HOME', '.config'), 'opencode');
+
+/** OpenCode's data directory, which holds v1's `auth.json`, under `XDG_DATA_HOME` or `~/.local/share`. */
+export const getOpenCodeDataDir = (): string => path.join(readXdgDir('XDG_DATA_HOME', '.local', 'share'), 'opencode');
 
 /**
- * Reads the global config files, `OPENCODE_CONFIG` (a file path) and
- * `OPENCODE_CONFIG_CONTENT` (inline config). Malformed or unreadable sources
- * are skipped rather than failing the caller.
+ * Reads the global config files, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG` (a
+ * file path) and `OPENCODE_CONFIG_CONTENT` (inline config). Malformed or
+ * unreadable sources are skipped rather than failing the caller.
+ *
+ * v1 reads `OPENCODE_CONFIG_DIR` on top of the global directory and v2 instead
+ * of it. Both are read here, so nothing either version could load is missed.
  */
 export const readOpenCodeConfigs = async (): Promise<OpenCodeConfigSource[]> => {
-  const configDir = getOpenCodeConfigDir();
+  const configDir = getOpenCodeGlobalConfigDir();
   const filePaths = OPENCODE_CONFIG_FILES.map((fileName) => path.join(configDir, fileName));
+
+  const extraConfigDir = readOptionalString(process.env.OPENCODE_CONFIG_DIR);
+  if (extraConfigDir) {
+    filePaths.push(...OPENCODE_DIR_CONFIG_FILES.map((fileName) => path.join(path.resolve(extraConfigDir), fileName)));
+  }
 
   const customConfigPath = readOptionalString(process.env.OPENCODE_CONFIG);
   if (customConfigPath) {
@@ -160,7 +171,7 @@ export const listConfiguredProviders = (
   for (const { config, sourceDir } of configs) {
     for (const sectionKey of PROVIDER_SECTION_KEYS) {
       for (const [id, entry] of Object.entries(readObjectRecord(config[sectionKey]) ?? {})) {
-        providers.push({ id, credential: readProviderCredential(entry, sourceDir) });
+        providers.push({ id, section: sectionKey, credential: readProviderCredential(entry, sourceDir) });
       }
     }
   }

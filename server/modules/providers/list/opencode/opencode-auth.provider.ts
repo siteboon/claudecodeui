@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import {
+  getOpenCodeDataDir,
   hasFileCredential,
   listConfiguredProviders,
   readOpenCodeConfigs,
@@ -79,7 +79,7 @@ export class OpenCodeProviderAuth implements IProviderAuth {
    */
   private async checkCredentials(): Promise<OpenCodeCredentialsStatus> {
     try {
-      const authPath = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
+      const authPath = path.join(getOpenCodeDataDir(), 'auth.json');
       const content = await readFile(authPath, 'utf8');
       const auth = readObjectRecord(JSON.parse(content)) ?? {};
 
