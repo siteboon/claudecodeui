@@ -195,3 +195,63 @@ for (const mode of ['exit-zero', 'exit-error', 'signal'] as const) {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 }
+
+
+test('an unavailable CLI keeps setup guidance in both the live and saved failure', async (t) => {
+  let probes = 0;
+  const result = await runFixture(t, scripted([], new Error('PRIVATE STDERR sk-secret')), {
+    isProviderInstalled: async () => { probes += 1; return false; },
+  });
+  const errors = result.frames.filter((frame) => frame.kind === 'error');
+  assert.equal(probes, 1);
+  assert.equal(errors.length, 1);
+  assert.equal(result.failures.length, 1);
+  assert.equal(errors[0].content, 'Codex CLI is not configured. Please set up authentication first.');
+  assert.equal(result.failures[0].content, errors[0].content);
+  assert.equal(result.failures[0].id, errors[0].id);
+  assert.equal(result.failures[0].code, 'CODEX_STREAM_ERROR');
+  assert.equal(result.frames.filter((frame) => frame.kind === 'complete' && frame.exitCode === 1).length, 1);
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE STDERR|sk-secret|PRIVATE USER PROMPT/);
+});
+
+for (const installed of [true, 'probe-error'] as const) {
+  test(`a pre-stream failure retains the generic notice when the install probe returns ${installed}`, async (t) => {
+    const result = await runFixture(t, scripted([], new Error('ECONNRESET')), {
+      isProviderInstalled: async () => {
+        if (installed === 'probe-error') throw new Error('PRIVATE PROBE ERROR');
+        return installed;
+      },
+    });
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.failures[0].content, 'Codex stopped before completing its reply. Check the conversation before retrying any work.');
+    assert.equal(result.frames.find((frame) => frame.kind === 'error')?.content, result.failures[0].content);
+    assert.equal(result.failures[0].diagnostics.transportCode, 'ECONNRESET');
+    assert.equal(result.frames.filter((frame) => frame.kind === 'complete' && frame.exitCode === 1).length, 1);
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE PROBE ERROR/);
+  });
+}
+
+test('streamed errors and user cancellation do not probe installation or replace their notice', async (t) => {
+  for (const [events, abort] of [
+    [[{ type: 'thread.started', thread_id: 'native-thread' }], false],
+    [[{ type: 'turn.failed', error: { message: 'fatal' } }], false],
+    [[], true],
+  ] as const) {
+    let probes = 0;
+    const result = await runFixture(t, scripted([...events], new Error('aborted'), abort), {
+      isProviderInstalled: async () => { probes += 1; return false; },
+    });
+    assert.equal(probes, 0);
+    assert.equal(result.failures.length, abort ? 0 : 1);
+    if (!abort) assert.equal(result.failures[0].content, 'Codex stopped before completing its reply. Check the conversation before retrying any work.');
+    t.mock.restoreAll();
+  }
+});
+
+test('Stop during installation probing still suppresses failure and duplicate completion', async (t) => {
+  const result = await runFixture(t, scripted([], new Error('aborted')), {
+    isProviderInstalled: async () => { codexRuntime.abort('app-failure'); return false; },
+  });
+  assert.equal(result.failures.length, 0);
+  assert.equal(result.frames.length, 0);
+});

@@ -327,14 +327,15 @@ async function queryCodex(
   // the provider-native thread id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
 
-  const reportFailure = (code: SessionRuntimeFailure['code'], error?: Error) => {
+  const reportFailure = (code: SessionRuntimeFailure['code'], error?: Error, contentOverride?: string) => {
     if (failureReported) return;
     failureReported = true;
     const timestamp = new Date().toISOString();
     // Parse only the SDK's exit envelope and known transport codes. Stderr may
     // contain credentials or tool output and must not enter the durable journal.
     const envelope = /Codex Exec exited with (?:code (\d+)|signal (SIG[A-Z0-9]+))/.exec(error?.message ?? '');
-    const content = 'Codex stopped before completing its reply. Check the conversation before retrying any work.';
+    const content = contentOverride
+      ?? 'Codex stopped before completing its reply. Check the conversation before retrying any work.';
     const failure: SessionRuntimeFailure = {
       id: runId, sessionId: sessionId || capturedSessionId || '', timestamp, startedAt,
       provider: 'codex', code, content,
@@ -537,11 +538,19 @@ async function queryCodex(
     const runError = error instanceof Error ? error : new Error(String(error));
     // Only our cancellation signal/state proves a user abort. A transport can
     // throw AbortError (or say "aborted") without the user pressing Stop.
-    const wasAborted = (session?.abortController === abortController && session.status === 'aborted')
+    let wasAborted = (session?.abortController === abortController && session.status === 'aborted')
       || abortController.signal.aborted;
 
+    // Before any stream event, a missing CLI needs setup guidance rather than
+    // a transport-retry hint. Failed probes must preserve the original error.
+    const setupMessage = !wasAborted && !terminalFailure && eventCount === 0
+      && !(await context.isProviderInstalled().catch(() => true))
+      ? 'Codex CLI is not configured. Please set up authentication first.'
+      : undefined;
+    // Stop may arrive while the asynchronous installation probe is pending.
+    wasAborted ||= abortController.signal.aborted;
     if (!wasAborted || terminalFailure) {
-      reportFailure(terminalFailure ? 'CODEX_TURN_FAILED' : 'CODEX_STREAM_ERROR', runError);
+      reportFailure(terminalFailure ? 'CODEX_TURN_FAILED' : 'CODEX_STREAM_ERROR', runError, setupMessage);
     }
     if (!wasAborted) {
       sendMessage(ws, createCompleteMessage({
