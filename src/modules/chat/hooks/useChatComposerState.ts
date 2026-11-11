@@ -833,6 +833,7 @@ export function useChatComposerState({
     if (scope !== draftScopeRef.current) {
       if (scope && readDraftText(scope) === text) {
         writeDraftText(scope, '');
+        setEditingAnchors((anchors) => withoutEdit(anchors, scope));
       }
       return;
     }

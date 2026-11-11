@@ -174,6 +174,24 @@ test('a side question asked for the sending chat after a chat switch leaves the 
   assert.equal(readDraftText('session-b'), 'typed in b', 'and its draft');
 });
 
+test('a side question asked while editing ends that edit even after a chat switch', async () => {
+  const { view } = renderComposer(SESSION_A, backgroundInA);
+  await act(async () => {
+    view.result.current.beginEditMessage({ type: 'user', content: 'old a', transcriptAnchorId: 'anchor-a', timestamp: new Date() } as never);
+  });
+  await act(async () => {
+    view.result.current.setInput('from a');
+    view.result.current.setAttachedFiles([new File(['a'], 'a.txt')]);
+  });
+  await act(async () => { void submit(view); });
+  await act(async () => { view.rerender({ session: SESSION_B }); });
+  await release(pendingUploads, { attachments: [{ id: 'asset-a' }] });
+  await act(async () => { view.result.current.resolveBackgroundSendPrompt('sideQuestion'); });
+
+  await act(async () => { view.rerender({ session: SESSION_A }); });
+  assert.ok(!view.result.current.editingAnchorId, 'a later plain send from a must not replace the edited turn');
+});
+
 test('an edit begun in another chat during the upload survives the send', async () => {
   const { view, chatSends, editSends } = renderComposer(SESSION_A);
   await act(async () => {
