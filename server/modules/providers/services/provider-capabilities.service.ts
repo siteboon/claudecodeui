@@ -43,6 +43,12 @@ type ProviderCapabilities = {
    */
   supportsSessionForking: boolean;
   /**
+   * Whether a session's transcript can be moved so it resumes from another
+   * project's directory. Mirrors the provider having a `transcriptRelocation`
+   * facet; keep the two in step.
+   */
+  supportsSessionMoving: boolean;
+  /**
    * Whether the provider can answer a question on the side without touching
    * the session's main turn. False only for Cursor, which has no headless
    * way to do that.
@@ -79,6 +85,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSessionMoving: true,
     supportsSideQuestions: true,
     // Streaming input stays open for the whole run, and a user message written
     // to it with priority `next` joins the running turn.
@@ -97,6 +104,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: [],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSessionMoving: false,
     supportsSideQuestions: false,
     supportsSteering: false,
   },
@@ -117,6 +125,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSessionMoving: true,
     supportsSideQuestions: true,
     supportsSteering: false,
   },
@@ -140,6 +149,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSessionMoving: false,
     supportsSideQuestions: true,
     supportsSteering: false,
   },

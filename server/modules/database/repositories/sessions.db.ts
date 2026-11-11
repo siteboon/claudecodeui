@@ -322,6 +322,33 @@ export const sessionsDb = {
   },
 
   /**
+   * Files one session under another project. Its transcript path is updated
+   * separately (`updateSessionTranscriptPath`) once the file has moved.
+   */
+  updateSessionProjectPath(sessionId: string, projectPath: string | null): void {
+    const db = getConnection();
+    // NULL stays NULL: it is how a rollback restores a row that had no project.
+    const normalizedProjectPath = projectPath === null ? null : normalizeProjectPath(projectPath);
+    db.prepare(
+      `UPDATE sessions
+       SET project_path = ?
+       WHERE session_id = ?`
+    ).run(normalizedProjectPath, sessionId);
+  },
+
+  /**
+   * Marks a moved session as just changed: clients list it first in its new
+   * project, and paging must agree with that order. Only while the row is
+   * still in `projectPath`, so a concurrent move is not bumped in its stead.
+   * ISO like the indexers write, so text-ordered queries sort it correctly.
+   */
+  touchMovedSession(sessionId: string, projectPath: string): void {
+    const db = getConnection();
+    db.prepare('UPDATE sessions SET updated_at = ? WHERE session_id = ? AND project_path = ?')
+      .run(new Date().toISOString(), sessionId, normalizeProjectPath(projectPath));
+  },
+
+  /**
    * Detaches a session from its provider session so the next run starts a new
    * one.
    *
@@ -656,6 +683,22 @@ export const sessionsDb = {
       .get(normalizedProjectPath) as { count: number } | undefined;
 
     return Number(row?.count ?? 0);
+  },
+
+  /**
+   * Repoints one session at the transcript file it now lives in.
+   *
+   * Only used when the file itself was moved on disk (a relocated project
+   * folder), or to put a row back when that move failed, so the row keeps
+   * resolving to a readable transcript.
+   */
+  updateSessionTranscriptPath(sessionId: string, jsonlPath: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET jsonl_path = ?
+       WHERE session_id = ?`
+    ).run(jsonlPath, sessionId);
   },
 
   deleteSessionsByProjectPath(projectPath: string): void {

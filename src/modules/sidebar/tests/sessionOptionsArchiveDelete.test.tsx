@@ -32,6 +32,7 @@ const optionsProps = (
   provider: 'claude',
   projectId: 'project-1',
   isProcessing: false,
+  hasBackgroundWork: false,
   isEditing: false,
   renameDraft: '',
   onRenameDraftChange: noop,
