@@ -147,7 +147,15 @@ describe('ChatExportMenu continue in new chat', () => {
     assert.ok(screen.getByText('export.html.description'), 'the other formats keep their description');
 
     view.rerender(<ChatExportMenu {...props} sessionId="s2" />);
-    assert.equal(screen.queryByText('export.failed'), null, 'another chat does not inherit the failure');
+    assert.ok(!screen.queryByText('export.failed'), 'another chat does not inherit the failure');
+
+    // Two new chats have no session id; the project still tells them apart.
+    view.rerender(<ChatExportMenu {...props} />);
+    await act(async () => { fireEvent.click(screen.getByText('export.json.label')); });
+    fireEvent.click(screen.getByRole('button', { name: 'export.trigger' }));
+    await waitFor(() => assert.ok(screen.getByText('export.failed')));
+    view.rerender(<ChatExportMenu {...props} selectedProject={{ projectId: 'other' } as Project} />);
+    assert.ok(!screen.queryByText('export.failed'), 'a new chat in another project does not inherit it');
   });
 
   for (const [name, leave] of [

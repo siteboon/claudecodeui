@@ -63,12 +63,12 @@ export default function ChatExportMenu({
   // matches what the session itself saw; the operator opts in from this option.
   const [includeSideQuestions, setIncludeSideQuestions] = useState(false);
   // The item whose last run failed shows that in its description; a log line alone left the click looking ignored.
-  // Kept per session, since the menu stays mounted when another chat opens.
-  const [failure, setFailure] = useState<{ sessionId: string | null | undefined; item: TranscriptExportFormat | 'handoff' } | null>(null);
-  const failedItem = failure && failure.sessionId === sessionId ? failure.item : null;
-  // The chat open now, read after the transcript loads to tell whether the user has moved on:
-  // another session, another project (two new chats both lack a session id), or away from the chat.
+  // Kept per chat, since the menu stays mounted when another chat opens.
+  const [failure, setFailure] = useState<{ chat: string; item: TranscriptExportFormat | 'handoff' } | null>(null);
+  // The chat open now: project and session, since two new chats both lack a session id.
   const openChat = `${selectedProject?.projectId ?? ''}:${sessionId ?? ''}`;
+  const failedItem = failure && failure.chat === openChat ? failure.item : null;
+  // Read after the transcript loads to tell whether the user has moved on, or away from the chat.
   const openChatRef = useRef<string | null>(null);
   useLayoutEffect(() => {
     openChatRef.current = openChat;
@@ -98,7 +98,7 @@ export default function ChatExportMenu({
       });
     } catch (error) {
       console.error('Failed to export conversation:', error);
-      setFailure({ sessionId, item: format });
+      setFailure({ chat: openChat, item: format });
     } finally {
       setBusyFormat(null);
     }
@@ -133,7 +133,7 @@ export default function ChatExportMenu({
       openNewSession(project);
     } catch (error) {
       console.error('Failed to continue conversation in a new chat:', error);
-      setFailure({ sessionId, item: 'handoff' });
+      setFailure({ chat: openChat, item: 'handoff' });
     } finally {
       setBusyFormat(null);
     }
