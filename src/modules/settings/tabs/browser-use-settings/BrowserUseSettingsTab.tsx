@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, Loader2 } from 'lucide-react';
 
@@ -22,11 +22,11 @@ type BrowserUseStatus = {
   message: string;
 };
 
-/** Rendered by Settings for the "browser" tab, configuring the browser automation integration. */
 const BROWSER_USE_ERROR_KEYS: Record<string, string> = {
   BROWSER_USE_STATUS_LOAD_FAILED: 'browserUseSettings.loadStatusFailed',
   BROWSER_USE_SETTINGS_LOAD_FAILED: 'browserUseSettings.loadSettingsFailed',
   BROWSER_USE_SETTINGS_SAVE_FAILED: 'browserUseSettings.saveFailed',
+  BROWSER_USE_SETTINGS_APPLY_FAILED: 'browserUseSettings.applyFailed',
   BROWSER_USE_RUNTIME_INSTALL_FAILED: 'browserUseSettings.installFailed',
 };
 
@@ -37,6 +37,7 @@ function localizeApiError(err: unknown, fallbackKey: string, t: (key: string) =>
   return t(fallbackKey);
 }
 
+/** Rendered by Settings for the "browser" tab, configuring the browser automation integration. */
 export default function BrowserUseSettingsTab() {
   const { t } = useTranslation('settings');
   const [settings, setSettings] = useState<BrowserUseSettings | null>(null);
@@ -45,65 +46,100 @@ export default function BrowserUseSettingsTab() {
   const [isStatusLoading, setIsStatusLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Retain the failed operation so a partially applied setting can be retried.
+  const [error, setError] = useState<{ message: string; retrySettings?: boolean } | null>(null);
+  const requestVersion = useRef(0);
+  // Translation changes must not invalidate an in-flight settings operation.
+  const translate = useRef(t);
+  translate.current = t;
 
-  const loadSettings = useCallback(async () => {
+  const loadSettings = useCallback(async (version: number) => {
     const settingsResponse = await api.browserUse.settings();
     const settingsData = await readApiJson<{ data: { settings: BrowserUseSettings } }>(settingsResponse);
-    setSettings(settingsData.data.settings);
-  }, [t]);
+    if (requestVersion.current === version) setSettings(settingsData.data.settings);
+  }, []);
 
-  const loadStatus = useCallback(async () => {
+  const loadStatus = useCallback(async (version: number) => {
     const statusResponse = await api.browserUse.status();
     const statusData = await readApiJson<{ data: BrowserUseStatus }>(statusResponse);
-    setStatus(statusData.data);
-  }, [t]);
+    if (requestVersion.current === version) setStatus(statusData.data);
+  }, []);
 
   useEffect(() => {
+    const version = ++requestVersion.current;
     setError(null);
     setIsSettingsLoading(true);
     setIsStatusLoading(true);
 
-    void loadSettings()
-      .catch((err) => setError(localizeApiError(err, 'browserUseSettings.loadSettingsFailed', t)))
-      .finally(() => setIsSettingsLoading(false));
+    void loadSettings(version)
+      .catch((err) => {
+        if (requestVersion.current === version) setError({ message: localizeApiError(err, 'browserUseSettings.loadSettingsFailed', translate.current) });
+      })
+      .finally(() => { if (requestVersion.current === version) setIsSettingsLoading(false); });
 
-    void loadStatus()
-      .catch((err) => setError(localizeApiError(err, 'browserUseSettings.loadStatusFailed', t)))
-      .finally(() => setIsStatusLoading(false));
-  }, [loadSettings, loadStatus, t]);
+    void loadStatus(version)
+      .catch((err) => {
+        if (requestVersion.current === version) setError({ message: localizeApiError(err, 'browserUseSettings.loadStatusFailed', translate.current) });
+      })
+      .finally(() => { if (requestVersion.current === version) setIsStatusLoading(false); });
+    return () => { ++requestVersion.current; };
+  }, [loadSettings, loadStatus]);
 
   const updateSettings = async (nextSettings: Partial<BrowserUseSettings>) => {
+    const version = ++requestVersion.current;
+    let saved = false;
     setIsSaving(true);
     setError(null);
     try {
       const response = await api.browserUse.saveSettings(nextSettings);
       const data = await readApiJson<{ data: { settings: BrowserUseSettings } }>(response);
+      if (requestVersion.current !== version) return;
+      saved = true;
       setSettings(data.data.settings);
       window.dispatchEvent(new Event('browserUseSettingsChanged'));
       setIsStatusLoading(true);
-      await loadStatus();
+      await loadStatus(version);
     } catch (err) {
-      setError(localizeApiError(err, 'browserUseSettings.saveFailed', t));
+      if (requestVersion.current !== version) return;
+      const message = localizeApiError(err, saved ? 'browserUseSettings.loadStatusFailed' : 'browserUseSettings.saveFailed', t);
+      setError({ message, retrySettings: err instanceof ApiRequestError && err.code === 'BROWSER_USE_SETTINGS_APPLY_FAILED' });
+      // Persistence can succeed before MCP registration fails. Reload both
+      // values without replacing the original, useful failure explanation.
+      setIsSettingsLoading(true);
+      setIsStatusLoading(true);
+      const [savedSettings] = await Promise.allSettled([loadSettings(version), loadStatus(version)]);
+      if (requestVersion.current !== version) return;
+      if (savedSettings.status === 'fulfilled') {
+        window.dispatchEvent(new Event('browserUseSettingsChanged'));
+      } else {
+        setError({ message: `${message} ${t('browserUseSettings.reloadFailed')}` });
+      }
     } finally {
-      setIsStatusLoading(false);
-      setIsSaving(false);
+      if (requestVersion.current === version) {
+        setIsSettingsLoading(false);
+        setIsStatusLoading(false);
+        setIsSaving(false);
+      }
     }
   };
 
   const installBrowserBinaries = async () => {
+    const version = ++requestVersion.current;
     setIsInstalling(true);
     setError(null);
     try {
       const response = await api.browserUse.installRuntime();
       await readApiJson(response);
+      if (requestVersion.current !== version) return;
       setIsStatusLoading(true);
-      await loadStatus();
+      await loadStatus(version);
     } catch (err) {
-      setError(localizeApiError(err, 'browserUseSettings.installFailed', t));
+      if (requestVersion.current === version) setError({ message: localizeApiError(err, 'browserUseSettings.installFailed', t) });
     } finally {
-      setIsStatusLoading(false);
-      setIsInstalling(false);
+      if (requestVersion.current === version) {
+        setIsStatusLoading(false);
+        setIsInstalling(false);
+      }
     }
   };
 
@@ -134,7 +170,7 @@ export default function BrowserUseSettingsTab() {
                 checked={browserEnabled}
                 onChange={(value) => void updateSettings({ enabled: value })}
                 ariaLabel={t('browserUseSettings.enableAriaLabel')}
-                disabled={isSaving}
+                disabled={isSaving || isInstalling || isSettingsLoading}
               />
             )}
           </SettingsRow>
@@ -171,7 +207,7 @@ export default function BrowserUseSettingsTab() {
                   type="button"
                   size="sm"
                   onClick={() => void installBrowserBinaries()}
-                  disabled={isInstalling || status?.installInProgress}
+                  disabled={isInstalling || isSaving || status?.installInProgress}
                   className="flex-shrink-0"
                 >
                   {isInstalling || status?.installInProgress ? (
@@ -187,8 +223,13 @@ export default function BrowserUseSettingsTab() {
             )}
 
             {error && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
-                {error}
+              <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+                <p>{error.message}</p>
+                {error.retrySettings && settings && (
+                  <Button type="button" size="sm" className="mt-2" disabled={isSaving || isInstalling} onClick={() => void updateSettings(settings)}>
+                    {t('browserUseSettings.retrySettings')}
+                  </Button>
+                )}
               </div>
             )}
           </div>

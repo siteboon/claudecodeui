@@ -901,6 +901,9 @@
     "loadSettingsFailed": "Failed to load Browser settings",
     "loadStatusFailed": "Failed to load Browser status",
     "saveFailed": "Failed to save Browser settings",
+    "applyFailed": "Browser settings were saved, but applying them to agents failed. Check provider configuration and retry.",
+    "retrySettings": "Retry applying settings",
+    "reloadFailed": "Could not reload the saved settings. Refresh this page before trying again.",
     "installFailed": "Failed to install browser runtime"
   },
   "mcpServersAdd": {

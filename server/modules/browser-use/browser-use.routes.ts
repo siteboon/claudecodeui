@@ -1,7 +1,7 @@
 import express from 'express';
 import type { Response } from 'express';
 
-import { browserUseService } from '@/modules/browser-use/browser-use.service.js';
+import { BrowserSettingsApplyError, browserUseService } from '@/modules/browser-use/browser-use.service.js';
 
 const router = express.Router();
 
@@ -17,6 +17,7 @@ export const BROWSER_USE_ERROR_CODES = {
   STATUS_LOAD_FAILED: 'BROWSER_USE_STATUS_LOAD_FAILED',
   SETTINGS_LOAD_FAILED: 'BROWSER_USE_SETTINGS_LOAD_FAILED',
   SETTINGS_SAVE_FAILED: 'BROWSER_USE_SETTINGS_SAVE_FAILED',
+  SETTINGS_APPLY_FAILED: 'BROWSER_USE_SETTINGS_APPLY_FAILED',
   RUNTIME_INSTALL_FAILED: 'BROWSER_USE_RUNTIME_INSTALL_FAILED',
   SESSIONS_LOAD_FAILED: 'BROWSER_USE_SESSIONS_LOAD_FAILED',
   SESSION_STOP_FAILED: 'BROWSER_USE_SESSION_STOP_FAILED',
@@ -78,12 +79,17 @@ router.put('/settings', async (req, res) => {
     const settings = await browserUseService.updateSettings(req.body || {});
     res.json({ success: true, data: { settings } });
   } catch (error) {
+    const applyFailed = error instanceof BrowserSettingsApplyError;
+    const code = applyFailed
+      ? BROWSER_USE_ERROR_CODES.SETTINGS_APPLY_FAILED
+      : BROWSER_USE_ERROR_CODES.SETTINGS_SAVE_FAILED;
+    // Log only a stable diagnostic code; provider errors may contain secrets.
+    console.warn('[Browser] Settings update failed:', code);
     sendError(
       res,
-      400,
-      BROWSER_USE_ERROR_CODES.SETTINGS_SAVE_FAILED,
-      'Failed to save Browser settings.',
-      error instanceof Error ? error.message : undefined,
+      applyFailed ? 500 : 400,
+      code,
+      applyFailed ? error.message : 'Failed to save Browser settings.',
     );
   }
 });

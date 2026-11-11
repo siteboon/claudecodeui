@@ -478,6 +478,14 @@ async function getActionPoint(page: any, input: { selector?: string; text?: stri
   };
 }
 
+/** Used by the Browser routes to report a saved setting whose agent setup failed, without leaking provider errors. */
+export class BrowserSettingsApplyError extends Error {
+  constructor() {
+    super('Browser settings were saved, but applying them to agents failed. Check provider configuration and retry.');
+    this.name = 'BrowserSettingsApplyError';
+  }
+}
+
 export const browserUseService = {
   async getSettings() {
     return readSettings();
@@ -490,11 +498,17 @@ export const browserUseService = {
     };
 
     const next = writeSettings(nextSettings);
-    if (next.enabled) {
-      await this.registerAgentMcp();
-    } else if (current.enabled) {
-      await this.unregisterAgentMcp();
-      await this.stopAllSessions();
+    try {
+      if (next.enabled) {
+        await this.registerAgentMcp();
+      } else if (current.enabled || settings.enabled === false) {
+        // An explicit disable also retries cleanup after a previous partial failure.
+        await this.unregisterAgentMcp();
+        await this.stopAllSessions();
+      }
+    } catch {
+      // Provider failures can include commands, environment values and tokens.
+      throw new BrowserSettingsApplyError();
     }
     return next;
   },
