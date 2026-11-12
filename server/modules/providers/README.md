@@ -56,15 +56,29 @@ A CLI that does not emit this protocol reports an explicit error. Aborts send
 SIGTERM, escalate to SIGKILL after three seconds, and retain process ownership
 until exit. Successful stderr diagnostics are excluded from assistant replies.
 
-Antigravity supports whole-conversation forks through the shared session-fork
-endpoint and sidebar controls. A read-only SQLite backup preserves native steps
+Antigravity supports whole-conversation and message-point forks through the
+shared session-fork endpoint and controls. A read-only SQLite backup preserves native steps
 and independently indexed generation/executor caches, assigns new native and
 trajectory identities, and copies conversation artifacts into an independent
 brain directory. The original conversation and workspace files remain intact.
 The app retains the source model, effort, title and fork ancestry. AGY currently
 exposes `/fork` only in its interactive TUI, so this adapter validates the known
-native storage layout and rejects unsupported layouts. Message-prefix forks
-are explicitly unsupported; their cache boundaries require a native API.
+native storage layout and rejects unsupported layouts. Prefix snapshots filter
+generation/executor caches by their referenced step indices, not cache ordinals;
+failed generations with no output steps are dropped. Linked/battle histories
+and malformed references fail without changing the app mapping. Native step
+anchors also drive the shared pencil edit/resend gateway; editing the first
+prompt detaches the old native conversation, and later edits repoint the app
+session only after its independent prefix snapshot succeeds.
+
+The common capability matrix also enables model-specific effort, file/image
+references, tool calls/results and token usage. Native `--effort` receives only
+available model variants or declared custom levels; fixed models hide the picker.
+The text-only input protocol uses the existing file-reference envelopes for
+attachments. Live/persisted tool identities agree across history refreshes,
+and native usage does not double-count cache reads or thinking. See the
+[surface comparison](../../../docs/antigravity-provider-parity.md) for remaining
+protocol limits.
 
 Antigravity also implements the shared runtime `askSideQuestion` contract, so
 the existing send menu, `/btw`, streaming cards, reconnect and dismiss handling
