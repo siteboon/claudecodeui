@@ -662,6 +662,13 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *                          Codex supports: 'low', 'medium', 'high', 'xhigh', 'max', 'ultra' depending on model.
    *                          'default' or omission lets the provider decide.
    *
+   * @param {boolean} unattended - (Optional) Whether nobody will answer the run's MCP elicitation forms.
+   *                              Claude only. Default: true
+   *                              - true: a form an MCP server sends mid-call is declined at once
+   *                              - false: the form is shown in any tab that opens the session and
+   *                                waits for an answer there, as in a chat turn. Pass it when a person
+   *                                will watch the run in the UI.
+   *
    * @param {boolean} cleanup - (Optional) Auto-cleanup project directory after completion.
    *                           Default: true
    *                           Behavior:
@@ -880,6 +887,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
     const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
     const cleanup = req.body.cleanup === undefined ? true : (req.body.cleanup === true || req.body.cleanup === 'true');
+    // Only an explicit false switches it off. A run that waits on a form
+    // nobody sees holds until the MCP server gives up, so a value that is
+    // neither true nor false keeps the declining default.
+    const unattended = !(req.body.unattended === false || req.body.unattended === 'false');
 
     // If branchName is provided, automatically enable createBranch
     const createBranch = branchName ? true : (req.body.createBranch === true || req.body.createBranch === 'true');
@@ -1072,7 +1083,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           sessionId: appSessionId,
           model: model || providerModels?.DEFAULT,
           effort,
-          permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
+          permissionMode: 'bypassPermissions', // Bypass all permissions for API calls
+          // A caller that only reads this response cannot answer an MCP form;
+          // one whose run a person watches in the UI says so with `false`.
+          unattended
         }, run.writer);
 
       } else if (provider === 'cursor') {

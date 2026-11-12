@@ -35,3 +35,19 @@ test('capability effort levels cover every level a curated model declares', () =
     assert.deepEqual(missingLevels, [], `${provider}: effortLevels misses curated levels`);
   }
 });
+
+
+test('side questions are supported by claude, codex and opencode, not by cursor', () => {
+  // Cursor has no headless way to ask on the side; its menu then offers only
+  // Queue · Stop / Send anyway.
+  const expected: Record<LLMProvider, boolean> = {
+    claude: true,
+    codex: true,
+    cursor: false,
+    opencode: true,
+  };
+  for (const [provider, supported] of Object.entries(expected) as Array<[LLMProvider, boolean]>) {
+    const capabilities = providerCapabilitiesService.getProviderCapabilities(provider) as unknown as Record<string, unknown>;
+    assert.equal(capabilities.supportsSideQuestions, supported, `${provider}: supportsSideQuestions`);
+  }
+});

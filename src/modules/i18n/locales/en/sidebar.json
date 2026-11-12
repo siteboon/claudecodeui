@@ -38,7 +38,9 @@
     "selectAllLoaded": "Select all loaded",
     "clearSelection": "Clear",
     "deleteSelected_one": "Delete {{count}} session",
-    "deleteSelected_other": "Delete {{count}} sessions"
+    "deleteSelected_other": "Delete {{count}} sessions",
+    "expandForks": "Expand forks of {{session}}",
+    "collapseForks": "Collapse forks of {{session}}"
   },
   "tooltips": {
     "viewEnvironments": "View Environments",
@@ -109,6 +111,8 @@
     "enterProjectPath": "Please enter a project path",
     "deleteSessionFailed": "Failed to delete session. Please try again.",
     "deleteSessionError": "Error deleting session. Please try again.",
+    "archiveSessionFailed": "Failed to archive session. Please try again.",
+    "archiveSessionError": "Error archiving session. Please try again.",
     "renameSessionFailed": "Failed to rename session. Please try again.",
     "renameSessionError": "Error renaming session. Please try again.",
     "deleteProjectFailed": "Failed to remove project. Please try again.",
@@ -160,10 +164,9 @@
     "sessionCount_other": "This project contains {{count}} conversations.",
     "removeFromSidebar": "Remove from sidebar only",
     "archiveProject": "Archive project",
-    "archiveSession": "Archive session",
-    "archiveSessionNotice": "Archive keeps the session out of the active list while preserving its history.",
-    "archivedSessionNotice": "This session is already archived. You can keep it hidden or delete it permanently.",
     "deleteSessionPermanently": "Delete permanently",
+    "confirmDeleteSession": "Permanently delete",
+    "deleteSessionNotice": "The session and its history will be removed. This cannot be undone.",
     "deleteAllData": "Delete all data permanently",
     "allConversationsDeleted": "The project will be removed from the sidebar. Your files, memories, and session data will be preserved.",
     "cannotUndo": "You can re-add the project later.",
