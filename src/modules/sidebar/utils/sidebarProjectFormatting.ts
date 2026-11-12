@@ -28,16 +28,44 @@ export const getProjectGroupKey = (project: Project): string => {
   return segments[segments.length - 1] || project.displayName || project.projectId;
 };
 
+const rawProjectPath = (project: Project): string => String(project.fullPath || project.path || '');
+
 /**
- * Short location hint for a project shown under a group header. Every project in
- * a group ends in the same folder name, so the hint is the parent directory (its
- * tail when long): that is the part that tells two grouped rows apart.
+ * Location hint for each project under one group header, keyed by projectId.
+ * Every project in a group ends in the same folder name, and synced paths often
+ * share a leading root and a trailing parent run too, so a fixed-length tail can
+ * read the same for two rows. The hint keeps only the parent segments that differ
+ * inside the group, marking the dropped shared prefix and suffix with `...`.
  */
-export const getProjectGroupPathHint = (project: Project): string => {
-  const fullPath = String(project.fullPath || project.path || '').replace(/[\\/]+$/, '');
-  const cut = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
-  const parent = cut > 0 ? fullPath.slice(0, cut) : cut === 0 ? fullPath.slice(0, 1) : fullPath;
-  return parent.length > 25 ? `...${parent.slice(-22)}` : parent;
+export const getGroupPathHints = (projects: Project[]): Map<string, string> => {
+  const parents = projects.map((project) =>
+    rawProjectPath(project).split(/[\\/]+/).filter((segment) => segment.length > 0).slice(0, -1),
+  );
+  const minLength = Math.min(...parents.map((segments) => segments.length));
+  const sameAt = (index: (segments: string[]) => number) =>
+    parents.every((segments) => segments[index(segments)] === parents[0][index(parents[0])]);
+
+  let prefix = 0;
+  while (prefix < minLength && sameAt(() => prefix)) prefix += 1;
+  let suffix = 0;
+  while (suffix < minLength - prefix && sameAt((segments) => segments.length - 1 - suffix)) suffix += 1;
+
+  const hints = new Map<string, string>();
+  projects.forEach((project, index) => {
+    const segments = parents[index];
+    const middle = segments.slice(prefix, segments.length - suffix);
+    if (middle.length === 0) {
+      const raw = rawProjectPath(project).replace(/[\\/]+$/, '');
+      const cut = Math.max(raw.lastIndexOf('/'), raw.lastIndexOf('\\'));
+      hints.set(project.projectId, cut > 0 ? raw.slice(0, cut) : raw.slice(0, 1) || raw);
+      return;
+    }
+    hints.set(
+      project.projectId,
+      `${prefix > 0 ? '.../' : ''}${middle.join('/')}${suffix > 0 ? '/...' : ''}`,
+    );
+  });
+  return hints;
 };
 
 export type ProjectGroup = {

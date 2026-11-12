@@ -5,7 +5,7 @@ import type { TFunction } from 'i18next';
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
-import { getProjectGroupPathHint, getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import TaskIndicator from '@/modules/sidebar/TaskIndicator';
 import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
@@ -15,7 +15,7 @@ type SidebarProjectItemProps = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   /** Rendered under a folder-name group, where sibling rows can share a display name. */
-  isGrouped?: boolean;
+  groupPathHint?: string | null;
   isExpanded: boolean;
   isDeleting: boolean;
   isStarred: boolean;
@@ -70,7 +70,7 @@ function SidebarProjectItem({
   project,
   selectedProject,
   selectedSession,
-  isGrouped = false,
+  groupPathHint = null,
   isExpanded,
   isDeleting,
   isStarred,
@@ -242,10 +242,10 @@ function SidebarProjectItem({
                       </div>
                       <p className="truncate text-xs text-muted-foreground">
                         {sessionCountLabel}
-                        {isGrouped && (
+                        {groupPathHint && (
                           <span className="ml-1 opacity-60" title={project.fullPath}>
                             {' - '}
-                            {getProjectGroupPathHint(project)}
+                            {groupPathHint}
                           </span>
                         )}
                       </p>
@@ -387,9 +387,8 @@ function SidebarProjectItem({
                     {project.fullPath !== project.displayName && (
                       <span className="ml-1 opacity-60" title={project.fullPath}>
                         {' - '}
-                        {isGrouped
-                          ? getProjectGroupPathHint(project)
-                          : project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath}
+                        {groupPathHint
+                          ?? (project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath)}
                       </span>
                     )}
                   </div>

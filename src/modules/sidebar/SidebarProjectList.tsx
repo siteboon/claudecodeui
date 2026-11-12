@@ -5,7 +5,7 @@ import type { Project, SidebarProjectListProps } from '@/shared/types';
 import { getPageTitle } from '@/shared/utils';
 import SidebarProjectItem from '@/modules/sidebar/SidebarProjectItem';
 import SidebarProjectsState from '@/modules/sidebar/SidebarProjectsState';
-import { groupProjectsByBasename } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { getGroupPathHints, groupProjectsByBasename } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 
 
 /** Rendered by SidebarContent to list the filtered projects, delegating each row to SidebarProjectItem. */
@@ -93,7 +93,7 @@ export default function SidebarProjectList({
 
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
 
-  const renderProjectItem = (project: Project, isGrouped = false) => {
+  const renderProjectItem = (project: Project, groupPathHint: string | null = null) => {
     // Both renames are resolved here rather than inside the row, so
     // every other row is handed the same scalars on each keystroke and
     // its memo boundary holds.
@@ -119,7 +119,7 @@ export default function SidebarProjectList({
         project={project}
         selectedProject={selectedProject}
         selectedSession={selectedSession}
-        isGrouped={isGrouped}
+        groupPathHint={groupPathHint}
         isExpanded={isProjectExpanded(project.projectId)}
         isDeleting={deletingProjects.has(project.projectId)}
         isStarred={isProjectStarred(project.projectId)}
@@ -173,6 +173,7 @@ export default function SidebarProjectList({
       // would say a project matched without showing which one. The persisted
       // collapsed state is kept, it is only ignored while a filter is active.
       const isCollapsed = collapsedGroups.has(group.key) && searchFilter.trim().length === 0;
+      const pathHints = getGroupPathHints(group.projects);
       const totalSessions = group.projects.reduce(
         (sum, project) => sum + (project.sessionMeta?.total ?? project.sessions?.length ?? 0),
         0,
@@ -200,7 +201,7 @@ export default function SidebarProjectList({
           </button>
           {!isCollapsed && (
             <div className="ml-3 border-l border-border pl-1 md:space-y-1">
-              {group.projects.map((project) => renderProjectItem(project, true))}
+              {group.projects.map((project) => renderProjectItem(project, pathHints.get(project.projectId) ?? null))}
             </div>
           )}
         </div>
