@@ -10,9 +10,6 @@ type WebPushState = {
   unsubscribe: () => Promise<void>;
 };
 
-/**
- * Converts a URL-safe Base64 VAPID public key string into a Uint8Array for PushManager.subscribe.
- */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -24,16 +21,12 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
-/**
- * Manages browser Web Push notification permission and subscription state.
- */
 export function useWebPush(): WebPushState {
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() => {
     if (
       typeof window === 'undefined'
       || Boolean((window as any).cloudcliDesktopNotifications)
       || !('Notification' in window)
-      || !('serviceWorker' in navigator)
       || !navigator.serviceWorker
     ) {
       return 'unsupported';
@@ -45,7 +38,7 @@ export function useWebPush(): WebPushState {
 
   // Check existing subscription on mount
   useEffect(() => {
-    if (permission === 'unsupported' || !navigator.serviceWorker) return;
+    if (permission === 'unsupported') return;
 
     navigator.serviceWorker.ready.then((registration) => {
       registration.pushManager.getSubscription().then((sub) => {

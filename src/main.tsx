@@ -16,13 +16,8 @@ import '@/modules/i18n'
 // `localStorage.setItem('react-scan', 'on')` and reload.
 scan({ enabled: import.meta.env.DEV && localStorage.getItem('react-scan') === 'on' })
 
-// Register service worker for PWA + Web Push support (guarded for non-secure HTTP / iOS WebKit)
-if (
-  typeof navigator !== 'undefined' &&
-  'serviceWorker' in navigator &&
-  navigator.serviceWorker &&
-  typeof navigator.serviceWorker.register === 'function'
-) {
+// Register service worker for PWA + Web Push support
+if (navigator.serviceWorker) {
   navigator.serviceWorker.register('/sw.js').catch(err => {
     console.warn('Service worker registration failed:', err);
   });
