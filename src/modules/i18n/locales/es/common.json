@@ -442,6 +442,7 @@
     "backgroundTasks": "Tareas en segundo plano",
     "backgroundAgent": "Agente",
     "backgroundCommand": "Comando",
+    "backgroundMonitor": "Monitor",
     "stopTask": "Detener",
     "taskRowNotLoaded": "Se lanzó antes en esta conversación; haz clic para cargarla",
     "taskOfAgent": "Lanzada por uno de los agentes de esta sesión"

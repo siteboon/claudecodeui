@@ -38,7 +38,9 @@
     "selectAllLoaded": "Alle geladenen auswählen",
     "clearSelection": "Auswahl aufheben",
     "deleteSelected_one": "{{count}} Sitzung löschen",
-    "deleteSelected_other": "{{count}} Sitzungen löschen"
+    "deleteSelected_other": "{{count}} Sitzungen löschen",
+    "expandForks": "Abzweigungen von {{session}} aufklappen",
+    "collapseForks": "Abzweigungen von {{session}} zuklappen"
   },
   "tooltips": {
     "viewEnvironments": "Umgebungen anzeigen",

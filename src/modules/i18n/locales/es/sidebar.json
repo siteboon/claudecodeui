@@ -39,6 +39,8 @@
     "clearSelection": "Quitar selección",
     "deleteSelected_one": "Eliminar {{count}} sesión",
     "deleteSelected_other": "Eliminar {{count}} sesiones",
+    "expandForks": "Expandir bifurcaciones de {{session}}",
+    "collapseForks": "Contraer bifurcaciones de {{session}}",
     "deleteSelected_many": "Eliminar {{count}} sesiones"
   },
   "tooltips": {
