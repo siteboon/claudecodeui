@@ -74,7 +74,9 @@ export default function SidebarRecentConversations({
   // added nothing (e.g. all duplicates) leaves it unchanged, which stops the
   // automatic loading instead of requesting the same page in a loop.
   const autoLoadedAtLengthRef = useRef<number | null>(null);
-  const canAutoLoadMore = hasMore && !isLoadingMore && !hasError;
+  // A full reload replaces the list, so a page requested during it would be
+  // dropped; the observer comes back once the reload finishes.
+  const canAutoLoadMore = hasMore && !isLoading && !isLoadingMore && !hasError;
   const conversationCount = conversations.length;
 
   useEffect(() => {

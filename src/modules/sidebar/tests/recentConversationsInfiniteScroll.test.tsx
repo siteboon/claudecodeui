@@ -181,6 +181,20 @@ test('a full reload re-enables loading at a length that had stopped', () => {
   assert.equal(onLoadMore.mock.calls.length, 2);
 });
 
+test('no automatic request while a full reload keeps the old rows on screen', () => {
+  const onLoadMore = vi.fn();
+  const { rerender } = renderList({ items: conversations(40), isLoading: true }, onLoadMore);
+
+  scrollSentinelIntoView();
+  assert.equal(onLoadMore.mock.calls.length, 0, 'no request during the reload');
+  assert.ok(screen.getByText('title 0'), 'existing rows stay visible');
+
+  // The reload returns the same number of rows; scrolling still works after it.
+  rerender({ items: conversations(40) });
+  scrollSentinelIntoView();
+  assert.equal(onLoadMore.mock.calls.length, 1);
+});
+
 test('no automatic request after an error or when everything is loaded', () => {
   const onLoadMore = vi.fn();
   const { rerender } = renderList({ items: conversations(40), hasError: true }, onLoadMore);
