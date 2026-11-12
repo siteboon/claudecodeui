@@ -15,9 +15,12 @@ import type {
 } from '@/shared/index.js';
 import {
   buildProviderCliEnv,
+  appendFilesInputTag,
+  appendImagesInputTag,
   createCompleteMessage,
   createNormalizedMessage,
   readObjectRecord,
+  normalizeAntigravityTokenUsage,
   resolveConfiguredCliExecutable,
   SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
   SIDE_CONVERSATION_BOUNDARY_PROMPT,
@@ -166,6 +169,22 @@ async function runAntigravity(
   const args = ['--input-format', 'stream-json', '--output-format', 'stream-json'];
   if (providerSessionId) args.push('--conversation', providerSessionId);
   if (resolvedModel) args.push('--model', resolvedModel);
+  const effort = readStringOption(options, 'effort');
+  try {
+    if (effort && effort !== 'default') {
+      const catalog = await context.getProviderModels();
+      const model = catalog.OPTIONS.find((option) => option.value === resolvedModel);
+      const allowed = model ? model.effort?.values.map((option) => option.value) ?? []
+        : ['low', 'medium', 'high', 'xhigh', 'max'];
+      if (allowed.includes(effort)) args.push('--effort', effort);
+      else if (allowed.length > 0) throw new Error(`Unsupported Antigravity effort: ${effort}`);
+    }
+  } catch (error) {
+    const resolvedError = error instanceof Error ? error : new Error(String(error));
+    reportError(resolvedError);
+    throw resolvedError;
+  }
+  if (startup.aborted || sideQuestion?.signal.aborted) return;
   if (sideQuestion) {
     // Native permission rules override global/project auto-approval. Plan mode
     // alone does not prevent shell/MCP side effects. Never inherit bypass mode.
@@ -206,6 +225,8 @@ async function runAntigravity(
     let failure: Error | null = null;
     let sawResponseDelta = false;
     let sawResult = false;
+    const toolSteps = new Set<number>();
+    const completedToolSteps = new Set<number>();
     const stdoutFilter = createAntigravityStdoutFilter((text) => {
       for (const message of context.normalizeMessage(text, nativeSessionId ?? fallbackSessionId)) {
         writer.send(message);
@@ -248,6 +269,34 @@ async function runAntigravity(
         sawResponseDelta = true;
         stdoutFilter.write(step.text_delta);
       }
+      if (event?.event === 'step_update' && step?.step_type === 'tool' && Number.isSafeInteger(step.step_index)) {
+        const index = step.step_index as number;
+        const tool = readObjectRecord(step.tool_info);
+        const resultId = `${appSessionId ?? nativeSessionId ?? fallbackSessionId}-${index}`;
+        const toolId = `${resultId}-call`;
+        if (tool && !toolSteps.has(index)) {
+          toolSteps.add(index);
+          writer.send(createNormalizedMessage({
+            id: toolId, kind: 'tool_use', provider: 'antigravity', sessionId: nativeSessionId ?? fallbackSessionId,
+            toolId, toolName: readStringOption(tool, 'name') ?? readStringOption(step, 'tool_name') ?? 'Antigravity Tool',
+            toolInput: tool.parameters ?? {},
+          }));
+        }
+        if (tool && step.state === 'DONE' && !completedToolSteps.has(index)) {
+          completedToolSteps.add(index);
+          const error = readObjectRecord(tool.error);
+          writer.send(createNormalizedMessage({
+            id: resultId, kind: 'tool_result', provider: 'antigravity', sessionId: nativeSessionId ?? fallbackSessionId,
+            toolId, content: typeof tool.output === 'string' ? tool.output : readStringOption(error ?? {}, 'message') ?? '',
+            isError: Boolean(error),
+          }));
+        }
+      }
+      const usage = result?.usage ?? step?.usage;
+      if (usage) writer.send(createNormalizedMessage({
+        kind: 'status', text: 'token_budget', provider: 'antigravity', sessionId: nativeSessionId ?? fallbackSessionId,
+        tokenBudget: normalizeAntigravityTokenUsage(usage),
+      }));
       if (event?.event === 'result' && result) {
         sawResult = true;
         if (result.status !== 'SUCCESS') {
@@ -325,7 +374,8 @@ async function runAntigravity(
     });
     // JSON stdin preserves multiline/leading-dash prompts and keeps them out of argv.
     child.stdin?.on('error', (error) => { failure = error; });
-    child.stdin?.end(`${JSON.stringify({ event: 'user', message: { content: command } })}\n`);
+    const prompt = appendFilesInputTag(appendImagesInputTag(command, options.images), options.files);
+    child.stdin?.end(`${JSON.stringify({ event: 'user', message: { content: prompt } })}\n`);
   });
 }
 

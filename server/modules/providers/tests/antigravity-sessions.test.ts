@@ -10,6 +10,7 @@ import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/datab
 import { AntigravitySessionSynchronizer } from '@/modules/providers/list/antigravity/antigravity-session-synchronizer.provider.js';
 import { AntigravitySessionsProvider } from '@/modules/providers/list/antigravity/antigravity-sessions.provider.js';
 import { antigravityRunBindings } from '@/modules/providers/services/antigravity-run-bindings.service.js';
+import { appendFilesInputTag, appendImagesInputTag } from '@/shared/index.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -18,6 +19,29 @@ const patchHomeDir = (nextHomeDir: string) => {
     (os as any).homedir = original;
   };
 };
+
+test('AGY history restores attachment cards, native anchors, thinking and paired tool results', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-history-parity-'));
+  try {
+    const transcript = path.join(root, 'transcript.jsonl');
+    await writeFile(transcript, [
+      { step_index: 0, source: 'USER_EXPLICIT', type: 'USER_INPUT', content: appendFilesInputTag(appendImagesInputTag('Review',
+        [{ path: '/assets/screen.png', name: '화면.png' }]), [{ path: '/assets/spec.txt', name: '요구사항.txt' }]) },
+      { step_index: 1, source: 'MODEL', type: 'PLANNER_RESPONSE', thinking: 'reasoning', content: 'answer', tool_calls: [{ name: 'read_file', args: { path: 'spec.txt' } }] },
+      { step_index: 2, source: 'MODEL', type: 'GENERIC', content: 'tool output' },
+    ].map((row) => JSON.stringify(row)).join('\n'));
+    const history = await new AntigravitySessionsProvider().fetchHistory('app', { jsonlPath: transcript });
+    assert.equal(history.messages[0].content, 'Review');
+    assert.equal(history.messages[0].transcriptAnchorId, '0');
+    assert.deepEqual(history.messages[0].images, [{ path: '/assets/screen.png', name: '화면.png' }]);
+    assert.deepEqual(history.messages[0].files, [{ path: '/assets/spec.txt', name: '요구사항.txt' }]);
+    assert.deepEqual(history.messages.slice(1).map((message) => message.kind), ['thinking', 'text', 'tool_use', 'tool_result']);
+    assert.equal(history.messages[3].toolId, history.messages[4].toolId);
+    assert.equal(history.messages[3].id, 'app-2-call', 'tool cards use the same result-step identity as live events');
+    assert.equal(history.messages[4].id, 'app-2');
+    assert.equal(history.messages[3].toolName, 'read_file');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;

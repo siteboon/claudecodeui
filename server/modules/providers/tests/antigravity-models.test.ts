@@ -42,6 +42,14 @@ test('parseAntigravityModelsStdout falls back when agy returns no models', () =>
   assert.deepEqual(parseAntigravityModelsStdout(''), ANTIGRAVITY_FALLBACK_MODELS);
 });
 
+test('effort menus expose only sibling variants available to the current account', () => {
+  const models = parseAntigravityModelsStdout('gemini-pro-low\tPro Low\ngemini-pro-high\tPro High\nfixed-thinking\tFixed\n');
+  assert.deepEqual(models.OPTIONS[0].effort, { default: 'low', values: [{ value: 'low' }, { value: 'high' }] });
+  assert.equal(models.OPTIONS[1].effort?.default, 'high');
+  assert.equal(models.OPTIONS[2].effort, undefined);
+  assert.equal(parseAntigravityModelsStdout('single-high\tSingle').OPTIONS[0].effort, undefined);
+});
+
 test('fallback catalog includes every model family reported for Free and Plus accounts', () => {
   const ids = new Set(ANTIGRAVITY_FALLBACK_MODELS.OPTIONS.map((model) => model.value));
   for (const version of ['3.8', '3.7', '3.6']) {

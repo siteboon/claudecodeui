@@ -4,9 +4,15 @@ import { readFile } from 'node:fs/promises';
 
 import Database from 'better-sqlite3';
 
+import { sessionsDb } from '@/modules/database/index.js';
+import { AntigravityForkProvider } from '@/modules/providers/list/antigravity/antigravity-fork.provider.js';
 import type { FetchHistoryOptions, FetchHistoryResult, IProviderSessions, NormalizedMessage } from '@/shared/index.js';
 import {
   createNormalizedMessage,
+  AppError,
+  parseFilesInputTag,
+  parseImagesInputTag,
+  readProtobufFields,
   generateMessageId,
   readObjectRecord,
   readOptionalString,
@@ -19,6 +25,8 @@ const PROVIDER = 'antigravity';
 const WAITING_FOR_EVENTS = /^<WAITING_FOR_EVENTS>\s*<\/WAITING_FOR_EVENTS>$/;
 const TRUNCATION_MARKER = /<truncated \d+ bytes>/;
 
+type PendingAntigravityTool = { message: NormalizedMessage; toolName: string };
+
 /** Resolves the native conversation DB without accepting path separators in a session id. */
 function resolveAntigravityConversationDbPath(providerSessionId: string | null): string | null {
   if (!providerSessionId) return null;
@@ -28,41 +36,10 @@ function resolveAntigravityConversationDbPath(providerSessionId: string | null):
 
 /** Reads one length-delimited protobuf field without depending on AGY's private schema. */
 function readWireField(payload: Buffer, wantedField: number): Buffer | null {
-  let offset = 0;
-  const readVarint = (): bigint | null => {
-    let value = 0n;
-    for (let shift = 0n; shift < 70n; shift += 7n) {
-      if (offset >= payload.length) return null;
-      const byte = payload[offset++];
-      value |= BigInt(byte & 0x7f) << shift;
-      if (!(byte & 0x80)) return value;
-    }
-    return null;
-  };
-
-  while (offset < payload.length) {
-    const key = readVarint();
-    if (key === null || key < 8n || key > BigInt(Number.MAX_SAFE_INTEGER)) return null;
-    const field = Number(key >> 3n);
-    const wireType = Number(key & 7n);
-
-    if (wireType === 0) {
-      if (readVarint() === null) return null;
-    } else if (wireType === 1 || wireType === 5) {
-      offset += wireType === 1 ? 8 : 4;
-    } else if (wireType === 2) {
-      const encodedLength = readVarint();
-      if (encodedLength === null || encodedLength > BigInt(payload.length - offset)) return null;
-      const length = Number(encodedLength);
-      const value = payload.subarray(offset, offset + length);
-      offset += length;
-      if (field === wantedField) return value;
-    } else {
-      return null;
-    }
-    if (offset > payload.length) return null;
-  }
-  return null;
+  try {
+    const field = readProtobufFields(payload).get(wantedField)?.[0];
+    return Buffer.isBuffer(field) ? field : null;
+  } catch { return null; }
 }
 
 /** Restores a clipped assistant answer from the matching native AGY step, if it is still available. */
@@ -172,7 +149,9 @@ function parseAntigravityTimestamp(value: unknown): string | undefined {
 }
 
 /** Maps one AGY JSONL step into zero or more shared history messages. */
-function normalizeAntigravityHistoryStep(rawStep: unknown, sessionId: string | null): NormalizedMessage[] {
+function normalizeAntigravityHistoryStep(
+  rawStep: unknown, sessionId: string | null, pendingTools: PendingAntigravityTool[],
+): NormalizedMessage[] {
   const raw = readObjectRecord(rawStep);
   if (!raw) {
     return [];
@@ -186,6 +165,8 @@ function normalizeAntigravityHistoryStep(rawStep: unknown, sessionId: string | n
   const timestamp = parseAntigravityTimestamp(raw.created_at);
 
   if (source === 'USER_EXPLICIT' && type === 'USER_INPUT' && content?.trim()) {
+    const parsed = parseFilesInputTag(stripAntigravityTags(content));
+    const images = parseImagesInputTag(parsed.text);
     return [createNormalizedMessage({
       id: baseId,
       sessionId,
@@ -193,28 +174,47 @@ function normalizeAntigravityHistoryStep(rawStep: unknown, sessionId: string | n
       provider: PROVIDER,
       kind: 'text',
       role: 'user',
-      content: stripAntigravityTags(content),
+      content: images.text,
+      files: parsed.attachments.length ? parsed.attachments : undefined,
+      images: images.attachments.length ? images.attachments : undefined,
+      transcriptAnchorId: Number.isSafeInteger(stepIndex) && (stepIndex as number) >= 0 ? String(stepIndex) : undefined,
     })];
   }
 
   if (source === 'MODEL' && type === 'PLANNER_RESPONSE') {
-    const text = content ?? readOptionalString(raw.thinking);
-    if (!text?.trim() || WAITING_FOR_EVENTS.test(text.trim())) {
-      return [];
+    const messages: NormalizedMessage[] = [];
+    const thinking = readOptionalString(raw.thinking);
+    for (const [kind, text] of [['thinking', thinking], ['text', content]] as const) {
+      if (!text?.trim() || WAITING_FOR_EVENTS.test(text.trim())) continue;
+      messages.push(createNormalizedMessage({
+        id: kind === 'thinking' && content ? `${baseId}-thinking` : baseId,
+        sessionId, timestamp, provider: PROVIDER, kind, role: 'assistant', content: text.trim(),
+      }));
     }
-
-    return [createNormalizedMessage({
-      id: baseId,
-      sessionId,
-      timestamp,
-      provider: PROVIDER,
-      kind: readOptionalString(raw.thinking) && !content ? 'thinking' : 'text',
-      role: 'assistant',
-      content: text.trim(),
-    })];
+    for (const [index, entry] of (Array.isArray(raw.tool_calls) ? raw.tool_calls : []).entries()) {
+      const call = readObjectRecord(entry);
+      const toolName = readOptionalString(call?.name);
+      if (!toolName) continue;
+      const toolId = `${baseId}-tool-${index}`;
+      const message = createNormalizedMessage({
+        id: toolId, sessionId, timestamp, provider: PROVIDER, kind: 'tool_use', role: 'assistant',
+        toolId, toolName, toolInput: call?.args ?? {},
+      });
+      pendingTools.push({ message, toolName });
+      messages.push(message);
+    }
+    return messages;
   }
 
   if (source === 'MODEL' && content?.trim()) {
+    const pendingTool = pendingTools.shift();
+    if (pendingTool) {
+      // Live stream tool steps use the result step's index. Once known, give
+      // both persisted rows those same identities so refresh can reconcile
+      // the streamed cards instead of adding duplicate calls and results.
+      pendingTool.message.id = `${baseId}-call`;
+      pendingTool.message.toolId = `${baseId}-call`;
+    }
     return [createNormalizedMessage({
       id: baseId,
       sessionId,
@@ -222,8 +222,8 @@ function normalizeAntigravityHistoryStep(rawStep: unknown, sessionId: string | n
       provider: PROVIDER,
       kind: 'tool_result',
       role: 'assistant',
-      toolName: type || 'Antigravity Tool',
-      toolId: baseId,
+      toolName: pendingTool?.toolName ?? type ?? 'Antigravity Tool',
+      toolId: pendingTool?.message.toolId ?? baseId,
       content: content.trim(),
       isError: type === 'ERROR_MESSAGE',
     })];
@@ -245,6 +245,46 @@ function normalizeAntigravityHistoryStep(rawStep: unknown, sessionId: string | n
 
 /** Antigravity transcript reader and message normalizer used by session services. */
 export class AntigravitySessionsProvider implements IProviderSessions {
+  /** The common edit gateway addresses stable native step indices, never visible row ordinals. */
+  async resolveEditAnchor(sessionId: string, anchorId: string) {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session?.jsonl_path || !session.provider_session_id) return { found: false, resumeThroughId: null };
+    const lines = (await readFile(session.jsonl_path, 'utf8')).split(/\r?\n/);
+    let previous: string | null = null;
+    let lastIndex = -1;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let step;
+      try { step = readObjectRecord(JSON.parse(line)); } catch { return { found: false, resumeThroughId: null }; }
+      if (!Number.isSafeInteger(step?.step_index) || (step!.step_index as number) <= lastIndex) {
+        return { found: false, resumeThroughId: null };
+      }
+      lastIndex = step!.step_index as number;
+      if (String(lastIndex) === anchorId) return {
+        found: step?.source === 'USER_EXPLICIT' && step.type === 'USER_INPUT', resumeThroughId: previous,
+      };
+      previous = String(lastIndex);
+    }
+    return { found: false, resumeThroughId: null };
+  }
+
+  /** Branches the retained native prefix and retires the original mapping after snapshot success. */
+  async rewindSession(sessionId: string, keepThroughId: string | null): Promise<void> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session?.provider_session_id || !session.jsonl_path) throw new AppError('The Antigravity transcript is not ready.', {
+      code: 'EDIT_SOURCE_NOT_READY', statusCode: 409,
+    });
+    const fork = keepThroughId === null ? null : await new AntigravityForkProvider().forkSession({
+      providerSessionId: session.provider_session_id, jsonlPath: session.jsonl_path,
+      projectPath: session.project_path ?? process.cwd(), upToAnchorId: keepThroughId,
+    });
+    sessionsDb.markProviderSessionSuperseded({
+      provider: PROVIDER, providerSessionId: session.provider_session_id, sessionId, jsonlPath: session.jsonl_path,
+    });
+    if (fork) sessionsDb.repointSessionToProviderSession(sessionId, fork);
+    else sessionsDb.detachProviderSession(sessionId);
+  }
+
   /** Normalizes a live AGY output chunk for websocket and SSE consumers. */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     const raw = readObjectRecord(rawMessage);
@@ -285,6 +325,7 @@ export class AntigravitySessionsProvider implements IProviderSessions {
     }
 
     const normalized: NormalizedMessage[] = [];
+    const pendingTools: PendingAntigravityTool[] = [];
     let lastTranscriptStepIndex = -1;
     try {
       const lines = (await readFile(transcriptPath, 'utf8')).split(/\r?\n/);
@@ -316,7 +357,7 @@ export class AntigravitySessionsProvider implements IProviderSessions {
             );
             if (restored !== null) raw.content = restored;
           }
-          normalized.push(...normalizeAntigravityHistoryStep(raw ?? step, sessionId));
+          normalized.push(...normalizeAntigravityHistoryStep(raw ?? step, sessionId, pendingTools));
         } catch {
           // A live transcript can end with a partially written JSONL record.
           // Preserve every complete entry instead of hiding the whole history.

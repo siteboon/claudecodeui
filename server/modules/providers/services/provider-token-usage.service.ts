@@ -8,6 +8,7 @@ import Database from 'better-sqlite3';
 import { sessionsDb } from '@/modules/database/index.js';
 import type { AnyRecord } from '@/shared/types.js';
 import { AppError, getOpenCodeDatabasePath } from '@/shared/utils.js';
+import { normalizeAntigravityTokenUsage, readObjectRecord } from '@/shared/index.js';
 
 type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
 
@@ -458,6 +459,26 @@ export function createProviderTokenUsageService(
         }
 
         return readOpenCodeTokenUsage(databasePath, providerSessionId);
+      }
+
+      if (session.provider === 'antigravity') {
+        const transcriptPath = session.jsonl_path ?? path.join(dependencies.getHomeDirectory(),
+          '.gemini', 'antigravity-cli', 'brain', providerSessionId, '.system_generated', 'logs', 'transcript.jsonl');
+        // Transcript usage is per step, so sum complete rows once. A partial
+        // trailing append is ignored and included by the next history refresh.
+        const totals = { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0 };
+        if (dependencies.fileExists(transcriptPath)) {
+          for (const line of (await dependencies.readTextFile(transcriptPath)).split(/\r?\n/)) {
+            try {
+              const row = readObjectRecord(JSON.parse(line));
+              const usage = normalizeAntigravityTokenUsage(row);
+              totals.input_tokens += usage.inputTokens;
+              totals.output_tokens += usage.outputTokens;
+              totals.cache_read_tokens += usage.cacheReadTokens;
+            } catch { /* Incomplete native append. */ }
+          }
+        }
+        return normalizeAntigravityTokenUsage(totals);
       }
 
       if (session.provider === 'codex') {

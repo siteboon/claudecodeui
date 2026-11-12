@@ -2,6 +2,7 @@ import type {
   IProviderModels,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
+  ProviderModelOption,
 } from '@/shared/index.js';
 import {
   buildDefaultProviderCurrentActiveModel,
@@ -9,9 +10,24 @@ import {
   runProviderCliCommand,
 } from '@/shared/index.js';
 
+/** Only sibling variants actually present in the catalog are selectable. */
+function withReasoningEffort(options: ProviderModelOption[]): ProviderModelOption[] {
+  const levels = ['low', 'medium', 'high', 'xhigh', 'max'];
+  return options.map((option) => {
+    const match = /^(.*)-(low|medium|high|xhigh|max)$/.exec(option.value);
+    if (!match) return option;
+    const values = levels.filter((level) => options.some((sibling) => sibling.value === `${match[1]}-${level}`));
+    return values.length < 2 ? option : {
+      ...option,
+      effort: { default: match[2], values: values.map((value) => ({ value })) },
+    };
+  });
+}
+
+
 /** Used by AntigravityProviderModels and its tests when live discovery is unavailable; not an entitlement check. */
 export const ANTIGRAVITY_FALLBACK_MODELS: ProviderModelsDefinition = {
-  OPTIONS: [
+  OPTIONS: withReasoningEffort([
     {
       value: 'gemini-3.8-flash-medium',
       label: 'Gemini 3.8 Flash (Medium)',
@@ -82,7 +98,7 @@ export const ANTIGRAVITY_FALLBACK_MODELS: ProviderModelsDefinition = {
       label: 'GPT-OSS 120B (Medium)',
       description: 'Antigravity CLI model',
     },
-  ],
+  ]),
   DEFAULT: 'gemini-3.8-flash-medium',
 };
 
@@ -108,7 +124,7 @@ export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefi
   }
 
   return {
-    OPTIONS: models,
+    OPTIONS: withReasoningEffort(models),
     DEFAULT: models[0].value,
   };
 };

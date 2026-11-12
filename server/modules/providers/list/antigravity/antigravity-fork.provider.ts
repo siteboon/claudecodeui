@@ -6,7 +6,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import type { IProviderFork } from '@/shared/index.js';
-import { AppError } from '@/shared/index.js';
+import { AppError, readProtobufFields } from '@/shared/index.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NATIVE_TABLES = ['steps', 'gen_metadata', 'executor_metadata', 'parent_references', 'battle_mode_infos'];
@@ -15,7 +15,55 @@ function invalidSource(message: string): AppError {
   return new AppError(message, { code: 'FORK_SOURCE_INVALID', statusCode: 409 });
 }
 
-/** Rewrites only CascadeMetadata.cascade_id (field 6); other opaque fields retain their exact bytes. */
+/** Packed protobuf uint32 lists are used for generator step references. */
+function referencedSteps(payload: Buffer): number[] {
+  const values = readProtobufFields(payload).get(2) ?? [];
+  const indices: number[] = [];
+  for (const value of values) {
+    if (typeof value === 'bigint') indices.push(Number(value));
+    else {
+      let number = 0;
+      let shift = 0;
+      for (const byte of value) {
+        number += (byte & 127) * 2 ** shift;
+        if (shift > 28 || number > 0xffffffff) throw invalidSource('Invalid Antigravity generation reference.');
+        if (byte & 128) shift += 7;
+        else { indices.push(number); number = 0; shift = 0; }
+      }
+      if (shift) throw invalidSource('Incomplete Antigravity generation reference.');
+    }
+  }
+  if (indices.some((index) => !Number.isSafeInteger(index) || index < 0)) {
+    throw invalidSource('Unsupported Antigravity generation references.');
+  }
+  return indices;
+}
+
+/** Cache ordinals are independent of step ordinals: filter by their payload references. */
+function truncateNativeSnapshot(db: Database.Database, lastStep: number): void {
+  // Parent/battle trajectories may inherit context outside this DB. Until those
+  // layouts have a native prefix API, reject them before touching the app mapping.
+  for (const table of ['parent_references', 'battle_mode_infos']) {
+    if (db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) {
+      throw invalidSource('Antigravity prefix forks of linked or battle conversations are not supported.');
+    }
+  }
+  for (const table of ['gen_metadata', 'executor_metadata']) {
+    for (const row of db.prepare(`SELECT idx, data FROM ${table}`).all() as { idx: number; data: unknown }[]) {
+      if (!Buffer.isBuffer(row.data)) throw invalidSource('Unsupported Antigravity cache format.');
+      const steps = table === 'gen_metadata' ? referencedSteps(row.data)
+        : [Number(readProtobufFields(row.data).get(3)?.[0] ?? 0n)];
+      if (steps.some((index) => !Number.isSafeInteger(index) || index < 0)) throw invalidSource('Invalid Antigravity cache reference.');
+      // Failed or abandoned generations can have no output step references.
+      // They contribute nothing to a retained prefix and must not carry their
+      // cached request/error into its next turn.
+      if (!steps.length || steps.some((index) => index > lastStep)) db.prepare(`DELETE FROM ${table} WHERE idx = ?`).run(row.idx);
+    }
+  }
+  db.prepare('DELETE FROM steps WHERE idx > ?').run(lastStep);
+}
+
+/** Rewrites only CortexTrajectoryMetadata.root_conversation_id (field 6); other opaque fields retain their exact bytes. */
 function reidentifyMetadata(payload: Buffer, sourceId: string, forkId: string): Buffer {
   const result = Buffer.from(payload);
   let offset = 0;
@@ -101,11 +149,6 @@ export class AntigravityForkProvider implements IProviderFork {
   }
 
   private async snapshot(input: Parameters<IProviderFork['forkSession']>[0], ephemeral: boolean) {
-    if (input.upToAnchorId !== undefined) {
-      throw new AppError('Antigravity supports forking the whole conversation only.', {
-        code: 'FORK_ANCHOR_NOT_SUPPORTED', statusCode: 409,
-      });
-    }
     if (!UUID.test(input.providerSessionId)) throw invalidSource('Invalid Antigravity conversation id.');
     const root = path.join(os.homedir(), '.gemini', 'antigravity-cli');
     const sourceBrain = path.join(root, 'brain', input.providerSessionId);
@@ -114,12 +157,14 @@ export class AntigravityForkProvider implements IProviderFork {
       throw invalidSource('Antigravity transcript does not belong to the source conversation.');
     }
 
-    // AGY's generation/executor cache indices are not step indices. A full
-    // snapshot preserves them verbatim; message-prefix forks need a native API.
+    // Validate the entire transcript even when copying a prefix; never silently
+    // branch a different point after corruption or a stale anchor.
     const contents = await readFile(sourceTranscript, 'utf8');
     const lines = contents.split(/\r?\n/);
     const prefix: string[] = [];
     let lastIndex = -1;
+    let anchorFound = input.upToAnchorId === undefined;
+    let forkStep = -1;
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
       if (!line.trim()) continue;
@@ -133,9 +178,16 @@ export class AntigravityForkProvider implements IProviderFork {
         throw invalidSource('Antigravity transcript step order is invalid.');
       }
       lastIndex = step.step_index as number;
-      prefix.push(line);
+      if (!anchorFound || input.upToAnchorId === undefined) {
+        prefix.push(line);
+        forkStep = lastIndex;
+      }
+      if (String(lastIndex) === input.upToAnchorId) anchorFound = true;
     }
     if (lastIndex < 0) throw invalidSource('Antigravity has no complete transcript steps to fork.');
+    if (!anchorFound) throw new AppError('The Antigravity fork anchor is no longer in the transcript.', {
+      code: 'FORK_ANCHOR_NOT_FOUND', statusCode: 409,
+    });
 
     const forkId = randomUUID();
     const forkDbPath = path.join(root, 'conversations', `${forkId}.db`);
@@ -159,9 +211,10 @@ export class AntigravityForkProvider implements IProviderFork {
           if (identity.length !== 1 || identity[0].cascade_id !== input.providerSessionId || !Buffer.isBuffer(metadata?.data)) {
             throw invalidSource('Antigravity native storage does not match this conversation.');
           }
-          if (!fork.prepare('SELECT idx FROM steps WHERE idx = ?').get(lastIndex)) {
+          if (!fork.prepare('SELECT idx FROM steps WHERE idx = ?').get(forkStep)) {
             throw invalidSource('Antigravity native storage has not persisted the fork point yet.');
           }
+          if (input.upToAnchorId !== undefined) truncateNativeSnapshot(fork, forkStep);
           fork.prepare('UPDATE trajectory_meta SET trajectory_id = ?, cascade_id = ?').run(randomUUID(), forkId);
           fork.prepare("UPDATE trajectory_metadata_blob SET data = ? WHERE id = 'main'").run(
             reidentifyMetadata(metadata.data, input.providerSessionId, forkId),

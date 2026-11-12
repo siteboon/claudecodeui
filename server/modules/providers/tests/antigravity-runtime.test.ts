@@ -63,6 +63,69 @@ function createWriter(onMessage?: (message: AnyRecord) => void) {
 }
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+test('AGY forwards model effort and both attachment types through the shared prompt envelopes', async () => {
+  const child = createFakeProcess();
+  let args: string[] = [];
+  let stdin = '';
+  child.stdin.on('data', (data) => { stdin += String(data); });
+  const runtime = createAntigravityRuntime({ spawnProcess: (_command, flags) => { args = flags; return child as never; } });
+  const { writer } = createWriter();
+  const pending = runtime.run('Explain these', {
+    model: 'gemini-low', effort: 'high',
+    images: [{ path: '/assets/screen.png', name: '화면.png' }],
+    files: [{ path: '/assets/spec.txt', name: '요구사항.txt' }],
+  }, writer, createRuntimeContext({ getProviderModels: async () => ({
+    DEFAULT: 'gemini-low', OPTIONS: [{ value: 'gemini-low', label: 'Gemini', effort: { values: [{ value: 'low' }, { value: 'high' }] } }],
+  }) }));
+  await tick();
+  assert.equal(args[args.indexOf('--effort') + 1], 'high');
+  const prompt = JSON.parse(stdin).message.content;
+  assert.match(prompt, /<images_input>[\s\S]*screen.png/);
+  assert.match(prompt, /<files_input>[\s\S]*spec.txt/);
+  assert.match(prompt, /요구사항.txt/);
+  assert.ok(!args.includes(prompt), 'attachments and prompt stay off argv');
+  finish(child);
+  await pending;
+});
+
+test('AGY emits live tool calls/results once and reports usage without double-counting cache or thinking', async () => {
+  const child = createFakeProcess();
+  const runtime = createAntigravityRuntime({ spawnProcess: () => child as never });
+  const { writer, messages } = createWriter();
+  const pending = runtime.run('Read', {}, writer, createRuntimeContext());
+  await tick(); emitInit(child);
+  const step = { step_type: 'tool', step_index: 3, state: 'ACTIVE', tool_info: { name: 'read_file', parameters: { path: 'test.txt' } } };
+  emitEvent(child, { event: 'step_update', step_update: step });
+  for (let i = 0; i < 2; i += 1) emitEvent(child, { event: 'step_update', step_update: {
+    ...step, state: 'DONE', tool_info: { ...step.tool_info, output: 'file contents' },
+  } });
+  emitEvent(child, { event: 'result', result: { conversation_id: 'native-id', status: 'SUCCESS', response: 'done',
+    usage: { input_tokens: 100, output_tokens: 30, thinking_tokens: 20, cache_read_tokens: 70 } } });
+  child.emit('close', 0, null); await pending;
+  assert.equal(messages.filter((message) => message.kind === 'tool_use').length, 1);
+  assert.equal(messages.filter((message) => message.kind === 'tool_result').length, 1);
+  assert.equal(messages.find((message) => message.kind === 'tool_use')?.id, 'native-id-3-call');
+  assert.equal(messages.find((message) => message.kind === 'tool_result')?.id, 'native-id-3');
+  const budget = messages.find((message) => message.text === 'token_budget')?.tokenBudget;
+  assert.equal(budget.used, 130);
+  assert.equal(budget.total, undefined);
+});
+
+test('AGY does not pass effort to fixed models and rejects unsupported adjustable levels before spawning', async () => {
+  let launches = 0;
+  const child = createFakeProcess();
+  let flags: string[] = [];
+  const runtime = createAntigravityRuntime({ spawnProcess: (_command, args) => { launches += 1; flags = args; return child as never; } });
+  const { writer } = createWriter();
+  const context = createRuntimeContext({ getProviderModels: async () => ({
+    DEFAULT: 'fixed', OPTIONS: [{ value: 'fixed', label: 'Fixed' }, { value: 'adjustable', label: 'Adjustable', effort: { values: [{ value: 'low' }] } }],
+  }) });
+  const pending = runtime.run('hello', { model: 'fixed', effort: 'high' }, writer, context);
+  await tick(); assert.equal(flags.includes('--effort'), false); finish(child); await pending;
+  await assert.rejects(runtime.run('hello', { model: 'adjustable', effort: 'max' }, writer, context), /Unsupported Antigravity effort/);
+  assert.equal(launches, 1);
+});
+
 function sideQuestion(overrides: Partial<SideQuestionRequest> = {}): SideQuestionRequest {
   return {
     appSessionId: 'parent-app', providerSessionId: 'parent-native', projectPath: '/workspace',

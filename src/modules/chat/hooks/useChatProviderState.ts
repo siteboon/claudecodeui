@@ -22,6 +22,7 @@ const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly stri
   // valid Max/Ultra selection from being reset during catalog hydration.
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   opencode: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+  antigravity: ['low', 'medium', 'high', 'xhigh', 'max'],
 };
 
 const toProviderEffortOptions = (
@@ -36,7 +37,7 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   // any other model runs on the CLI's fallback metadata.
   codex: 'gpt-5.6-sol',
   opencode: 'anthropic/claude-sonnet-4-5',
-  antigravity: 'Gemini 3.5 Flash (Medium)',
+  antigravity: 'gemini-3.8-flash-medium',
 };
 
 const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];

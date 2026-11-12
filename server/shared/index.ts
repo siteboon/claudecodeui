@@ -1,4 +1,4 @@
-export { appendFilesInputTag, buildCodexInputItems, normalizeImageDescriptors } from './image-attachments.js';
+export { appendFilesInputTag, appendImagesInputTag, parseImagesInputTag, buildCodexInputItems, normalizeImageDescriptors } from './image-attachments.js';
 
 // Providers, Agent response collection, and Websocket Shell launches consume these shared contracts.
 export type {
@@ -28,6 +28,7 @@ export type {
   ProviderCurrentActiveModel,
   ProviderMcpServer,
   ProviderModelsDefinition,
+  ProviderModelOption,
   ProviderRunFunction,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
@@ -57,6 +58,8 @@ export {
   readFileTimestamps,
   readJsonConfig,
   readObjectRecord,
+  readProtobufFields,
+  normalizeAntigravityTokenUsage,
   readOptionalString,
   readStringArray,
   readStringRecord,
@@ -71,5 +74,5 @@ export {
 
 export { getLinuxFileLockIdentity, parseLinuxExclusiveFileLocks } from './utils.js';
 
-export { getGlobalImageAssetsDir, isImageAttachmentDescriptor, normalizeAttachmentDescriptors } from './image-attachments.js';
+export { getGlobalImageAssetsDir, isImageAttachmentDescriptor, normalizeAttachmentDescriptors, parseFilesInputTag } from './image-attachments.js';
 export type { ChatAttachmentDescriptor } from './image-attachments.js';

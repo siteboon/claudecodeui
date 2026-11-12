@@ -46,8 +46,10 @@ async function fixture(run: (input: {
   const metadata = Buffer.concat([Buffer.from([50, 36]), Buffer.from(SOURCE), Buffer.from([58, 36]), Buffer.from(SOURCE)]);
   native.prepare('INSERT INTO trajectory_metadata_blob VALUES (?, ?)').run('main', metadata);
   for (const table of ['steps', 'gen_metadata', 'executor_metadata', 'parent_references', 'battle_mode_infos']) {
-    native.exec(`CREATE TABLE ${table} (idx INTEGER PRIMARY KEY, data TEXT)`);
-    for (let index = 0; index < 4; index += 1) native.prepare(`INSERT INTO ${table} VALUES (?, ?)`).run(index, `step ${index}`);
+    native.exec(`CREATE TABLE ${table} (idx INTEGER PRIMARY KEY, data BLOB)`);
+    if (table === 'parent_references' || table === 'battle_mode_infos') continue;
+    for (let index = 0; index < 4; index += 1) native.prepare(`INSERT INTO ${table} VALUES (?, ?)`).run(index,
+      table === 'steps' ? `step ${index}` : table === 'gen_metadata' ? Buffer.from([18, 1, index]) : Buffer.from([24, index]));
   }
   native.close();
   Object.defineProperty(os, 'homedir', { value: () => home, configurable: true });
@@ -86,7 +88,7 @@ test('AGY full forks preserve native context, independent identities, artifacts 
       jsonlPath: row.jsonl_path ?? undefined, providerSessionId: row.provider_session_id ?? undefined,
     });
     assert.deepEqual(history.messages.map((message) => message.content), ['first', 'answer', 'second', 'future']);
-    assert.equal(history.messages[0].transcriptAnchorId, undefined);
+    assert.equal(history.messages[0].transcriptAnchorId, '0');
     assert.equal(history.messages[0].sessionId, result.sessionId);
     const db = new Database(path.join(root, 'conversations', `${row.provider_session_id}.db`), { readonly: true });
     try {
@@ -144,11 +146,11 @@ test('AGY snapshots include committed WAL data and preserve independently indexe
   });
 });
 
-test('AGY refuses message-prefix forks, transcript mismatches and unsupported schemas without leaving a fork', async () => {
+test('AGY refuses stale anchors, transcript mismatches and unsupported schemas without leaving a fork', async () => {
   await fixture(async (input, root) => {
     const provider = new AntigravityForkProvider();
-    for (const upToAnchorId of ['1', '999', '../outside']) {
-      await assert.rejects(provider.forkSession({ ...input, upToAnchorId }), { code: 'FORK_ANCHOR_NOT_SUPPORTED' });
+    for (const upToAnchorId of ['999', '../outside']) {
+      await assert.rejects(provider.forkSession({ ...input, upToAnchorId }), { code: 'FORK_ANCHOR_NOT_FOUND' });
     }
     await assert.rejects(provider.forkSession({ ...input, providerSessionId: '../outside' }), { code: 'FORK_SOURCE_INVALID' });
     const wrong = path.join(root, 'wrong.jsonl'); await writeFile(wrong, '{}');
@@ -158,6 +160,60 @@ test('AGY refuses message-prefix forks, transcript mismatches and unsupported sc
     await assert.rejects(provider.forkSession(input), { code: 'FORK_SOURCE_INVALID' });
     assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
     assert.deepEqual(await readdir(path.join(root, 'brain')), [SOURCE]);
+  });
+});
+
+test('AGY prefix forks filter cache references rather than unrelated cache ordinals', async () => {
+  await fixture(async (input, root) => {
+    const sourcePath = path.join(root, 'conversations', `${SOURCE}.db`);
+    const source = new Database(sourcePath);
+    source.prepare('INSERT INTO gen_metadata VALUES (?, ?)').run(98, Buffer.from([42, 3, 98, 97, 100]));
+    source.prepare('INSERT INTO gen_metadata VALUES (?, ?)').run(99, Buffer.from([18, 1, 0]));
+    source.prepare('INSERT INTO executor_metadata VALUES (?, ?)').run(88, Buffer.from([24, 1]));
+    source.close();
+    const before = await readFile(sourcePath);
+    const fork = await new AntigravityForkProvider().forkSession({ ...input, upToAnchorId: '1' });
+    const copy = new Database(path.join(root, 'conversations', `${fork.providerSessionId}.db`));
+    try {
+      assert.deepEqual(copy.prepare('SELECT idx FROM steps ORDER BY idx').all(), [{ idx: 0 }, { idx: 1 }]);
+      assert.deepEqual(copy.prepare('SELECT idx FROM gen_metadata ORDER BY idx').all(), [{ idx: 0 }, { idx: 1 }, { idx: 99 }]);
+      assert.deepEqual(copy.prepare('SELECT idx FROM executor_metadata ORDER BY idx').all(), [{ idx: 0 }, { idx: 1 }, { idx: 88 }]);
+    } finally { copy.close(); }
+    const history = await new AntigravitySessionsProvider().fetchHistory('fork', { jsonlPath: fork.jsonlPath });
+    assert.deepEqual(history.messages.map((message) => message.content), ['first', 'answer']);
+    assert.deepEqual(await readFile(sourcePath), before);
+  });
+});
+
+test('AGY edits preserve the original and retire its mapping, including edits of the first message', async () => {
+  await fixture(async (_input, root) => {
+    const provider = new AntigravitySessionsProvider();
+    assert.deepEqual(await provider.resolveEditAnchor(APP, '2'), { found: true, resumeThroughId: '1' });
+    assert.deepEqual(await provider.resolveEditAnchor(APP, '0'), { found: true, resumeThroughId: null });
+    assert.equal((await provider.resolveEditAnchor(APP, '1')).found, false, 'assistant rows are not editable prompts');
+    assert.equal((await provider.resolveEditAnchor(APP, '999')).found, false);
+    const before = await readFile(path.join(root, 'conversations', `${SOURCE}.db`));
+    await provider.rewindSession(APP, '1');
+    const row = sessionsDb.getSessionById(APP)!;
+    assert.notEqual(row.provider_session_id, SOURCE);
+    assert.equal(sessionsDb.isProviderSessionSuperseded(SOURCE, 'antigravity'), true);
+    const history = await provider.fetchHistory(APP, { jsonlPath: row.jsonl_path });
+    assert.deepEqual(history.messages.map((message) => message.content), ['first', 'answer']);
+    await provider.rewindSession(APP, null);
+    assert.equal(sessionsDb.getSessionById(APP)?.provider_session_id, null);
+    assert.deepEqual(await readFile(path.join(root, 'conversations', `${SOURCE}.db`)), before);
+  });
+});
+
+test('an unsupported prefix cache leaves the original session mapping and storage unchanged', async () => {
+  await fixture(async (_input, root) => {
+    const db = new Database(path.join(root, 'conversations', `${SOURCE}.db`));
+    db.prepare('UPDATE gen_metadata SET data = ? WHERE idx = 2').run(Buffer.from([18, 2, 128]));
+    db.close();
+    await assert.rejects(new AntigravitySessionsProvider().rewindSession(APP, '1'));
+    assert.equal(sessionsDb.getSessionById(APP)?.provider_session_id, SOURCE);
+    assert.equal(sessionsDb.isProviderSessionSuperseded(SOURCE, 'antigravity'), false);
+    assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
   });
 });
 
