@@ -5,7 +5,7 @@ import type { TFunction } from 'i18next';
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
-import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { getProjectGroupPathHint, getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import TaskIndicator from '@/modules/sidebar/TaskIndicator';
 import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
@@ -245,7 +245,7 @@ function SidebarProjectItem({
                         {isGrouped && (
                           <span className="ml-1 opacity-60" title={project.fullPath}>
                             {' - '}
-                            {project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath}
+                            {getProjectGroupPathHint(project)}
                           </span>
                         )}
                       </p>
@@ -387,7 +387,9 @@ function SidebarProjectItem({
                     {project.fullPath !== project.displayName && (
                       <span className="ml-1 opacity-60" title={project.fullPath}>
                         {' - '}
-                        {project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath}
+                        {isGrouped
+                          ? getProjectGroupPathHint(project)
+                          : project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath}
                       </span>
                     )}
                   </div>

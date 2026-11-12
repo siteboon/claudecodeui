@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import type { Project } from '@/shared/types';
-import { getProjectGroupKey, groupProjectsByBasename } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { getProjectGroupKey, getProjectGroupPathHint, groupProjectsByBasename } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 
 /**
  * The grouping exists for a ~/.claude synced across machines, where one project
@@ -51,4 +51,12 @@ test('keeps the incoming sort order by first occurrence, and leaves singletons a
 
   assert.deepEqual(groups.map((group) => group.key), ['zeta', 'alpha', 'beta']);
   assert.deepEqual(groups.map((group) => group.projects.length), [1, 2, 1]);
+});
+
+test('hints grouped rows by their parent directory, which is what differs', () => {
+  assert.equal(getProjectGroupPathHint(project('a', '/home/alice/abcdefghijklmnopqrstuv')), '/home/alice');
+  assert.equal(getProjectGroupPathHint(project('b', '/home/bob/abcdefghijklmnopqrstuv')), '/home/bob');
+  assert.equal(getProjectGroupPathHint(project('c', 'C:\\work\\Paperclip')), 'C:\\work');
+  assert.equal(getProjectGroupPathHint(project('d', '/Users/someone/work/clients/acme/Paperclip/')), '...eone/work/clients/acme');
+  assert.equal(getProjectGroupPathHint(project('e', '/Paperclip')), '/');
 });
