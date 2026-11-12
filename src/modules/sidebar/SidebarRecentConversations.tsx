@@ -1,4 +1,5 @@
 import { Loader2, MessageSquare } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import type { MouseEvent } from 'react';
 import type { TFunction } from 'i18next';
 
@@ -64,6 +65,54 @@ export default function SidebarRecentConversations({
   onRetry,
   t,
 }: SidebarRecentConversationsProps) {
+  // The row after the last conversation: once it scrolls into view, the next
+  // page loads, so older conversations arrive without clicking the button.
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+  // Latest onLoadMore, so a new callback identity does not rebuild the observer.
+  const onLoadMoreRef = useRef(onLoadMore);
+  // The list length when a page was last requested by scrolling. A page that
+  // added nothing (e.g. all duplicates) leaves it unchanged, which stops the
+  // automatic loading instead of requesting the same page in a loop.
+  const autoLoadedAtLengthRef = useRef<number | null>(null);
+  const canAutoLoadMore = hasMore && !isLoadingMore && !hasError;
+  const conversationCount = conversations.length;
+
+  useEffect(() => {
+    onLoadMoreRef.current = onLoadMore;
+  }, [onLoadMore]);
+
+  // A full reload starts a new list, which may again have the stopped length.
+  useEffect(() => {
+    if (isLoading) {
+      autoLoadedAtLengthRef.current = null;
+    }
+  }, [isLoading]);
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (
+      !canAutoLoadMore
+      || !sentinel
+      || autoLoadedAtLengthRef.current === conversationCount
+      || typeof IntersectionObserver === 'undefined'
+    ) {
+      return undefined;
+    }
+
+    // Re-created after each page (the loading flag and length change), so a
+    // sentinel that is still visible after a short page loads the next one.
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) {
+        return;
+      }
+      observer.disconnect();
+      autoLoadedAtLengthRef.current = conversationCount;
+      onLoadMoreRef.current();
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [canAutoLoadMore, conversationCount]);
+
   if (isLoading && conversations.length === 0) {
     return <RecentConversationSkeleton />;
   }
@@ -241,17 +290,24 @@ export default function SidebarRecentConversations({
       </div>
 
       {hasMore && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-1 h-8 w-full text-xs text-muted-foreground"
-          onClick={onLoadMore}
-          disabled={isLoadingMore}
-        >
-          {isLoadingMore
-            ? t('recent.loadingMore', 'Loading more...')
-            : t('recent.loadMore', 'Load older conversations')}
-        </Button>
+        // Kept as a button: a fallback where scrolling cannot trigger the load
+        // (no IntersectionObserver, a failed page) and for keyboard users.
+        <div ref={loadMoreSentinelRef} data-testid="recent-conversations-load-more">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-1 h-8 w-full text-xs text-muted-foreground"
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                {t('recent.loadingMore', 'Loading more...')}
+              </>
+            ) : t('recent.loadMore', 'Load older conversations')}
+          </Button>
+        </div>
       )}
     </div>
   );
