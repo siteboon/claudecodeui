@@ -22,7 +22,7 @@ export default function ProjectEffects({
   });
 
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker) {
       return undefined;
     }
 

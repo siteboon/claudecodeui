@@ -48,7 +48,7 @@
 
             try {
                 // Unregister all service workers
-                if ('serviceWorker' in navigator) {
+                if (navigator.serviceWorker) {
                     const registrations = await navigator.serviceWorker.getRegistrations();
                     for (let registration of registrations) {
                         await registration.unregister();
