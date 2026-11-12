@@ -28,6 +28,18 @@ export const getProjectGroupKey = (project: Project): string => {
   return segments[segments.length - 1] || project.displayName || project.projectId;
 };
 
+/**
+ * Short location hint for a project shown under a group header. Every project in
+ * a group ends in the same folder name, so the hint is the parent directory (its
+ * tail when long): that is the part that tells two grouped rows apart.
+ */
+export const getProjectGroupPathHint = (project: Project): string => {
+  const fullPath = String(project.fullPath || project.path || '').replace(/[\\/]+$/, '');
+  const cut = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+  const parent = cut > 0 ? fullPath.slice(0, cut) : cut === 0 ? fullPath.slice(0, 1) : fullPath;
+  return parent.length > 25 ? `...${parent.slice(-22)}` : parent;
+};
+
 export type ProjectGroup = {
   key: string;
   projects: Project[];
