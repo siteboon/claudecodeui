@@ -39,6 +39,7 @@ test('a single-dollar-only message activates the math plugin, including user lin
 test.each([
   'Intro.\n\n입력 $X$와 $Q \\cdot K^T$.\n\nAfter.',
   'Prices $5 and $7.\n\nThen $x^2$.\n\nAfter.',
+  'Pay $5 and $7 ($x$), then $5-$𝟟 ($y$).',
   'Intro.\n\n$x\ny$\n\nAfter.',
 ])('every streaming prefix matches the reopened message: %s', (source) => {
   const normalize = (html: string) => html.replace(/>\n</g, '><');
@@ -52,4 +53,12 @@ test.each([
     </>);
     expect(normalize(split), `prefix ${end}`).toBe(normalize(whole));
   }
+});
+
+test('chat preserves mixed prices and following formulas', () => {
+  const root = document.createElement('div');
+  root.innerHTML = renderToStaticMarkup(<MarkdownBody>{'Pay $5 and $7 ($x$), then $5-$𝟟 ($y$).'}</MarkdownBody>);
+  expect(Array.from(root.querySelectorAll('annotation'), (node) => node.textContent)).toEqual(['x', 'y']);
+  expect(root.textContent).toContain('Pay $5 and $7 (');
+  expect(root.textContent).toContain('then $5-$𝟟 (');
 });

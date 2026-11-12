@@ -28,6 +28,9 @@ describe('single-dollar math', () => {
     'It costs $5 and $7 in total.',
     'The $20/psf allowance is low for a surgical buildout (sealed floors, surgery/recovery, plumbing). Can we push to $35–$50/psf?',
     '$10–$20, $1,000.50 and $2,000.',
+    '$5-$７',
+    '$5-$٧',
+    '$5-$𝟟',
     '$HOME and $PATH are environment variables.',
     '$ x$ and $y $',
     '$x\ny$',
@@ -45,6 +48,25 @@ describe('single-dollar math', () => {
     expect(root.querySelector('strong')?.textContent).toBe('today');
     expect(root.querySelector('a')?.textContent).toBe('tomorrow');
     expect(root.textContent).toContain('$5 today and $7 tomorrow');
+  });
+
+  test.each([
+    'Pay $5 and $7 ($x$).',
+    'Pay $5 and $7, $9 ($x$).',
+    'Pay $5-$７ ($x$).',
+    'Pay $5-$٧ ($x$).',
+    'Pay $5-$𝟟 ($x$).',
+  ])('prices do not consume a later formula: %s', (source) => {
+    const root = renderMath(source);
+    expect(root.querySelectorAll('.katex')).toHaveLength(1);
+    expect(root.querySelector('annotation')?.textContent).toBe('x');
+    expect(root.textContent).toContain(source.slice(0, source.indexOf('($x$)')));
+  });
+
+  test.each(['Pay $5 and $x$.', '$2 + 2 = 4$'])('numeric text does not suppress valid math: %s', (source) => {
+    const root = renderMath(source);
+    expect(root.querySelectorAll('.katex')).toHaveLength(1);
+    expect(root.querySelector('annotation')?.textContent).toBe(source === '$2 + 2 = 4$' ? '2 + 2 = 4' : 'x');
   });
 
   test('double-dollar inline and display math keep their original rules', () => {
