@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import type { Project } from '@/shared/types';
-import { getProjectGroupKey, getProjectGroupPathHint, groupProjectsByBasename } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { getProjectGroupKey, getGroupPathHints, groupProjectsByBasename } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 
 /**
  * The grouping exists for a ~/.claude synced across machines, where one project
@@ -53,10 +53,21 @@ test('keeps the incoming sort order by first occurrence, and leaves singletons a
   assert.deepEqual(groups.map((group) => group.projects.length), [1, 2, 1]);
 });
 
-test('hints grouped rows by their parent directory, which is what differs', () => {
-  assert.equal(getProjectGroupPathHint(project('a', '/home/alice/abcdefghijklmnopqrstuv')), '/home/alice');
-  assert.equal(getProjectGroupPathHint(project('b', '/home/bob/abcdefghijklmnopqrstuv')), '/home/bob');
-  assert.equal(getProjectGroupPathHint(project('c', 'C:\\work\\Paperclip')), 'C:\\work');
-  assert.equal(getProjectGroupPathHint(project('d', '/Users/someone/work/clients/acme/Paperclip/')), '...eone/work/clients/acme');
-  assert.equal(getProjectGroupPathHint(project('e', '/Paperclip')), '/');
+const hints = (...paths: string[]) =>
+  [...getGroupPathHints(paths.map((path, index) => project(`p${index}`, path))).values()];
+
+test('hints grouped rows by the parent segments that differ inside the group', () => {
+  assert.deepEqual(hints('/home/alice/Project', '/home/bob/Project'), ['.../alice', '.../bob']);
+  assert.deepEqual(
+    hints('/home/alice/workspaces/shared-projects/Project', '/home/bob/workspaces/shared-projects/Project'),
+    ['.../alice/...', '.../bob/...'],
+  );
+  assert.deepEqual(
+    hints('/Users/sergio/ClaudeProyectos/Paperclip', 'C:\\Users\\sergio\\ClaudeProyectos\\Paperclip', '/home/claude/ClaudeProyectos/Paperclip'),
+    ['Users/sergio/...', 'C:/Users/sergio/...', 'home/claude/...'],
+  );
+});
+
+test('falls back to the full parent when one parent contains the other', () => {
+  assert.deepEqual(hints('/work/Project', '/work/old/Project'), ['/work', '.../old']);
 });
