@@ -4,6 +4,8 @@ import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { writeSelectedProvider } from '@/shared/selectedProvider';
 import { useProjectEffectsState } from '@/modules/project-workspace/context/ProjectsStateContext';
 import type { LLMProvider, ProjectWorkspaceShellProps } from '@/shared/types';
+import { getPageTitle } from '@/shared/utils';
+import { COMPLETION_TITLE_INDICATOR } from '@/shared/constants';
 
 /** Headless controller rendered by ProjectWorkspaceShell to register palette operations and handle service-worker navigation messages. */
 export default function ProjectEffects({
@@ -12,14 +14,26 @@ export default function ProjectEffects({
   const {
     openSettings,
     refreshProjectsSilently,
+    selectedProject,
+    selectedSession,
     setActiveTab,
     setSidebarOpen,
   } = useProjectEffectsState();
+  const pageTitle = getPageTitle(selectedProject, selectedSession);
 
   usePaletteOpsRegister({
     openSettings,
     refreshProjects: refreshProjectsSilently,
   });
+
+  // This controller stays mounted while every sidebar mode is visible, unlike
+  // the Projects-only list that used to own the title update.
+  useEffect(() => {
+    const completionPrefix = `${COMPLETION_TITLE_INDICATOR} `;
+    document.title = document.title.startsWith(completionPrefix)
+      ? `${completionPrefix}${pageTitle}`
+      : pageTitle;
+  }, [pageTitle]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
