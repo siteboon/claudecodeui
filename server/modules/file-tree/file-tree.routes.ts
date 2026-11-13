@@ -247,6 +247,10 @@ export function createFileTreeRouter(
           });
           return;
         }
+        if (errorCode === 'LIMIT_FIELD_NESTING') {
+          response.status(400).json({ error: 'Nested upload fields are not allowed.' });
+          return;
+        }
 
         const message = error instanceof Error ? error.message : String(error);
         response.status(500).json({ error: message });
