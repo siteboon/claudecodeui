@@ -23,6 +23,7 @@ type UseShellConnectionOptions = {
   bypassPermissionsRef: MutableRefObject<boolean>;
   isDarkModeRef: MutableRefObject<boolean>;
   onProcessCompleteRef: MutableRefObject<((exitCode: number) => void) | null | undefined>;
+  onSessionChangeRef?: MutableRefObject<((sessionId: string, previousSessionId: string | null) => void) | null | undefined>;
   isInitialized: boolean;
   autoConnect: boolean;
   closeSocket: () => void;
@@ -50,6 +51,7 @@ export function useShellConnection({
   bypassPermissionsRef,
   isDarkModeRef,
   onProcessCompleteRef,
+  onSessionChangeRef,
   isInitialized,
   autoConnect,
   closeSocket,
@@ -124,9 +126,19 @@ export function useShellConnection({
       if (message.type === 'claude_theme') {
         const { colorScheme } = message;
         setClaudeLaunchColorScheme(colorScheme === 'light' || colorScheme === 'dark' ? colorScheme : null);
+        return;
+      }
+
+      if (message.type === 'session_changed') {
+        const { sessionId, previousSessionId } = message;
+        if (typeof sessionId === 'string' && sessionId && sessionId !== selectedSessionRef.current?.id) {
+          // The session the terminal left, so the host can tell whether the
+          // page still shows it or the user has navigated elsewhere meanwhile.
+          onSessionChangeRef?.current?.(sessionId, typeof previousSessionId === 'string' ? previousSessionId : null);
+        }
       }
     },
-    [handleProcessCompletion, onOutputRef, terminalRef],
+    [handleProcessCompletion, onOutputRef, onSessionChangeRef, selectedSessionRef, terminalRef],
   );
 
   const connectWebSocket = useCallback(

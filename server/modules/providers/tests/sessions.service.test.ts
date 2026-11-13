@@ -236,11 +236,18 @@ async function withClaudeCliRegistry(
   }
 
   const realHomedir = os.homedir;
+  // The registry follows CLAUDE_CONFIG_DIR, so a developer's own setting
+  // would point the lookup away from this fake home.
+  const configDirectory = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
   (os as unknown as { homedir: () => string }).homedir = () => homeDirectory;
   try {
     await runTest();
   } finally {
     (os as unknown as { homedir: () => string }).homedir = realHomedir;
+    if (configDirectory !== undefined) {
+      process.env.CLAUDE_CONFIG_DIR = configDirectory;
+    }
     await rm(homeDirectory, { recursive: true, force: true });
   }
 }

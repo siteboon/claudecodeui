@@ -40,6 +40,9 @@ type ShellIncomingMessage =
   // The app theme the Claude CLI in the pty was launched for. A running CLI
   // keeps those colours, including one a reconnect reattaches to.
   | { type: 'claude_theme'; colorScheme?: string }
+  // The Claude CLI in the pty moved to another session (`/clear`, `/resume`);
+  // the server has already filed the pty under it.
+  | { type: 'session_changed'; sessionId?: string; previousSessionId?: string | null }
   | { type: string; [key: string]: unknown };
 
 export function getShellWebSocketUrl(): string | null {
