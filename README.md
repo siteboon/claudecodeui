@@ -95,6 +95,71 @@ Open `http://localhost:3001` — all your existing sessions are discovered autom
 
 Visit the **[documentation →](https://cloudcli.ai/docs)** for full configuration options, PM2, remote server setup and more.
 
+#### Authentication behind a reverse proxy
+
+CloudCLI requires its own local login by default. When an upstream proxy already
+enforces authentication, you can disable the second login. For example, create
+a Cloudflare Access self-hosted application for the CloudCLI hostname and attach
+an Access policy that allows your Google Workspace identity (or selected Google
+users). Requests are then challenged by Google OAuth at Cloudflare before the
+tunnel forwards them to CloudCLI.
+
+This mode requires a source checkout so you can build the frontend with the
+same authentication settings as the server. The `npx` and global npm packages
+ship a prebuilt frontend without its source or build tooling. Setting
+`DISABLE_AUTH=true` only at runtime does not reconfigure that frontend; startup
+rejects mismatched authentication settings. Use a source checkout instead:
+
+```bash
+git clone https://github.com/siteboon/claudecodeui.git
+cd claudecodeui
+npm ci --include=dev
+cp .env.example .env
+```
+
+In the checkout's `.env`, set `HOST=127.0.0.1`, `DISABLE_AUTH=false`, and
+`VITE_DISABLE_AUTH=false` for initial setup. To reuse an existing installation's
+local user, keep the same `DATABASE_PATH` (shown by `cloudcli status`). Stop any
+existing CloudCLI process before starting this checkout:
+
+```bash
+npm run build
+npm run server
+```
+
+Open `http://127.0.0.1:3001` and complete first-user setup if no local user exists,
+then stop the server. After the upstream login is enforced, update `.env`:
+
+```bash
+HOST=127.0.0.1
+DISABLE_AUTH=true
+VITE_DISABLE_AUTH=true
+```
+
+Rebuild and start from the same checkout:
+
+```bash
+npm run build
+npm run server
+```
+
+Continue using `npm run server` from this checkout; `npx` or a global `cloudcli`
+command starts its separately installed package.
+
+`DISABLE_AUTH` is the canonical setting for both the Vite build and server
+runtime. `VITE_DISABLE_AUTH` remains a compatible alias; if both are set, they
+must agree. The server refuses to start with a frontend built for different
+authentication settings. Rebuild with `npm run build` and restart CloudCLI after
+changing these settings. To return to first-user setup, set both flags to
+`false`, rebuild, and restart before completing setup.
+
+This mode uses the installation's existing single local user. Complete the
+normal first-user setup before enabling it. Bind CloudCLI to `127.0.0.1` (or an
+otherwise private interface), point `cloudflared` at that private origin, and do
+not expose the CloudCLI port publicly. The Access application must cover the
+whole hostname, including `/api`, `/ws`, and `/shell`. Otherwise a direct or
+uncovered request would be accepted without CloudCLI credentials.
+
 #### Docker Sandboxes (Experimental)
 
 Run agents in isolated sandboxes with hypervisor-level isolation. Starts Claude Code by default. Requires the [`sbx` CLI](https://docs.docker.com/ai/sandboxes/get-started/).

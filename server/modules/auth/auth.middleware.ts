@@ -1,7 +1,7 @@
 // @ts-nocheck -- JWT request augmentation is narrowed by Auth route contracts.
 import jwt from 'jsonwebtoken';
 
-import { IS_PLATFORM } from '@/shared/utils.js';
+import { TRUST_LOCAL_AUTH_BYPASS } from '@/shared/index.js';
 
 import { userDb, appConfigDb } from '../database/index.js';
 
@@ -9,7 +9,8 @@ import { userDb, appConfigDb } from '../database/index.js';
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
 
 // Optional API key middleware
-const validateApiKey = (req, res, next) => {
+/** Used by server startup for optional API-wide key validation. */
+export const validateApiKey = (req, res, next) => {
   // Skip API key validation if not configured
   if (!process.env.API_KEY) {
     return next();
@@ -23,19 +24,20 @@ const validateApiKey = (req, res, next) => {
 };
 
 // JWT authentication middleware
-const authenticateToken = async (req, res, next) => {
-  // Platform mode:  use single database user
-  if (IS_PLATFORM) {
+/** Used by server startup to authenticate protected REST routes. */
+export const authenticateToken = async (req, res, next) => {
+  // The platform or authenticating proxy already verified the request.
+  if (TRUST_LOCAL_AUTH_BYPASS) {
     try {
       const user = userDb.getFirstUser();
       if (!user) {
-        return res.status(500).json({ error: 'Platform mode: No user found in database' });
+        return res.status(503).json({ error: 'Authentication bypass requires an existing local user' });
       }
       req.user = user;
       return next();
     } catch (error) {
-      console.error('Platform mode error:', error);
-      return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
+      console.error('Authentication bypass error:', error);
+      return res.status(500).json({ error: 'Authentication bypass failed' });
     }
   }
 
@@ -103,7 +105,8 @@ const authenticateToken = async (req, res, next) => {
 };
 
 // Generate JWT token
-const generateToken = (user) => {
+/** Used by Auth module composition to issue and refresh local sessions. */
+export const generateToken = (user) => {
   return jwt.sign(
     {
       userId: user.id,
@@ -115,9 +118,10 @@ const generateToken = (user) => {
 };
 
 // WebSocket authentication function
-const authenticateWebSocket = (token) => {
-  // Platform mode: bypass token validation, return first user
-  if (IS_PLATFORM) {
+/** Used by WebSocket startup to authenticate every upgrade path. */
+export const authenticateWebSocket = (token) => {
+  // Trusted deployment: bypass token validation and use the existing local user.
+  if (TRUST_LOCAL_AUTH_BYPASS) {
     try {
       const user = userDb.getFirstUser();
       if (user) {
@@ -125,7 +129,7 @@ const authenticateWebSocket = (token) => {
       }
       return null;
     } catch (error) {
-      console.error('Platform mode WebSocket error:', error);
+      console.error('Authentication bypass WebSocket error:', error);
       return null;
     }
   }
@@ -152,12 +156,4 @@ const authenticateWebSocket = (token) => {
     }
     return null;
   }
-};
-
-export {
-  validateApiKey,
-  authenticateToken,
-  generateToken,
-  authenticateWebSocket,
-  JWT_SECRET
 };

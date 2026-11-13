@@ -9,6 +9,7 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
+import { AUTH_MODE, TRUST_LOCAL_AUTH_BYPASS } from '@/shared/index.js';
 import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
@@ -26,6 +27,7 @@ import {
     authenticateWebSocket,
     authRoutes,
     validateApiKey,
+    validateFrontendAuthMode,
 } from './modules/auth/index.js';
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
 import { commandsRoutes } from './modules/commands/index.js';
@@ -106,7 +108,7 @@ chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackg
 
 createWebSocketServer(server, {
     verifyClient: {
-        isPlatform: IS_PLATFORM,
+        isPlatform: TRUST_LOCAL_AUTH_BYPASS,
         authenticateWebSocket,
     },
     chat: {
@@ -332,6 +334,8 @@ async function removeLocalServerMarker() {
 // Initialize database and start server
 async function startServer() {
     try {
+        validateFrontendAuthMode(path.join(APP_ROOT, 'dist'), AUTH_MODE);
+
         // Initialize authentication database
         await initializeDatabase();
 

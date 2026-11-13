@@ -34,14 +34,22 @@ import type {
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
+import { resolveAuthMode } from '../../shared/authConfig.js';
+
 //----------------- ENVIRONMENT UTILITIES ------------
 /**
- * Indicates whether the backend is running in hosted Platform mode rather than
- * self-hosted OSS mode. The server bootstrap, Agent, Auth, and Browser Use
- * modules use this shared flag to keep environment-dependent behavior aligned.
+ * Resolves the same deployment authentication settings used by the Vite build.
+ * Server startup validates its frontend artifact against this mode; Auth and
+ * User composition use its flags for trusted single-user deployments.
  * Environment variables must be loaded before this module is evaluated.
  */
-export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+export const AUTH_MODE = resolveAuthMode(process.env);
+/** Used by server startup and deployment integrations to retain Platform behavior. */
+export const IS_PLATFORM = AUTH_MODE.isPlatform;
+/** Used by Auth and User module composition to enable the local bypass contract. */
+export const DISABLE_AUTH = AUTH_MODE.disableAuth;
+/** Used by REST middleware and WebSocket startup for the effective authentication mode. */
+export const TRUST_LOCAL_AUTH_BYPASS = AUTH_MODE.trustLocalAuthBypass;
 
 // ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------

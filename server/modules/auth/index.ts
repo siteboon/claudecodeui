@@ -7,3 +7,6 @@ export { authenticateToken } from './auth.middleware.js';
 export { authenticateWebSocket } from './auth.middleware.js';
 // validateApiKey: used by the server entrypoint for optional API-wide key validation.
 export { validateApiKey } from './auth.middleware.js';
+
+// Used by server startup to reject a frontend built with a different auth mode.
+export { validateFrontendAuthMode } from './services/auth-config.service.js';

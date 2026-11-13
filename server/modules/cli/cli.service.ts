@@ -1,5 +1,7 @@
 import path from 'node:path';
 
+import { resolveAuthMode } from '../../../shared/authConfig.js';
+
 import type {
   CliApplication,
   CliEnvironment,
@@ -106,6 +108,9 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`       DATABASE_PATH: ${terminalTextStyles.dim(environment.DATABASE_PATH || '(using default location)')}`);
   output.log(`       CLAUDE_CLI_PATH: ${terminalTextStyles.dim(environment.CLAUDE_CLI_PATH || 'claude (default)')}`);
   output.log(`       CONTEXT_WINDOW: ${terminalTextStyles.dim(environment.CONTEXT_WINDOW || '160000 (default)')}`);
+  // Resolve after the CLI has loaded .env, using the injected environment.
+  const { trustLocalAuthBypass } = resolveAuthMode(environment);
+  output.log(`       TRUST_LOCAL_AUTH_BYPASS: ${terminalTextStyles.dim(String(trustLocalAuthBypass))}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
   output.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
   output.log(`       Status: ${fileSystem.pathExists(claudeProjectsPath)
