@@ -6,7 +6,7 @@ import { sessionsDb } from '@/modules/database/index.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
-  findFilesRecursivelyCreatedAfter,
+  findFilesRecursivelyChangedAfter,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
@@ -47,7 +47,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   async synchronize(since?: Date): Promise<number> {
     const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
-    const files = await findFilesRecursivelyCreatedAfter(
+    const files = await findFilesRecursivelyChangedAfter(
       path.join(this.claudeHome, 'projects'),
       '.jsonl',
       since ?? null
@@ -135,6 +135,19 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    const titles = await this.extractSessionTitles(filePath, parsed.sessionId);
+
+    // A `custom-title` event is a manual `/rename` typed in the CLI — possibly
+    // after the index had already named the session from its first prompt or an
+    // ai-title. It is the newest explicit user intent, so it outranks the DB
+    // name too, not just the other transcript events.
+    if (titles.customTitle) {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(titles.customTitle, 'Untitled Claude Session'),
+      };
+    }
+
     // App-created sessions are keyed by an app id, so disk-discovered provider
     // ids must be resolved through the provider-id mapping first.
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
@@ -147,7 +160,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       };
     }
 
-    let sessionName = await this.extractSessionTitle(filePath, parsed.sessionId);
+    let sessionName = titles.aiTitle || titles.lastPrompt;
     if (!sessionName) {
       sessionName = nameMap.get(parsed.sessionId);
     }
@@ -159,19 +172,20 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   }
 
   /**
-   * Returns the best available title for one session from its transcript.
+   * Returns the title events found for one session in its transcript, keyed by
+   * kind so callers can rank them.
    *
-   * Scans forward keeping the last match of each event type, then prefers
-   * `custom-title` (a manual `/rename`) over `ai-title` over `last-prompt`.
-   * Claude writes `custom-title` immediately before `ai-title`, so a reverse
-   * scan that returns its first hit would always lose the manual rename.
+   * Scans forward keeping the last match of each event type, so a later rename
+   * or ai-title replaces an earlier one. Claude writes `custom-title`
+   * immediately before `ai-title`, so a reverse scan that returns its first hit
+   * would always lose the manual rename.
    *
-   * Returns undefined on a missing or unreadable file so sync can continue.
+   * Returns empty titles on a missing or unreadable file so sync can continue.
    */
-  private async extractSessionTitle(
+  private async extractSessionTitles(
     filePath: string,
     sessionId: string
-  ): Promise<string | undefined> {
+  ): Promise<{ customTitle?: string; aiTitle?: string; lastPrompt?: string }> {
     try {
       const content = await readFile(filePath, 'utf8');
       const lines = content.split(/\r?\n/);
@@ -219,11 +233,15 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         }
       }
 
-      return foundCustomTitle || foundAiTitle || foundLastPrompt;
+      return {
+        customTitle: foundCustomTitle,
+        aiTitle: foundAiTitle,
+        lastPrompt: foundLastPrompt,
+      };
     } catch {
       // Ignore missing/unreadable files so sync can continue.
     }
 
-    return undefined;
+    return {};
   }
 }
