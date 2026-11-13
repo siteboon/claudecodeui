@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { projectsDb, sessionsDb, sessionRuntimeFailuresDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
@@ -14,8 +14,8 @@ import type {
   LLMProvider,
   NormalizedMessage,
   WorkflowAgentActivity,
-} from '@/shared/types.js';
-import { AppError, sliceTailPage } from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { AppError, createNormalizedMessage, sliceTailPage } from '@/shared/index.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -467,6 +467,8 @@ export const sessionsService = {
    * Rewinds a session on disk so `keepThroughId` is the last row it holds.
    *
    * Only call this once the run is admitted — see `providerRewindsForEdit`.
+   * Journal cleanup is best-effort once the provider rewind has succeeded:
+   * stale notices must not prevent the admitted edit from continuing.
    */
   async rewindSessionForEdit(sessionId: string, keepThroughId: string | null): Promise<void> {
     const session = sessionsDb.getSessionById(sessionId);
@@ -478,9 +480,27 @@ export const sessionsService = {
     }
 
     const sessions = providerRegistry.resolveProvider(session.provider as LLMProvider).sessions;
-    await sessions.rewindSession?.(sessionId, keepThroughId);
+    if (sessions.rewindSession) {
+      await sessions.rewindSession(sessionId, keepThroughId);
+      // Unbound first-launch failures belong to the conversation before the
+      // edit. Bound failures remain journaled and are filtered by native id.
+      if (session.provider === 'codex') {
+        try {
+          sessionRuntimeFailuresDb.clearUnbound(sessionId);
+        } catch (error) {
+          // The transcript already moved; rejecting would falsely report a
+          // failed rewind and prevent the edited message from being sent.
+          console.warn('[Sessions] Could not clear pre-transcript Codex failures after rewind', { sessionId }, error);
+        }
+      }
+    }
   },
 
+  /**
+   * Loads the current transcript and merges durable failure notices before
+   * pagination. If inherited Codex history is broken, expose that error beside
+   * saved failures so neither an empty conversation nor a lost failure is shown.
+   */
   async fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
@@ -493,13 +513,21 @@ export const sessionsService = {
       });
     }
 
-    // App-created sessions that never produced a provider transcript yet
-    // (e.g. first message still streaming) simply have no history.
+    const failures = session.provider === 'codex'
+      ? sessionRuntimeFailuresDb.list(sessionId).filter((failure) => !failure.diagnostics.providerSessionId
+        || failure.diagnostics.providerSessionId === session.provider_session_id)
+      : [];
+    const failureNotices = failures.map((failure) => createNormalizedMessage({
+      id: failure.id, sessionId, timestamp: failure.timestamp, provider: 'codex', kind: 'error', content: failure.content,
+    }));
+    // A failed first launch can have no provider transcript. Keep its durable
+    // notice available without asking the provider to resolve a missing id.
     if (!session.provider_session_id) {
+      const { page, hasMore } = sliceTailPage(failureNotices, options.limit ?? null, Math.max(0, options.offset ?? 0));
       return {
-        messages: [],
-        total: 0,
-        hasMore: false,
+        messages: page,
+        total: failureNotices.length,
+        hasMore,
         offset: options.offset ?? 0,
         limit: options.limit ?? null,
       };
@@ -507,7 +535,7 @@ export const sessionsService = {
 
     const provider = session.provider as LLMProvider;
     const providerSessions = providerRegistry.resolveProvider(provider).sessions;
-    const providerSessionId = session.provider_session_id;
+    const providerSessionId = session.provider_session_id ?? undefined;
     const projectPath = session.project_path ?? '';
     const requestedLimit = options.limit ?? null;
     const requestedOffset = options.offset ?? 0;
@@ -520,24 +548,51 @@ export const sessionsService = {
     const transcriptPath = provider === 'claude' || provider === 'codex'
       ? session.jsonl_path
       : null;
-    const fullHistory = await sessionHistoryCache.getFullHistory({
-      sessionId,
-      transcriptPath,
-      loadFull: () => providerSessions.fetchHistory(sessionId, {
-        limit: null,
-        offset: 0,
-        projectPath,
-        providerSessionId,
-      }),
+    const loadFull = () => providerSessions.fetchHistory(sessionId, {
+      limit: null, offset: 0, projectPath, providerSessionId,
     });
+    let fullHistory: FetchHistoryResult | null;
+    let historyErrorNotice: NormalizedMessage | null = null;
+    try {
+      fullHistory = await sessionHistoryCache.getFullHistory({ sessionId, transcriptPath, loadFull });
+      if (!fullHistory && failures.length > 0) fullHistory = await loadFull();
+    } catch (error) {
+      if (provider !== 'codex' || failures.length === 0 || !(error instanceof AppError)
+        || !['CODEX_HISTORY_SOURCE_UNAVAILABLE', 'CODEX_HISTORY_SOURCE_INVALID'].includes(error.code)) {
+        throw error;
+      }
+      // This fallback is deliberately outside the cache: restoring the source
+      // must make the next request try loading the real transcript again.
+      fullHistory = { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
+      historyErrorNotice = createNormalizedMessage({
+        id: `codex-history-error-${providerSessionId}`, sessionId, provider: 'codex', kind: 'error',
+        timestamp: failures[failures.length - 1].timestamp,
+        content: `${error.message} (${error.code})`,
+      });
+    }
 
     let result: FetchHistoryResult;
     if (fullHistory) {
+      const full = fullHistory;
+      // Failures can arrive without changing the CLI file. Merge after reading
+      // the transcript cache and before slicing, so reloads and older pages
+      // retain a stable row count even when the native file never existed.
+      const messages = [...full.messages];
+      for (const [index, failure] of failures.entries()) {
+        const alreadyVisible = messages.some((message) => message.kind === 'error'
+          && message.timestamp >= failure.startedAt && message.timestamp <= failure.timestamp);
+        if (!alreadyVisible) messages.push(failureNotices[index]);
+      }
+      // A history-loading warning is separate from the turn failure and must
+      // not satisfy the native-error deduplication above.
+      if (historyErrorNotice) messages.push(historyErrorNotice);
+      if (failures.length > 0) messages.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
       // Providers slice with this same helper, so a cached page is identical
       // to what a direct `(limit, offset)` read would have returned.
-      const { page, hasMore } = sliceTailPage(fullHistory.messages, requestedLimit, Math.max(0, requestedOffset));
+      const { page, hasMore } = sliceTailPage(messages, requestedLimit, Math.max(0, requestedOffset));
       result = {
-        ...fullHistory,
+        ...full,
+        total: messages.length,
         messages: page,
         hasMore,
         offset: requestedOffset,
