@@ -12,14 +12,16 @@ export type ScheduledMessageRow = {
   options: string;
   scheduled_for: string;
   status: ScheduledMessageStatus;
+  dispatch_token: string | null;
   failure_reason: string | null;
   created_at: string;
   updated_at: string;
 };
 
 const COLUMNS =
-  'id, user_id, session_id, content, options, scheduled_for, status, failure_reason, created_at, updated_at';
+  'id, user_id, session_id, content, options, scheduled_for, status, dispatch_token, failure_reason, created_at, updated_at';
 
+/** Used by the scheduled-messages module to persist schedules, claims, and dispatch outcomes. */
 export const scheduledMessagesDb = {
   create(input: {
     userId: number;
@@ -98,9 +100,11 @@ export const scheduledMessagesDb = {
       });
 
       for (const row of claimed) {
+        row.dispatch_token = randomUUID();
         db.prepare(
-          `UPDATE scheduled_messages SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-        ).run(row.id);
+          `UPDATE scheduled_messages
+           SET status = 'sent', dispatch_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+        ).run(row.dispatch_token, row.id);
       }
 
       return claimed;
@@ -120,21 +124,54 @@ export const scheduledMessagesDb = {
         )
         .get(sessionId, now.toISOString()) as ScheduledMessageRow | undefined;
       if (!row) return null;
+      row.dispatch_token = randomUUID();
       db.prepare(
-        `UPDATE scheduled_messages SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-      ).run(row.id);
+        `UPDATE scheduled_messages SET status = 'sent', dispatch_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      ).run(row.dispatch_token, row.id);
       return row;
     })();
   },
 
-  markFailed(id: string, reason: string): void {
+  markFailed(id: string, reason: string, dispatchToken: string | null): void {
     getConnection()
       .prepare(
         `UPDATE scheduled_messages
-         SET status = 'failed', failure_reason = ?, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`
+         SET status = 'failed', failure_reason = ?, dispatch_token = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'sent' AND dispatch_token IS ?`
       )
-      .run(reason.slice(0, 500), id);
+      .run(reason.slice(0, 500), id, dispatchToken);
+  },
+
+  /** Restores a dispatcher claim that shutdown rejected before the provider ran. */
+  releaseClaim(id: string, dispatchToken: string | null): void {
+    getConnection()
+      .prepare(
+        `UPDATE scheduled_messages
+         SET status = 'pending', failure_reason = NULL, dispatch_token = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND status = 'sent' AND dispatch_token = ?`
+      )
+      .run(id, dispatchToken);
+  },
+
+  /** Used by the dispatcher before provider execution to fence off an obsolete claim. */
+  startClaim(id: string, dispatchToken: string | null): boolean {
+    return getConnection().prepare(
+      `UPDATE scheduled_messages SET dispatch_token = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = 'sent' AND dispatch_token = ?`
+    ).run(id, dispatchToken).changes === 1;
+  },
+
+  /**
+   * Used at dispatcher startup to restore claims whose provider never started,
+   * including releases that failed during shutdown. A revoked owner's token
+   * cannot pass startClaim, and sent rows without a token are never replayed.
+   */
+  recoverUnstartedClaims(): void {
+    getConnection().prepare(
+      `UPDATE scheduled_messages
+       SET status = 'pending', failure_reason = NULL, dispatch_token = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE status = 'sent' AND dispatch_token IS NOT NULL`
+    ).run();
   },
 
   /**

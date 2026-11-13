@@ -36,7 +36,7 @@ type AgentRouterDependencies = {
     createAppSession(provider: string, projectPath: string, initialMessage: string): { sessionId: string };
   };
   /** The live-run registry the chat socket uses; registering here is what puts an API run on the running-sessions list. */
-  runs: Pick<typeof import('../websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent' | 'isProcessing'>;
+  runs: Pick<typeof import('@/modules/websocket/index.js').chatRunRegistry, 'startRun' | 'completeRunIfCurrent' | 'isProcessing' | 'isDraining' | 'reserveDrainWork'>;
   queryClaude: ProviderRunFunction;
   queryCursor: ProviderRunFunction;
   queryCodex: ProviderRunFunction;
@@ -673,7 +673,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *                           Default: true
    *                           Behavior:
    *                           - Only applies when cloning via githubUrl (not for existing projectPath)
-   *                           - Deletes cloned repository after 5 seconds
+   *                           - Deletes newly cloned repositories under ~/.claude/external-projects after 5 seconds
+   *                           - Caller-specified destinations outside that root are retained, including during shutdown
    *                           - Also deletes associated Claude session directory
    *                           - Remote branch and PR remain on GitHub if created
    *
@@ -914,6 +915,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       return res.status(400).json({ error: 'createBranch and createPR require either githubUrl or projectPath with a GitHub remote' });
     }
 
+    if (runRegistry.isDraining()) {
+      return res.status(503).json({ code: 'SERVER_DRAINING', error: 'The server is shutting down and cannot start a new run.' });
+    }
+
     // A run continues a session the caller names, by its app id or — for a
     // caller that stored what an earlier response called `sessionId` — the
     // provider-native one, which the row is also keyed by once indexed. The
@@ -942,6 +947,13 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     // The run as the chat socket registers one: on the running-sessions
     // list, subscribable from any tab, and completed on every exit path.
     let run = null;
+
+    // Include clone/setup and post-provider GitHub work in the same bounded
+    // shutdown window, even before a run exists or after its terminal event.
+    const finishRequest = runRegistry.reserveDrainWork();
+    if (!finishRequest) {
+      return res.status(503).json({ code: 'SERVER_DRAINING', error: 'The server is shutting down and cannot start a new run.' });
+    }
 
     try {
       // Determine the final project path
@@ -981,6 +993,15 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         throw new Error(`Session "${sessionRow.session_id}" belongs to project ${sessionRow.project_path}, not ${finalProjectPath}`);
       }
 
+      // Setup can yield across shutdown. Refuse before allocating an empty
+      // session; no await separates this check from session/run registration.
+      if (runRegistry.isDraining()) {
+        if (cleanup && githubUrl && clonedProjectCreated) {
+          await cleanupProject(finalProjectPath, null);
+        }
+        return res.status(503).json({ code: 'SERVER_DRAINING', error: 'The server is shutting down and cannot start a new run.' });
+      }
+
       // Register project path in DB (or reuse existing active registration)
       const registrationResult = projectsDb.createProjectPath(finalProjectPath, null);
       if (registrationResult.outcome === 'active_conflict') {
@@ -1010,7 +1031,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       });
       if (!run) {
         if (cleanup && githubUrl && clonedProjectCreated) {
-          cleanupProject(finalProjectPath, null);
+          await cleanupProject(finalProjectPath, null);
+        }
+        if (runRegistry.isDraining()) {
+          return res.status(503).json({ code: 'SERVER_DRAINING', error: 'The server is shutting down and cannot start a new run.' });
         }
         return res.status(409).json({ error: `Session "${appSessionId}" already has a run in progress` });
       }
@@ -1324,9 +1348,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       if (cleanup && githubUrl && clonedProjectCreated) {
         // Only cleanup if we cloned a repo (not for existing project paths)
         const sessionIdForCleanup = run.writer.getSessionId();
-        setTimeout(() => {
-          cleanupProject(finalProjectPath, sessionIdForCleanup);
-        }, 5000);
+        // Keep the request's drain reservation through the delay and cleanup,
+        // even though its HTTP response and provider run have already ended.
+        await new Promise((resolve) => { setTimeout(resolve, 5000); });
+        await cleanupProject(finalProjectPath, sessionIdForCleanup);
       }
 
     } catch (error) {
@@ -1335,7 +1360,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // Clean up on error
       if (finalProjectPath && cleanup && githubUrl && clonedProjectCreated) {
         const sessionIdForCleanup = run ? run.writer.getSessionId() : null;
-        cleanupProject(finalProjectPath, sessionIdForCleanup);
+        await cleanupProject(finalProjectPath, sessionIdForCleanup);
       }
 
       if (stream) {
@@ -1368,8 +1393,12 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // without its terminal `complete` would leave the session listed as
       // running in every tab. Scoped to this run, so a run the session
       // started meanwhile is left alone.
-      if (run) {
-        runRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+      try {
+        if (run) {
+          runRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+        }
+      } finally {
+        finishRequest();
       }
     }
   });
