@@ -97,6 +97,9 @@ test('dispatches runs and aborts through the runtime owned by providerRegistry',
       calls.push(['abort', sessionId]);
       return true;
     },
+    async restart() {
+      calls.push(['restart']);
+    },
   });
   const service = createService([createProvider('claude', runtime)]);
   const writer = { send() {} };
@@ -105,10 +108,24 @@ test('dispatches runs and aborts through the runtime owned by providerRegistry',
   assert.equal(service.hasRuntime('unknown'), false);
   assert.equal(await service.getRunner('claude')('hello', { model: 'sonnet' }, writer), 'complete');
   assert.equal(await service.abort('claude', 'session-1'), true);
+  assert.deepEqual(await service.restart('claude'), { provider: 'claude', restarted: true });
   assert.deepEqual(calls, [
     ['run', 'hello', { model: 'sonnet' }, writer],
     ['abort', 'session-1'],
+    ['restart'],
   ]);
+});
+
+test('rejects restart when the provider has no restartable runtime', async () => {
+  const service = createService([createProvider('cursor', createRuntime())]);
+
+  await assert.rejects(
+    service.restart('cursor'),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'PROVIDER_RUNTIME_RESTART_UNSUPPORTED');
+      return true;
+    },
+  );
 });
 
 test('routes permission decisions through provider-owned runtime capabilities', () => {

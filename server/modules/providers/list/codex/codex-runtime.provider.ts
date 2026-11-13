@@ -23,11 +23,14 @@ import {
 } from '@/shared/index.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
-// Not re-exported through the `@/shared/index.js` barrel yet (same seam the
-// Claude side-question provider already uses), so imported directly.
-import type { SideQuestionOutcome, SideQuestionRequest, SideQuestionSink } from '@/shared/types.js';
+import type { SideQuestionOutcome, SideQuestionRequest, SideQuestionSink } from '@/shared/index.js';
 
 import { codexAppServer } from './codex-app-server.client.js';
+
+import {
+  codexAppServerRuntime,
+} from './codex-app-server.runtime.js';
+import { resolveCodexRuntimeMode } from './codex-app-server.config.js';
 
 type ActiveCodexSession = {
   thread: Thread;
@@ -257,11 +260,13 @@ function mapPermissionModeToCodexOptions(permissionMode: string): Pick<ThreadOpt
 
 /**
  * Execute a Codex query with streaming
+ * @deprecated Use the app-server runtime unless the user explicitly selects
+ * the SDK in settings.
  * @param {string} command - The prompt to send
  * @param {object} options - Options including cwd, sessionId, model, permissionMode
  * @param {WebSocket|object} ws - WebSocket connection or response writer
  */
-async function queryCodex(
+async function queryLegacyCodex(
   command: string,
   options: AnyRecord = {},
   ws: ProviderRuntimeWriter,
@@ -525,15 +530,45 @@ async function queryCodex(
 }
 
 /**
+ * Selects the provider implementation without changing the browser contract.
+ * The mode is explicit: there is no automatic retry through a second runtime.
+ */
+async function queryCodex(
+  command: string,
+  options: AnyRecord = {},
+  ws: ProviderRuntimeWriter,
+  context: ProviderRuntimeContext,
+) {
+  const mode = resolveCodexRuntimeMode(options.codexRuntimeMode);
+  if (mode === 'sdk') {
+    return queryLegacyCodex(command, options, ws, context);
+  }
+
+  try {
+    return await codexAppServerRuntime.run(command, options, ws, context);
+  } catch (error) {
+    const content = error instanceof Error ? error.message : String(error);
+    sendMessage(ws, createNormalizedMessage({
+      kind: 'error',
+      content,
+      sessionId: options.sessionId || null,
+      provider: 'codex',
+    }));
+    throw error;
+  }
+}
+
+/**
  * Abort an active Codex session
  * @param {string} sessionId - Session ID to abort
- * @returns {boolean} - Whether abort was successful
+ * @returns {Promise<boolean>} - Whether abort was successful
  */
-function abortCodexSession(sessionId: string) {
+async function abortCodexSession(sessionId: string) {
+  const appServerAborted = await codexAppServerRuntime.abort(sessionId);
   const session = activeCodexSessions.get(sessionId);
 
   if (!session) {
-    return false;
+    return appServerAborted;
   }
 
   session.status = 'aborted';
@@ -582,10 +617,12 @@ async function askCodexSideQuestion(
   }
 }
 
-/** Used by the providers module's CodexProvider to run and abort SDK turns. */
+/** Used by the providers module's CodexProvider to select runtimes and expose lifecycle controls. */
 export const codexRuntime = {
   run: queryCodex,
   abort: abortCodexSession,
+  restart: codexAppServerRuntime.restart,
+  permissions: codexAppServerRuntime.permissions,
   askSideQuestion: askCodexSideQuestion,
 };
 

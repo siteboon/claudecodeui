@@ -42,6 +42,7 @@ for (const resumed of [false, true]) {
       };
 
       await codexRuntime.run('hey there', {
+        codexRuntimeMode: 'sdk',
         sessionId: resumed ? 'app-session' : undefined,
         permissionMode,
         cwd: process.cwd(),
@@ -82,6 +83,7 @@ for (const command of ['', '  \n\t']) {
     };
 
     await codexRuntime.run(command, {
+      codexRuntimeMode: 'sdk',
       cwd: process.cwd(),
       images: [{ path: imagePath, mimeType: 'image/png' }],
     }, { isWebSocketWriter: true, send: () => {} }, context);

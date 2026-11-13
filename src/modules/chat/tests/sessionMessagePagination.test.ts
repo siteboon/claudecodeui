@@ -13,6 +13,13 @@ import {
   resolveLatestPagePagination,
 } from '@/modules/chat/utils/sessionMessagePagination';
 
+test('history URLs carry runtime selection for both full and paginated reads', () => {
+  assert.equal(buildSessionMessagesUrl('session/id', { codexRuntimeMode: 'sdk' }),
+    '/api/providers/sessions/session%2Fid/messages?codexRuntimeMode=sdk');
+  assert.equal(buildSessionMessagesUrl('session/id', { limit: 20, offset: 2, codexRuntimeMode: 'app-server' }),
+    '/api/providers/sessions/session%2Fid/messages?limit=20&offset=2&codexRuntimeMode=app-server');
+});
+
 function message(
   number: number,
   overrides: Partial<NormalizedMessage> = {},

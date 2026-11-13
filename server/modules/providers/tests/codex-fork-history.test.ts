@@ -7,6 +7,7 @@ import test from 'node:test';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 
+// These fixtures exercise the JSONL reader; app-server history has its own tests.
 type Row = Record<string, unknown>;
 
 function turn(id: string, prompt: string): Row[] {
@@ -63,7 +64,7 @@ test('metadata-only Codex forks show frozen inherited prompts, replies and edit 
     await rollout(root, 'fork', [], await reference('source', source));
     // A fork remains a snapshot while the source keeps receiving turns.
     await appendFile(source, encode(turn('turn-later', 'must stay on the source')));
-    const provider = new CodexSessionsProvider();
+    const provider = new CodexSessionsProvider({ readRuntimeMode: () => 'sdk' });
     const history = await provider.fetchHistory('fork');
     assert.deepEqual(history.messages.map((message) => message.content), ['한글 원본', 'answer: 한글 원본']);
     assert.equal(history.messages[0].transcriptAnchorId, 'turn-a');
@@ -79,7 +80,7 @@ test('forks of forks combine frozen ancestors and new local turns in order, incl
     const child = await rollout(root, 'child', turn('turn-b', 'second'), await reference('source', source));
     await rollout(root, 'grandchild', turn('turn-c', 'third'), await reference('child', child));
     await appendFile(child, encode(turn('turn-later', 'not inherited')));
-    const provider = new CodexSessionsProvider();
+    const provider = new CodexSessionsProvider({ readRuntimeMode: () => 'sdk' });
     const history = await provider.fetchHistory('grandchild');
     assert.deepEqual(history.messages.map((message) => message.content), [
       'first', 'answer: first', 'second', 'answer: second', 'third', 'answer: third',
@@ -97,7 +98,7 @@ test('history_base can point at a grandparent rather than the immediate fork sou
     const source = await rollout(root, 'source', turn('turn-a', 'first'));
     await rollout(root, 'child', turn('turn-b', 'excluded'), await reference('source', source));
     await rollout(root, 'grandchild', [], { ...await reference('source', source), forked_from_id: 'child' });
-    const history = await new CodexSessionsProvider().fetchHistory('grandchild');
+    const history = await new CodexSessionsProvider({ readRuntimeMode: () => 'sdk' }).fetchHistory('grandchild');
     assert.deepEqual(history.messages.map((message) => message.content), ['first', 'answer: first']);
   });
 });
@@ -110,7 +111,7 @@ test('unindexed and archived history sources are resolved from native storage', 
     await mkdir(archived);
     await writeFile(path.join(archived, 'rollout-source.jsonl'), await readFile(source));
     await rm(source);
-    const history = await new CodexSessionsProvider().fetchHistory('fork');
+    const history = await new CodexSessionsProvider({ readRuntimeMode: () => 'sdk' }).fetchHistory('fork');
     assert.equal(history.messages[0].content, 'still available');
   });
 });
@@ -119,13 +120,13 @@ test('copied legacy forks do not duplicate history using forked_from_id', async 
   await withRollouts(async (root) => {
     await rollout(root, 'source', turn('turn-a', 'copied'));
     await rollout(root, 'fork', turn('turn-a', 'copied'), { forked_from_id: 'source' });
-    assert.equal((await new CodexSessionsProvider().fetchHistory('fork')).messages.length, 2);
+    assert.equal((await new CodexSessionsProvider({ readRuntimeMode: () => 'sdk' }).fetchHistory('fork')).messages.length, 2);
   });
 });
 
 test('missing and invalid inherited history fail visibly instead of returning an empty conversation', async () => {
   await withRollouts(async (root) => {
-    const provider = new CodexSessionsProvider();
+    const provider = new CodexSessionsProvider({ readRuntimeMode: () => 'sdk' });
     await rollout(root, 'missing', [], { history_base: { thread_id: 'absent', end_byte_offset: 100 } });
     await assert.rejects(provider.fetchHistory('missing'), { code: 'CODEX_HISTORY_SOURCE_UNAVAILABLE' });
     await rollout(root, 'invalid', [], { history_base: { thread_id: '../source', end_byte_offset: -1 } });

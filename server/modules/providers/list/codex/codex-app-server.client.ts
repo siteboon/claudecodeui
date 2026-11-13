@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import readline from 'node:readline';
 
@@ -8,22 +7,16 @@ import {
   SIDE_CONVERSATION_BOUNDARY_PROMPT,
   SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
   SIDE_QUESTION_ANSWER_SEPARATOR,
-} from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { codexAppServerRuntime } from './codex-app-server.runtime.js';
+import type { CodexThreadFork, CodexThreadForkInput } from './codex-app-server.runtime.js';
+
+export type { CodexThreadFork };
 
 /**
- * Minimal JSON-RPC client for `codex app-server`.
- *
- * Codex ships two entry points and they expose different things. The
- * `@openai/codex-sdk` this app runs conversations through is a wrapper around
- * `codex exec`, and its whole surface is `startThread` and `resumeThread` —
- * there is no way to branch a thread or to resume one partway. The same
- * binary's `app-server` subcommand speaks JSON-RPC and does have that
- * primitive, `thread/fork`, which is what the Codex IDE clients build their
- * own "fork" and "edit an earlier message" on top of.
- *
- * So this is a second transport to the same CLI, opened only for the
- * operations the SDK cannot express. Everything else still goes through the
- * SDK.
+ * Codex's fork/edit adapters share the managed chat runtime. Side questions
+ * use an isolated process so their ephemeral, read-only turns and cancellation
+ * remain independent of the main conversation and its selected runtime.
  */
 
 /** How long a single request may take before the child is killed. */
@@ -56,27 +49,7 @@ type JsonRpcLine = {
 /** Handler for a notification the app-server sent us (never a reply). */
 type NotificationHandler = (method: string, params: unknown) => void;
 
-/**
- * One fork of a Codex thread.
- *
- * `path` is returned by the server rather than reconstructed: the rollout
- * lands in today's date directory, not next to the file it was copied from,
- * so deriving it from the source path would be wrong roughly every day.
- */
-export type CodexThreadFork = {
-  threadId: string;
-  path: string;
-};
-
-/**
- * Runs one exchange against a freshly spawned `codex app-server`.
- *
- * A process per operation rather than a pooled long-lived one: the handshake
- * costs a fraction of a second, forking happens at most once per user action,
- * and a shared child would need lifecycle handling — restarts, back-pressure,
- * a crash taking every pending fork with it — for no measurable gain next to
- * the model turn that follows.
- */
+/** Runs one side question in its own process, released after completion or abort. */
 async function withAppServer<T>(
   run: (helpers: {
     call: (method: string, params: unknown) => Promise<unknown>;
@@ -260,6 +233,7 @@ async function withAppServer<T>(
   }
 }
 
+/** Used by Codex session adapters for persistent forks and by its runtime for isolated side questions. */
 export const codexAppServer = {
   /**
    * Resolves the `codex` launcher shipped in node_modules.
@@ -294,41 +268,8 @@ export const codexAppServer = {
    * omitting it would file every fork under whatever directory this server
    * happens to be running from.
    */
-  async forkThread(input: {
-    threadId: string;
-    lastTurnId?: string;
-    cwd: string;
-  }): Promise<CodexThreadFork> {
-    return withAppServer(async ({ call }) => {
-      const result = await call('thread/fork', {
-        threadId: input.threadId,
-        ...(input.lastTurnId ? { lastTurnId: input.lastTurnId } : {}),
-        ...(input.cwd ? { cwd: input.cwd } : {}),
-      }) as { thread?: { id?: unknown; path?: unknown } } | undefined;
-
-      const threadId = typeof result?.thread?.id === 'string' ? result.thread.id : '';
-      const path = typeof result?.thread?.path === 'string' ? result.thread.path : '';
-      if (!threadId || !path) {
-        throw new AppError('Codex reported a fork without a thread id or transcript path.', {
-          code: 'FORK_FAILED',
-          statusCode: 502,
-        });
-      }
-
-      // Confirmed rather than trusted: both callers are about to point a
-      // database row at this file, and a row naming a transcript that is not
-      // there is a session that can never be opened.
-      try {
-        await stat(path);
-      } catch {
-        throw new AppError('Codex reported a fork but wrote no transcript for it.', {
-          code: 'FORK_FAILED',
-          statusCode: 502,
-        });
-      }
-
-      return { threadId, path };
-    });
+  forkThread(input: CodexThreadForkInput): Promise<CodexThreadFork> {
+    return codexAppServerRuntime.forkThread(input);
   },
 
   /**

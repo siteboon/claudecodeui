@@ -10,7 +10,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { LLMProvider, NormalizedMessage } from '@/shared/types';
+import { readUserPreference } from '@/shared/userSettings';
+import type { CodexRuntimeMode, LLMProvider, NormalizedMessage } from '@/shared/types';
 import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
 import { removeOptimisticUserEchoes } from '@/modules/chat/utils/sessionMessageReconciliation';
 import {
@@ -31,6 +32,8 @@ import type { SessionMessagesRequestOptions } from '@/modules/chat/utils/session
 export type SessionStatus = 'idle' | 'loading' | 'streaming' | 'error';
 
 export type SessionSlot = {
+  /** Pins history reads to one runtime; changing it requires a fresh persisted cache. */
+  historyRuntimeMode: CodexRuntimeMode;
   serverMessages: NormalizedMessage[];
   realtimeMessages: NormalizedMessage[];
   merged: NormalizedMessage[];
@@ -55,6 +58,7 @@ const SESSION_HISTORY_REQUEST_TIMEOUT_MS = 30_000;
 
 function createEmptySlot(): SessionSlot {
   return {
+    historyRuntimeMode: readHistoryRuntimeMode(),
     serverMessages: EMPTY,
     realtimeMessages: EMPTY,
     merged: EMPTY,
@@ -95,11 +99,21 @@ function enqueueHistoryMutation<T>(
   return result;
 }
 
+function readHistoryRuntimeMode(): CodexRuntimeMode {
+  const settings = readUserPreference<{ runtimeMode?: unknown }>('codexPermissions', {});
+  return settings?.runtimeMode === 'sdk' ? 'sdk' : 'app-server';
+}
+
 async function requestSessionHistoryPage(
   sessionId: string,
   options: SessionMessagesRequestOptions,
+  runtimeMode: CodexRuntimeMode,
+  canApply: () => boolean,
 ): Promise<SessionHistoryPage> {
-  const response = await api.providers.sessionMessages(sessionId, options, {
+  const response = await api.providers.sessionMessages(sessionId, {
+    ...options,
+    codexRuntimeMode: runtimeMode,
+  }, {
     signal: AbortSignal.timeout(SESSION_HISTORY_REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -111,7 +125,9 @@ async function requestSessionHistoryPage(
   // The server sends the session's whole side-question list on every page
   // (not just the page's own rows), so the store is replaced here rather
   // than merged, regardless of which page this request fetched.
-  if (Array.isArray(data.sideQuestions)) {
+  // Apply the same reader guard as the transcript so a late response from a
+  // previous runtime cannot overwrite side questions loaded by the new reader.
+  if (canApply() && Array.isArray(data.sideQuestions)) {
     sideQuestionStore.replaceForSession(sessionId, data.sideQuestions);
   }
 
@@ -233,29 +249,24 @@ function findServerTurnRangeByOrdinal(
   return { start, end };
 }
 
-function isAssistantTextEchoedInSameTurnOnServer(
+function findServerAssistantEchoIndex(
   message: NormalizedMessage,
   serverMessages: NormalizedMessage[],
   realtimeMessages: NormalizedMessage[],
-): boolean {
+): number {
   const assistantText = (message.content || '').trim();
-  if (!assistantText) {
-    return false;
-  }
-
+  if (!assistantText || !serverMessages.some(candidate => candidate.content?.trim() === assistantText)) return -1;
   const turnOrdinal = getUserTurnOrdinalBefore(message, serverMessages, realtimeMessages);
-  const turnRange = findServerTurnRangeByOrdinal(serverMessages, turnOrdinal);
-  if (!turnRange) {
-    return false;
-  }
-
-  return serverMessages
-    .slice(turnRange.start + 1, turnRange.end)
-    .some((serverMessage) =>
-      serverMessage.kind === 'text'
-      && serverMessage.role === 'assistant'
-      && (serverMessage.content || '').trim() === assistantText,
-    );
+  const range = findServerTurnRangeByOrdinal(serverMessages, turnOrdinal);
+  if (!range) return -1;
+  const knownLiveIds = new Set(realtimeMessages.map(candidate => candidate.id));
+  return serverMessages.findIndex((candidate, index) =>
+    index > range.start && index < range.end
+    && candidate.kind === 'text' && candidate.role === 'assistant'
+    && candidate.content?.trim() === assistantText
+    // Two distinct provider items may legitimately repeat the same words.
+    && (!knownLiveIds.has(candidate.id) || candidate.id === message.id),
+  );
 }
 
 /**
@@ -285,7 +296,8 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
         && m.role === 'assistant'
       ) {
         const ms = (m.content || '').trim();
-        if (ms.length > 0 && ms === (prev.content || '').trim()) {
+        if (ms.length > 0 && ms === (prev.content || '').trim()
+          && (prev.id === m.id || prev.id.startsWith('text_') || m.id.startsWith('text_'))) {
           continue;
         }
       }
@@ -295,90 +307,100 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
   return out;
 }
 
-/**
- * After a server refresh, drop only the realtime rows the persisted transcript
- * already owns. Anything not yet on disk (common right after `complete`, while
- * JSONL indexing lags) stays in `realtimeMessages` so the chat pane never
- * flashes the empty "Continue your conversation" state.
- */
+/** Matches live items to history, including results embedded in tool rows. */
+function findServerCounterpartIndex(
+  message: NormalizedMessage,
+  server: NormalizedMessage[],
+  realtime: NormalizedMessage[],
+): number {
+  const exact = server.findIndex(candidate => candidate.id === message.id);
+  if (exact >= 0) return exact;
+  if (message.toolId && (message.kind === 'tool_use' || message.kind === 'tool_result')) {
+    const tool = server.findIndex(candidate => candidate.kind === 'tool_use' && candidate.toolId === message.toolId);
+    if (tool >= 0) return tool;
+  }
+  if (message.kind === 'stream_delta' || (message.kind === 'text' && message.role === 'assistant')) {
+    return findServerAssistantEchoIndex(message, server, realtime);
+  }
+  return -1;
+}
+
+function serverHasLiveRevision(server: NormalizedMessage, live: NormalizedMessage): boolean {
+  const isPending = (status: string | undefined) => status === 'in_progress' || status === 'inProgress';
+  if (isPending(server.status) && live.status && !isPending(live.status)) return false;
+  if (live.kind === 'tool_result') {
+    const result = server.kind === 'tool_result' ? server : server.toolResult;
+    return Boolean(result && (result.content ?? '').startsWith(live.content ?? '')
+      && Boolean(result.isError) === Boolean(live.isError));
+  }
+  if (live.kind === 'tool_use') {
+    return server.toolName === live.toolName
+      && JSON.stringify(server.toolInput) === JSON.stringify(live.toolInput)
+      && (!live.toolResult || JSON.stringify(server.toolResult) === JSON.stringify(live.toolResult));
+  }
+  return (server.content ?? '').startsWith(live.content ?? '');
+}
+
+/** Keeps live rows and their ordering anchors until history contains every revision. */
 function pruneRealtimeSupersededByServer(
   serverMessages: NormalizedMessage[],
   realtimeMessages: NormalizedMessage[],
 ): NormalizedMessage[] {
-  if (realtimeMessages.length === 0) {
-    return realtimeMessages;
-  }
-
-  const serverIds = new Set(serverMessages.map((message) => message.id));
-  const reconciledRealtimeMessages = removeOptimisticUserEchoes(serverMessages, realtimeMessages);
-
-  return reconciledRealtimeMessages.filter((message) => {
-    if (serverIds.has(message.id)) {
-      return false;
-    }
-
-    if (message.kind === 'stream_delta' || message.id === `__streaming_${message.sessionId}`) {
-      if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
-        return false;
-      }
-      return true;
-    }
-
-    if (message.kind === 'text' && message.role === 'assistant') {
-      if (isAssistantTextEchoedInSameTurnOnServer(message, serverMessages, realtimeMessages)) {
-        return false;
-      }
-      return true;
-    }
-
-    if (message.kind === 'text' && message.role === 'user') {
-      return true;
-    }
-
-    if (message.kind === 'tool_use' && message.toolId) {
-      if (serverMessages.some((serverMessage) => serverMessage.kind === 'tool_use' && serverMessage.toolId === message.toolId)) {
-        return false;
-      }
-    }
-
-    return true;
+  const realtime = removeOptimisticUserEchoes(serverMessages, realtimeMessages);
+  const allPersisted = realtime.every(message => {
+    const index = findServerCounterpartIndex(message, serverMessages, realtime);
+    return index >= 0 && serverHasLiveRevision(serverMessages[index], message);
   });
+  // Keep shared anchors while any live item is missing from history. Dropping
+  // the final-answer anchor early strands preceding live-only rows at the end.
+  return allPersisted ? EMPTY : realtime;
 }
 
 function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[]): NormalizedMessage[] {
-  if (realtime.length === 0) {
-    return dedupeAdjacentAssistantEchoes(server);
-  }
-  if (server.length === 0) {
-    return dedupeAdjacentAssistantEchoes(realtime);
-  }
+  if (realtime.length === 0) return dedupeAdjacentAssistantEchoes(server);
+  if (server.length === 0) return dedupeAdjacentAssistantEchoes(realtime);
+  const live = removeOptimisticUserEchoes(server, realtime);
+  const positions = live.map(message => findServerCounterpartIndex(message, server, live));
+  const rows = [...server];
+  const insertions = new Map<number, NormalizedMessage[]>();
+  const newestServerTime = server.reduce((latest, message) => Math.max(latest, readMessageTime(message) ?? 0), 0);
+  let previousAnchor = -1;
+  let insertionFloor = 0;
 
-  const serverIds = new Set(server.map((message) => message.id));
-  const reconciledRealtime = removeOptimisticUserEchoes(server, realtime);
-  const extra = reconciledRealtime.filter((message) => {
-    if (serverIds.has(message.id)) {
-      return false;
+  for (let i = 0; i < live.length; i++) {
+    const message = live[i];
+    const index = positions[i];
+    if (index >= 0) {
+      previousAnchor = Math.max(previousAnchor, index);
+      if (serverHasLiveRevision(server[index], message)) continue;
+      if (server[index].kind === message.kind) {
+        // Use fresh live content at the history row's canonical position.
+        rows[index] = { ...server[index], ...message, timestamp: server[index].timestamp };
+        continue;
+      }
     }
-    return true;
-  });
 
-  if (extra.length === 0) {
-    return dedupeAdjacentAssistantEchoes(server);
+    const nextAnchor = positions.slice(i + 1).find(position => position >= previousAnchor && position >= 0);
+    let position = index >= 0 ? index + 1 : nextAnchor;
+    if (position === undefined) {
+      position = previousAnchor >= 0 ? previousAnchor + 1 : server.findIndex(candidate =>
+        (readMessageTime(candidate) ?? 0) > readSortTime(message, newestServerTime),
+      );
+      if (position < 0) position = server.length;
+    }
+    position = Math.max(position, insertionFloor);
+    insertionFloor = position;
+    const bucket = insertions.get(position) ?? [];
+    bucket.push(message);
+    insertions.set(position, bucket);
   }
 
-  // Interleave by timestamp so live rows stay with their turn instead of
-  // piling up at the bottom after every refresh. Sorting is stable and the
-  // live rows come second, so a replacement that ties with the newest server
-  // row still lands after it.
-  const newestServerTime = server.reduce(
-    (newest, message) => Math.max(newest, readMessageTime(message) ?? 0),
-    0,
-  );
-  return dedupeAdjacentAssistantEchoes(
-    [...server, ...extra].sort(
-      (a, b) => readSortTime(a, newestServerTime) - readSortTime(b, newestServerTime),
-    ),
-  );
+  const merged: NormalizedMessage[] = [];
+  for (let index = 0; index <= rows.length; index++) {
+    merged.push(...(insertions.get(index) ?? []));
+    if (index < rows.length) merged.push(rows[index]);
+  }
+  return dedupeAdjacentAssistantEchoes(merged);
 }
 
 /**
@@ -443,7 +465,10 @@ async function refreshLatestSlotFromServer(
   const latestPage = await requestSessionHistoryPage(sessionId, {
     limit,
     offset: 0,
-  });
+  }, slot.historyRuntimeMode, canRequest);
+  if (!canRequest()) {
+    return { applied: false, changed: false, deferred: true };
+  }
 
   let nextServerMessages: NormalizedMessage[] | null = null;
   let nextHasMore = previousHasMore;
@@ -479,7 +504,10 @@ async function refreshLatestSlotFromServer(
         return { applied: false, changed: false, deferred: true };
       }
 
-      const bridgePage = await requestSessionHistoryPage(sessionId, bridgeRequest);
+      const bridgePage = await requestSessionHistoryPage(sessionId, bridgeRequest, slot.historyRuntimeMode, canRequest);
+      if (!canRequest()) {
+        return { applied: false, changed: false, deferred: true };
+      }
       if (bridgePage.total !== latestPage.total) {
         console.warn(`[SessionStore] History changed while bridging ${sessionId}; retaining cached suffix.`);
         return { applied: false, changed: false, deferred: false };
@@ -582,6 +610,23 @@ export function useSessionStore() {
     return store.get(sessionId)!;
   }, []);
 
+  const getHistorySlot = useCallback((sessionId: string) => {
+    const slot = getSlot(sessionId);
+    if (slot.historyRuntimeMode === readHistoryRuntimeMode()) {
+      return { slot, modeChanged: false };
+    }
+    const replacement = createEmptySlot();
+    replacement.realtimeMessages = slot.realtimeMessages;
+    recomputeMergedIfNeeded(replacement);
+    storeRef.current.set(sessionId, replacement);
+    notify(sessionId);
+    return { slot: replacement, modeChanged: true };
+  }, [getSlot, notify]);
+
+  const isCurrentHistorySlot = useCallback((sessionId: string, slot: SessionSlot) => (
+    storeRef.current.get(sessionId) === slot && slot.historyRuntimeMode === readHistoryRuntimeMode()
+  ), []);
+
   /**
    * Fetch messages from the provider sessions endpoint and populate serverMessages.
    *
@@ -596,12 +641,14 @@ export function useSessionStore() {
       canRequest?: CanRequestHistory;
     } = {},
   ) => {
-    const slot = getSlot(sessionId);
+    const { slot, modeChanged } = getHistorySlot(sessionId);
     slot.status = 'loading';
     notify(sessionId);
 
     return enqueueHistoryMutation(slot, async () => {
-      const { canRequest = () => true, ...requestOptions } = opts;
+      const { canRequest: callerCanRequest = () => true, ...requestOptions } = opts;
+      const canRequest = () => callerCanRequest() && isCurrentHistorySlot(sessionId, slot);
+      if (modeChanged) requestOptions.offset = 0;
       if (!canRequest()) {
         slot.status = 'idle';
         notify(sessionId);
@@ -609,7 +656,12 @@ export function useSessionStore() {
       }
 
       try {
-        const data = await requestSessionHistoryPage(sessionId, requestOptions);
+        const data = await requestSessionHistoryPage(sessionId, requestOptions, slot.historyRuntimeMode, canRequest);
+        if (!canRequest()) {
+          slot.status = 'idle';
+          notify(sessionId);
+          return null;
+        }
         slot.serverMessages = data.messages;
         slot.total = data.total;
         slot.hasMore = data.hasMore;
@@ -628,13 +680,18 @@ export function useSessionStore() {
         notify(sessionId);
         return slot;
       } catch (error) {
+        if (!isCurrentHistorySlot(sessionId, slot)) {
+          slot.status = 'idle';
+          notify(sessionId);
+          return null;
+        }
         console.error(`[SessionStore] fetch failed for ${sessionId}:`, error);
         slot.status = 'error';
         notify(sessionId);
         return slot;
       }
     });
-  }, [getSlot, notify]);
+  }, [getHistorySlot, isCurrentHistorySlot, notify]);
 
   /**
    * Load older (paginated) messages and prepend to serverMessages.
@@ -646,14 +703,21 @@ export function useSessionStore() {
       canRequest?: CanRequestHistory;
     } = {},
   ) => {
-    const slot = getSlot(sessionId);
+    const { slot, modeChanged } = getHistorySlot(sessionId);
     return enqueueHistoryMutation(slot, async () => {
       let prependedCount = 0;
       let changed = false;
-      const canRequest = opts.canRequest ?? (() => true);
-      if (!slot.hasMore || !canRequest()) return { slot, prependedCount };
+      const canRequest = () => (opts.canRequest?.() ?? true) && isCurrentHistorySlot(sessionId, slot);
+      if (!canRequest()) return { slot, prependedCount };
 
       try {
+        if (modeChanged || slot.fetchedAt === 0) {
+          const result = await refreshLatestSlotFromServer(
+            sessionId, slot, opts.limit ?? SESSION_MESSAGES_PAGE_SIZE, canRequest,
+          );
+          if (result.changed) notify(sessionId);
+          return { slot, prependedCount };
+        }
         // A tail-relative offset can shift while JSONL is still growing. One
         // bounded latest-page reconciliation realigns the cache, after which
         // the older-page request is retried once with the new raw-row offset.
@@ -665,7 +729,8 @@ export function useSessionStore() {
           const data = await requestSessionHistoryPage(sessionId, {
             limit: opts.limit ?? SESSION_MESSAGES_PAGE_SIZE,
             offset: slot.offset,
-          });
+          }, slot.historyRuntimeMode, canRequest);
+          if (!canRequest()) break;
           const olderMerge = mergeOlderServerPage(cachedMessages, data.messages);
           const shiftedWhileFetching = (
             data.total !== expectedTotal
@@ -707,7 +772,7 @@ export function useSessionStore() {
         return { slot, prependedCount };
       }
     });
-  }, [getSlot, notify]);
+  }, [getHistorySlot, isCurrentHistorySlot, notify]);
 
   /**
    * Append a realtime (WebSocket) message to the correct session slot.
@@ -762,11 +827,19 @@ export function useSessionStore() {
       msg.sessionId === sessionId
         ? msg
         : { ...msg, sessionId };
-    let updated = [...slot.realtimeMessages, normalizedMessage];
-    if (updated.length > MAX_REALTIME_MESSAGES) {
-      updated = updated.slice(-MAX_REALTIME_MESSAGES);
+    const index = slot.realtimeMessages.findIndex(message => message.id === normalizedMessage.id);
+    if (index >= 0) {
+      const previous = slot.realtimeMessages[index];
+      // Replayed older revisions must not replace a newer snapshot.
+      if (previous.seq !== undefined && normalizedMessage.seq !== undefined && normalizedMessage.seq <= previous.seq) return;
+      slot.realtimeMessages = [...slot.realtimeMessages];
+      slot.realtimeMessages[index] = { ...normalizedMessage, timestamp: previous.timestamp };
+    } else {
+      slot.realtimeMessages = [...slot.realtimeMessages, normalizedMessage];
+      if (slot.realtimeMessages.length > MAX_REALTIME_MESSAGES) {
+        slot.realtimeMessages = slot.realtimeMessages.slice(-MAX_REALTIME_MESSAGES);
+      }
     }
-    slot.realtimeMessages = updated;
     recomputeMergedIfNeeded(slot);
     notify(sessionId);
   }, [getSlot, notify]);
@@ -783,7 +856,8 @@ export function useSessionStore() {
       canRequest?: CanRequestHistory;
     } = {},
   ) => {
-    const slot = getSlot(sessionId);
+    const { slot } = getHistorySlot(sessionId);
+    const canRequest = () => (opts.canRequest?.() ?? true) && isCurrentHistorySlot(sessionId, slot);
 
     return enqueueHistoryMutation(slot, async () => {
       try {
@@ -791,7 +865,7 @@ export function useSessionStore() {
           sessionId,
           slot,
           opts.limit ?? SESSION_MESSAGES_PAGE_SIZE,
-          opts.canRequest,
+          canRequest,
         );
         if (result.changed) notify(sessionId);
         return { slot, ...result };
@@ -800,7 +874,7 @@ export function useSessionStore() {
         return { slot, applied: false, changed: false, deferred: false };
       }
     });
-  }, [getSlot, notify]);
+  }, [getHistorySlot, isCurrentHistorySlot, notify]);
 
   /**
    * Check if a session's data is stale (>30s old).
@@ -808,7 +882,7 @@ export function useSessionStore() {
   const isStale = useCallback((sessionId: string) => {
     const slot = storeRef.current.get(sessionId);
     if (!slot) return true;
-    return Date.now() - slot.fetchedAt > STALE_THRESHOLD_MS;
+    return slot.historyRuntimeMode !== readHistoryRuntimeMode() || Date.now() - slot.fetchedAt > STALE_THRESHOLD_MS;
   }, []);
 
   /**
@@ -829,7 +903,7 @@ export function useSessionStore() {
     const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
     if (idx >= 0) {
       slot.realtimeMessages = [...slot.realtimeMessages];
-      slot.realtimeMessages[idx] = msg;
+      slot.realtimeMessages[idx] = { ...msg, timestamp: slot.realtimeMessages[idx].timestamp };
     } else {
       slot.realtimeMessages = [...slot.realtimeMessages, msg];
     }
