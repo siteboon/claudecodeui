@@ -1,7 +1,73 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import remarkMath from 'remark-math';
+import type { Processor } from 'unified';
+import type { Construct } from 'micromark-util-types';
+// Register remark-parse's unified Data types without loading another parser.
+import type {} from 'remark-parse';
 
 import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
+
+//----------------- MARKDOWN MATH ------------
+
+/**
+ * Enables dollar-delimited math for chat and editor previews without treating
+ * ordinary prices as formulas. Single-dollar math must stay on one line, have
+ * no whitespace just inside its delimiters, and not close before a digit.
+ * Double-dollar math keeps remark-math's existing behavior.
+ */
+export function remarkMathWithCurrencyProtection(this: Processor) {
+  remarkMath.call(this, { singleDollarTextMath: true });
+
+  // Wrap only the text construct registered by this invocation of remarkMath;
+  // its block parser, code handling and MDAST integration remain unchanged.
+  const extensions = this.data().micromarkExtensions!;
+  const extension = extensions[extensions.length - 1];
+  const mathText = extension.text![36] as Construct;
+  const tokenize = mathText.tokenize;
+  // Rejected candidates are rolled back by micromark. Remember only closing
+  // markers followed by a price digit, per document, so retrying them cannot
+  // swallow a later formula. Non-numeric formula openers remain eligible.
+  const priceMarkers = new WeakMap<object, Set<number>>();
+  const decimalDigit: Construct = {
+    partial: true,
+    tokenize(effects, ok, nok) {
+      return (code) => {
+        if (code === null || code < 0) return nok(code);
+        const first = String.fromCharCode(code);
+        if (/\p{Decimal_Number}/u.test(first)) return ok(code);
+        if (code < 0xD800 || code > 0xDBFF) return nok(code);
+        // micromark supplies UTF-16 units: check astral decimal digits too.
+        effects.enter('data');
+        effects.consume(code);
+        effects.exit('data');
+        return (next) => next !== null && next >= 0 && /\p{Decimal_Number}/u.test(first + String.fromCharCode(next))
+          ? ok(next) : nok(next);
+      };
+    },
+  };
+  mathText.tokenize = function (effects, ok, nok) {
+    const markers = priceMarkers.get(this.parser) ?? new Set<number>();
+    priceMarkers.set(this.parser, markers);
+    const isPriceMarker = markers.has(this.now().offset);
+    return tokenize.call(this, effects, (code) => {
+      const token = this.events[this.events.length - 1][1];
+      const source = this.sliceSerialize(token);
+      if (!source.startsWith('$$')) {
+        const value = source.slice(1, -1);
+        // Reject before committing the token, so Markdown still parses the
+        // original prose, emphasis and links when a pair is actually currency.
+        return effects.check(decimalDigit, () => {
+          markers.add(token.end.offset - 1);
+          return nok(code);
+        }, () => isPriceMarker || /^\s|\s$|[\r\n]/.test(value) ? nok(code) : ok(code))(code);
+      }
+      return ok(code);
+    }, nok);
+  };
+}
+
+// ---------------------------
 
 //----------------- DEPLOYMENT MODE ------------
 

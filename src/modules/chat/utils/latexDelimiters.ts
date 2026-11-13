@@ -8,9 +8,8 @@
  * reads `\(` and `\[` as backslash escapes the parser eats the backslash, so the
  * reader is left with `(x = …)` instead of a formula.
  *
- * `$$` is the target for both notations because `singleDollarTextMath` is off in
- * <Markdown>, deliberately: a lone `$` must never open math or a sentence like
- * "costs $5 and $7" becomes a formula. A `$$…$$` run inside a paragraph is
+ * `$$` is the target for both notations so explicit TeX math bypasses the
+ * currency guards applied to single-dollar math. A `$$…$$` run inside a paragraph is
  * inline math and a `$$` alone on its line opens a display block, so both
  * notations survive the translation.
  *
