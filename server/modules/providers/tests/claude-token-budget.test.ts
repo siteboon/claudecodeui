@@ -25,6 +25,26 @@ test('assistant usage produces a cumulative budget', () => {
   assert.equal(budget.used, 42_512);
 });
 
+test('an all-zero account emits no budget', () => {
+  // The CLI writes its own messages into the stream as model `<synthetic>` —
+  // the interrupt notice, an API error, the usage-limit line — with usage that
+  // is zero throughout. Reading one as a budget dropped the badge to 0 until
+  // the next real turn.
+  const budget = extractTokenBudget({
+    type: 'assistant',
+    message: {
+      usage: {
+        input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        output_tokens: 0,
+      },
+    },
+  });
+
+  assert.equal(budget, null);
+});
+
 test('system task events with tool-usage shaped usage emit no budget', () => {
   // task_progress/task_notification carry usage {total_tokens, tool_uses,
   // duration_ms}; reading Anthropic keys off it produced a used: 0 budget
