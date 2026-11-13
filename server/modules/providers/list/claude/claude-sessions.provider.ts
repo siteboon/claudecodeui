@@ -692,6 +692,97 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
   return rows.filter((row) => typeof row.uuid !== 'string' || !abandoned.has(row.uuid));
 }
 
+/** A real user row this close to a taken queued command is the same message landing twice. */
+const TAKEN_QUEUED_COMMAND_WINDOW_MS = 5000;
+
+/**
+ * The person's text on a `queued_command` attachment row, or null when the row is
+ * anything else. Claude Code also queues machinery (task notifications, reminders,
+ * caveats, interrupts) through the same lane; those are never the person's words.
+ */
+function readQueuedCommandPrompt(row: AnyRecord): string | null {
+  const attachment = row.type === 'attachment' ? row.attachment : null;
+  if (attachment?.type !== 'queued_command' || typeof attachment.prompt !== 'string') {
+    return null;
+  }
+  if (attachment.commandMode !== undefined && attachment.commandMode !== 'prompt') {
+    return null;
+  }
+
+  const text = attachment.prompt.trimStart();
+  const isMachinery = text.startsWith('<task-notification')
+    || text.startsWith('<system-reminder')
+    || text.startsWith('Caveat:')
+    || text.startsWith('[Request interrupted');
+  return isMachinery ? null : attachment.prompt;
+}
+
+/** The text of a user row, whether `content` is a string or an array of parts. */
+function readUserRowText(row: AnyRecord): string | null {
+  const content = row.message?.content;
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .filter((part) => part && typeof part.text === 'string')
+      .map((part) => part.text)
+      .join('\n');
+  }
+  return null;
+}
+
+/**
+ * Turns the messages Claude Code took mid-turn into ordinary user messages.
+ *
+ * A message sent while a turn is running is not written as a `user` row. Claude
+ * Code queues it and, when the turn picks it up, records it as an `attachment`
+ * row of type `queued_command`. Nothing renders those rows, so the message
+ * vanishes from the history even though the model answered it. Each one becomes
+ * a user row at the position the attachment holds, unless a real user row with
+ * the same text and nearly the same timestamp already shows it (some versions
+ * write both), so a message never appears twice.
+ */
+function foldTakenQueuedCommands(rows: AnyRecord[]): AnyRecord[] {
+  if (!rows.some((row) => readQueuedCommandPrompt(row) !== null)) {
+    return rows;
+  }
+
+  // Real user rows, each matched at most once so two identical messages stay two.
+  const realUsers = rows
+    .filter((row) => row.type === 'user')
+    .map((row) => ({ text: readUserRowText(row), ms: Date.parse(row.timestamp), used: false }));
+
+  return rows.flatMap((row) => {
+    const prompt = readQueuedCommandPrompt(row);
+    if (prompt === null) {
+      return [row];
+    }
+
+    const ms = Date.parse(row.timestamp);
+    const duplicate = realUsers.find((user) => (
+      !user.used
+      && user.text === prompt
+      && !Number.isNaN(user.ms)
+      && !Number.isNaN(ms)
+      && Math.abs(user.ms - ms) <= TAKEN_QUEUED_COMMAND_WINDOW_MS
+    ));
+    if (duplicate) {
+      duplicate.used = true;
+      return [row];
+    }
+
+    return [{
+      type: 'user',
+      uuid: row.uuid,
+      parentUuid: row.parentUuid,
+      timestamp: row.timestamp,
+      sessionId: row.sessionId,
+      message: { role: 'user', content: prompt },
+    }];
+  });
+}
+
 /** When the CLI run behind a session started (epoch ms), or null when none is up. */
 type LiveRunStartTimeProbe = (sessionId: string) => number | null;
 
@@ -713,9 +804,9 @@ async function getSessionMessages(
 
     const projectDir = path.dirname(jsonLPath);
 
-    const messages = dropSupersededPromptBranches(
+    const messages = foldTakenQueuedCommands(dropSupersededPromptBranches(
       await readTranscriptRows(jsonLPath, providerSessionId),
-    );
+    ));
 
     const agentIds = new Set<string>();
     for (const message of messages) {
