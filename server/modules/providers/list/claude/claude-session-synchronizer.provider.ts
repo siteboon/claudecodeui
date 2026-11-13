@@ -12,6 +12,8 @@ import {
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 type ParsedSession = {
   sessionId: string;
   projectPath: string;
@@ -133,6 +135,15 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
     if (!parsed) {
       return null;
+    }
+
+    // Claude names each transcript `<sessionId>.jsonl`. A forked or continued
+    // session (Claude Desktop does this) opens with rows copied from its parent,
+    // which still carry the parent's id, so the first row would index the fork
+    // as a second copy of the parent and overwrite the parent's `jsonl_path`.
+    const fileSessionId = path.basename(filePath, '.jsonl');
+    if (UUID_PATTERN.test(fileSessionId)) {
+      parsed.sessionId = fileSessionId;
     }
 
     // App-created sessions are keyed by an app id, so disk-discovered provider
