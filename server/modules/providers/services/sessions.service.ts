@@ -171,13 +171,21 @@ async function readClearedContextSegment(
     transcriptPath: segment.jsonlPath ?? undefined,
   });
 
-  const full = await sessionHistoryCache.getFullHistory({
-    sessionId: `${sessionId}\u0000${segment.providerSessionId}`,
-    transcriptPath: segment.jsonlPath,
-    loadFull,
-  }) ?? await loadFull();
+  // A reader that parses a per-session file cannot find this part without its
+  // path — it would fall back to the session's current transcript and read
+  // the wrong conversation. The path is missing only for a session cleared
+  // before the indexer saw its file, and only until the indexer does.
+  const readsTranscriptFile = provider === 'claude' || provider === 'codex';
+  const full = readsTranscriptFile && !segment.jsonlPath
+    ? null
+    : await sessionHistoryCache.getFullHistory({
+      sessionId: `${sessionId}\u0000${segment.providerSessionId}`,
+      transcriptPath: segment.jsonlPath,
+      loadFull,
+    }) ?? await loadFull();
 
-  const messages: NormalizedMessage[] = full.messages.map((message) => ({ ...message, transcriptAnchorId: undefined }));
+  const messages: NormalizedMessage[] = (full?.messages ?? [])
+    .map((message) => ({ ...message, transcriptAnchorId: undefined }));
   messages.push(createNormalizedMessage({
     // Stable across reads, so the client can tell it already has this row.
     id: `context_cleared_${segment.providerSessionId}`,
@@ -640,6 +648,20 @@ export const sessionsService = {
         code: 'SESSION_BUSY',
         statusCode: 409,
       });
+    }
+
+    // A session cleared seconds after a turn may not have been indexed yet,
+    // and the transcript path is what the earlier conversation is read back
+    // through. Index what was written since the session began, so the path is
+    // on the row before the row lets go of it. Best effort: the indexer also
+    // records the path when it meets the file later.
+    if (session.provider_session_id && !session.jsonl_path) {
+      try {
+        await providerRegistry.resolveProvider(provider).sessionSynchronizer
+          .synchronize(new Date(session.created_at));
+      } catch (error) {
+        console.warn(`[Sessions] Could not index session ${sessionId} before clearing its context:`, error);
+      }
     }
 
     const cleared = sessionsDb.clearProviderSessionContext(sessionId);

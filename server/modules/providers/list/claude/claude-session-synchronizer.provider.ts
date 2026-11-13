@@ -141,6 +141,9 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     // id is that transcript's id, it would hand the row back to the context
     // the user cleared.
     if (sessionsDb.isProviderSessionSuperseded(parsed.sessionId, this.provider)) {
+      // Cleared before this file was ever indexed: its path is not on record
+      // yet, and the history reader needs it to show that part.
+      sessionsDb.recordSupersededTranscriptPath(parsed.sessionId, this.provider, filePath);
       return null;
     }
 

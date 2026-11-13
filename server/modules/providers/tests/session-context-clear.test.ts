@@ -191,3 +191,21 @@ test('clearing context is refused for a provider that cannot do it, and for an u
     await assert.rejects(sessionsService.clearSessionContext('missing'), isAppError('SESSION_NOT_FOUND', 404));
   });
 });
+
+test('a session cleared before its transcript was indexed gets its history once the indexer sees the file', { concurrency: false }, async () => {
+  await withIsolatedSessions(async (directory) => {
+    // Created by the app and run once; the watcher has not reached its file yet.
+    const sessionId = 'app-session';
+    sessionsDb.createAppSession(sessionId, 'claude', PROJECT_PATH);
+    sessionsDb.assignProviderSessionId(sessionId, 'unindexed-context');
+    const transcriptPath = await writeClaudeTranscript(directory, 'unindexed-context', ['one', 'reply one']);
+
+    assert.deepEqual(await sessionsService.clearSessionContext(sessionId), { sessionId, cleared: true });
+
+    assert.equal(await new ClaudeSessionSynchronizer().synchronizeFile(transcriptPath), null);
+    assert.equal(sessionsDb.getAllSessions().length, 1, 'the cleared transcript is not listed as its own session');
+
+    const history = await sessionsService.fetchHistory(sessionId);
+    assert.deepEqual(history.messages.map((message) => message.content), ['one', 'reply one', 'Context cleared']);
+  });
+});

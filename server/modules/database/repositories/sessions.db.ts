@@ -423,6 +423,23 @@ export const sessionsDb = {
     ).run(input.providerSessionId, input.provider, input.sessionId, input.jsonlPath, input.reason ?? 'edit');
   },
 
+  /**
+   * Fills in the transcript path of a provider session a session has left,
+   * when it was left before the indexer had seen its file.
+   *
+   * A session can be cleared seconds after its first turn, while its row
+   * still has no \`jsonl_path\`; the record of what it left behind then has
+   * none either, and that path is the only way the earlier conversation is
+   * read back and, later, deleted from disk. A path already recorded is kept.
+   */
+  recordSupersededTranscriptPath(providerSessionId: string, provider: string, jsonlPath: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE superseded_provider_sessions SET jsonl_path = ?
+       WHERE provider_session_id = ? AND provider = ? AND jsonl_path IS NULL`
+    ).run(jsonlPath, providerSessionId, provider);
+  },
+
   isProviderSessionSuperseded(providerSessionId: string, provider: string): boolean {
     const db = getConnection();
     const row = db
