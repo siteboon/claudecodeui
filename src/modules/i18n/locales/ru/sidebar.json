@@ -184,5 +184,15 @@
     "archiveSessionsNotice_few": "Архивирование убирает сеансы из активного списка, сохраняя их историю.",
     "archiveSessionsNotice_many": "Архивирование убирает сеансы из активного списка, сохраняя их историю.",
     "archiveSessionsNotice_other": "Архивирование убирает сеансы из активного списка, сохраняя их историю."
+  },
+  "projectGroup": {
+    "locations_one": "{{count}} путь",
+    "locations_few": "{{count}} пути",
+    "locations_many": "{{count}} путей",
+    "locations_other": "{{count}} путей",
+    "sessions_one": "{{count}} сессия",
+    "sessions_few": "{{count}} сессии",
+    "sessions_many": "{{count}} сессий",
+    "sessions_other": "{{count}} сессий"
   }
 }

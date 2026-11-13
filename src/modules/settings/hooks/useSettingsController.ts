@@ -9,6 +9,7 @@ import {
 } from '@/shared/codeEditorSettings';
 import {
   readUserPreference,
+  subscribeToUserPreferences,
   writeUserPreferences,
 } from '@/shared/userSettings';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
@@ -35,6 +36,7 @@ type ClaudeSettingsStorage = {
   disallowedTools?: string[];
   skipPermissions?: boolean;
   projectSortOrder?: ProjectSortOrder;
+  groupProjectsByName?: boolean;
 };
 
 type CursorSettingsStorage = {
@@ -126,6 +128,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
   const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
+  const [groupProjectsByName, setGroupProjectsByName] = useState<boolean>(false);
   const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(() => (
     readCodeEditorSettings()
   ));
@@ -158,6 +161,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
       });
       setProjectSortOrder(readUserPreference<ProjectSortOrder>('projectSortOrder', 'name') === 'date' ? 'date' : 'name');
+      setGroupProjectsByName(readUserPreference<boolean>('groupProjectsByName', false) === true);
 
       const savedCursorSettings = readUserPreference<CursorSettingsStorage>('cursorPermissions', {});
       setCursorPermissions({
@@ -192,6 +196,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setNotificationPreferences(createDefaultNotificationPreferences());
       setCodexPermissionMode('default');
       setProjectSortOrder('name');
+      setGroupProjectsByName(false);
     }
   }, []);
 
@@ -229,6 +234,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
           skipPermissions: claudePermissions.skipPermissions,
         },
         projectSortOrder,
+        groupProjectsByName,
         cursorPermissions: {
           allowedCommands: cursorPermissions.allowedCommands,
           disallowedCommands: cursorPermissions.disallowedCommands,
@@ -261,6 +267,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     cursorPermissions.skipPermissions,
     notificationPreferences,
     projectSortOrder,
+    groupProjectsByName,
   ]);
 
   // Persist on the user's edit rather than in an effect keyed on the settings
@@ -281,6 +288,29 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     },
     [],
   );
+
+  // The dialog can open before the server preferences hydrate. Without this,
+  // it keeps the pre-hydrate default and the next autosave writes it back over
+  // the hydrated value. A value the user picked while loading still wins.
+  const groupProjectsEditedRef = useRef(false);
+  const updateGroupProjectsByName = useCallback((value: boolean) => {
+    groupProjectsEditedRef.current = true;
+    setGroupProjectsByName(value);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    groupProjectsEditedRef.current = false;
+    return subscribeToUserPreferences(() => {
+      if (groupProjectsEditedRef.current) {
+        return;
+      }
+      setGroupProjectsByName(readUserPreference<boolean>('groupProjectsByName', false) === true);
+    });
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -358,6 +388,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     saveStatus,
     projectSortOrder,
     setProjectSortOrder,
+    groupProjectsByName,
+    setGroupProjectsByName: updateGroupProjectsByName,
     codeEditorSettings,
     updateCodeEditorSetting,
     claudePermissions,
