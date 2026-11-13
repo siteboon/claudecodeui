@@ -219,6 +219,17 @@ Current session sync roots are:
 | Cursor | `~/.cursor/projects/**/*.jsonl` | Uses sibling `worker.log` to recover `workspacePath`, then derives the session title from the first user prompt. |
 | OpenCode | `~/.local/share/opencode/opencode.db` | Reads active sessions/messages/parts from OpenCode's shared SQLite database and stores `jsonl_path` as `null` so deleting one app session cannot remove the shared DB. |
 
+OpenCode runtime profiles share the server's history storage. Profile environment
+overrides for `HOME`, `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, and `XDG_DATA_HOME` are rejected at configuration
+validation so runtime writes cannot silently diverge from history readers, model
+lookups, usage accounting, and watchers. Provider config and authentication
+environment variables remain available for selecting a different account.
+
+On Windows, Codex profiles can name the npm `codex.cmd` shim, including a command
+found through the profile's PATH. Both SDK turns and app-server operations resolve
+that installation's native `codex.exe`, without passing prompts through a shell.
+Unrecognized batch wrappers must configure their native executable explicitly.
+
 8. Register the provider.
 
 - Add the new provider class to `server/modules/providers/provider.registry.ts`.

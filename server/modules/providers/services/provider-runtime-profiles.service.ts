@@ -114,6 +114,13 @@ const parseProfiles = (rawConfiguration: string | undefined): ProviderRuntimePro
     if (description !== undefined && typeof description !== 'string') {
       throw invalidConfiguration(`profile ${index + 1} description must be a string.`);
     }
+    const env = parseEnvironment(record.env, index);
+    if (record.provider === 'opencode' && Object.keys(env).some((name) => (
+      ['HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'XDG_DATA_HOME'].includes(name.toUpperCase())
+    ))) {
+      // History, usage, models and watchers currently share the server's OpenCode DB.
+      throw invalidConfiguration(`profile ${index + 1} OpenCode env cannot override HOME, USERPROFILE, HOMEDRIVE, HOMEPATH or XDG_DATA_HOME; profiles must share the server's history storage.`);
+    }
 
     return {
       id,
@@ -122,7 +129,7 @@ const parseProfiles = (rawConfiguration: string | undefined): ProviderRuntimePro
       ...(description?.trim() ? { description: description.trim() } : {}),
       isDefault: false,
       ...(typeof executable === 'string' ? { executable: executable.trim() } : {}),
-      env: parseEnvironment(record.env, index),
+      env,
     };
   });
 };

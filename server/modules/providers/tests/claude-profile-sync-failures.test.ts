@@ -10,6 +10,51 @@ import { ClaudeSessionSynchronizer } from '@/modules/providers/list/claude/claud
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 
+test('Claude prunes unreadable artifact directories before discovering parent sessions and later homes', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'claude-pruned-artifacts-'));
+  const saved = Object.fromEntries(['DATABASE_PATH', 'CLOUDCLI_RUNTIME_PROFILES', 'CLAUDE_CONFIG_DIR'].map((key) => [key, process.env[key]]));
+  const homes = [path.join(root, 'default'), path.join(root, 'work')];
+  process.env.DATABASE_PATH = path.join(root, 'auth.db');
+  process.env.CLAUDE_CONFIG_DIR = homes[0];
+  process.env.CLOUDCLI_RUNTIME_PROFILES = JSON.stringify([
+    { id: 'work', name: 'Work', provider: 'claude', env: { CLAUDE_CONFIG_DIR: homes[1] } },
+  ]);
+  let excludedReads = 0;
+  try {
+    for (const [index, home] of homes.entries()) {
+      const project = path.join(home, 'projects', 'workspace');
+      await mkdir(path.join(project, 'parent', 'subagents'), { recursive: true });
+      await mkdir(path.join(project, 'parent', 'tool-results'));
+      await writeFile(path.join(project, `parent-${index}.jsonl`), JSON.stringify({ sessionId: `parent-${index}`, cwd: root }) + '\n');
+    }
+    const originalReaddir = fsPromises.readdir;
+    t.mock.method(fsPromises, 'readdir', async (...args: Parameters<typeof fsPromises.readdir>) => {
+      if (['subagents', 'tool-results'].includes(path.basename(String(args[0])))) {
+        excludedReads += 1;
+        throw Object.assign(new Error('unreadable excluded artifact directory'), { code: 'EACCES', path: args[0] });
+      }
+      return originalReaddir(...args);
+    });
+    syncBuiltinESMExports();
+    closeConnection();
+    await initializeDatabase();
+    const synchronizer = new ClaudeSessionSynchronizer();
+    assert.equal(await synchronizer.synchronize(new Date('2100-01-01')), 2);
+    assert.equal(excludedReads, 0);
+    assert.equal(sessionsDb.getSessionById('parent-0')?.runtime_profile_id, null);
+    assert.equal(sessionsDb.getSessionById('parent-1')?.runtime_profile_id, 'work');
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+    closeConnection();
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 for (const initiallyComplete of [true, false]) {
   test(initiallyComplete
     ? 'Claude indexes valid profile metadata after malformed JSONL lines'

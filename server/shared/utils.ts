@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import {
   access,
@@ -29,6 +31,7 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
   ProviderSkillSource,
+  ResolveCodexExecutableDependencies,
   SessionArtifactReadOptions,
   QueuedChatMessage,
   SubagentActivity,
@@ -43,6 +46,66 @@ import type {
  * Environment variables must be loaded before this module is evaluated.
  */
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+
+// ---------------------------
+//----------------- CODEX EXECUTABLE RESOLUTION ------------
+/**
+ * Resolves Windows npm Codex shims to the selected installation's native binary.
+ * The providers module uses this for both SDK turns and app-server operations:
+ * neither transport can execute a .cmd file directly. Only recognized Codex npm
+ * launchers are unwrapped; arbitrary batch programs require an explicit native
+ * executable instead. POSIX paths and the default bundled launcher are unchanged.
+ */
+export function resolveCodexExecutablePath(
+  executable: string | undefined,
+  environment: NodeJS.ProcessEnv = process.env,
+  dependencies: ResolveCodexExecutableDependencies = {},
+): string | undefined {
+  if (!executable || (dependencies.platform ?? process.platform) !== 'win32') return executable;
+  const exists = dependencies.existsSync ?? fs.existsSync;
+  const read = dependencies.readFileSync ?? fs.readFileSync;
+  const lookup = dependencies.execFileSync ?? execFileSync;
+  const resolvePackage = dependencies.resolvePackage
+    ?? ((name: string, launcher: string) => createRequire(launcher).resolve(name));
+  let selected = executable;
+  if (!/[\\/]/.test(selected)) {
+    try {
+      const found = lookup('where.exe', [selected], {
+        encoding: 'utf8', env: environment, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
+      });
+      const candidates = found.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+      selected = candidates.find((entry) => /\.exe$/i.test(entry))
+        ?? candidates.find((entry) => /\.(cmd|bat)$/i.test(entry))
+        ?? selected;
+    } catch {
+      // Preserve native command lookup failures for the caller's normal error path.
+    }
+  }
+  if (!/\.(cmd|bat)$/i.test(selected)) return selected;
+
+  // npm's global and local .bin wrappers name the JS launcher relative to %dp0%.
+  // Resolve its own optional platform package rather than CloudCLI's dependency.
+  const content = String(read(selected, 'utf8'));
+  const launcherTarget = /"((?:%dp0%|%~dp0)[^"\r\n]*[\\/]@openai[\\/]codex[\\/]bin[\\/]codex\.js)"/i.exec(content)?.[1];
+  if (launcherTarget) {
+    const launcher = path.win32.resolve(path.win32.dirname(selected), launcherTarget.replace(/^%(?:dp0%|~dp0)[\\/]?/i, ''));
+    const arch = dependencies.arch ?? process.arch;
+    if (arch === 'x64' || arch === 'arm64') {
+      const triple = arch === 'x64' ? 'x86_64-pc-windows-msvc' : 'aarch64-pc-windows-msvc';
+      let vendor = path.win32.resolve(path.win32.dirname(launcher), '..', 'vendor');
+      try {
+        vendor = path.win32.join(path.win32.dirname(resolvePackage(`@openai/codex-win32-${arch}/package.json`, launcher)), 'vendor');
+      } catch {
+        // Older Codex installations keep vendor beside their package's bin folder.
+      }
+      for (const directory of ['bin', 'codex']) {
+        const native = path.win32.join(vendor, triple, directory, 'codex.exe');
+        if (exists(native)) return native;
+      }
+    }
+  }
+  throw new Error('Codex command shim could not be resolved to codex.exe. Configure the profile executable with its native codex.exe path.');
+}
 
 // ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
@@ -1201,7 +1264,9 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * directories are treated as empty because not every provider exists on every machine.
  * Enable `options.throwOnError` when a partial scan must not advance a cursor;
  * every discovery/stat failure then rejects, including ENOENT during an active
- * scan. Strict callers must handle an absent initial root separately.
+ * scan. Strict callers must handle an absent initial root separately. Use
+ * `excludedDirectoryNames` to prune non-session artifacts before traversal;
+ * excluded directories are never read, even in strict mode.
  */
 export async function findFilesRecursivelyCreatedAfter(
   rootDir: string,
@@ -1216,6 +1281,7 @@ export async function findFilesRecursivelyCreatedAfter(
       const fullPath = path.join(rootDir, entry.name);
 
       if (entry.isDirectory()) {
+        if (options.excludedDirectoryNames?.includes(entry.name)) continue;
         await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList, options);
         continue;
       }

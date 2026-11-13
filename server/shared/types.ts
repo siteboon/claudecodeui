@@ -13,6 +13,8 @@ import type { Readable } from 'node:stream';
  */
 export type SessionArtifactReadOptions = {
   throwOnError?: boolean;
+  /** Directory leaf names to skip before reading any of their descendants. */
+  excludedDirectoryNames?: readonly string[];
 };
 
 // ---------------------------
@@ -115,6 +117,22 @@ export type ResolveClaudeCodeExecutablePathDependencies = {
   platform?: NodeJS.Platform;
   readFileSync?: typeof import('node:fs').readFileSync;
   env?: NodeJS.ProcessEnv;
+};
+
+// ---------------------------
+//----------------- CODEX EXECUTABLE RESOLUTION ------------
+/**
+ * Host and filesystem operations for the Codex native executable resolver.
+ * Providers use the selected profile environment for Windows PATH lookup;
+ * resolver tests inject Windows package layouts without executing a shell.
+ */
+export type ResolveCodexExecutableDependencies = {
+  platform?: NodeJS.Platform;
+  arch?: string;
+  execFileSync?: typeof import('node:child_process').execFileSync;
+  existsSync?: typeof import('node:fs').existsSync;
+  readFileSync?: typeof import('node:fs').readFileSync;
+  resolvePackage?: (name: string, launcher: string) => string;
 };
 
 /**

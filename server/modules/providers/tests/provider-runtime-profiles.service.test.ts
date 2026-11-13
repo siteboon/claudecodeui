@@ -72,3 +72,25 @@ test('rejects malformed operator configuration', () => {
     (error) => error instanceof AppError && error.code === 'INVALID_RUNTIME_PROFILES_CONFIGURATION',
   );
 });
+
+test('rejects OpenCode profile storage relocation before exposing a selectable profile', () => {
+  for (const key of ['HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'XDG_DATA_HOME', 'Home']) {
+    const service = createProviderRuntimeProfilesService({
+      readConfiguration: () => JSON.stringify([{
+        id: 'work', name: 'Work', provider: 'opencode', env: { [key]: '/other-storage' },
+      }]),
+    });
+    assert.throws(() => service.list(), (error) => (
+      error instanceof AppError && error.code === 'INVALID_RUNTIME_PROFILES_CONFIGURATION'
+      && /history storage/.test(error.message)
+    ));
+    assert.throws(() => service.resolve('opencode', 'work'), /history storage/);
+  }
+  const service = createProviderRuntimeProfilesService({
+    readConfiguration: () => JSON.stringify([{
+      id: 'work', name: 'Work', provider: 'opencode',
+      env: { OPENCODE_CONFIG: '/work/config.json', API_TOKEN: 'test-only' },
+    }]),
+  });
+  assert.equal(service.resolve('opencode', 'work').env.OPENCODE_CONFIG, '/work/config.json');
+});

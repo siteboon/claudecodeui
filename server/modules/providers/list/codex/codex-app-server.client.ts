@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import readline from 'node:readline';
+import { resolveCodexExecutablePath } from '@/shared/index.js';
 
 import {
   AppError,
@@ -95,12 +96,13 @@ async function withAppServer<T>(
   options: { signal?: AbortSignal; environment?: NodeJS.ProcessEnv; executable?: string } = {},
 ): Promise<T> {
   const { signal, environment = process.env, executable } = options;
+  const resolvedExecutable = resolveCodexExecutablePath(executable, environment);
   // Resolved through the exported object, not a module-local function, so
   // tests can replace `codexAppServer.resolveLauncher` with a fake app-server
   // script the same way they already replace `forkThread`.
   const child = spawn(
-    executable || process.execPath,
-    executable ? ['app-server'] : [codexAppServer.resolveLauncher(), 'app-server'],
+    resolvedExecutable || process.execPath,
+    resolvedExecutable ? ['app-server'] : [codexAppServer.resolveLauncher(), 'app-server'],
     { env: environment, stdio: ['pipe', 'pipe', 'pipe'] },
   );
 

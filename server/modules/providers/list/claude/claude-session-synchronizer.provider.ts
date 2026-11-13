@@ -66,7 +66,10 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
   /** Returns null when the projects root is absent, so it stays eligible for a full scan. */
   private async synchronizeHome(claudeHome: string, profileId: string | null, since?: Date): Promise<number | null> {
-    const readOptions = { throwOnError: true };
+    const readOptions: SessionArtifactReadOptions = {
+      throwOnError: true,
+      excludedDirectoryNames: ['subagents', 'tool-results'],
+    };
     const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const projectsRoot = path.join(claudeHome, 'projects');
     let files: string[];

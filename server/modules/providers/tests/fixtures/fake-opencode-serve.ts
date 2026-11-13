@@ -58,6 +58,8 @@ type SessionState = { permission?: PermissionRule[]; title?: string; history?: H
 type StoredMessage = { info: Record<string, unknown>; parts: Array<Record<string, unknown>> };
 
 type Scenario = {
+  /** Split the readiness line at a protocol boundary and interleave stderr. */
+  readinessSplit?: 'prefix' | 'port';
   /** Id given to a session created through POST /session. */
   newSessionId?: string;
   /** Sessions GET /session/:id knows; any other id answers 404. */
@@ -589,7 +591,18 @@ const listen = () => server.listen(Number(readFlag('port') ?? 0), readFlag('host
     profileMarker: process.env.CLOUDCLI_TEST_PROFILE,
     configTheme: JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}').theme,
   });
-  console.log(`opencode server listening on http://${readFlag('hostname') ?? '127.0.0.1'}:${port}`);
+  const readiness = `opencode server listening on http://${readFlag('hostname') ?? '127.0.0.1'}:${port}`;
+  if (scenario.readinessSplit) {
+    const split = scenario.readinessSplit === 'prefix'
+      ? 'opencode server listening'.length : readiness.lastIndexOf(':') + 2;
+    process.stdout.write(readiness.slice(0, split));
+    setTimeout(() => {
+      process.stderr.write('startup diagnostic on stderr\n');
+      setTimeout(() => process.stdout.write(readiness.slice(split) + '\n'), 50);
+    }, 50);
+  } else {
+    console.log(readiness);
+  }
 });
 
 if (scenario.listenDelayMs) {

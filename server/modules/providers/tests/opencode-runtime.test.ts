@@ -291,6 +291,18 @@ test('the SDK runtime uses the selected executable, environment and inline confi
   assert.ok(turn.serverPid && await waitForExit(turn.serverPid));
 });
 
+for (const readinessSplit of ['prefix', 'port'] as const) {
+  test(`OpenCode waits for a complete readiness line split at the ${readinessSplit}`, async () => {
+    const turn = await runTurn({
+      scenario: { readinessSplit, steps: [{ type: 'text', text: 'split readiness succeeded' }] },
+    });
+    assert.equal(turn.error, null);
+    assert.equal(turn.frames.find((frame) => frame.kind === 'text')?.content, 'split readiness succeeded');
+    assert.ok(turn.requests.length > 0, 'the SDK must connect to the complete announced port');
+    assert.ok(turn.serverPid && await waitForExit(turn.serverPid));
+  });
+}
+
 test('an attachment-only message sends the attachment list as the prompt', async () => {
   const turn = await runTurn({
     command: '',

@@ -698,6 +698,7 @@ async function startOpenCodeServer(
 
   return new Promise((resolve, reject) => {
     let output = '';
+    let pendingStdout = '';
     let ready = false;
     const clear = () => {
       clearTimeout(timer);
@@ -726,7 +727,10 @@ async function startOpenCodeServer(
     child.stdout?.on('data', (chunk) => {
       if (ready) return;
       output += chunk.toString();
-      for (const line of output.split('\n')) {
+      pendingStdout += chunk.toString();
+      const lines = pendingStdout.split('\n');
+      pendingStdout = lines.pop() ?? '';
+      for (const line of lines) {
         if (!line.startsWith('opencode server listening')) continue;
         const url = /on\s+(https?:\/\/[^\s]+)/.exec(line)?.[1];
         if (!url) {

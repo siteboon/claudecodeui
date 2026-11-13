@@ -20,6 +20,7 @@ import {
   normalizeImageDescriptors,
   createCompleteMessage,
   createNormalizedMessage,
+  resolveCodexExecutablePath,
 } from '@/shared/index.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
@@ -331,7 +332,9 @@ async function queryCodex(
     const runtimeProfile = context.runtimeProfile;
     const codexOptions: CodexOptions = {};
     if (runtimeProfile?.executable) {
-      codexOptions.codexPathOverride = runtimeProfile.executable;
+      codexOptions.codexPathOverride = resolveCodexExecutablePath(
+        runtimeProfile.executable, { ...process.env, ...runtimeProfile.env },
+      );
     }
     if (runtimeProfile && Object.keys(runtimeProfile.env).length > 0) {
       codexOptions.env = { ...inheritedEnvironment(), ...runtimeProfile.env };
