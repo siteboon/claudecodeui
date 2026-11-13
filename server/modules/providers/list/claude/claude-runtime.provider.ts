@@ -1327,6 +1327,13 @@ async function queryClaudeSDK(
       effortModels,
     });
 
+    const bypassPermissionsRequested = sdkOptions.permissionMode === 'bypassPermissions';
+    if (bypassPermissionsRequested && process.getuid?.() === 0) {
+      // Claude Code rejects native bypass mode as root. Use the SDK approval
+      // callback instead; dontAsk would deny tools before reaching it.
+      sdkOptions.permissionMode = 'default';
+    }
+
     const mcpServers = await loadMcpConfig(options.cwd);
     if (mcpServers) {
       sdkOptions.mcpServers = mcpServers;
@@ -1423,7 +1430,7 @@ async function queryClaudeSDK(
       };
     }
 
-    // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
+    // Caveat: in 'auto' and native 'bypassPermissions' modes the SDK resolves approval
     // at the permission-mode step and skips this callback, so interactive tools
     // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
     // auto-approves them and the model acts on a generated answer. Move these
@@ -1433,7 +1440,7 @@ async function queryClaudeSDK(
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
       if (!requiresInteraction) {
-        if (sdkOptions.permissionMode === 'bypassPermissions') {
+        if (bypassPermissionsRequested) {
           return { behavior: 'allow', updatedInput: input };
         }
 
