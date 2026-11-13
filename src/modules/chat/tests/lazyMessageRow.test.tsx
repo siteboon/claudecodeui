@@ -62,6 +62,7 @@ function Harness({
     <div ref={scrollContainerRef}>
       <LazyMessageRow
         lazyRows={lazyRows}
+        scrollContainerRef={scrollContainerRef}
         timestamp="2026-01-01T00:00:00.000Z"
         initiallyNearViewport={initiallyNearViewport}
       >
@@ -220,6 +221,41 @@ describe('LazyMessageRow', () => {
 
     // A 0x0 box says nothing about the row's height; 0px would collapse it.
     expect(wrapper.style.height).toBe('123.5px');
+  });
+
+  it('keeps every row mounted on touch devices, without placeholders or observation', () => {
+    vi.stubGlobal('IntersectionObserver', StubIntersectionObserver);
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+
+    const { container, queryByTestId } = render(<Harness initiallyNearViewport={false} />);
+
+    expect(queryByTestId('row-content')).not.toBeNull();
+    const wrapper = container.querySelector('[data-message-timestamp="2026-01-01T00:00:00.000Z"]') as HTMLElement;
+    expect(wrapper.style.height).toBe('');
+    // The row never registers with the lazy observer in this mode.
+    expect(StubIntersectionObserver.instances).toHaveLength(0);
+  });
+
+  it('keeps every row mounted where the browser lacks scroll anchoring', () => {
+    vi.stubGlobal('IntersectionObserver', StubIntersectionObserver);
+    // Simulate WebKit: overflowAnchor disappears from the style prototype.
+    const stylePrototype = Object.getPrototypeOf(document.documentElement.style) as Record<string, unknown>;
+    const descriptor = Object.getOwnPropertyDescriptor(stylePrototype, 'overflowAnchor');
+    delete stylePrototype.overflowAnchor;
+
+    try {
+      const { queryByTestId } = render(<Harness initiallyNearViewport={false} />);
+
+      expect(queryByTestId('row-content')).not.toBeNull();
+      expect(StubIntersectionObserver.instances).toHaveLength(0);
+    } finally {
+      if (descriptor) Object.defineProperty(stylePrototype, 'overflowAnchor', descriptor);
+    }
   });
 
   it('keeps every row mounted where IntersectionObserver does not exist', () => {
