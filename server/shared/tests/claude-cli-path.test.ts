@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  resolveClaudeCodeExecutablePath,
-  type ResolveClaudeCodeExecutablePathDependencies,
-} from '@/shared/claude-cli-path.js';
+import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import type { ResolveClaudeCodeExecutablePathDependencies } from '@/shared/types.js';
 
 test('resolveClaudeCodeExecutablePath resolves the npm Claude wrapper to its native exe on Windows', () => {
   const wrapperDir = 'C:\\nvm4w\\nodejs';
@@ -115,4 +113,21 @@ test('resolveClaudeCodeExecutablePath leaves non-Windows platforms on the bare c
   const resolved = resolveClaudeCodeExecutablePath(undefined, { platform: 'linux' });
 
   assert.equal(resolved, 'claude');
+});
+
+test('Windows executable lookup uses the runtime profile environment', () => {
+  const profileEnv = { PATH: 'C:\\work-tools', PATHEXT: '.EXE;.CMD' };
+  const nativePath = 'C:\\work-tools\\claude.exe';
+  let lookupEnvironment: NodeJS.ProcessEnv | undefined;
+  const execFileSync = ((command: string, args: string[], options: { env: NodeJS.ProcessEnv }) => {
+    assert.equal(command, 'where.exe');
+    assert.deepEqual(args, ['claude']);
+    lookupEnvironment = options.env;
+    return options.env.PATH === profileEnv.PATH ? nativePath : 'C:\\server-tools\\claude.exe';
+  }) as unknown as ResolveClaudeCodeExecutablePathDependencies['execFileSync'];
+
+  assert.equal(resolveClaudeCodeExecutablePath('claude', {
+    platform: 'win32', env: profileEnv, execFileSync,
+  }), nativePath);
+  assert.equal(lookupEnvironment, profileEnv);
 });

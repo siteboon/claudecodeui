@@ -1,6 +1,21 @@
 import type { IncomingMessage } from 'node:http';
 import type { Readable } from 'node:stream';
 
+//----------------- SESSION ARTIFACT READ OPTIONS ------------
+/**
+ * Controls error reporting by the shared transcript discovery and JSONL readers.
+ *
+ * Provider indexers can enable `throwOnError` for full scans so read or parse
+ * failures prevent their synchronization cursor from advancing. Omitted or false
+ * retains best-effort reads for other callers. Strict discovery also rejects
+ * ENOENT, so indexers must distinguish an absent provider root from entries
+ * removed during a scan before deciding whether the scan completed.
+ */
+export type SessionArtifactReadOptions = {
+  throwOnError?: boolean;
+};
+
+// ---------------------------
 //----------------- HTTP RESPONSE SHAPES ------------
 /**
  * Canonical success envelope used by backend APIs that return a structured payload.
@@ -67,6 +82,40 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * a specific LLM integration.
  */
 export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode';
+
+/**
+ * Safe runtime-profile metadata returned to the browser.
+ *
+ * Executable paths and environment values are deliberately absent because a
+ * profile may contain deployment paths or credentials that must stay server-side.
+ */
+export type ProviderRuntimeProfileSummary = {
+  id: string;
+  name: string;
+  provider: LLMProvider;
+  description?: string;
+  isDefault: boolean;
+};
+
+/** Server-only process configuration selected for one provider session. */
+export type ProviderRuntimeProfile = ProviderRuntimeProfileSummary & {
+  executable?: string;
+  env: Record<string, string>;
+};
+
+/**
+ * Dependencies for the shared Claude executable resolver, used by the providers
+ * module and resolver tests. Supply the effective subprocess environment so
+ * Windows command lookup uses the selected runtime profile's PATH. Omitted
+ * members use the host's platform, environment, and filesystem operations.
+ */
+export type ResolveClaudeCodeExecutablePathDependencies = {
+  execFileSync?: typeof import('node:child_process').execFileSync;
+  existsSync?: typeof import('node:fs').existsSync;
+  platform?: NodeJS.Platform;
+  readFileSync?: typeof import('node:fs').readFileSync;
+  env?: NodeJS.ProcessEnv;
+};
 
 /**
  * One selectable model row in a provider model catalog.
@@ -780,6 +829,8 @@ export type ProviderRuntimePermissionGateway = {
  * adapters from importing services that resolve back through providerRegistry.
  */
 export type ProviderRuntimeContext = {
+  /** Runtime process configuration fixed to the app session before its first turn. */
+  runtimeProfile?: ProviderRuntimeProfile;
   resolveProviderSessionId(sessionId: string | null | undefined): string | null;
   resolveResumeModel(
     sessionId: string | undefined,

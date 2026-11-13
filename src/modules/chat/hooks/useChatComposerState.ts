@@ -38,6 +38,8 @@ type UseChatComposerStateArgs = {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
   provider: LLMProvider;
+  /** Server-configured CLI environment to bind to a newly allocated session. */
+  runtimeProfileId?: string;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
   resolvePermissionModeForProvider: (provider: LLMProvider, requestedMode: PermissionMode | string) => PermissionMode;
@@ -257,6 +259,7 @@ export function useChatComposerState({
   selectedSession,
   currentSessionId,
   provider,
+  runtimeProfileId = 'default',
   permissionMode,
   cyclePermissionMode,
   resolvePermissionModeForProvider,
@@ -1295,6 +1298,7 @@ export function useChatComposerState({
             provider,
             projectPath: resolvedProjectPath,
             initialMessage: messageContent,
+            runtimeProfileId,
           });
           if (!response.ok) {
             throw new Error(`Failed to create session (${response.status})`);
@@ -1456,6 +1460,7 @@ export function useChatComposerState({
       onSessionProcessing,
       onSessionEstablished,
       provider,
+      runtimeProfileId,
       queueMessage,
       recordSentMessage,
       resetCommandMenuState,

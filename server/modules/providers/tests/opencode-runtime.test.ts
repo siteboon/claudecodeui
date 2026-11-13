@@ -126,6 +126,7 @@ type TurnOptions = {
   files?: unknown[];
   installed?: boolean;
   normalizeMessage?: ProviderRuntimeContext['normalizeMessage'];
+  runtimeProfile?: ProviderRuntimeContext['runtimeProfile'];
   /** Called for every frame the chat receives; return a decision to answer a permission_request. */
   onFrame?: (frame: Frame) => ProviderPermissionDecision | void;
 };
@@ -152,6 +153,7 @@ async function runTurn(options: TurnOptions) {
     },
   };
   const context: ProviderRuntimeContext = {
+    runtimeProfile: options.runtimeProfile,
     resolveProviderSessionId: () => options.resumeSessionId ?? null,
     resolveResumeModel: async (_sessionId, requestedModel) => requestedModel || undefined,
     getProviderModels: async () => ({ OPTIONS: [], DEFAULT: '' }),
@@ -257,6 +259,36 @@ test('a new session runs on a private, authenticated server that stops with the 
 
   assert.ok(turn.serverPid, 'the fake server reported its pid');
   assert.ok(await waitForExit(turn.serverPid!), 'the turn\'s server process is gone');
+});
+
+test('the SDK runtime uses the selected executable, environment and inline config without leaking them', async () => {
+  const suffix = process.platform === 'win32' ? '.cmd' : '';
+  const executable = path.join(binDir, `custom-opencode${suffix}`);
+  await writeFile(executable, await readFile(path.join(binDir, `opencode${suffix}`)));
+  if (process.platform !== 'win32') await chmod(executable, 0o755);
+  const previousConfig = process.env.OPENCODE_CONFIG_CONTENT;
+  const previousMarker = process.env.CLOUDCLI_TEST_PROFILE;
+  const turn = await runTurn({
+    scenario: { steps: [{ type: 'text', text: 'host response' }] },
+    runtimeProfile: {
+      id: 'work', name: 'Work', provider: 'opencode', isDefault: false, executable,
+      env: {
+        PATH: path.join(tempRoot, 'empty-profile-bin'),
+        CLOUDCLI_TEST_PROFILE: 'work',
+        OPENCODE_CONFIG_CONTENT: '{ "theme": "profile-theme" }',
+        FAKE_OPENCODE_SCENARIO: JSON.stringify({ steps: [{ type: 'text', text: 'profile response' }] }),
+      },
+    },
+  });
+
+  assert.equal(turn.error, null);
+  assert.equal(turn.frames.find((frame) => frame.kind === 'text')?.content, 'profile response');
+  assert.equal(turn.started?.profileMarker, 'work');
+  assert.equal(turn.started?.configTheme, 'profile-theme');
+  assert.equal(process.env.CLOUDCLI_TEST_PROFILE, previousMarker);
+  assert.equal(process.env.OPENCODE_CONFIG_CONTENT, previousConfig);
+  assert.equal(process.env.OPENCODE_SERVER_PASSWORD, undefined);
+  assert.ok(turn.serverPid && await waitForExit(turn.serverPid));
 });
 
 test('an attachment-only message sends the attachment list as the prompt', async () => {

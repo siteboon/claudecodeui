@@ -333,6 +333,9 @@ test('the model picker says which providers list only your models', () => {
         currentSessionId={null}
         provider="claude"
         setProvider={() => {}}
+        runtimeProfiles={[]}
+        selectedRuntimeProfileId="default"
+        onSelectRuntimeProfile={() => {}}
         textareaRef={{ current: null }}
         providerModels={{ claude: 'default', codex: 'gpt-5.6-sol', cursor: 'auto', opencode: '' }}
         setProviderModel={() => {}}

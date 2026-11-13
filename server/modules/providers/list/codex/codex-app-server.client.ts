@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import readline from 'node:readline';
 
 import {
@@ -9,6 +10,7 @@ import {
   SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
   SIDE_QUESTION_ANSWER_SEPARATOR,
 } from '@/shared/utils.js';
+import type { ProviderRuntimeProfile } from '@/shared/types.js';
 
 /**
  * Minimal JSON-RPC client for `codex app-server`.
@@ -91,16 +93,17 @@ async function withAppServer<T>(
      */
     onExit: (handler: (reason: string) => void) => () => void;
   }) => Promise<T>,
-  signal?: AbortSignal,
+  options: { signal?: AbortSignal; environment?: NodeJS.ProcessEnv; executable?: string } = {},
 ): Promise<T> {
+  const { signal, environment = process.env, executable } = options;
   // Resolved through the exported object, not a module-local function, so
   // tests can replace `codexAppServer.resolveLauncher` with a fake app-server
   // script the same way they already replace `forkThread`.
-  const launcher = codexAppServer.resolveLauncher();
-  const child = spawn(process.execPath, [launcher, 'app-server'], {
-    env: process.env,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  const child = spawn(
+    executable || process.execPath,
+    executable ? ['app-server'] : [codexAppServer.resolveLauncher(), 'app-server'],
+    { env: environment, stdio: ['pipe', 'pipe', 'pipe'] },
+  );
 
   // The server logs sandbox and skill warnings to stderr on every start. They
   // are not failures and drowning the app log in them helps nobody, so stderr
@@ -260,6 +263,7 @@ async function withAppServer<T>(
   }
 }
 
+/** Used by the Codex runtime, fork and history providers for app-server operations. */
 export const codexAppServer = {
   /**
    * Resolves the `codex` launcher shipped in node_modules.
@@ -298,7 +302,28 @@ export const codexAppServer = {
     threadId: string;
     lastTurnId?: string;
     cwd: string;
+    jsonlPath: string;
+    runtimeProfile?: ProviderRuntimeProfile;
   }): Promise<CodexThreadFork> {
+    // This CLI version looks up forks by id inside CODEX_HOME. Derive that
+    // home from the persisted transcript, never the server's default account.
+    let sessionsDirectory = path.dirname(path.resolve(input.jsonlPath));
+    while (path.basename(sessionsDirectory) !== 'sessions'
+      && path.dirname(sessionsDirectory) !== sessionsDirectory) {
+      sessionsDirectory = path.dirname(sessionsDirectory);
+    }
+    if (path.basename(sessionsDirectory) !== 'sessions') {
+      throw new AppError('The Codex transcript is outside a sessions directory.', {
+        code: 'CODEX_TRANSCRIPT_PATH_INVALID',
+        statusCode: 409,
+      });
+    }
+    await stat(input.jsonlPath);
+    const environment = {
+      ...process.env,
+      ...input.runtimeProfile?.env,
+      CODEX_HOME: path.dirname(sessionsDirectory),
+    };
     return withAppServer(async ({ call }) => {
       const result = await call('thread/fork', {
         threadId: input.threadId,
@@ -328,7 +353,7 @@ export const codexAppServer = {
       }
 
       return { threadId, path };
-    });
+    }, { environment, executable: input.runtimeProfile?.executable });
   },
 
   /**
@@ -412,7 +437,7 @@ export const codexAppServer = {
    *   codex-rs/config/src/types.rs at rust-v0.166.0).
    */
   async askSideQuestion(
-    input: { threadId: string; cwd: string; model: string; question: string; signal: AbortSignal },
+    input: { threadId: string; cwd: string; model: string; question: string; signal: AbortSignal; runtimeProfile?: ProviderRuntimeProfile },
     onDelta: (text: string) => void,
   ): Promise<string> {
     const abortedError = () => new AppError('The side question was aborted.', {
@@ -648,7 +673,11 @@ export const codexAppServer = {
           settle(() => reject(error));
         });
       });
-    }, input.signal).catch((error: unknown) => {
+    }, {
+      signal: input.signal,
+      environment: { ...process.env, ...input.runtimeProfile?.env },
+      executable: input.runtimeProfile?.executable,
+    }).catch((error: unknown) => {
       // A dismiss during `initialize` surfaces as the killed child's exit;
       // report it as the abort it was.
       throw input.signal.aborted ? abortedError() : error;

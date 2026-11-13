@@ -181,7 +181,9 @@ type Asking = {
 };
 
 /** Starts one side question against the fake; `onDelta` runs synchronously inside `sink.delta`. */
-function startAsk(fakeScenario: Record<string, unknown>, onDelta?: (text: string) => void): Asking {
+function startAsk(
+  fakeScenario: Record<string, unknown>, onDelta?: (text: string) => void, runtimeContext = context,
+): Asking {
   assert.equal(typeof runtime.askSideQuestion, 'function', 'opencodeRuntime.askSideQuestion is missing (contract: the opencode side question on the SDK)');
 
   const logPath = path.join(tempRoot, `side-requests-${++logCounter}.jsonl`);
@@ -204,7 +206,7 @@ function startAsk(fakeScenario: Record<string, unknown>, onDelta?: (text: string
       onDelta?.(text);
     },
   };
-  const pending = runtime.askSideQuestion!(request, sink, context)
+  const pending = runtime.askSideQuestion!(request, sink, runtimeContext)
     .then((outcome) => ({ outcome }), (caught: unknown) => ({ rejected: caught }));
 
   const readLog = async (): Promise<LogEntry[]> => {
@@ -724,4 +726,30 @@ test('synchronize skips a fork whose agent is a per-question sidequestion-<uuid>
     assert.ok(sessionsDb.getSessionByProviderSessionId(USER_DASHED_AGENT_SESSION), 'a sidequestion-review agent\'s session stays indexed');
     assert.equal(sessionsDb.getAllSessions().length, 3);
   });
+});
+
+
+test('side-question startup keeps the selected profile and overrides its permission environment', async () => {
+  const suffix = process.platform === 'win32' ? '.cmd' : '';
+  const executable = path.join(tempRoot, `profile-opencode${suffix}`);
+  await writeFile(executable, await readFile(path.join(tempRoot, 'bin', `opencode${suffix}`)));
+  if (process.platform !== 'win32') await chmod(executable, 0o755);
+  const marker = process.env.CLOUDCLI_TEST_PROFILE;
+  const config = process.env.OPENCODE_CONFIG_CONTENT;
+  const asking = startAsk(scenario(), undefined, { ...context, runtimeProfile: {
+    id: 'work', name: 'Work', provider: 'opencode', isDefault: false, executable,
+    env: {
+      PATH: path.join(tempRoot, 'empty-bin'), CLOUDCLI_TEST_PROFILE: 'work',
+      OPENCODE_CONFIG_CONTENT: '{"theme":"profile-theme"}', OPENCODE_PERMISSION: '{"*":"allow"}',
+    },
+  } });
+  const { outcome, started, requests } = await asking.finish();
+  assert.equal(outcome.status, 'done');
+  assert.equal(started?.profileMarker, 'work');
+  assert.equal(started?.configTheme, 'profile-theme');
+  assert.equal(started?.permissionEnvSet, false);
+  assert.deepEqual(agentConfig(started, String(promptOf(requests).body?.agent)).permission, EXPECTED_PERMISSION);
+  assert.equal(process.env.CLOUDCLI_TEST_PROFILE, marker);
+  assert.equal(process.env.OPENCODE_CONFIG_CONTENT, config);
+  await assertServerGone(started);
 });

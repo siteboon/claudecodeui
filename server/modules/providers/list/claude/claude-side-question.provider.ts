@@ -6,6 +6,7 @@ import type {
   AnyRecord,
   BackgroundTaskSummary,
   ProviderRuntimeContext,
+  ProviderRuntimeProfile,
   SideQuestionOutcome,
   SideQuestionRequest,
   SideQuestionSink,
@@ -77,6 +78,7 @@ async function runSideQuestionQuery(
   promptText: string,
   extraOptions: ForkExtraOptions,
   createQueryFn: NonNullable<ProviderRuntimeContext['createQuery']>,
+  runtimeProfile?: ProviderRuntimeProfile,
 ): Promise<SideQuestionOutcome> {
   const abortController = new AbortController();
   const onAbort = () => abortController.abort();
@@ -96,7 +98,9 @@ async function runSideQuestionQuery(
     await held;
   })();
 
+  const environment = { ...process.env, ...runtimeProfile?.env };
   const options: AnyRecord = {
+    env: environment,
     ...extraOptions,
     persistSession: false,
     tools: SIDE_QUESTION_TOOLS,
@@ -112,7 +116,9 @@ async function runSideQuestionQuery(
     includePartialMessages: true,
     cwd: request.projectPath ?? undefined,
     abortController,
-    pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
+    pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(
+      runtimeProfile?.executable || process.env.CLAUDE_CLI_PATH, { env: environment },
+    ),
     systemPrompt: { type: 'preset', preset: 'claude_code', append: SIDE_QUESTION_SYSTEM_PROMPT_APPEND },
   };
 
@@ -207,6 +213,7 @@ export async function askClaudeSideQuestion(
   sink: SideQuestionSink,
   deps: {
     createQuery?: ProviderRuntimeContext['createQuery'];
+    runtimeProfile?: ProviderRuntimeProfile;
     liveTasks: BackgroundTaskSummary[];
     now?: () => number;
   },
@@ -222,5 +229,5 @@ export async function askClaudeSideQuestion(
     // Keeps the fork on the session's prompt cache; left unset lets the SDK
     // pick its own default instead of sending another provider's model id.
     model: request.model || undefined,
-  }, createQueryFn);
+  }, createQueryFn, deps.runtimeProfile);
 }

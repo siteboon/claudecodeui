@@ -180,6 +180,7 @@ function createService(
       return provider;
     },
     resolveProviderSessionId: (sessionId) => (sessionId ? `native-${sessionId}` : null),
+    resolveRuntimeProfile: (provider) => ({ id: 'default', name: 'Default', provider, isDefault: true, env: {} }),
     async resolveResumeModel(_provider, _sessionId, requestedModel) {
       return requestedModel?.trim() || undefined;
     },
@@ -372,4 +373,27 @@ test('claudeRuntime.askSideQuestion forks with the live tasks of that app sessio
     held.script.end();
     await rm(cwd, { recursive: true, force: true });
   }
+});
+
+
+test('side questions resolve the persisted runtime profile using the app session id', async () => {
+  const selected = { id: 'work', name: 'Work', provider: 'codex' as const, isDefault: false, env: { CODEX_HOME: '/work/codex' } };
+  const lookups: unknown[] = [];
+  let receivedProfile: ProviderRuntimeContext['runtimeProfile'];
+  const provider = createProvider('codex', createRuntime({
+    async askSideQuestion(_request, _sink, context) {
+      receivedProfile = context.runtimeProfile;
+      return { status: 'done', answer: 'profile answer' };
+    },
+  }));
+  const service = createService([provider], {
+    resolveRuntimeProfile(provider, sessionId) {
+      lookups.push([provider, sessionId]);
+      return selected;
+    },
+  });
+  const request = createRequest();
+  assert.deepEqual(await service.askSideQuestion('codex', request, createSink().sink), { status: 'done', answer: 'profile answer' });
+  assert.deepEqual(lookups, [['codex', request.appSessionId]]);
+  assert.equal(receivedProfile, selected);
 });

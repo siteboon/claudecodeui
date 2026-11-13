@@ -1,6 +1,6 @@
 /**
  * A stand-in for `opencode serve`, used by the OpenCode runtime tests in place
- * of the real binary. The SDK's `createOpencodeServer` spawns it exactly like
+ * of the real binary. The runtime spawns it exactly like
  * OpenCode (`opencode serve --hostname=… --port=…`) and waits for the same
  * "listening" line; the runtime then talks to it through the SDK client.
  *
@@ -611,6 +611,8 @@ const listen = () => server.listen(Number(readFlag('port') ?? 0), readFlag('host
     configContent: process.env.OPENCODE_CONFIG_CONTENT ?? null,
     permissionEnvSet: process.env.OPENCODE_PERMISSION !== undefined,
     ownerPid: process.env.CLOUDCLI_OPENCODE_OWNER_PID ?? null,
+    profileMarker: process.env.CLOUDCLI_TEST_PROFILE,
+    configTheme: JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '{}').theme,
   });
   console.log(`opencode server listening on http://${readFlag('hostname') ?? '127.0.0.1'}:${port}`);
 });

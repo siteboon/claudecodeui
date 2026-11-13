@@ -4,8 +4,8 @@
  *
  * Runs OpenCode chat turns through the official `@opencode-ai/sdk`.
  *
- * Every turn gets its own `opencode serve`, started with the SDK's
- * `createOpencodeServer` and stopped when the turn ends. The SDK client then
+ * Every turn gets its own `opencode serve`, started with its runtime profile
+ * and stopped when the turn ends. The SDK client then
  * creates or resumes the session, sends the prompt, follows the server's event
  * stream and answers the two requests OpenCode makes of its user while a turn
  * runs:
@@ -33,13 +33,15 @@
  */
 
 import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import fsSync from 'node:fs';
 import { readdir, readFile, readlink } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
-import { createOpencodeClient, createOpencodeServer } from '@opencode-ai/sdk/v2';
+import spawn from 'cross-spawn';
+import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import type {
   Config as OpenCodeConfig,
   Event as OpenCodeEvent,
@@ -76,6 +78,7 @@ import type {
   ProviderModelsDefinition,
   ProviderPermissionDecision,
   ProviderRuntimeContext,
+  ProviderRuntimeProfile,
   ProviderRuntimeWriter,
   SideQuestionOutcome,
   SideQuestionRequest,
@@ -544,8 +547,8 @@ function installExitHook(): void {
  * own `config` option through that same variable, which would otherwise
  * replace a value the user set.
  */
-function readInlineConfig(): OpenCodeConfig | undefined {
-  const raw = process.env.OPENCODE_CONFIG_CONTENT;
+function readInlineConfig(env: NodeJS.ProcessEnv): OpenCodeConfig | undefined {
+  const raw = env.OPENCODE_CONFIG_CONTENT;
   if (!raw) {
     return undefined;
   }
@@ -658,66 +661,96 @@ function reserveFreePort(): Promise<number> {
 }
 
 /**
- * Starts a private `opencode serve` for one turn through the SDK.
+ * Starts a private `opencode serve` for one turn with its selected executable
+ * and environment. The SDK launcher hardcodes `opencode` and `process.env`.
  *
  * The server listens on loopback only, and a random Basic-auth password keeps
  * other local processes and web pages from driving it. OpenCode reads that
- * password from `OPENCODE_SERVER_PASSWORD` only, and the SDK builds the child's
- * environment from `process.env` in the same synchronous step that spawns it,
- * so the variables are set just around that call and restored right after.
+ * password from `OPENCODE_SERVER_PASSWORD` only. Environment overrides stay
+ * on the child so concurrent turns cannot borrow each other's profile.
  * The question tool is switched on explicitly, since the chat can answer it.
  */
 async function startOpenCodeServer(
   signal: AbortSignal,
-  options: { config?: OpenCodeConfig; unsetPermissionEnv?: boolean } = {},
+  options: { runtimeProfile?: ProviderRuntimeProfile; config?: OpenCodeConfig; unsetPermissionEnv?: boolean } = {},
 ): Promise<{ server: OpenCodeServer; password: string }> {
+  const { runtimeProfile } = options;
   const port = await reserveFreePort();
+  signal.throwIfAborted();
   const password = crypto.randomBytes(24).toString('base64url');
-  const childEnv: Record<string, string | undefined> = {
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...runtimeProfile?.env,
     OPENCODE_SERVER_PASSWORD: password,
     OPENCODE_SERVER_USERNAME: 'opencode',
     [OWNER_PID_ENV]: String(process.pid),
   };
-  if (process.env.OPENCODE_ENABLE_QUESTION_TOOL === undefined) {
+  if (childEnv.OPENCODE_ENABLE_QUESTION_TOOL === undefined) {
     childEnv.OPENCODE_ENABLE_QUESTION_TOOL = 'true';
   }
-  // A side question's server config already names its own agent explicitly;
-  // the user's own OPENCODE_PERMISSION must not reach it (gate F8's sibling:
-  // an env rule cannot shape a name it cannot predict either).
-  if (options.unsetPermissionEnv) {
-    childEnv.OPENCODE_PERMISSION = undefined;
-  }
 
-  const previousEnv = new Map<string, string | undefined>();
-  for (const [name, value] of Object.entries(childEnv)) {
-    previousEnv.set(name, process.env[name]);
-    if (value === undefined) {
-      delete process.env[name];
-    } else {
-      process.env[name] = value;
-    }
-  }
+  // The private side-question agent must override any inherited permission rule.
+  if (options.unsetPermissionEnv) delete childEnv.OPENCODE_PERMISSION;
+  const config = options.config ?? readInlineConfig(childEnv);
+  childEnv.OPENCODE_CONFIG_CONTENT = JSON.stringify(config ?? {});
+  const args = ['serve', '--hostname=127.0.0.1', `--port=${port}`];
+  if (config?.logLevel) args.push(`--log-level=${config.logLevel}`);
+  const child = spawn(runtimeProfile?.executable || 'opencode', args, { env: childEnv });
 
-  let starting: Promise<OpenCodeServer>;
-  try {
-    starting = createOpencodeServer({
-      hostname: '127.0.0.1',
-      port,
-      timeout: SERVER_START_TIMEOUT_MS,
-      signal,
-      config: options.config ?? readInlineConfig(),
-    });
-  } finally {
-    for (const [name, value] of previousEnv) {
-      if (value === undefined) {
-        delete process.env[name];
-      } else {
-        process.env[name] = value;
+  return new Promise((resolve, reject) => {
+    let output = '';
+    let ready = false;
+    const clear = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', abort);
+    };
+    const close = () => {
+      clear();
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      // npm command wrappers on Windows need the same process-tree shutdown
+      // as the SDK launcher; stopping cmd.exe alone leaves the server alive.
+      if (process.platform === 'win32' && child.pid) {
+        const stopped = spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
+        if (!stopped.error && stopped.status === 0) return;
       }
-    }
-  }
+      child.kill();
+    };
+    const fail = (error: unknown) => {
+      close();
+      reject(error);
+    };
+    const abort = () => fail(signal.reason ?? new Error('aborted'));
+    const timer = setTimeout(() => fail(new Error(
+      `Timeout waiting for server to start after ${SERVER_START_TIMEOUT_MS}ms`,
+    )), SERVER_START_TIMEOUT_MS);
 
-  return { server: await starting, password };
+    child.stdout?.on('data', (chunk) => {
+      if (ready) return;
+      output += chunk.toString();
+      for (const line of output.split('\n')) {
+        if (!line.startsWith('opencode server listening')) continue;
+        const url = /on\s+(https?:\/\/[^\s]+)/.exec(line)?.[1];
+        if (!url) {
+          fail(new Error('Failed to parse OpenCode server URL.'));
+          return;
+        }
+        ready = true;
+        clearTimeout(timer);
+        resolve({ server: { url, close }, password });
+        return;
+      }
+    });
+    child.stderr?.on('data', (chunk) => {
+      if (!ready) output += chunk.toString();
+    });
+    child.once('error', fail);
+    child.once('exit', (code) => {
+      clear();
+      if (!ready) reject(new Error(`Server exited with code ${code}${output.trim() ? `\nServer output: ${output}` : ''}`));
+    });
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+  });
 }
 
 /**
@@ -1213,12 +1246,12 @@ async function runOpenCodeTurn(
     }
     let started: Awaited<ReturnType<typeof startOpenCodeServer>>;
     try {
-      started = await startOpenCodeServer(turn.abortController.signal);
+      started = await startOpenCodeServer(turn.abortController.signal, { runtimeProfile: context.runtimeProfile });
     } catch (error) {
       if (turn.aborted || !isRetryableStartFailure(error)) {
         throw error;
       }
-      started = await startOpenCodeServer(turn.abortController.signal);
+      started = await startOpenCodeServer(turn.abortController.signal, { runtimeProfile: context.runtimeProfile });
     }
     turn.server = started.server;
     if (turn.aborted) {
@@ -1510,8 +1543,10 @@ export function buildOpenCodeSideQuestionPermission(): Record<string, unknown> {
  *
  * Exported for tests only.
  */
-export function buildOpenCodeSideQuestionConfig(agentName: string): OpenCodeConfig {
-  const userConfig = (readInlineConfig() ?? {}) as AnyRecord;
+export function buildOpenCodeSideQuestionConfig(
+  agentName: string, environment: NodeJS.ProcessEnv = process.env,
+): OpenCodeConfig {
+  const userConfig = (readInlineConfig(environment) ?? {}) as AnyRecord;
   const sideQuestionAgent = {
     mode: 'primary',
     description: 'Read-only fork answering a side question: looks, never touches.',
@@ -1539,7 +1574,7 @@ export function buildOpenCodeSideQuestionConfig(agentName: string): OpenCodeConf
 async function askOpenCodeSideQuestion(
   request: SideQuestionRequest,
   sink: SideQuestionSink,
-  _context: ProviderRuntimeContext,
+  context: ProviderRuntimeContext,
 ): Promise<SideQuestionOutcome> {
   const { providerSessionId, projectPath, question, model, signal } = request;
   if (!providerSessionId) {
@@ -1552,7 +1587,7 @@ async function askOpenCodeSideQuestion(
   // and the session synchronizer, before the fork's id comes back.
   const pendingToken = opencodeSideQuestionForks.registerPending(workingDir, startedAt);
   const agentName = `sidequestion-${crypto.randomUUID()}`;
-  const config = buildOpenCodeSideQuestionConfig(agentName);
+  const config = buildOpenCodeSideQuestionConfig(agentName, { ...process.env, ...context.runtimeProfile?.env });
 
   let answer = '';
   let forkId: string | null = null;
@@ -1570,12 +1605,12 @@ async function askOpenCodeSideQuestion(
     try {
       let started: Awaited<ReturnType<typeof startOpenCodeServer>>;
       try {
-        started = await startOpenCodeServer(startAbort.signal, { config, unsetPermissionEnv: true });
+        started = await startOpenCodeServer(startAbort.signal, { config, unsetPermissionEnv: true, runtimeProfile: context.runtimeProfile });
       } catch (error) {
         if (startAbort.signal.aborted || !isRetryableStartFailure(error)) {
           throw error;
         }
-        started = await startOpenCodeServer(startAbort.signal, { config, unsetPermissionEnv: true });
+        started = await startOpenCodeServer(startAbort.signal, { config, unsetPermissionEnv: true, runtimeProfile: context.runtimeProfile });
       }
       server = started.server;
       activeSideQuestionServers.add(server);

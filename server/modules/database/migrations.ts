@@ -458,6 +458,16 @@ const addSessionEffortColumn = (db: Database): void => {
 };
 
 /**
+ * Adds the immutable runtime-profile selection for app-created sessions.
+ *
+ * Existing sessions remain on the default environment, represented by NULL.
+ */
+const addSessionRuntimeProfileColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'runtime_profile_id', 'TEXT');
+};
+
+/**
  * Adds the reasoning-effort metadata columns to the custom-model library.
  *
  * Existing rows stay NULL on purpose: no effort levels were ever declared for
@@ -532,6 +542,7 @@ export const runMigrations = (db: Database) => {
     addProviderSessionIdMapping(db);
     addSessionModelColumn(db);
     addSessionEffortColumn(db);
+    addSessionRuntimeProfileColumn(db);
     addForkedFromSessionIdColumn(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
