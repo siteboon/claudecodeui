@@ -676,14 +676,21 @@ async function handleChatAbort(
     return;
   }
 
-  const success = await dependencies.runtime.abort(run.provider, sessionId);
-
-  // Scoped to the run that was stopped: a stop can take a round trip, and a
-  // new run of the session may have started by the time it returns.
-  chatRunRegistry.completeRunIfCurrent(run, {
-    exitCode: success ? 0 : 1,
-    aborted: true,
-  });
+  try {
+    const success = await dependencies.runtime.abort(run.provider, sessionId);
+    // The old run may finish and a queued turn may start while abort awaits
+    // provider confirmation. Never complete that newer turn on its behalf.
+    if (chatRunRegistry.getRun(sessionId) !== run || run.status !== 'running') return;
+    if (!success) {
+      sendProtocolError(ws, 'ABORT_FAILED', 'The run could not be interrupted. Please try again.', sessionId);
+      return;
+    }
+    chatRunRegistry.completeRunIfCurrent(run, { exitCode: 0, aborted: true });
+  } catch (error) {
+    if (chatRunRegistry.getRun(sessionId) !== run || run.status !== 'running') return;
+    const message = error instanceof Error ? error.message : String(error);
+    sendProtocolError(ws, 'ABORT_FAILED', `Could not interrupt the run: ${message}`, sessionId);
+  }
 }
 
 /**
@@ -895,10 +902,10 @@ export async function runDetachedChatTurn(
     // run's own dispatch settles later through completeRunIfCurrent, which is
     // scoped to that run and cannot touch the one started here.
     const aborted = await dependencies.runtime.abort(activeRun.provider, input.sessionId);
-    chatRunRegistry.completeRunIfCurrent(activeRun, {
-      exitCode: aborted ? 0 : 1,
-      aborted: true,
-    });
+    if (!aborted && activeRun.status === 'running') {
+      return { started: false, error: 'The active run could not be interrupted.' };
+    }
+    chatRunRegistry.completeRunIfCurrent(activeRun, { exitCode: 0, aborted: true });
   }
 
   return dispatchRun(

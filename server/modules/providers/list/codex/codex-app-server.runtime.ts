@@ -46,6 +46,11 @@ type AppServerRun = {
   abortRequested: boolean;
   terminal: boolean;
   lastError: string | null;
+  turnReady: Promise<void>;
+  resolveTurnReady: () => void;
+  interruptPromise: Promise<void> | null;
+  // Keep each item's first position while later deltas revise its contents.
+  items: Map<string, { item: AnyRecord; timestamp: string; completed: boolean }>;
   completion: Promise<AppServerRuntimeResult>;
   resolveCompletion: (result: AppServerRuntimeResult) => void;
 };
@@ -594,9 +599,7 @@ export class CodexAppServerRuntime {
       if (!run.turnId) {
         throw new Error('Codex app-server did not return a turn id');
       }
-      if (run.abortRequested) {
-        void this.interruptRun(run);
-      }
+      run.resolveTurnReady();
 
       return await run.completion;
     } catch (error) {
@@ -649,9 +652,12 @@ export class CodexAppServerRuntime {
 
     run.abortRequested = true;
     this.cancelApprovalsForRun(run, 'aborted');
-    if (run.turnId) {
-      void this.interruptRun(run);
-    }
+    await run.turnReady;
+    if (run.terminal) return true;
+    if (!run.turnId) return false;
+    // Keep the gateway busy until the provider confirms the turn has ended.
+    await Promise.race([this.interruptRun(run), run.completion]);
+    await run.completion;
     return true;
   }
 
@@ -781,6 +787,8 @@ export class CodexAppServerRuntime {
     const completion = new Promise<AppServerRuntimeResult>((resolve) => {
       resolveCompletion = resolve;
     });
+    let resolveTurnReady = () => {};
+    const turnReady = new Promise<void>((resolve) => { resolveTurnReady = resolve; });
     const run: AppServerRun = {
       appSessionId,
       sessionSummary,
@@ -792,6 +800,10 @@ export class CodexAppServerRuntime {
       abortRequested: false,
       terminal: false,
       lastError: null,
+      turnReady,
+      resolveTurnReady,
+      interruptPromise: null,
+      items: new Map(),
       completion,
       resolveCompletion,
     };
@@ -803,6 +815,8 @@ export class CodexAppServerRuntime {
   }
 
   private removeRun(run: AppServerRun): void {
+    // Release an abort waiting for a start request that failed before acceptance.
+    run.resolveTurnReady();
     if (this.runsByThread.get(run.threadId) === run) {
       this.runsByThread.delete(run.threadId);
     }
@@ -848,18 +862,26 @@ export class CodexAppServerRuntime {
     }
     if (notificationTurnId && !run.turnId) {
       run.turnId = notificationTurnId;
+      run.resolveTurnReady();
     }
 
     switch (notification.method) {
       case 'turn/started':
         return;
+      case 'item/started':
       case 'item/completed': {
         const item = readNestedRecord(params, 'item');
         if (item && item.type !== 'userMessage' && item.type !== 'hookPrompt') {
-          this.emitNormalized(run, transformCodexAppServerItem(item));
+          this.emitItemSnapshot(run, item, notification.method === 'item/completed');
         }
         return;
       }
+      case 'item/agentMessage/delta':
+      case 'item/plan/delta':
+      case 'item/reasoning/summaryTextDelta':
+      case 'item/commandExecution/outputDelta':
+        this.applyItemDelta(run, notification.method, params);
+        return;
       case 'thread/tokenUsage/updated': {
         const tokenBudget = readTokenBudget(params);
         if (tokenBudget) {
@@ -898,6 +920,47 @@ export class CodexAppServerRuntime {
     }
   }
 
+  private emitItemSnapshot(run: AppServerRun, item: AnyRecord, completed: boolean): void {
+    const itemId = readString(item.id);
+    if (!itemId) return;
+    const previous = run.items.get(itemId);
+    if (previous?.completed) return;
+    const snapshot = {
+      item: { ...previous?.item, ...item },
+      timestamp: previous?.timestamp ?? new Date().toISOString(),
+      completed,
+    };
+    run.items.set(itemId, snapshot);
+    const status = snapshot.item.status === 'inProgress'
+      ? 'in_progress'
+      : readString(snapshot.item.status) ?? (completed ? 'completed' : 'in_progress');
+    const transformed = transformCodexAppServerItem({ ...snapshot.item, status });
+    this.emitNormalized(run, { ...transformed, timestamp: snapshot.timestamp }, {
+      timestamp: snapshot.timestamp, status,
+    });
+  }
+
+  private applyItemDelta(run: AppServerRun, method: string, params: AnyRecord): void {
+    const itemId = readString(params.itemId);
+    if (!itemId || typeof params.delta !== 'string') return;
+    const previous = run.items.get(itemId);
+    if (previous?.completed) return;
+    const type = method.split('/')[1];
+    const item = { ...(previous?.item ?? { id: itemId, type }) };
+    if (type === 'agentMessage' || type === 'plan') {
+      item.text = String(item.text ?? '') + params.delta;
+    } else if (type === 'reasoning') {
+      const index = params.summaryIndex;
+      if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0) return;
+      const summary = Array.isArray(item.summary) ? [...item.summary] : [];
+      summary[index] = String(summary[index] ?? '') + params.delta;
+      item.summary = summary;
+    } else {
+      item.aggregatedOutput = String(item.aggregatedOutput ?? '') + params.delta;
+    }
+    this.emitItemSnapshot(run, item, false);
+  }
+
   private handleRequest(request: JsonRpcRequest): unknown {
     switch (request.method) {
       case 'item/commandExecution/requestApproval':
@@ -914,6 +977,7 @@ export class CodexAppServerRuntime {
     if (!run) {
       return { decision: 'decline' };
     }
+    if (run.abortRequested) return { decision: 'cancel' };
 
     const requestId = `codex:${randomUUID()}`;
     const isCommand = request.method === 'item/commandExecution/requestApproval';
@@ -1042,10 +1106,14 @@ export class CodexAppServerRuntime {
     }
   }
 
-  private emitNormalized(run: AppServerRun, transformed: AnyRecord): void {
+  private emitNormalized(
+    run: AppServerRun,
+    transformed: AnyRecord,
+    metadata?: { timestamp: string; status: string },
+  ): void {
     try {
       for (const message of run.context.normalizeMessage(transformed, run.threadId)) {
-        run.writer.send(message);
+        run.writer.send(metadata ? { ...message, ...metadata } : message);
       }
     } catch (error) {
       this.failRun(run, error instanceof Error ? error.message : String(error));
@@ -1061,6 +1129,12 @@ export class CodexAppServerRuntime {
       return;
     }
     run.terminal = true;
+    for (const snapshot of run.items.values()) {
+      if (!snapshot.completed) {
+        this.emitItemSnapshot(run, { ...snapshot.item, status }, true);
+      }
+    }
+    run.resolveTurnReady();
     this.cancelApprovalsForRun(run, status);
     if (error) {
       run.lastError = error;
@@ -1071,7 +1145,7 @@ export class CodexAppServerRuntime {
       sessionId: run.threadId,
       actualSessionId: run.threadId,
       exitCode: status === 'failed' ? 1 : 0,
-      aborted: status === 'interrupted' || run.abortRequested,
+      aborted: status === 'interrupted',
     }));
     run.resolveCompletion({ status, ...(error ? { error } : {}) });
     if (!run.abortRequested || status === 'failed') {
@@ -1111,16 +1185,22 @@ export class CodexAppServerRuntime {
     if (!run.turnId || run.terminal) {
       return;
     }
+    if (run.interruptPromise) return run.interruptPromise;
+    const request = this.manager.request('turn/interrupt', {
+      threadId: run.threadId,
+      turnId: run.turnId,
+    }).then(() => {});
+    run.interruptPromise = request;
     try {
-      await this.manager.request('turn/interrupt', {
-        threadId: run.threadId,
-        turnId: run.turnId,
-      });
+      await request;
     } catch (error) {
       // The authoritative interrupted/failed turn notification may race this
       // request. Keep the error for diagnostics without emitting a duplicate
       // terminal message from the abort path.
       run.lastError = error instanceof Error ? error.message : String(error);
+      if (!run.terminal) throw error;
+    } finally {
+      run.interruptPromise = null;
     }
   }
 

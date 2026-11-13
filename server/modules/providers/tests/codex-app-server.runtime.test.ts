@@ -21,6 +21,7 @@ import {
   type CodexAppServerProcess,
 } from '@/modules/providers/list/codex/index.js';
 import { createNormalizedMessage } from '@/shared/index.js';
+import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 import type {
   AnyRecord,
   NormalizedMessage,
@@ -52,7 +53,7 @@ type RuntimeHarness = {
 function createHarness(options: {
   failThreadStart?: boolean;
   sandbox?: AnyRecord;
-  pauseAt?: 'initialize' | 'thread/start' | 'thread/resume' | 'turn/start';
+  pauseAt?: 'initialize' | 'thread/start' | 'thread/resume' | 'turn/start' | 'turn/interrupt';
 } = {}): RuntimeHarness {
   const process = new FakeAppServerProcess();
   const requests: Record<string, unknown>[] = [];
@@ -628,10 +629,17 @@ test('interrupts an active turn and reports an aborted completion', async () => 
   await harness.nextRequest();
   await harness.nextRequest();
 
-  assert.equal(await runtime.abort('app-abort'), true);
+  let abortSettled = false;
+  const abortPromise = runtime.abort('app-abort').then((result) => {
+    abortSettled = true;
+    return result;
+  });
   const interrupt = await harness.nextRequest();
   assert.equal(interrupt.method, 'turn/interrupt');
   assert.deepEqual(interrupt.params, { threadId: 'thread-new', turnId: 'turn-1' });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(abortSettled, false, 'interrupt acceptance does not mean the turn has stopped');
+  assert.equal(output.messages.some((message) => message.kind === 'complete'), false);
 
   harness.notify('turn/completed', {
     threadId: 'thread-new',
@@ -640,6 +648,7 @@ test('interrupts an active turn and reports an aborted completion', async () => 
   });
 
   const result = await runPromise;
+  assert.equal(await abortPromise, true);
   assert.deepEqual(result, { status: 'interrupted' });
   assert.equal(output.messages.at(-1)?.aborted, true);
   assert.equal(output.messages.at(-1)?.success, false);
@@ -767,13 +776,14 @@ test('interrupts a turn accepted after Stop was clicked', async (testContext) =>
   while (start.method !== 'turn/start') {
     start = await harness.nextRequest();
   }
-  assert.equal(await runtime.abort('app-pending-turn'), true);
+  const abortPromise = runtime.abort('app-pending-turn');
   harness.respondWithResult(start, { turn: { id: 'turn-pending' } });
   const interrupt = await harness.nextRequest();
   assert.equal(interrupt.method, 'turn/interrupt');
   assert.deepEqual(interrupt.params, { threadId: 'thread-new', turnId: 'turn-pending' });
   harness.notify('turn/completed', { threadId: 'thread-new', turn: { id: 'turn-pending', status: 'interrupted' } });
   assert.deepEqual(await runPromise, { status: 'interrupted' });
+  assert.equal(await abortPromise, true);
 });
 
 test('cleanup of a terminal run cannot remove a newer run in the same session', async (testContext) => {
@@ -793,11 +803,12 @@ test('cleanup of a terminal run cannot remove a newer run in the same session', 
   }
   harness.respondWithResult(firstStart, { turn: { id: 'turn-old' } });
   assert.deepEqual(await firstRun, { status: 'completed' });
-  assert.equal(await runtime.abort('resume-app'), true);
+  const abortPromise = runtime.abort('resume-app');
   harness.respondWithResult(nextStart, { turn: { id: 'turn-next' } });
   assert.equal((await harness.nextRequest()).method, 'turn/interrupt');
   harness.notify('turn/completed', { threadId: 'thread-existing', turn: { id: 'turn-next', status: 'interrupted' } });
   assert.deepEqual(await nextRun, { status: 'interrupted' });
+  assert.equal(await abortPromise, true);
 });
 
 for (const scenario of [
@@ -857,9 +868,7 @@ for (const scenario of [
       harness.respondWithError(pending, -32000, 'Model quota exceeded');
       await rejection;
     } else {
-      if (scenario === 'aborted') {
-        assert.equal(await runtime.abort(sessionId), true);
-      }
+      const abortPromise = scenario === 'aborted' ? runtime.abort(sessionId) : null;
       const status = failed ? 'failed' : scenario === 'interrupted' ? 'interrupted' : 'completed';
       const completion = {
         threadId: 'thread-existing',
@@ -867,6 +876,7 @@ for (const scenario of [
       };
       harness.notify('turn/completed', completion);
       harness.notify('turn/completed', completion);
+      if (abortPromise) assert.equal(await abortPromise, true);
       assert.deepEqual(await runPromise, { status, ...(failed ? { error: 'Model quota exceeded' } : {}) });
     }
 
@@ -1207,4 +1217,95 @@ test('forks a persisted thread through the app-server protocol', async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('interrupts from turn/started even when the turn/start response is delayed', async () => {
+  const harness = createHarness({ pauseAt: 'turn/start' });
+  const runtime = createRuntime(harness.process);
+  const output = createWriter();
+  const running = runtime.run('Stop pending turn', { sessionId: 'pending-turn' }, output.writer, context);
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  const turnStart = await harness.nextRequest();
+  const aborted = runtime.abort('pending-turn');
+
+  harness.notify('turn/started', { threadId: 'thread-new', turn: { id: 'turn-1' } });
+  assert.equal((await harness.nextRequest()).method, 'turn/interrupt');
+  harness.notify('turn/completed', { threadId: 'thread-new', turn: { id: 'turn-1', status: 'interrupted' } });
+  assert.equal(await aborted, true);
+  harness.respondWithResult(turnStart, { turn: { id: 'turn-1' } });
+  assert.deepEqual(await running, { status: 'interrupted' });
+  assert.equal(harness.requests.filter((request) => request.method === 'turn/interrupt').length, 0);
+});
+
+test('surfaces an interrupt rejection and allows another interrupt attempt', async () => {
+  const harness = createHarness({ pauseAt: 'turn/interrupt' });
+  const runtime = createRuntime(harness.process);
+  const output = createWriter();
+  const running = runtime.run('Retry stop', { sessionId: 'retry-stop' }, output.writer, context);
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+
+  const rejected = assert.rejects(runtime.abort('retry-stop'), /Try again/);
+  const firstInterrupt = await harness.nextRequest();
+  harness.respondWithError(firstInterrupt, -32000, 'Try again');
+  await rejected;
+  assert.equal(output.messages.some((message) => message.kind === 'complete'), false);
+
+  const retried = runtime.abort('retry-stop');
+  const secondInterrupt = await harness.nextRequest();
+  assert.equal(secondInterrupt.method, 'turn/interrupt');
+  harness.respondWithResult(secondInterrupt, {});
+  harness.notify('turn/completed', { threadId: 'thread-new', turn: { id: 'turn-1', status: 'interrupted' } });
+  assert.equal(await retried, true);
+  assert.deepEqual(await running, { status: 'interrupted' });
+});
+
+test('streams item revisions before completion with stable identity and placement', async () => {
+  const harness = createHarness();
+  const runtime = createRuntime(harness.process);
+  const output = createWriter();
+  const provider = new CodexSessionsProvider();
+  const running = runtime.run('Show progress', { sessionId: 'stream-items' }, output.writer, {
+    ...context, normalizeMessage: (raw, sessionId) => provider.normalizeMessage(raw, sessionId),
+  });
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  await harness.nextRequest();
+  const notify = (method: string, params: AnyRecord) => harness.notify(method, {
+    threadId: 'thread-new', turnId: 'turn-1', ...params,
+  });
+
+  notify('item/started', { item: { type: 'agentMessage', id: 'progress', text: '' } });
+  notify('item/agentMessage/delta', { itemId: 'progress', delta: 'Checking ' });
+  notify('item/agentMessage/delta', { itemId: 'progress', delta: 'files' });
+  assert.equal(output.messages.filter(m => m.id === 'progress').at(-1)?.content, 'Checking files');
+  assert.equal(output.messages.filter(m => m.id === 'progress').at(-1)?.status, 'in_progress');
+  harness.notify('item/agentMessage/delta', {
+    threadId: 'thread-new', turnId: 'previous-turn', itemId: 'progress', delta: 'wrong turn',
+  });
+  assert.equal(output.messages.filter(m => m.id === 'progress').at(-1)?.content, 'Checking files');
+
+  notify('item/started', { item: { type: 'commandExecution', id: 'command', command: 'ls', aggregatedOutput: '', status: 'inProgress' } });
+  notify('item/commandExecution/outputDelta', { itemId: 'command', delta: 'file.ts\n' });
+  assert.equal(output.messages.filter(m => m.id === 'command_result').at(-1)?.content, 'file.ts\n');
+
+  notify('item/started', { item: { type: 'reasoning', id: 'reasoning', summary: [], content: [] } });
+  notify('item/reasoning/summaryTextDelta', { itemId: 'reasoning', summaryIndex: 0, delta: 'Inspecting' });
+  notify('item/reasoning/summaryTextDelta', { itemId: 'reasoning', summaryIndex: 1, delta: 'Comparing' });
+  assert.equal(output.messages.filter(m => m.id === 'reasoning').at(-1)?.content, 'Inspecting\nComparing');
+
+  notify('item/completed', { item: { type: 'agentMessage', id: 'final', text: 'Finished' } });
+  notify('item/completed', { item: { type: 'agentMessage', id: 'progress', text: 'Checking files: complete' } });
+  const progress = output.messages.filter(m => m.id === 'progress');
+  assert.equal(progress.at(-1)?.status, 'completed');
+  assert.equal(new Set(progress.map(m => m.timestamp)).size, 1);
+  notify('item/agentMessage/delta', { itemId: 'progress', delta: 'stale trailing delta' });
+  assert.equal(output.messages.filter(m => m.id === 'progress').length, progress.length);
+  notify('turn/completed', { turn: { id: 'turn-1', status: 'completed' } });
+  await running;
 });

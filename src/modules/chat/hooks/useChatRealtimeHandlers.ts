@@ -232,7 +232,7 @@ export function useChatRealtimeHandlers({
             // the run never started (or was rejected), so no `complete` follows.
             // A refused or failed stop request is not about the run, and
             // idling here would drop a response in flight on that session.
-            if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED' && msg.code !== 'TASK_STOP_FAILED') {
+            if (!['NO_SUCH_TASK', 'TASK_ID_REQUIRED', 'TASK_STOP_FAILED', 'ABORT_FAILED', 'RUN_IN_PROGRESS'].includes(String(msg.code))) {
               onSessionIdle?.(sid);
             }
             sessionStore.appendRealtime(sid, {

@@ -347,7 +347,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
     }
 
     const toolResultSource: ToolResultSource = msg.kind === 'tool_use'
-      ? msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) : null) || null
+      ? (msg.toolId ? toolResultMap.get(msg.toolId) : null) || msg.toolResult || null
       : null;
     const subagentActivitySource = msg.kind === 'tool_use' && msg.toolId
       ? lastSubagentSourceByParent.get(msg.toolId) ?? null
@@ -441,6 +441,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             content: text,
             timestamp: msg.timestamp,
             memoryCitations: msg.memoryCitations,
+            isStreaming: msg.status === 'in_progress',
             ...sharedMetadata,
           });
         }
@@ -590,6 +591,11 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
         break;
     }
 
+    // React keys must follow provider identity across partial text and history
+    // refreshes. Turn timestamps and text prefixes are shared by distinct rows.
+    for (let index = convertedStart; index < converted.length; index++) {
+      converted[index].id = index === convertedStart ? msg.id : `${msg.id}:${index - convertedStart}`;
+    }
     projectionCache.set(msg, {
       toolResultSource,
       subagentActivitySource,
