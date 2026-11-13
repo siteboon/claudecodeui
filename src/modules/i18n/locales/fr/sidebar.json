@@ -38,7 +38,9 @@
     "selectAllLoaded": "Sélectionner les chargées",
     "clearSelection": "Tout désélectionner",
     "deleteSelected_one": "Supprimer {{count}} session",
-    "deleteSelected_other": "Supprimer {{count}} sessions"
+    "deleteSelected_other": "Supprimer {{count}} sessions",
+    "expandForks": "Développer les branches de {{session}}",
+    "collapseForks": "Replier les branches de {{session}}"
   },
   "tooltips": {
     "viewEnvironments": "Voir les environnements",
