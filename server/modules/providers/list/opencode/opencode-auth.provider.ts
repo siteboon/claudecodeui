@@ -1,7 +1,13 @@
 import { readFile } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
+import {
+  getOpenCodeDataDir,
+  hasFileCredential,
+  listConfiguredProviders,
+  readOpenCodeConfigs,
+  type OpenCodeCredential,
+} from '@/modules/providers/list/opencode/opencode-config.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { CliVersionProbe, ProviderAuthStatus } from '@/shared/types.js';
 import { probeCliVersion, readObjectRecord, readOptionalString } from '@/shared/utils.js';
@@ -20,6 +26,23 @@ const OPENCODE_ENV_CREDENTIAL_KEYS = [
   'GROQ_API_KEY',
   'OPENROUTER_API_KEY',
 ];
+
+/**
+ * Whether a configured `apiKey` resolves to a key. Only presence is checked:
+ * no key value is read into, logged or returned by this process.
+ */
+const isCredentialPresent = async (credential: OpenCodeCredential): Promise<boolean> => {
+  switch (credential.kind) {
+    case 'literal':
+      return true;
+    case 'env':
+      return Boolean(process.env[credential.name]?.trim());
+    case 'file':
+      return hasFileCredential(credential);
+    default:
+      return false;
+  }
+};
 
 export class OpenCodeProviderAuth implements IProviderAuth {
   /**
@@ -51,11 +74,12 @@ export class OpenCodeProviderAuth implements IProviderAuth {
   }
 
   /**
-   * Reads OpenCode's auth store or falls back to provider API key environment variables.
+   * Reads OpenCode's auth store, then provider API key environment variables,
+   * then provider keys in OpenCode's config (v1 `provider` or v2 `providers`).
    */
   private async checkCredentials(): Promise<OpenCodeCredentialsStatus> {
     try {
-      const authPath = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
+      const authPath = path.join(getOpenCodeDataDir(), 'auth.json');
       const content = await readFile(authPath, 'utf8');
       const auth = readObjectRecord(JSON.parse(content)) ?? {};
 
@@ -95,6 +119,16 @@ export class OpenCodeProviderAuth implements IProviderAuth {
         email: envCredential,
         method: 'environment',
       };
+    }
+
+    for (const { id, credential } of listConfiguredProviders(await readOpenCodeConfigs())) {
+      if (await isCredentialPresent(credential)) {
+        return {
+          authenticated: true,
+          email: `${id} credentials`,
+          method: 'config_file',
+        };
+      }
     }
 
     return {
