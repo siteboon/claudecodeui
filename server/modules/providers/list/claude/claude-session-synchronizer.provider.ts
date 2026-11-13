@@ -11,6 +11,7 @@ import {
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
+import { parseFilesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
 type ParsedSession = {
@@ -210,7 +211,9 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
   /**
    * The first prompt a transcript records: the user's text, whether the message
-   * carried it as a string or as a text block beside attachments.
+   * carried it as a string or as a text block beside attachments. Attached
+   * files reach the transcript as a `<files_input>` block appended to that
+   * text, which the app never saw when it named the session, so it is dropped.
    */
   private async readFirstPrompt(filePath: string): Promise<string | undefined> {
     const prompt = await extractFirstValidJsonlData(filePath, (rawData) => {
@@ -228,7 +231,9 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       }
       return null;
     });
-    return prompt ?? undefined;
+    // Stripped only once the message is found: a message of files alone leaves
+    // no text, and the search must not move on to a later prompt for it.
+    return prompt === null ? undefined : parseFilesInputTag(prompt).text;
   }
 
   /**

@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { appendFilesInputTag } from '@/shared/image-attachments.js';
 import { buildCloudCliSessionName } from '@/shared/utils.js';
 
 // The synchronizer resolves `os.homedir()` when its module loads, so HOME has
@@ -125,6 +126,27 @@ test('a first prompt sent with an attachment still identifies the placeholder', 
     assert.equal(nameOf('app-4'), 'Screenshot review');
   });
 });
+
+// Attached files reach the transcript as a block appended to the prompt the
+// app named the session from; a prompt under four words would otherwise pick
+// the block's opening words up into the name it is compared against.
+for (const [label, firstMessage] of [['a short prompt', 'Summarize this'], ['no prompt at all', '']] as const) {
+  test(`a first message with a file attached and ${label} still identifies the placeholder`, async () => {
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new ClaudeSessionSynchronizer();
+      sessionsDb.createAppSession('app-6', 'claude', projectPath, buildCloudCliSessionName(firstMessage));
+      sessionsDb.assignProviderSessionId('app-6', 'native-6');
+      await mkdir(transcriptDir, { recursive: true });
+      const filePath = path.join(transcriptDir, 'native-6.jsonl');
+      const sent = appendFilesInputTag(firstMessage, [{ path: '/tmp/report.pdf', name: 'report.pdf' }]);
+      await writeFile(filePath, userPrompt('native-6', sent)
+        + userPrompt('native-6', 'and a second prompt that names nothing')
+        + aiTitle('native-6', 'Report summary'));
+      await synchronizer.synchronizeFile(filePath);
+      assert.equal(nameOf('app-6'), 'Report summary');
+    });
+  });
+}
 
 test('a rename that lands while the synchronizer reads the transcript is kept', async () => {
   await withIsolatedDatabase(async () => {
