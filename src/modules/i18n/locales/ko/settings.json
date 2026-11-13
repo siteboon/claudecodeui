@@ -434,6 +434,9 @@
       },
       "opencode": {
         "description": "OpenCode CLI 어시스턴트"
+      },
+      "antigravity": {
+        "description": "Antigravity CLI 어시스턴트"
       }
     },
     "connectionStatus": "연결 상태",
@@ -579,7 +582,8 @@
       "claude": "Model Context Protocol 서버는 Claude에 추가 도구와 데이터 소스를 제공합니다",
       "cursor": "Model Context Protocol 서버는 Cursor에 추가 도구와 데이터 소스를 제공합니다",
       "codex": "Model Context Protocol 서버는 Codex에 추가 도구와 데이터 소스를 제공합니다",
-      "opencode": "Model Context Protocol 서버는 OpenCode에 추가 도구와 데이터 소스를 제공합니다"
+      "opencode": "Model Context Protocol 서버는 OpenCode에 추가 도구와 데이터 소스를 제공합니다",
+      "antigravity": "Model Context Protocol 서버는 Antigravity에 추가 도구와 데이터 소스를 제공합니다"
     },
     "addButton": "MCP 서버 추가",
     "empty": "설정된 MCP 서버 없음",

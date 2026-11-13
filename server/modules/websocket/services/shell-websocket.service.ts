@@ -5,7 +5,12 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
+import {
+  buildProviderCliEnv,
+  parseIncomingJsonObject,
+  resolveConfiguredCliExecutable,
+  stripAnsiSequences,
+} from '@/shared/index.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -201,6 +206,7 @@ type ShellLaunch = {
    * scheme, so a later theme toggle can be applied by restarting it.
    */
   claudeFollowsAppTheme: boolean;
+  useAntigravityEnv?: boolean;
 };
 
 /**
@@ -248,6 +254,17 @@ function buildShellCommand(
       return otherProgram(`opencode --session "${resumeSessionId}"`);
     }
     return otherProgram(initialCommand || 'opencode');
+  }
+
+  if (provider === 'antigravity') {
+    const executable = resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy');
+    const shellExecutable = os.platform() === 'win32'
+      ? `& '${executable.replaceAll("'", "''")}'`
+      : `'${executable.replaceAll("'", "'\"'\"'")}'`;
+    if (resumeSessionId) {
+      return { ...otherProgram(`${shellExecutable} --conversation "${resumeSessionId}"`), useAntigravityEnv: true };
+    }
+    return { ...otherProgram(initialCommand || shellExecutable), useAntigravityEnv: !initialCommand };
   }
 
   // Launching with the flag is what unlocks "bypass permissions" in the CLI's
@@ -633,7 +650,7 @@ export function handleShellConnection(
           return;
         }
 
-        const { command: shellCommand, claudeFollowsAppTheme } = buildShellCommand(
+        const { command: shellCommand, claudeFollowsAppTheme, useAntigravityEnv } = buildShellCommand(
           data,
           dependencies,
           resolvedProjectPath,
@@ -645,16 +662,18 @@ export function handleShellConnection(
           os.platform() === 'win32' ? ['-Command', shellCommand] : ['-c', shellCommand];
         const termCols = readNumber(data.cols, 80);
         const termRows = readNumber(data.rows, 24);
-        const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
 
+        const prioritizedPath = prioritizeUserNpmGlobalBin(process.env);
+        const shellEnv = useAntigravityEnv ? buildProviderCliEnv() : {
+          ...process.env, [prioritizedPath.key]: prioritizedPath.value,
+        };
         shellProcess = (dependencies.spawnPty ?? pty.spawn)(shell, shellArgs, {
           name: 'xterm-256color',
           cols: termCols,
           rows: termRows,
           cwd: resolvedProjectPath,
           env: {
-            ...process.env,
-            [prioritizedPath.key]: prioritizedPath.value,
+            ...shellEnv,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',
             FORCE_COLOR: '3',
@@ -789,6 +808,8 @@ export function handleShellConnection(
                 ? 'Codex'
                 : provider === 'opencode'
                     ? 'OpenCode'
+                    : provider === 'antigravity'
+                      ? 'Antigravity'
                   : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
             ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`

@@ -5,7 +5,7 @@ import type { NavigateFunction } from 'react-router-dom';
 //----------------- LLM PROVIDER MODEL CATALOG ------------
 
 /** Identifies which coding-agent CLI backs a session, project selection or model list. */
-export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode';
+export type LLMProvider = 'claude' | 'cursor' | 'codex' | 'opencode' | 'antigravity';
 
 /** One selectable model in a provider's model menu, including its optional reasoning-effort choices. */
 export type ProviderModelOption = {
@@ -1428,7 +1428,7 @@ export type ProviderAuthStatusMap = Record<LLMProvider, ProviderAuthStatus>;
 
 //----------------- PROVIDER CLI VERSION ------------
 
-/** One provider CLI's version state from `GET /api/providers/:provider/cli`: the installed version, the newest npm release (null when the CLI is not on npm or the registry did not answer), the command the update action runs, or why there is none ('bundled': it ships with CloudCLI; 'platform': the hosting platform manages it), whether an update run is going on, and the most recent finished run since the server started. A page that sees `updateInProgress` polls until it turns false and then shows `lastUpdate` as that run's result. Loaded by useProviderCliVersion and rendered by the settings account view. */
+/** One provider CLI's version state from `GET /api/providers/:provider/cli`: the installed version, the newest npm release (null when the CLI is not on npm or the registry did not answer), the command the update action runs, or why there is none ('bundled': it ships with CloudCLI; 'platform': the hosting platform manages it; 'manual': manage the external CLI outside CloudCLI), whether an update run is going on, and the most recent finished run since the server started. A page that sees `updateInProgress` polls until it turns false and then shows `lastUpdate` as that run's result. Loaded by useProviderCliVersion and rendered by the settings account view. */
 export type ProviderCliStatus = {
   provider: LLMProvider;
   installed: boolean;
@@ -1436,7 +1436,7 @@ export type ProviderCliStatus = {
   latestVersion: string | null;
   updateAvailable: boolean;
   updateCommand: string | null;
-  updateUnavailableReason: 'bundled' | 'platform' | null;
+  updateUnavailableReason: 'bundled' | 'platform' | 'manual' | null;
   updateInProgress: boolean;
   lastUpdate: ProviderCliUpdateResult | null;
 };

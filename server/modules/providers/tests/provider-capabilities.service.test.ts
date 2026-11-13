@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { ANTIGRAVITY_FALLBACK_MODELS } from '@/modules/providers/list/antigravity/antigravity-models.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { CODEX_PREDEFINED_MODELS } from '@/modules/providers/list/codex/codex-models.provider.js';
 import { CURSOR_PREDEFINED_MODELS } from '@/modules/providers/list/cursor/cursor-models.provider.js';
@@ -17,6 +18,7 @@ const CURATED_CATALOGS: Record<LLMProvider, ProviderModelsDefinition> = {
   codex: CODEX_PREDEFINED_MODELS,
   cursor: CURSOR_PREDEFINED_MODELS,
   opencode: OPENCODE_PREDEFINED_MODELS,
+  antigravity: ANTIGRAVITY_FALLBACK_MODELS,
 };
 
 test('capability effort levels cover every level a curated model declares', () => {
@@ -37,7 +39,7 @@ test('capability effort levels cover every level a curated model declares', () =
 });
 
 
-test('side questions are supported by claude, codex and opencode, not by cursor', () => {
+test('side questions use the shared capability gate for every supported runtime', () => {
   // Cursor has no headless way to ask on the side; its menu then offers only
   // Queue · Stop / Send anyway.
   const expected: Record<LLMProvider, boolean> = {
@@ -45,9 +47,17 @@ test('side questions are supported by claude, codex and opencode, not by cursor'
     codex: true,
     cursor: false,
     opencode: true,
+    antigravity: true,
   };
   for (const [provider, supported] of Object.entries(expected) as Array<[LLMProvider, boolean]>) {
     const capabilities = providerCapabilitiesService.getProviderCapabilities(provider) as unknown as Record<string, unknown>;
     assert.equal(capabilities.supportsSideQuestions, supported, `${provider}: supportsSideQuestions`);
+  }
+});
+
+// Only Claude keeps the steering input protocol open during a running turn.
+test('steering is exposed only by a runtime that implements it', () => {
+  for (const capabilities of providerCapabilitiesService.listAllProviderCapabilities()) {
+    assert.equal(capabilities.supportsSteering, capabilities.provider === 'claude', capabilities.provider);
   }
 });

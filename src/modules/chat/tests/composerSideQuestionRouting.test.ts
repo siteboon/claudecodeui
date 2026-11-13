@@ -7,7 +7,7 @@ import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { clearQueuedMessage } from '@/shared/chatDrafts';
 import type * as ChatDrafts from '@/shared/chatDrafts';
-import type { PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
+import type { LLMProvider, PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
 
 /**
  * The send menu's choices and `/btw` route through the composer state:
@@ -71,7 +71,8 @@ type ComposerState = ReturnType<typeof useChatComposerState> & {
 
 type AddedRow = { type?: string; content?: unknown };
 
-const render = ({ isLoading, processingSessions, supportsSideQuestions = true }: {
+const render = ({ isLoading, processingSessions, supportsSideQuestions = true, provider = 'claude' }: {
+  provider?: LLMProvider;
   isLoading: boolean;
   processingSessions: SessionActivityMap;
   supportsSideQuestions?: boolean;
@@ -86,7 +87,7 @@ const render = ({ isLoading, processingSessions, supportsSideQuestions = true }:
       selectedProject: PROJECT,
       selectedSession: SESSION,
       currentSessionId: SESSION.id,
-      provider: 'claude',
+      provider,
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
@@ -472,3 +473,21 @@ test('/btw is refused when the supportsSideQuestions option is left out, since t
   assert.equal(view.result.current.input, '/btw why is this test slow?');
   assert.deepEqual(added.filter((row) => row.type === 'error').map((row) => row.content), [UNSUPPORTED]);
 });
+
+for (const provider of ['claude', 'codex', 'opencode', 'antigravity'] as const) {
+  for (const command of ['menu', 'btw'] as const) {
+    test(`${provider} ${command} side question leaves the active turn and queue alone`, async () => {
+      const { view, of, types } = render({ provider, isLoading: true, processingSessions: responding });
+      await act(async () => { view.result.current.setInput(command === 'btw' ? '/btw why?' : 'why?'); });
+      if (command === 'btw') {
+        await act(async () => { await view.result.current.handleSubmit({ preventDefault() {} } as never); });
+      } else {
+        await choose(view, 'sideQuestion');
+      }
+      assertOneSideQuestion(of('chat.side_question'), 'why?');
+      assert.deepEqual(types(), ['chat.side_question']);
+      assert.equal(appendQueuedMessage.mock.calls.length, 0);
+      assert.equal(view.result.current.input, '');
+    });
+  }
+}

@@ -455,6 +455,9 @@
       "codex": {
         "description": "OpenAI Codex AI asistanı"
       },
+      "antigravity": {
+        "description": "Antigravity CLI asistanı"
+      },
       "opencode": {
         "description": "OpenCode komut satırı asistanı"
       }
@@ -615,6 +618,7 @@
       "claude": "Model Context Protocol sunucuları Claude'a ek araçlar ve veri kaynakları sağlar",
       "cursor": "Model Context Protocol sunucuları Cursor'a ek araçlar ve veri kaynakları sağlar",
       "codex": "Model Context Protocol sunucuları Codex'e ek araçlar ve veri kaynakları sağlar",
+      "antigravity": "Model Context Protocol sunucuları Antigravity için ek araçlar ve veri kaynakları sağlar",
       "opencode": "Model Context Protocol sunucuları OpenCode'a ek araçlar ve veri kaynakları sağlar"
     },
     "addButton": "MCP Sunucusu Ekle",

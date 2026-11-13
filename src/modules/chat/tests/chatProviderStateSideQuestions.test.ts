@@ -25,6 +25,7 @@ const MATRIX = {
       { provider: 'claude', permissionModes: ['default'], defaultPermissionMode: 'default', supportsSideQuestions: true },
       { provider: 'cursor', permissionModes: ['default'], defaultPermissionMode: 'default', supportsSideQuestions: false },
       { provider: 'codex', permissionModes: ['default'], defaultPermissionMode: 'default', supportsSideQuestions: true },
+      { provider: 'antigravity', permissionModes: ['default'], defaultPermissionMode: 'default', supportsSideQuestions: true },
       // An entry without the field reads as unsupported, not as supported.
       { provider: 'opencode', permissionModes: ['default'], defaultPermissionMode: 'default' },
     ],
@@ -95,4 +96,7 @@ test('supportsSideQuestions follows the matrix for the active provider once it l
 
   act(() => { result.current.setProvider('opencode'); });
   assert.equal(result.current.supportsSideQuestions, false, 'a missing field reads as unsupported');
+
+  act(() => { result.current.setProvider('antigravity'); });
+  assert.equal(result.current.supportsSideQuestions, true, 'AGY uses the same capability gate');
 });

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { antigravityCliLivenessService } from './antigravity-cli-liveness.service.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
@@ -14,8 +15,8 @@ import type {
   LLMProvider,
   NormalizedMessage,
   WorkflowAgentActivity,
-} from '@/shared/types.js';
-import { AppError, sliceTailPage } from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { AppError, sliceTailPage } from '@/shared/index.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -41,6 +42,7 @@ type RunningSessionEntry = {
   canInterrupt?: false;
   statusText?: string;
   tasks?: BackgroundTaskSummary[];
+  external?: true;
 };
 
 type CreateAppSessionResult = {
@@ -208,7 +210,23 @@ export const sessionsService = {
       runningById.set(session.session_id, entries[entries.length - 1]);
     }
 
+    for (const live of await antigravityCliLivenessService.listSessions()) {
+      const session = sessionsDb.getSessionByProviderSessionId(live.providerSessionId);
+      if (!session || session.provider !== 'antigravity' || runningById.has(session.session_id)) continue;
+      entries.push({
+        sessionId: session.session_id, provider: 'antigravity', startedAt: live.startedAt,
+        lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0,
+        canInterrupt: false, external: true, statusText: 'Running in the Antigravity CLI',
+      });
+    }
     return entries;
+  },
+
+  /** WebSocket and fork admission inspect native AGY work without signalling its owner. */
+  async getExternalSessionActivity(sessionId: string) {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (session?.provider !== 'antigravity' || !session.provider_session_id) return null;
+    return antigravityCliLivenessService.getSession(session.provider_session_id);
   },
 
   /**
@@ -328,6 +346,12 @@ export const sessionsService = {
       });
     }
 
+    if (source.provider === 'antigravity' && (chatRunRegistry.isProcessing(sessionId)
+      || await this.getExternalSessionActivity(sessionId))) {
+      throw new AppError('Wait for the Antigravity turn to finish before forking.', {
+        code: 'SESSION_BUSY', statusCode: 409,
+      });
+    }
     const provider = source.provider as LLMProvider;
     const fork = providerRegistry.resolveProvider(provider).fork;
     if (!fork) {
@@ -517,7 +541,7 @@ export const sessionsService = {
     // re-parsing the whole file per request. Cursor and OpenCode read their
     // messages from elsewhere (store.db / shared SQLite), so that file's stat
     // says nothing about their history — they stay on the direct path.
-    const transcriptPath = provider === 'claude' || provider === 'codex'
+    const transcriptPath = provider === 'claude' || provider === 'codex' || provider === 'antigravity'
       ? session.jsonl_path
       : null;
     const fullHistory = await sessionHistoryCache.getFullHistory({
@@ -528,6 +552,7 @@ export const sessionsService = {
         offset: 0,
         projectPath,
         providerSessionId,
+        jsonlPath: session.jsonl_path ?? null,
       }),
     });
 
@@ -549,6 +574,7 @@ export const sessionsService = {
         offset: requestedOffset,
         projectPath,
         providerSessionId,
+        jsonlPath: session.jsonl_path ?? null,
       });
     }
 

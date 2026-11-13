@@ -18,6 +18,7 @@ const CURSOR_SESSION_ID = 'side-question-socket-cursor-session';
 // Codex and opencode answer their own side questions, like Claude.
 const CODEX_SESSION_ID = 'side-question-socket-codex-session';
 const OPENCODE_SESSION_ID = 'side-question-socket-opencode-session';
+const AGY_SESSION_ID = 'side-question-socket-agy-session';
 const PROVIDER_SESSION_ID = 'claude-native-id';
 
 type Frame = Record<string, unknown>;
@@ -82,12 +83,13 @@ async function withGateway(
     sessionsDb.createAppSession(CURSOR_SESSION_ID, 'cursor', tempDirectory, 'Cursor side question session');
     sessionsDb.createAppSession(CODEX_SESSION_ID, 'codex', tempDirectory, 'Codex side question session');
     sessionsDb.createAppSession(OPENCODE_SESSION_ID, 'opencode', tempDirectory, 'opencode side question session');
+    sessionsDb.createAppSession(AGY_SESSION_ID, 'antigravity', tempDirectory, 'AGY side question session');
     sessionsDb.assignProviderSessionId(SESSION_ID, PROVIDER_SESSION_ID);
 
     const runtime = {
       // Every provider has a runtime for turns; only the capability decides
       // whether a side question is accepted.
-      hasRuntime: (provider: string) => ['claude', 'codex', 'cursor', 'opencode'].includes(provider),
+      hasRuntime: (provider: string) => ['claude', 'codex', 'cursor', 'opencode', 'antigravity'].includes(provider),
       hasBackgroundWork: () => options.backgroundWork === true,
       run: (provider: string, command: string, options: Record<string, unknown>) => {
         runs.push({ provider, command, options });
@@ -127,7 +129,7 @@ async function withGateway(
     try {
       // The handler uses the process-wide service, whose memory outlives one
       // test; clear it so an id reused by the next test is not a duplicate.
-      for (const sessionId of [SESSION_ID, CURSOR_SESSION_ID, CODEX_SESSION_ID, OPENCODE_SESSION_ID, 'no-such-session']) {
+      for (const sessionId of [SESSION_ID, CURSOR_SESSION_ID, CODEX_SESSION_ID, OPENCODE_SESSION_ID, AGY_SESSION_ID, 'no-such-session']) {
         for (const sideQuestion of sideQuestionsService.listForSession(sessionId)) {
           sideQuestionsService.dismiss(sessionId, sideQuestion.id, () => {});
         }
@@ -478,16 +480,18 @@ test('a 4th concurrent side question in one session is refused while 3 run; anot
   });
 });
 
-test('codex and opencode sessions\' side questions reach the runtime with their own provider', { timeout: 5000 }, async () => {
+test('codex, opencode and AGY side questions reach the runtime with their own provider', { timeout: 5000 }, async () => {
   await withGateway(async ({ asker, asks }) => {
     sendSideQuestion(asker, { sessionId: CODEX_SESSION_ID, sideQuestionId: 'sq-codex', question: 'codex, are you there?' });
     sendSideQuestion(asker, { sessionId: OPENCODE_SESSION_ID, sideQuestionId: 'sq-opencode', question: 'opencode, are you there?' });
+    sendSideQuestion(asker, { sessionId: AGY_SESSION_ID, sideQuestionId: 'sq-agy', question: 'agy, are you there?' });
     await settle();
 
     // Gated on the capability, not on the provider being Claude.
     assert.deepEqual(
       asks.map((ask) => [ask.provider, ask.request.appSessionId, ask.request.question]).sort(),
       [
+        ['antigravity', AGY_SESSION_ID, 'agy, are you there?'],
         ['codex', CODEX_SESSION_ID, 'codex, are you there?'],
         ['opencode', OPENCODE_SESSION_ID, 'opencode, are you there?'],
       ],

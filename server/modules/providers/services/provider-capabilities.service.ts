@@ -44,8 +44,8 @@ type ProviderCapabilities = {
   supportsSessionForking: boolean;
   /**
    * Whether the provider can answer a question on the side without touching
-   * the session's main turn. False only for Cursor, which has no headless
-   * way to do that.
+   * the session's main turn. False for runtimes without the side-question
+   * contract, such as Cursor.
    */
   supportsSideQuestions: boolean;
   /**
@@ -140,6 +140,24 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSideQuestions: true,
+    supportsSteering: false,
+  },
+  antigravity: {
+    provider: 'antigravity',
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+    defaultPermissionMode: 'default',
+    // Like Cursor's text transport, validated assets are passed as references
+    // for native file/image tools, rather than unsupported stream-json blocks.
+    supportsImages: true,
+    supportsFiles: true,
+    supportsAbort: true,
+    supportsPermissionRequests: false,
+    supportsTokenUsage: true,
+    supportsEffort: true,
+    effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    supportsMessageEditing: true,
+    supportsSessionForking: true,
     supportsSideQuestions: true,
     supportsSteering: false,
   },

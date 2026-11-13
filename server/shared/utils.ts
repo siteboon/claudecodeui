@@ -16,7 +16,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-import spawn from 'cross-spawn';
+import crossSpawn from 'cross-spawn';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 import { parseFrontMatter } from '@/shared/frontmatter.js';
@@ -34,6 +34,67 @@ import type {
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
 
+//----------------- NATIVE PROVIDER STORAGE ------------
+/**
+ * Providers' AGY history and snapshot readers use this strict protobuf wire
+ * decoder. It preserves repeated fields and unknown length-delimited bytes;
+ * it rejects truncated/unsupported wire types instead of guessing a boundary.
+ */
+export function readProtobufFields(payload: Buffer): Map<number, Array<bigint | Buffer>> {
+  const fields = new Map<number, Array<bigint | Buffer>>();
+  let offset = 0;
+  const varint = (): bigint => {
+    let value = 0n;
+    for (let shift = 0n; shift < 70n && offset < payload.length; shift += 7n) {
+      const byte = payload[offset++];
+      if (shift === 63n && byte > 1) throw new Error('Invalid protobuf varint');
+      value |= BigInt(byte & 127) << shift;
+      if (!(byte & 128)) return value;
+    }
+    throw new Error('Incomplete protobuf varint');
+  };
+  while (offset < payload.length) {
+    const key = varint();
+    const field = Number(key >> 3n);
+    const wire = Number(key & 7n);
+    if (field < 1 || field > 0x1fffffff) throw new Error('Invalid protobuf field');
+    let value: bigint | Buffer;
+    if (wire === 0) value = varint();
+    else {
+      const size = wire === 2 ? Number(varint()) : wire === 1 ? 8 : wire === 5 ? 4 : -1;
+      if (size < 0 || !Number.isSafeInteger(size) || size > payload.length - offset) {
+        throw new Error('Incomplete or unsupported protobuf field');
+      }
+      value = payload.subarray(offset, offset + size);
+      offset += size;
+    }
+    const values = fields.get(field) ?? [];
+    values.push(value);
+    fields.set(field, values);
+  }
+  return fields;
+}
+
+/**
+ * Providers' AGY runtime and usage reader normalize native request counters.
+ * Native input includes cached input and output includes thinking: neither is
+ * added a second time. No guessed context window or subscription quota is set.
+ */
+export function normalizeAntigravityTokenUsage(raw: unknown) {
+  const usage = readObjectRecord(raw);
+  const count = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+  const inputTokens = count(usage?.input_tokens);
+  const outputTokens = count(usage?.output_tokens);
+  return {
+    used: inputTokens + outputTokens,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens: count(usage?.cache_read_tokens),
+    breakdown: { input: inputTokens, output: outputTokens },
+  };
+}
+
+// ---------------------------
 //----------------- ENVIRONMENT UTILITIES ------------
 /**
  * Indicates whether the backend is running in hosted Platform mode rather than
@@ -1195,11 +1256,11 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * Recursively discovers files that match one extension, with optional incremental filtering.
  *
  * Provider synchronizers call this to find transcript artifacts under provider
- * home directories. Pass `lastScanAt` to include only files created after the
+ * home directories. Pass `lastScanAt` to include only files modified after the
  * previous scan, or pass `null` to perform a full rescan. Missing directories
  * are treated as empty because not every provider exists on every machine.
  */
-export async function findFilesRecursivelyCreatedAfter(
+export async function findFilesRecursivelyModifiedAfter(
   rootDir: string,
   extension: string,
   lastScanAt: Date | null,
@@ -1211,7 +1272,7 @@ export async function findFilesRecursivelyCreatedAfter(
       const fullPath = path.join(rootDir, entry.name);
 
       if (entry.isDirectory()) {
-        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList);
+        await findFilesRecursivelyModifiedAfter(fullPath, extension, lastScanAt, fileList);
         continue;
       }
 
@@ -1225,7 +1286,7 @@ export async function findFilesRecursivelyCreatedAfter(
       }
 
       const fileStat = await stat(fullPath);
-      if (fileStat.birthtime > lastScanAt) {
+      if (fileStat.mtime > lastScanAt) {
         fileList.push(fullPath);
       }
     }
@@ -1394,6 +1455,168 @@ export function flattenPromptForWindowsShell(prompt: string): string {
 }
 
 // ---------------------------
+//----------------- PROVIDER CLI ENVIRONMENT UTILITIES ------------
+/**
+ * Resolves an operator-configured provider executable without invoking a
+ * shell. Antigravity auth, model discovery, runtime, and Websocket shell adapters share this
+ * so every provider subprocess uses the same executable override. Matching
+ * outer quotes are removed to support values copied from shell-style env files.
+ */
+export function resolveConfiguredCliExecutable(
+  configuredPath: string | undefined,
+  defaultCommand: string,
+): string {
+  const trimmedPath = configuredPath?.trim();
+  if (!trimmedPath) {
+    return defaultCommand;
+  }
+
+  const quote = trimmedPath[0];
+  if (
+    trimmedPath.length >= 2
+    && (quote === '"' || quote === "'")
+    && trimmedPath.at(-1) === quote
+  ) {
+    return trimmedPath.slice(1, -1).trim() || defaultCommand;
+  }
+
+  return trimmedPath;
+}
+
+function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const resolvedKey = Object.keys(env).find((envKey) => envKey.toLowerCase() === key.toLowerCase());
+  return resolvedKey ? env[resolvedKey] : undefined;
+}
+
+function getPathEnvKey(env: NodeJS.ProcessEnv): string {
+  return Object.keys(env).find((key) => key.toLowerCase() === 'path') || 'PATH';
+}
+
+function uniquePathEntries(entries: string[]): string[] {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const normalized = os.platform() === 'win32' ? entry.toLowerCase() : entry;
+    if (!entry || seen.has(normalized)) {
+      return false;
+    }
+
+    seen.add(normalized);
+    return true;
+  });
+}
+
+function getUserExecutablePathCandidates(env: NodeJS.ProcessEnv): string[] {
+  const home = os.homedir();
+  const npmPrefix = readEnvValue(env, 'npm_config_prefix');
+  const appData = readEnvValue(env, 'APPDATA');
+
+  return [
+    os.platform() === 'win32' && npmPrefix ? npmPrefix : '',
+    npmPrefix ? path.join(npmPrefix, 'bin') : '',
+    appData ? path.join(appData, 'npm') : '',
+    os.platform() === 'win32' ? path.join(home, 'AppData', 'Roaming', 'npm') : '',
+    path.join(home, '.local', 'bin'),
+    path.join(home, '.npm-global', 'bin'),
+    path.join(home, '.bun', 'bin'),
+    path.join(home, '.cargo', 'bin'),
+    path.join(home, 'go', 'bin'),
+  ];
+}
+
+/**
+ * Builds the subprocess environment used by provider CLI adapters.
+ *
+ * Antigravity's runtime, auth probe, model discovery, and AGY Shell launches use this helper so
+ * user-level executable directories remain discoverable when CloudCLI starts
+ * outside an interactive login shell. Existing variables and PATH ordering
+ * are preserved after the deduplicated user-directory prefix.
+ */
+export function buildProviderCliEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const nextEnv = { ...env };
+  const pathKey = getPathEnvKey(nextEnv);
+  const currentPath = nextEnv[pathKey] || '';
+  const pathEntries = currentPath.split(path.delimiter).filter(Boolean);
+
+  nextEnv[pathKey] = uniquePathEntries([
+    ...getUserExecutablePathCandidates(nextEnv),
+    ...pathEntries,
+  ]).join(path.delimiter);
+
+  return nextEnv;
+}
+
+/**
+ * Runs a short-lived provider CLI probe without blocking the Node.js event loop.
+ *
+ * The Antigravity auth and model adapters use this for installation,
+ * authentication, and model discovery checks. Failures are returned as data so
+ * those adapters can expose their normal fallback status instead of throwing.
+ */
+export function runProviderCliCommand(
+  command: string,
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
+): Promise<{
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  error: Error | null;
+}> {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const child = crossSpawn(command, args, {
+      env: options.env ?? buildProviderCliEnv(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: options.timeoutMs,
+    });
+
+    const finish = (
+      exitCode: number | null,
+      signal: NodeJS.Signals | null,
+      error: Error | null,
+    ) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve({ exitCode, signal, stdout, stderr, error });
+    };
+
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+    child.once('error', (error) => finish(null, null, error));
+    child.once('close', (exitCode, signal) => finish(exitCode, signal, null));
+  });
+}
+
+// ---------------------------
+//----------------- ANTIGRAVITY TRANSCRIPT UTILITIES ------------
+/**
+ * Removes Antigravity metadata and settings blocks, unwraps user requests,
+ * and trims the visible text. The Providers session reader and synchronizer
+ * share this so transcript content and generated session titles stay aligned.
+ * This is text normalization for AGY transcripts, not an HTML sanitizer.
+ */
+export function stripAntigravityTags(content: string): string {
+  return content
+    .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, '')
+    .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, '')
+    .replace(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/g, '$1')
+    .trim();
+}
+
+// ---------------------------
 //----------------- TERMINAL OUTPUT UTILITIES ------------
 /**
  * Matches the escape sequences a CLI emits when it believes it is writing to a
@@ -1488,9 +1711,12 @@ function parseCliVersion(output: string): string | null {
  * way, and the 5 s timeout bounds the wait. Used by every provider's auth
  * status (`installed` and `installedVersion`) and by the providers module's
  * CLI update service (the version before and after an update).
+ * Providers with normalized executable search paths may pass that environment
+ * as the third argument so installation and runtime resolve the same binary.
  */
-export function probeCliVersion(command: string, args: string[] = ['--version']): CliVersionProbe {
-  const result = spawn.sync(command, args, {
+export function probeCliVersion(command: string, args: string[] = ['--version'], env?: NodeJS.ProcessEnv): CliVersionProbe {
+  const result = crossSpawn.sync(command, args, {
+    env,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
     timeout: 5000,
@@ -1546,6 +1772,35 @@ export function findApplicationRoot(startDirectory: string): string {
   return path.basename(parentDirectory) === 'dist-server'
     ? path.dirname(parentDirectory)
     : parentDirectory;
+}
+
+// ---------------------------
+//----------------- LINUX NATIVE SESSION LOCKS ------------
+/**
+ * Providers' native CLI liveness readers use this device/inode key to match a
+ * stat result to Linux /proc/locks. Bigints preserve inode precision, including
+ * extended major and minor device numbers; this is only a Linux lock identity.
+ */
+export function getLinuxFileLockIdentity(device: bigint, inode: bigint): string {
+  const major = ((device >> 8n) & 0xfffn) | ((device >> 32n) & 0xfffff000n);
+  const minor = (device & 0xffn) | ((device >> 12n) & 0xffffff00n);
+  return `${major.toString(16)}:${minor.toString(16)}:${inode}`;
+}
+
+/**
+ * Providers' native activity readers use only granted exclusive whole-file
+ * flock owners as process evidence. Queued requests, POSIX SQLite locks, shared
+ * locks and invalid PIDs are excluded. Keys match getLinuxFileLockIdentity.
+ */
+export function parseLinuxExclusiveFileLocks(contents: string): Map<string, number> {
+  const holders = new Map<string, number>();
+  for (const line of contents.split('\n')) {
+    const match = /^\d+:\s+FLOCK\s+ADVISORY\s+WRITE\s+(\d+)\s+([\da-f]+):([\da-f]+):(\d+)\s+0\s+EOF\s*$/i.exec(line);
+    if (!match || Number(match[1]) <= 0) continue;
+    const key = `${BigInt(`0x${match[2]}`).toString(16)}:${BigInt(`0x${match[3]}`).toString(16)}:${match[4]}`;
+    holders.set(key, Number(match[1]));
+  }
+  return holders;
 }
 
 // ---------------------------

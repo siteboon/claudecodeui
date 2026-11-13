@@ -6,7 +6,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import { i18n } from '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { readDraftText, resetChatDrafts, writeDraftText } from '@/shared/chatDrafts';
-import type { BackgroundSendChoice, ChatMessage, PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
+import type { BackgroundSendChoice, ChatMessage, LLMProvider, PermissionMode, Project, ProjectSession, SessionActivityMap } from '@/shared/types';
 
 /**
  * #1587: follow-ups submitted while a turn runs used to replace each other in
@@ -140,6 +140,7 @@ const dispatcherClaims = (scope: string): StoredQueued | null => {
 };
 
 type Props = {
+  provider?: LLMProvider;
   session: ProjectSession;
   isLoading: boolean;
   model: string;
@@ -149,11 +150,11 @@ type Props = {
 const render = (initialProps: Partial<Props> = {}) => {
   const errors: ChatMessage[] = [];
   const view = renderHook(
-    ({ session, isLoading, model, processingSessions }: Props) => useChatComposerState({
+    ({ session, isLoading, model, processingSessions, provider = 'claude' }: Props) => useChatComposerState({
       selectedProject: PROJECT,
       selectedSession: session,
       currentSessionId: session.id ?? null,
-      provider: 'claude',
+      provider,
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
@@ -699,3 +700,15 @@ test('a session switch during the upload keeps a draft that changed in the sessi
   assert.equal(queuedOnServer('session-1')?.content, 'follow-up B');
   assert.equal(readDraftText('session-1'), 'written on the laptop');
 });
+
+for (const provider of ['claude', 'codex', 'opencode', 'antigravity'] as const) {
+  test(`${provider} uses the shared durable queue and retains its selected model`, async () => {
+    const { view } = render({ provider, model: 'chosen-model' });
+    await submit(view, 'follow-up A');
+    await submit(view, 'follow-up B');
+    assert.equal(queuedOnServer()?.content, 'follow-up A\n\nfollow-up B');
+    assert.equal(queuedOnServer()?.options?.model, 'chosen-model');
+    assert.equal(view.result.current.queuedDraft?.content, 'follow-up A\n\nfollow-up B');
+    assert.equal(view.result.current.input, '');
+  });
+}
