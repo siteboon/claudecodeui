@@ -293,11 +293,12 @@ test('listProjectFiles abandons a directory stream as soon as the entry limit is
       && error.code === 'FILE_TREE_TOO_LARGE'
       && error.statusCode === 413,
   );
-  // The budget plus the single entry that proves it was exceeded.
-  assert.equal(streamedEntries, 10_001);
+  // The budget plus the single entry that proves it was exceeded, once for
+  // the full walk and once for the top-level fallback that fails the same way.
+  assert.equal(streamedEntries, 20_002);
 });
 
-test('listProjectFiles shares the entry limit across nested directories', async () => {
+test('listProjectFiles falls back to a top-level listing when nested directories exceed the entry limit', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
   const firstDirectory = path.join(projectRoot, 'first');
   const secondDirectory = path.join(projectRoot, 'second');
@@ -309,6 +310,7 @@ test('listProjectFiles shares the entry limit across nested directories', async 
         return [
           createDirectoryEntry('first', true),
           createDirectoryEntry('second', true),
+          createDirectoryEntry('README.md', false),
         ];
       }
       if (directoryPaths.has(directoryPath)) {
@@ -323,11 +325,71 @@ test('listProjectFiles shares the entry limit across nested directories', async 
   });
   const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
 
+  const tree = await service.listProjectFiles('project-1');
+
+  assert.deepEqual(tree.map((entry) => entry.name), ['first', 'second', 'README.md']);
+  for (const directory of tree.slice(0, 2)) {
+    assert.equal(directory.childrenLoaded, false);
+    assert.equal(directory.children, undefined);
+  }
+  assert.equal(tree[2]?.childrenLoaded, undefined);
+});
+
+test('listProjectFiles lists one directory on demand and marks its subdirectories unloaded', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const sourceDirectory = path.join(projectRoot, 'src');
+  const nestedDirectory = path.join(sourceDirectory, 'nested');
+  const directoryPaths = new Set([sourceDirectory, nestedDirectory]);
+  const readDirectories: string[] = [];
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    realpath: async (candidatePath) => candidatePath,
+    stat: async (candidatePath) => createStats(directoryPaths.has(candidatePath), 0o755),
+    openDirectory: createDirectoryReader((directoryPath) => {
+      readDirectories.push(directoryPath);
+      if (directoryPath === projectRoot) {
+        return [createDirectoryEntry('src', true), createDirectoryEntry('README.md', false)];
+      }
+      if (directoryPath === sourceDirectory) {
+        return [createDirectoryEntry('nested', true), createDirectoryEntry('index.ts', false)];
+      }
+      if (directoryPath === nestedDirectory) {
+        return [createDirectoryEntry('deep.ts', false)];
+      }
+      return [];
+    }),
+    lstat: async (candidatePath) => createStats(directoryPaths.has(candidatePath), 0o644),
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
+  const listing = await service.listProjectFiles('project-1', { path: 'src' });
+
+  assert.deepEqual(listing.map((entry) => entry.name), ['nested', 'index.ts']);
+  assert.equal(listing[0]?.childrenLoaded, false);
+  assert.equal(listing[0]?.children, undefined);
+  assert.deepEqual(readDirectories, [sourceDirectory]);
+
+  const deeperListing = await service.listProjectFiles('project-1', { path: sourceDirectory, depth: 2 });
+
+  assert.deepEqual(deeperListing[0]?.children?.map((entry) => entry.name), ['deep.ts']);
+  assert.equal(deeperListing[0]?.childrenLoaded, undefined);
+});
+
+test('listProjectFiles rejects on-demand paths outside the project or pointing at a file', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const fileSystem = createFakeFileSystem({
+    access: async () => undefined,
+    stat: async () => createStats(false, 0o644),
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+
   await assert.rejects(
-    service.listProjectFiles('project-1'),
-    (error: unknown) => error instanceof AppError
-      && error.code === 'FILE_TREE_TOO_LARGE'
-      && error.statusCode === 413,
+    service.listProjectFiles('project-1', { path: '../outside' }),
+    (error: unknown) => error instanceof AppError && error.code === 'PATH_OUTSIDE_PROJECT',
+  );
+  await assert.rejects(
+    service.listProjectFiles('project-1', { path: 'README.md' }),
+    (error: unknown) => error instanceof AppError && error.code === 'NOT_A_DIRECTORY',
   );
 });
 
@@ -572,6 +634,26 @@ test('a file in another folder of the workspace can be read, but never written t
     );
   } finally {
     await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
+    await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('an on-demand listing does not follow a symlink out of the project', async () => {
+  // Beside this file rather than in the system temp directory, which is a
+  // read-only root.
+  const projectRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-lazy-project-'));
+  const outsideDirectory = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-lazy-outside-'));
+
+  try {
+    await fsPromises.writeFile(path.join(outsideDirectory, 'secret.txt'), 'secret', 'utf8');
+    await fsPromises.symlink(outsideDirectory, path.join(projectRoot, 'escape'));
+
+    await assert.rejects(
+      createRealFileSystemService(projectRoot).listProjectFiles('project-1', { path: 'escape' }),
+      (error: unknown) => error instanceof AppError && error.code === 'PATH_OUTSIDE_PROJECT',
+    );
+  } finally {
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
   }
 });

@@ -41,6 +41,20 @@ function readProjectId(request: Request): string {
   return readRequiredString(request.params.projectId, 'projectId');
 }
 
+function readOptionalDepth(value: unknown): number | null {
+  if (value === undefined) {
+    return null;
+  }
+  const parsedDepth = typeof value === 'string' ? Number.parseInt(value, 10) : Number.NaN;
+  if (!Number.isFinite(parsedDepth) || parsedDepth < 1) {
+    throw new AppError('Depth must be a positive integer', {
+      code: 'INVALID_FILE_TREE_DEPTH',
+      statusCode: 400,
+    });
+  }
+  return parsedDepth;
+}
+
 function readEntryType(value: unknown): 'file' | 'directory' {
   if (value !== 'file' && value !== 'directory') {
     throw new AppError('Type must be "file" or "directory"', {
@@ -162,8 +176,12 @@ export function createFileTreeRouter(
   }, logger));
 
   router.get('/projects/:projectId/files', createRouteHandler(async (request, response) => {
+    const directoryPath = readOptionalString(request.query.path);
+    const depth = readOptionalDepth(request.query.depth);
     response.json(await services.listProjectFiles(readProjectId(request), {
       respectGitignore: request.query.respectGitignore === 'true',
+      ...(directoryPath !== null ? { path: directoryPath } : {}),
+      ...(depth !== null ? { depth } : {}),
     }));
   }, logger));
 
