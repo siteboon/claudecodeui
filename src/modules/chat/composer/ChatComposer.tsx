@@ -358,6 +358,14 @@ export default function ChatComposer({
         />
       )}
 
+      {/* The question panel replaces the input, but how to answer often depends on
+          how much context is left, so the token usage stays reachable below it. */}
+      {hasQuestionPanel && (
+        <div className="mx-auto flex max-w-[54.25rem] justify-end">
+          <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
+        </div>
+      )}
+
       {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
         {showFileDropdown && filteredFiles.length > 0 && (
           <div
