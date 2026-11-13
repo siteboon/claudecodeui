@@ -68,6 +68,13 @@ test('hints grouped rows by the parent segments that differ inside the group', (
   );
 });
 
+test('keeps a long parent segment whole when it differs only near its end', () => {
+  assert.deepEqual(
+    hints('/srv/customer-project-archive-2025-q1/Project', '/srv/customer-project-archive-2025-q2/Project'),
+    ['.../customer-project-archive-2025-q1', '.../customer-project-archive-2025-q2'],
+  );
+});
+
 test('falls back to the full parent when one parent contains the other', () => {
   assert.deepEqual(hints('/work/Project', '/work/old/Project'), ['/work', '.../old']);
 });

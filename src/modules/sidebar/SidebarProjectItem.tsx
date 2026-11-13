@@ -240,15 +240,12 @@ function SidebarProjectItem({
                           />
                         )}
                       </div>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {sessionCountLabel}
-                        {groupPathHint && (
-                          <span className="ml-1 opacity-60" title={project.fullPath}>
-                            {' - '}
-                            {groupPathHint}
-                          </span>
-                        )}
-                      </p>
+                      <p className="truncate text-xs text-muted-foreground">{sessionCountLabel}</p>
+                      {groupPathHint && (
+                        <p className="break-all text-xs text-muted-foreground opacity-60" title={project.fullPath}>
+                          {groupPathHint}
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
