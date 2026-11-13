@@ -101,6 +101,7 @@
   "kanban": {
     "pending": "📋 Ausstehend",
     "inProgress": "🚀 In Bearbeitung",
+    "review": "🔍 In Prüfung",
     "done": "✅ Erledigt",
     "blocked": "🚫 Blockiert",
     "deferred": "⏳ Zurückgestellt",
@@ -125,6 +126,7 @@
   "statuses": {
     "pending": "Ausstehend",
     "in-progress": "In Bearbeitung",
+    "review": "In Prüfung",
     "done": "Erledigt",
     "blocked": "Blockiert",
     "deferred": "Zurückgestellt",
