@@ -32,6 +32,12 @@ before(async () => {
   port = (server.address() as { port: number }).port;
 });
 after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+/**
+ * Requests the loopback fixture server and collects raw wire bytes without automatic
+ * decompression. Uses a synthetic bearer value unless testing unauthenticated access;
+ * caller headers can override it. Rejects network errors and retains response headers
+ * so encoding, length and cache behavior can be compared with ordinary Express JSON.
+ */
 async function get(url: string, headers: Record<string, string> = {}, authorized = true) {
   return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: Buffer }>((resolve, reject) => {
     http.get({ hostname: '127.0.0.1', port, path: url, headers: { ...(authorized ? { Authorization: 'Bearer test-only' } : {}), ...headers } }, response => {
@@ -41,7 +47,7 @@ async function get(url: string, headers: Record<string, string> = {}, authorized
     }).on('error', reject);
   });
 }
-test('gzip decompresses to exact Express JSON bytes and preserves formatting/escaping/replacer', async () => {
+test('gzip decompresses to exact Express JSON bytes and preserves formatting/escaping/replacer', async (t) => {
   const original = await get('/reference');
   const compressed = await get('/history', { 'Accept-Encoding': 'gzip' });
   assert.equal(compressed.status, 200);
@@ -51,6 +57,7 @@ test('gzip decompresses to exact Express JSON bytes and preserves formatting/esc
   assert.deepEqual(gunzipSync(compressed.body), original.body);
   assert.equal(Number(compressed.headers['content-length']), compressed.body.length);
   assert(compressed.body.length < original.body.length);
+  t.diagnostic(`Synthetic response: identity=${original.body.length} bytes; gzip=${compressed.body.length} bytes; decompressed bytes match exactly.`);
 });
 test('identity, absent encoding and gzip q=0 preserve original JSON', async () => {
   const reference = await get('/reference');

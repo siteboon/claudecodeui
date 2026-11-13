@@ -6,7 +6,14 @@ import type { Request, Response } from 'express';
 const gzipAsync = promisify(gzip);
 const MIN_GZIP_BYTES = 1024;
 
-/** Used only by the providers history GET route after authentication and history loading. */
+/**
+ * Used only by the providers history GET route after authentication and history loading.
+ * Negotiates gzip/identity for JSON while preserving Express serialization settings.
+ * Bodies below 1 KiB use identity when allowed; refusing both encodings returns 406.
+ * Always marks history private/no-store and varies by Accept-Encoding. Range and
+ * non-GET requests keep Express's ordinary JSON path. Compression errors reject
+ * so the route can pass them to its existing error handler.
+ */
 export async function sendSessionHistoryResponse(req: Request, res: Response, payload: unknown): Promise<void> {
   res.setHeader('Cache-Control', 'private, no-store');
   res.vary('Accept-Encoding');
