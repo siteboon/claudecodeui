@@ -4,6 +4,23 @@ import path from 'node:path';
 import mime from 'mime-types';
 
 import { getGlobalImageAssetsDir, toPosixPath } from '@/shared/image-attachments.js';
+import { decodeMultipartFilename } from '@/shared/utils.js';
+
+/**
+ * Byte budget for the sanitized original name inside a stored asset filename.
+ * The `<ms>-<random>-` prefix adds at most 25 bytes, which keeps every stored
+ * name under the 255-byte limit of ext4 and APFS (NTFS: 255 UTF-16 units) even
+ * for scripts that take 2-4 UTF-8 bytes per character.
+ */
+const MAX_STORED_NAME_BYTES = 200;
+
+// Real extensions are short; a longer tail after the last dot is just part of
+// a dotted name, so it is truncated with the rest instead of being preserved.
+const MAX_KEPT_EXTENSION_BYTES = 32;
+
+// Truncation walks user-perceived characters so it never splits a surrogate
+// pair or separates a letter from its combining marks.
+const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 /**
  * Image mime types accepted for chat attachment uploads. SVG is allowed for
@@ -49,15 +66,72 @@ export async function ensureImageAssetsDir(): Promise<string> {
   return assetsDir;
 }
 
+/** Cuts a string to at most `maxBytes` UTF-8 bytes at a character boundary. */
+function truncateToUtf8Bytes(value: string, maxBytes: number): string {
+  let truncated = '';
+  let usedBytes = 0;
+  for (const { segment } of GRAPHEME_SEGMENTER.segment(value)) {
+    const segmentBytes = Buffer.byteLength(segment);
+    if (usedBytes + segmentBytes > maxBytes) {
+      break;
+    }
+    truncated += segment;
+    usedBytes += segmentBytes;
+  }
+  return truncated;
+}
+
+/**
+ * Turns an uploaded file's name into the readable part of its stored name.
+ *
+ * Letters, digits and combining marks of every script are kept, so a Cyrillic
+ * or CJK name stays recognizable. Everything else (whitespace, punctuation,
+ * symbols, emoji, control and bidi characters, path separators) becomes `_`:
+ * the stored path is listed unquoted in agent prompts (see
+ * `appendFilesInputTag`), where whitespace would split it and shell syntax
+ * must never appear.
+ */
+function sanitizeStoredAssetName(originalName: string): string {
+  const safeName = decodeMultipartFilename(originalName)
+    .normalize('NFC')
+    .replace(/[^\p{L}\p{N}\p{M}._-]/gu, '_');
+
+  let cappedName = safeName;
+  if (Buffer.byteLength(safeName) > MAX_STORED_NAME_BYTES) {
+    const extension = path.extname(safeName);
+    const keptExtension = Buffer.byteLength(extension) <= MAX_KEPT_EXTENSION_BYTES ? extension : '';
+    const baseName = safeName.slice(0, safeName.length - keptExtension.length);
+    cappedName = truncateToUtf8Bytes(baseName, MAX_STORED_NAME_BYTES - Buffer.byteLength(keptExtension))
+      + keptExtension;
+  }
+
+  // The serving routes refuse any name containing `..`; collapsing dot runs
+  // last also covers a cut that left the base name ending in a dot.
+  return cappedName.replace(/\.{2,}/g, '.');
+}
+
+/**
+ * Builds the unique on-disk filename for one chat upload from the name the
+ * client sent: a `<ms>-<random>-` prefix plus the sanitized, length-capped
+ * original name with its extension. The assets routes use it as multer's
+ * `filename` callback; the readable original name is returned separately by
+ * `buildStoredImageRecords`.
+ */
+export function buildStoredAssetFileName(originalName: string): string {
+  const uniquePrefix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  return `${uniquePrefix}-${sanitizeStoredAssetName(originalName)}`;
+}
+
 /**
  * Maps multer-stored upload files to the attachment records returned to the
  * chat composer. The absolute path is what providers receive and what session
- * history carries back to the UI.
+ * history carries back to the UI; `name` is the original filename, decoded
+ * from the raw UTF-8 bytes browsers send.
  */
 export function buildStoredImageRecords(files: UploadedImageFile[]): StoredImageAsset[] {
   const assetsDir = getGlobalImageAssetsDir();
   return files.map((file) => ({
-    name: file.originalname,
+    name: decodeMultipartFilename(file.originalname),
     path: toPosixPath(path.join(assetsDir, file.filename)),
     size: file.size,
     mimeType: file.mimetype,

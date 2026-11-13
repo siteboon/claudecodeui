@@ -200,9 +200,11 @@ export function appendImagesInputTag(prompt: string, images: unknown): string {
 
   const entryLines = descriptors.map((descriptor, index) => {
     const entryPath = toPosixPath(descriptor.path);
-    // Parentheses and newlines would break the "(original name: ...)" suffix
-    // the parser looks for, so drop them from the display name.
-    const cleanName = descriptor.name?.replace(/[()\r\n]/g, '').trim();
+    // Parentheses and line breaks would break the "(original name: ...)"
+    // suffix the parser looks for, so drop them from the display name. That
+    // includes U+2028/U+2029, which decoded upload names can contain and the
+    // entry pattern's `.` does not match.
+    const cleanName = descriptor.name?.replace(/[()\r\n\u2028\u2029]/g, '').trim();
     return cleanName
       ? `${index + 1}. ${entryPath} (original name: ${cleanName})`
       : `${index + 1}. ${entryPath}`;
@@ -233,7 +235,7 @@ export function appendFilesInputTag(prompt: string, files: unknown): string {
 
   const entryLines = descriptors.map((descriptor, index) => {
     const entryPath = toPosixPath(descriptor.path);
-    const cleanName = descriptor.name?.replace(/[()\r\n]/g, '').trim();
+    const cleanName = descriptor.name?.replace(/[()\r\n\u2028\u2029]/g, '').trim();
     return cleanName
       ? `${index + 1}. ${entryPath} (original name: ${cleanName})`
       : `${index + 1}. ${entryPath}`;
