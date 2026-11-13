@@ -575,3 +575,101 @@ test('a file in another folder of the workspace can be read, but never written t
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
   }
 });
+
+
+test('directory pages scan a 40,000-entry folder deterministically without recursion or unbounded metadata', async () => {
+  const root = path.resolve('paged-project');
+  const opened: string[] = [];
+  let metadata = 0;
+  const fs = createFakeFileSystem({
+    realpath: async p => p,
+    stat: async () => createStats(true, 0o755),
+    lstat: async () => { metadata++; return createStats(false, 0o644); },
+    readTextFile: async () => '*.log',
+    openDirectory: async function* (directory) {
+      opened.push(directory);
+      for (let i = 39999; i >= 0; i--) yield createDirectoryEntry(`f${String(i).padStart(5, '0')}`, false);
+      yield createDirectoryEntry('z-folder', true);
+      yield createDirectoryEntry('node_modules', true);
+      yield createDirectoryEntry('ignored.log', false);
+    },
+  });
+  const service = createFileTreeService(createDependencies(fs, root));
+  const first = await service.listProjectDirectory('p', { respectGitignore: true });
+  assert.equal(first.entries.length, 200);
+  assert.equal(metadata, 200);
+  assert.equal(first.entries[0].name, 'z-folder');
+  assert.deepEqual(opened, [root]);
+  const repeat = await service.listProjectDirectory('p', { respectGitignore: true });
+  assert.deepEqual(first, repeat);
+  const second = await service.listProjectDirectory('p', { respectGitignore: true, cursor: first.nextCursor! });
+  assert.equal(second.entries[0].name, 'f00199');
+  assert.equal(new Set([...first.entries, ...second.entries].map(x => x.path)).size, 400);
+});
+
+test('directory pagination covers every entry once and rejects malformed/stale/cross-folder cursors', async () => {
+  const root = path.resolve('paged-project');
+  let changed = false;
+  const service = createFileTreeService(createDependencies(createFakeFileSystem({
+    realpath: async p => p,
+    stat: async () => ({ ...createStats(true, 0o755), size: changed ? 1 : 0 }),
+    lstat: async () => createStats(false, 0o644),
+    readTextFile: async () => '',
+    openDirectory: async function* () {
+      for (let i = 450; i >= 0; i--) yield createDirectoryEntry(`f${String(i).padStart(3, '0')}`, false);
+    },
+  }), root));
+  const all: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await service.listProjectDirectory('p', { respectGitignore: true, cursor });
+    all.push(...page.entries.map(x => x.name));
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+  assert.equal(all.length, 451);
+  assert.equal(new Set(all).size, 451);
+  assert.deepEqual(all, [...all].sort());
+  const first = await service.listProjectDirectory('p', { respectGitignore: true });
+  await assert.rejects(service.listProjectDirectory('p', { respectGitignore: true, cursor: 'broken' }), { statusCode: 400 });
+  await assert.rejects(service.listProjectDirectory('p', { respectGitignore: true, cursor: first.nextCursor!, path: 'sub' }), { statusCode: 409 });
+  changed = true;
+  await assert.rejects(service.listProjectDirectory('p', { respectGitignore: true, cursor: first.nextCursor! }), { statusCode: 409 });
+  for (const limit of [0, -1, 201, NaN, 1.5]) await assert.rejects(service.listProjectDirectory('p', { respectGitignore: true, limit }), { statusCode: 400 });
+});
+
+test('directory expansion confines traversal, symlinks and ignored ancestors; unknown projects fail', async () => {
+  const root = path.resolve('paged-project');
+  let opened = 0;
+  const dependencies = createDependencies(createFakeFileSystem({
+    realpath: async p => p === path.join(root, 'escape') ? path.resolve('outside') : p,
+    stat: async () => createStats(true, 0o755),
+    readTextFile: async () => 'private/\n*.log',
+    openDirectory: async function* () { opened++; yield* []; },
+  }), root);
+  dependencies.projects.getProjectPathById = async id => id === 'missing' ? null : root;
+  const service = createFileTreeService(dependencies);
+  for (const target of ['../outside', '/etc', 'escape', '.git/objects', 'node_modules/sub', 'private/sub']) {
+    await assert.rejects(service.listProjectDirectory('p', { respectGitignore: true, path: target }), { statusCode: 403 });
+  }
+  assert.equal(opened, 0);
+  await assert.rejects(service.listProjectDirectory('missing', { respectGitignore: true }), { statusCode: 404 });
+  assert.deepEqual((await service.listProjectDirectory('p', { respectGitignore: true, path: '.' })).entries, []);
+});
+
+
+test('creating an empty gitignore invalidates fallback-rule cursors in a subdirectory', async () => {
+  const root = path.resolve('paged-project');
+  let exists = false;
+  const service = createFileTreeService(createDependencies(createFakeFileSystem({
+    realpath: async p => p, stat: async () => createStats(true, 0o755),
+    lstat: async () => createStats(false, 0o644),
+    readTextFile: async () => { if (!exists) throw Object.assign(new Error('missing'), { code: 'ENOENT' }); return ''; },
+    openDirectory: async function* () { yield createDirectoryEntry('build', true); yield createDirectoryEntry('a', false); yield createDirectoryEntry('b', false); },
+  }), root));
+  const first = await service.listProjectDirectory('p', { path: 'sub', respectGitignore: true, limit: 1 });
+  assert.equal(first.entries[0].name, 'a');
+  exists = true;
+  await assert.rejects(service.listProjectDirectory('p', { path: 'sub', respectGitignore: true, limit: 1, cursor: first.nextCursor! }), { statusCode: 409 });
+  const refreshed = await service.listProjectDirectory('p', { path: 'sub', respectGitignore: true, limit: 1 });
+  assert.equal(refreshed.entries[0].name, 'build');
+});

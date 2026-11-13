@@ -25,6 +25,7 @@ type FileTreeBodyProps = {
   onDownload?: (item: FileTreeNode) => void;
   onUpload?: (path: string) => void;
   onRefresh?: () => void;
+  renderDirectoryPage?: (path: string) => ReactNode;
   // Drag-and-drop upload targeting
   dropTarget?: string | null;
   onItemDragOver?: (event: DragEvent<HTMLDivElement>, targetPath: string) => void;
@@ -58,6 +59,7 @@ export default function FileTreeBody({
   onDownload,
   onUpload,
   onRefresh,
+  renderDirectoryPage,
   dropTarget,
   onItemDragOver,
   renamingItem,
@@ -96,6 +98,7 @@ export default function FileTreeBody({
           viewMode={viewMode}
           expandedDirs={expandedDirs}
           onItemClick={onItemClick}
+          renderDirectoryPage={renderDirectoryPage}
           renderFileIcon={renderFileIcon}
           formatFileSize={formatFileSize}
           formatRelativeTime={formatRelativeTime}
