@@ -1,7 +1,7 @@
 import { getConnection } from '@/modules/database/connection.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
 import { normalizeProjectPath } from '@/shared/utils.js';
-import type { SessionForkAncestor } from '@/shared/types.js';
+import type { ClearedContextSegment, SessionForkAncestor } from '@/shared/types.js';
 
 type SessionRow = {
   session_id: string;
@@ -341,6 +341,61 @@ export const sessionsDb = {
   },
 
   /**
+   * Clears a session's context: retires its provider session as an earlier
+   * part of the conversation and detaches the session, so the next run starts
+   * a new provider session that knows nothing of what came before.
+   *
+   * One transaction, so the session is never seen detached from a transcript
+   * that is not yet recorded as its history — a reader in between would show
+   * an empty conversation, and the indexer would take the transcript for a
+   * session of its own. Returns false, changing nothing, when the session has
+   * no provider session to retire.
+   */
+  clearProviderSessionContext(sessionId: string): boolean {
+    const db = getConnection();
+
+    return db.transaction(() => {
+      const session = db
+        .prepare('SELECT provider, provider_session_id, jsonl_path FROM sessions WHERE session_id = ?')
+        .get(sessionId) as Pick<SessionRow, 'provider' | 'provider_session_id' | 'jsonl_path'> | undefined;
+      if (!session?.provider_session_id) {
+        return false;
+      }
+
+      sessionsDb.markProviderSessionSuperseded({
+        providerSessionId: session.provider_session_id,
+        provider: session.provider,
+        sessionId,
+        jsonlPath: session.jsonl_path,
+        reason: 'context_cleared',
+      });
+      sessionsDb.detachProviderSession(sessionId);
+      return true;
+    })();
+  },
+
+  /**
+   * The provider sessions a session's context was cleared off, oldest first:
+   * the earlier parts of its conversation, in the order they happened.
+   */
+  getClearedContextSegments(sessionId: string): ClearedContextSegment[] {
+    const db = getConnection();
+    const rows = db
+      .prepare(
+        `SELECT provider_session_id, jsonl_path, created_at FROM superseded_provider_sessions
+         WHERE session_id = ? AND reason = 'context_cleared'
+         ORDER BY created_at ASC, rowid ASC`
+      )
+      .all(sessionId) as Array<{ provider_session_id: string; jsonl_path: string | null; created_at: string }>;
+
+    return rows.map((row) => ({
+      providerSessionId: row.provider_session_id,
+      jsonlPath: row.jsonl_path,
+      clearedAt: normalizeTimestamp(row.created_at) ?? row.created_at,
+    }));
+  },
+
+  /**
    * Records that a session has left a provider session behind for good.
    *
    * The transcript stays on disk, which is deliberate — the abandoned attempt
@@ -353,16 +408,19 @@ export const sessionsDb = {
     provider: string;
     sessionId: string;
     jsonlPath: string | null;
+    /** Defaults to 'edit': a discarded version, never read back as history. */
+    reason?: 'edit' | 'context_cleared';
   }): void {
     const db = getConnection();
     db.prepare(
-      `INSERT INTO superseded_provider_sessions (provider_session_id, provider, session_id, jsonl_path)
-       VALUES (?, ?, ?, ?)
+      `INSERT INTO superseded_provider_sessions (provider_session_id, provider, session_id, jsonl_path, reason)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(provider_session_id, provider) DO UPDATE SET
          session_id = excluded.session_id,
          jsonl_path = excluded.jsonl_path,
+         reason = excluded.reason,
          created_at = CURRENT_TIMESTAMP`
-    ).run(input.providerSessionId, input.provider, input.sessionId, input.jsonlPath);
+    ).run(input.providerSessionId, input.provider, input.sessionId, input.jsonlPath, input.reason ?? 'edit');
   },
 
   isProviderSessionSuperseded(providerSessionId: string, provider: string): boolean {

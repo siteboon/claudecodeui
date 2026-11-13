@@ -701,11 +701,14 @@ async function getSessionMessages(
   limit: number | null,
   offset: number,
   getLiveRunStartTime: LiveRunStartTimeProbe,
+  transcriptPath?: string,
 ): Promise<ClaudeHistoryMessagesResult> {
   try {
     // The DB row is keyed by the app-facing session id, while the JSONL rows
-    // on disk carry the provider-native id — both ids are needed here.
-    const jsonLPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+    // on disk carry the provider-native id — both ids are needed here. An
+    // explicit path is an earlier part of the conversation (its context was
+    // cleared since), which the row no longer points at.
+    const jsonLPath = transcriptPath ?? sessionsDb.getSessionById(sessionId)?.jsonl_path;
 
     if (!jsonLPath) {
       return { messages: [], total: 0, hasMore: false };
@@ -1800,7 +1803,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     try {
       // Load full history first so `total` reflects frontend-normalized messages,
       // not raw JSONL records.
-      result = await getSessionMessages(sessionId, providerSessionId, null, 0, this.getLiveRunStartTime);
+      result = await getSessionMessages(
+        sessionId,
+        providerSessionId,
+        null,
+        0,
+        this.getLiveRunStartTime,
+        options.transcriptPath,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[ClaudeProvider] Failed to load session ${sessionId}:`, message);

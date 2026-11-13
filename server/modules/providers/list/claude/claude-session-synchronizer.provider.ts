@@ -135,6 +135,15 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    // A transcript a session's context was cleared off stays on disk as an
+    // earlier part of that conversation. Re-indexing it would list it as a
+    // session of its own — and for a session discovered from disk, whose app
+    // id is that transcript's id, it would hand the row back to the context
+    // the user cleared.
+    if (sessionsDb.isProviderSessionSuperseded(parsed.sessionId, this.provider)) {
+      return null;
+    }
+
     // App-created sessions are keyed by an app id, so disk-discovered provider
     // ids must be resolved through the provider-id mapping first.
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)

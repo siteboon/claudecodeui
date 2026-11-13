@@ -406,6 +406,8 @@ export type ChatMessage = {
   compact?: CompactionInfo;
   /** The summary that compaction produced, folded into the row above rather than left loose. */
   compactSummary?: string;
+  /** Set on the row marking where the session's context was cleared, so it is drawn as a divider. */
+  contextCleared?: boolean;
   isSubagentContainer?: boolean;
   /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
   subagent?: SubagentInfo;
@@ -609,6 +611,8 @@ export type NormalizedMessage = {
   isCompactSummary?: boolean;
   /** Set by the provider on the row that stands in for a compaction. */
   compact?: CompactionInfo;
+  /** Set by the server on the row marking where the session's context was cleared. */
+  contextCleared?: boolean;
   images?: Array<{ path?: string; data?: string; name?: string }>;
   files?: Array<{ path?: string; name?: string; mimeType?: string; size?: number }>;
   toolName?: string;

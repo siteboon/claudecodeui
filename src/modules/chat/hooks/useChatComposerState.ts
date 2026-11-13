@@ -68,6 +68,8 @@ type UseChatComposerStateArgs = {
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
+  /** Runs the `/clear` command: clears the open session's context. */
+  onClearContext?: () => void;
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
@@ -275,6 +277,7 @@ export function useChatComposerState({
   onSessionEstablished,
   onFileOpen,
   onShowSettings,
+  onClearContext,
   scrollToBottom,
   addMessage,
   setIsUserScrolledUp,
@@ -472,11 +475,15 @@ export function useChatComposerState({
           onShowSettings?.();
           break;
 
+        case 'clear':
+          onClearContext?.();
+          break;
+
         default:
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage],
+    [onClearContext, onFileOpen, onShowSettings, addMessage],
   );
 
   const closeCommandModal = useCallback(() => {
