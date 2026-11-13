@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -14,10 +15,18 @@ type LiveClaudeCliSession = {
 };
 
 /**
- * Claude Code keeps one file per running session here, named `<pid>.json`.
- * The directory belongs to the CLI, not to CloudCLI: it is only ever read.
+ * Claude Code keeps one file per running session here, named `<pid>.json`,
+ * under its config directory: `CLAUDE_CONFIG_DIR` when that is set (the server
+ * forwards its env to every CLI it spawns), `~/.claude` otherwise. The
+ * directory belongs to the CLI, not to CloudCLI: it is only ever read.
  */
-const registryDirectory = () => path.join(os.homedir(), '.claude', 'sessions');
+const registryDirectory = () => {
+  const configDirectory = process.env.CLAUDE_CONFIG_DIR?.trim();
+  const baseDirectory = configDirectory && path.isAbsolute(configDirectory)
+    ? configDirectory
+    : path.join(os.homedir(), '.claude');
+  return path.join(baseDirectory, 'sessions');
+};
 
 /**
  * Upper bound on registry files inspected per poll.
@@ -28,6 +37,39 @@ const registryDirectory = () => path.join(os.homedir(), '.claude', 'sessions');
  */
 const MAX_REGISTRY_FILES = 256;
 
+/** Whether a process with this pid exists (EPERM: it does, owned by someone else). */
+function pidExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException)?.code === 'EPERM';
+  }
+}
+
+/**
+ * The registry's `.json` entries worth reading. An entry named after a pid
+ * that no longer exists is left out without being read, so crash leftovers
+ * neither cost a read nor count towards `MAX_REGISTRY_FILES`.
+ */
+async function listRegistryEntries(): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await fsp.readdir(registryDirectory());
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => {
+      if (!entry.endsWith('.json')) {
+        return false;
+      }
+      const pidName = /^(\d+)\.json$/.exec(entry);
+      return !pidName || pidExists(Number(pidName[1]));
+    })
+    .slice(0, MAX_REGISTRY_FILES);
+}
+
 /**
  * Whether `pid` is still the process the registry recorded.
  *
@@ -37,13 +79,9 @@ const MAX_REGISTRY_FILES = 256;
  * `procStart` is compared against the kernel's start-time for that pid so a
  * reused pid cannot be mistaken for the original process.
  */
-async function isRecordedProcessAlive(pid: number, procStart: unknown): Promise<boolean> {
-  try {
-    process.kill(pid, 0);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code !== 'EPERM') {
-      return false;
-    }
+function isRecordedProcessAlive(pid: number, procStart: unknown): boolean {
+  if (!pidExists(pid)) {
+    return false;
   }
 
   if (process.platform !== 'linux' || typeof procStart !== 'string' || !procStart) {
@@ -51,7 +89,7 @@ async function isRecordedProcessAlive(pid: number, procStart: unknown): Promise<
   }
 
   try {
-    const stat = await fsp.readFile(`/proc/${pid}/stat`, 'utf8');
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
     // The comm field is parenthesised and may itself contain spaces, so the
     // fields are counted from the last ')'. starttime is the 22nd field
     // overall, i.e. the 20th of what follows the comm field.
@@ -85,7 +123,7 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
     return null;
   }
 
-  if (!(await isRecordedProcessAlive(pid, record.procStart))) {
+  if (!isRecordedProcessAlive(pid, record.procStart)) {
     return null;
   }
 
@@ -103,19 +141,58 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
  * is recomputed on every read instead of being cached or persisted.
  */
 export async function listBusyClaudeCliSessions(): Promise<LiveClaudeCliSession[]> {
-  let entries: string[];
-  try {
-    entries = await fsp.readdir(registryDirectory());
-  } catch {
-    // No registry directory at all is the normal case for an install that has
-    // never run the CLI, and an unreadable one is not worth failing a poll for.
-    return [];
-  }
-
-  const registryFiles = entries.filter((entry) => entry.endsWith('.json')).slice(0, MAX_REGISTRY_FILES);
+  // No registry directory at all is the normal case for an install that has
+  // never run the CLI, and an unreadable one is not worth failing a poll for.
+  const registryFiles = await listRegistryEntries();
   const sessions = await Promise.all(
     registryFiles.map((entry) => readLiveBusySession(path.join(registryDirectory(), entry))),
   );
 
   return sessions.filter((session): session is LiveClaudeCliSession => session !== null);
+}
+
+/** Job ids end up in a shell command line, so only plain id characters pass. */
+const SAFE_JOB_ID = /^[A-Za-z0-9_.:-]+$/;
+
+/**
+ * The job id of the live background Claude process (`claude --bg`, or a
+ * session sent to the background) that holds `providerSessionId`, or null.
+ *
+ * The CLI refuses `claude --resume` for such a session and asks for
+ * `claude attach <job id>` instead, so the Shell view launches that.
+ *
+ * Used by the websocket module's Shell gateway before it builds a launch
+ * command. Reads are asynchronous so a slow config directory cannot stall the
+ * server while a Shell tab opens.
+ */
+export async function findBackgroundClaudeJobId(providerSessionId: string): Promise<string | null> {
+  if (!providerSessionId) {
+    return null;
+  }
+
+  const entries = await listRegistryEntries();
+  const jobIds = await Promise.all(entries.map(async (entry) => {
+    let record: Record<string, unknown> | null;
+    try {
+      record = JSON.parse(await fsp.readFile(path.join(registryDirectory(), entry), 'utf8'));
+    } catch {
+      return null;
+    }
+    if (
+      !record ||
+      typeof record !== 'object' ||
+      record.kind !== 'bg' ||
+      record.sessionId !== providerSessionId ||
+      typeof record.jobId !== 'string' ||
+      !SAFE_JOB_ID.test(record.jobId)
+    ) {
+      return null;
+    }
+    const pid = typeof record.pid === 'number' ? record.pid : NaN;
+    return Number.isInteger(pid) && pid > 0 && isRecordedProcessAlive(pid, record.procStart)
+      ? record.jobId
+      : null;
+  }));
+
+  return jobIds.find((jobId): jobId is string => jobId !== null) ?? null;
 }
