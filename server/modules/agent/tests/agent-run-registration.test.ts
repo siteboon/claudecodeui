@@ -70,6 +70,7 @@ function createDependencies(queryClaude: RunFunction): AgentDependencies {
         sessionsDb.createAppSession(sessionId, provider, projectPath, initialMessage);
         return { sessionId };
       },
+      archiveSession: async (sessionId) => sessionsDb.updateSessionIsArchived(sessionId, true),
     },
     runs: chatRunRegistry,
     queryClaude,
