@@ -8,6 +8,7 @@ import test from 'node:test';
 
 import { WebSocket } from 'ws';
 
+import { codexApiConnectionService } from '@/modules/providers/index.js';
 import { handleShellConnection } from '@/modules/websocket/services/shell-websocket.service.js';
 
 function createFakeSocket() {
@@ -49,6 +50,39 @@ function createFakePty() {
     },
   };
 }
+
+test('Codex and plain terminals receive the saved API environment; Claude does not', (t) => {
+  const secret = 'terminal-only-test-key';
+  const getEnvironment = t.mock.method(codexApiConnectionService, 'getShellEnvironment', () => ({
+    PATH: '/test/codex-shim:/usr/bin', CODEX_API_KEY: secret,
+  }));
+  for (const provider of ['codex', 'plain-shell', 'claude']) {
+    const socket = createFakeSocket();
+    const terminal = createFakePty();
+    let capturedEnv: NodeJS.ProcessEnv | undefined;
+    let capturedCommand: unknown;
+    handleShellConnection(socket as never, {
+      resolveProviderSessionId: () => 'native-thread',
+      spawnPty: (_shell, args, options) => {
+        capturedEnv = options?.env;
+        capturedCommand = args;
+        return terminal as never;
+      },
+    });
+    socket.emit('message', JSON.stringify({ type: 'init', provider, projectPath: process.cwd(),
+      sessionId: `api-env-${provider}`, hasSession: true }));
+    if (provider === 'claude') {
+      assert.notEqual(capturedEnv?.CODEX_API_KEY, secret);
+    } else {
+      assert.equal(capturedEnv?.CODEX_API_KEY, secret);
+      assert.equal(capturedEnv?.PATH, '/test/codex-shim:/usr/bin');
+    }
+    assert(!JSON.stringify(capturedCommand).includes(secret));
+    assert(!socket.frames.join('').includes(secret));
+    terminal.emitExit();
+  }
+  assert.equal(getEnvironment.mock.callCount(), 2);
+});
 
 test('a stale socket close cannot detach the socket that replaced it', () => {
   const pty = createFakePty();

@@ -10,6 +10,7 @@ type ProviderAuthStatusByProvider = Record<AgentProvider, ProviderAuthStatus>;
 type AgentsSettingsTabProps = {
   providerAuthStatus: ProviderAuthStatusByProvider;
   onProviderLogin: (provider: AgentProvider) => void;
+  onProviderAuthRefresh?: (provider: AgentProvider) => void;
   claudePermissions: ClaudePermissionsState;
   onClaudePermissionsChange: (value: ClaudePermissionsState) => void;
   cursorPermissions: CursorPermissionsState;
@@ -23,6 +24,7 @@ type AgentsSettingsTabProps = {
 export default function AgentsSettingsTab({
   providerAuthStatus,
   onProviderLogin,
+  onProviderAuthRefresh,
   claudePermissions,
   onClaudePermissionsChange,
   cursorPermissions,
@@ -102,6 +104,7 @@ export default function AgentsSettingsTab({
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           projects={projects}
+          onProviderAuthRefresh={onProviderAuthRefresh}
         />
       </div>
     </div>
