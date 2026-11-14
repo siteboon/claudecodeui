@@ -45,7 +45,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
     {
       value: 'best',
       label: 'Best available',
-      description: 'Use Fable 5 when available, otherwise the latest Opus model.',
+      description: 'Use Fable when available, otherwise the latest Opus model.',
       effort: {
         default: 'high',
         values: [
@@ -60,7 +60,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
     },
     {
       value: 'fable',
-      label: 'Fable 5',
+      label: 'Fable',
       description: 'Most capable Claude model for the hardest, longest-running tasks.',
       effort: {
         default: 'high',
@@ -142,6 +142,19 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
       value: 'haiku',
       label: 'Haiku',
       description: 'Fast and efficient Claude model for simple tasks.',
+      // `medium` is the level Claude Code already runs Haiku at when none is sent, so
+      // sessions that predate this control keep the effort they have been running with.
+      // Ultracode is left out: standing workflow orchestration is not what Haiku is for.
+      effort: {
+        default: 'medium',
+        values: [
+          { value: 'low' },
+          { value: 'medium' },
+          { value: 'high' },
+          { value: 'xhigh' },
+          { value: 'max' },
+        ],
+      },
     },
     {
       value: 'opusplan',

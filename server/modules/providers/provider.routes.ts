@@ -1006,6 +1006,16 @@ router.post(
   }),
 );
 
+// Starts the session's next message on a fresh context; its history stays.
+router.post(
+  '/sessions/:sessionId/clear-context',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.clearSessionContext(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
 router.post(
   '/sessions/:sessionId/fork',
   asyncHandler(async (req: Request, res: Response) => {

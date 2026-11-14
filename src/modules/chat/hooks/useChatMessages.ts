@@ -383,6 +383,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
       // transcript row when the user edits or forks from it.
       transcriptAnchorId: msg.transcriptAnchorId,
       compact: msg.compact,
+      contextCleared: msg.contextCleared,
       // Set by the provider only on an assistant reply, and only when it knows
       // which model produced it, so every other row simply carries undefined.
       model: msg.model,

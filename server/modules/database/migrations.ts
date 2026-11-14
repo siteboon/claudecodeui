@@ -425,6 +425,17 @@ const addSupersededTranscriptPathColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'superseded_provider_sessions', columnNames, 'jsonl_path', 'TEXT');
 };
 
+/**
+ * Adds the reason a session left a provider session behind.
+ *
+ * Every row written before clearing context existed came from an edit, which
+ * is what the column defaults to.
+ */
+const addSupersededReasonColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'superseded_provider_sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'superseded_provider_sessions', columnNames, 'reason', "TEXT NOT NULL DEFAULT 'edit'");
+};
+
 const addForkedFromSessionIdColumn = (db: Database): void => {
   const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'forked_from_session_id', 'TEXT');
@@ -555,6 +566,7 @@ export const runMigrations = (db: Database) => {
     db.exec(SESSION_DRAFTS_TABLE_SCHEMA_SQL);
     db.exec(SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL);
     addSupersededTranscriptPathColumn(db);
+    addSupersededReasonColumn(db);
 
     db.exec(PROJECTS_TABLE_SCHEMA_SQL);
     rebuildProjectsTableWithPrimaryKeySchema(db);

@@ -54,6 +54,13 @@ type ProviderCapabilities = {
    * Requires a runtime that keeps its CLI's input open during a turn.
    */
   supportsSteering: boolean;
+  /**
+   * Whether a session's context can be cleared: the next message starts a new
+   * provider session while the earlier conversation stays readable as history.
+   * Requires a history reader that can read a transcript the session row no
+   * longer points at, and an indexer that leaves such a transcript alone.
+   */
+  supportsContextClearing: boolean;
 };
 
 /**
@@ -83,6 +90,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // Streaming input stays open for the whole run, and a user message written
     // to it with priority `next` joins the running turn.
     supportsSteering: true,
+    supportsContextClearing: true,
   },
   cursor: {
     provider: 'cursor',
@@ -99,6 +107,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsSessionForking: false,
     supportsSideQuestions: false,
     supportsSteering: false,
+    supportsContextClearing: false,
   },
   codex: {
     provider: 'codex',
@@ -119,6 +128,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsSessionForking: true,
     supportsSideQuestions: true,
     supportsSteering: false,
+    supportsContextClearing: false,
   },
   opencode: {
     provider: 'opencode',
@@ -142,6 +152,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsSessionForking: false,
     supportsSideQuestions: true,
     supportsSteering: false,
+    supportsContextClearing: false,
   },
   kiro: {
     provider: 'kiro',
@@ -165,6 +176,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // way to inject a message into its running prompt.
     supportsSideQuestions: false,
     supportsSteering: false,
+    // Kiro cannot read retired transcripts or keep them out of session indexing.
+    supportsContextClearing: false,
   },
 };
 
