@@ -198,6 +198,12 @@ const builtInCommands = [
     metadata: { type: "builtin" },
   },
   {
+    name: "/clear",
+    description: "Clear this session's context and keep its history",
+    namespace: "builtin",
+    metadata: { type: "builtin" },
+  },
+  {
     name: "/cost",
     description: "Display token usage information",
     namespace: "builtin",
@@ -442,6 +448,17 @@ Custom commands can be created in:
           ? `Opening CLAUDE.md at ${claudeMdPath}`
           : `CLAUDE.md not found at ${claudeMdPath}. Create it to store project-specific instructions.`,
       },
+    };
+  },
+
+  // The session itself is cleared by the client through the providers
+  // module's clear-context route, which owns sessions; this only names the
+  // action, like "/config" does for the settings screen.
+  "/clear": async () => {
+    return {
+      type: "builtin",
+      action: "clear",
+      data: {},
     };
   },
 

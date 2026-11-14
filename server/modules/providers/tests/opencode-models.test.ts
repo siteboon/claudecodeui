@@ -23,6 +23,9 @@ const OPENCODE_ENV_KEYS = [
   'WALLY_API_KEY',
   'OPENCODE_CONFIG',
   'OPENCODE_CONFIG_CONTENT',
+  'OPENCODE_CONFIG_DIR',
+  'XDG_CONFIG_HOME',
+  'XDG_DATA_HOME',
 ];
 
 /**
@@ -283,7 +286,7 @@ test('OpenCode keeps curated metadata for discovered models it already knows', a
   );
 });
 
-test('OpenCode counts providers from OPENCODE_CONFIG and OPENCODE_CONFIG_CONTENT', async () => {
+test('OpenCode counts providers from OPENCODE_CONFIG, OPENCODE_CONFIG_CONTENT and a moved config dir', async () => {
   const listing = async () => ['my-proxy/foo', 'anthropic/claude-sonnet-5', 'opencode/gpt-5.6-terra'];
   const expectProxyAndAnthropic = async (adapter: OpenCodeProviderModels): Promise<void> => {
     const catalog = await adapter.getSupportedModels();
@@ -311,6 +314,145 @@ test('OpenCode counts providers from OPENCODE_CONFIG and OPENCODE_CONFIG_CONTENT
     },
     expectProxyAndAnthropic,
     listing,
+  );
+
+  for (const envKey of ['XDG_CONFIG_HOME', 'OPENCODE_CONFIG_DIR'] as const) {
+    await withOpenCodeHome(
+      async (homeDir) => {
+        await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } });
+        const baseDir = path.join(homeDir, 'moved-config');
+        const configDir = envKey === 'XDG_CONFIG_HOME' ? path.join(baseDir, 'opencode') : baseDir;
+        await mkdir(configDir, { recursive: true });
+        await writeFile(path.join(configDir, 'opencode.json'), JSON.stringify({ provider: { 'my-proxy': {} } }), 'utf8');
+        process.env[envKey] = baseDir;
+      },
+      expectProxyAndAnthropic,
+      listing,
+    );
+  }
+
+  // The usual XDG setup moves both: the login in auth.json still counts next to the moved config.
+  await withOpenCodeHome(
+    async (homeDir) => {
+      const dataDir = path.join(homeDir, 'xdg-data', 'opencode');
+      await mkdir(dataDir, { recursive: true });
+      await writeFile(path.join(dataDir, 'auth.json'), JSON.stringify({ anthropic: { type: 'api', key: 'test' } }), 'utf8');
+      const configDir = path.join(homeDir, 'xdg-config', 'opencode');
+      await mkdir(configDir, { recursive: true });
+      await writeFile(path.join(configDir, 'opencode.json'), JSON.stringify({ provider: { 'my-proxy': {} } }), 'utf8');
+      process.env.XDG_DATA_HOME = path.join(homeDir, 'xdg-data');
+      process.env.XDG_CONFIG_HOME = path.join(homeDir, 'xdg-config');
+    },
+    expectProxyAndAnthropic,
+    listing,
+  );
+});
+
+// The config from issue #1771: OpenCode v2's `providers` / `settings.apiKey` shape.
+const REPORTER_V2_CONFIG = {
+  providers: {
+    res: {
+      settings: { apiKey: '{file:~/.config/opencode/res.key}' },
+      models: { 'gemini-4-argon': {} },
+    },
+  },
+};
+
+const REPORTER_V2_JSONC = `{
+  // OpenCode v2 shape, with comments and trailing commas
+  "providers": {
+    "res": {
+      "settings": { "apiKey": "{file:~/.config/opencode/res.key}", },
+      /* models the proxy serves */
+      "models": { "gemini-4-argon": {}, },
+    },
+  },
+}`;
+
+const writeOpenCodeConfigFile = async (homeDir: string, fileName: string, content: string) => {
+  const configDir = path.join(homeDir, '.config', 'opencode');
+  await mkdir(configDir, { recursive: true });
+  await writeFile(path.join(configDir, fileName), content, 'utf8');
+};
+
+const listedModels = async (adapter: OpenCodeProviderModels): Promise<string[]> =>
+  (await adapter.getSupportedModels()).OPTIONS.map((option) => option.value);
+
+for (const [label, fileName, content] of [
+  ['opencode.json', 'opencode.json', JSON.stringify(REPORTER_V2_CONFIG)],
+  ['commented opencode.jsonc', 'opencode.jsonc', REPORTER_V2_JSONC],
+] as const) {
+  test(`OpenCode counts v2 \`providers\` from ${label} alongside another connected provider`, async () => {
+    await withOpenCodeHome(
+      async (homeDir) => {
+        await writeOpenCodeAuth(homeDir, { other: { type: 'api', key: 'test' } });
+        await writeOpenCodeConfigFile(homeDir, fileName, content);
+      },
+      async (adapter) => {
+        assert.deepEqual(await listedModels(adapter), ['res/gemini-4-argon', 'other/x']);
+      },
+      async () => ['res/gemini-4-argon', 'other/x'],
+    );
+
+    await withOpenCodeHome(
+      async (homeDir) => {
+        await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'test' } });
+        await writeOpenCodeConfigFile(homeDir, fileName, content);
+      },
+      async (adapter) => {
+        assert.deepEqual(
+          await listedModels(adapter),
+          ['anthropic/claude-sonnet-5', 'res/gemini-4-argon'],
+        );
+      },
+      async () => ['anthropic/claude-sonnet-5', 'res/gemini-4-argon', 'opencode/gpt-5.6-terra'],
+    );
+  });
+}
+
+test('OpenCode lists a keyless v2 `providers` entry next to another connected provider', async () => {
+  await withOpenCodeHome(
+    async (homeDir) => {
+      await writeOpenCodeAuth(homeDir, { other: { type: 'api', key: 'test' } });
+      await writeOpenCodeConfigFile(
+        homeDir,
+        'opencode.jsonc',
+        '{ "providers": { "res": { "models": { "gemini-4-argon": {} } }, }, // keyless\n}',
+      );
+    },
+    async (adapter) => {
+      assert.deepEqual(await listedModels(adapter), ['res/gemini-4-argon', 'other/x']);
+    },
+    async () => ['res/gemini-4-argon', 'other/x', 'opencode/gpt-5.6-terra'],
+  );
+});
+
+test('OpenCode does not filter the listing on a v2 `providers` entry alone', async () => {
+  // A v2 login lives in OpenCode's database, which is not read, so openai here
+  // may well be connected; the listing stays unfiltered, as it was before.
+  await withOpenCodeHome(
+    (homeDir) => writeOpenCodeConfigFile(homeDir, 'opencode.json', JSON.stringify(REPORTER_V2_CONFIG)),
+    async (adapter) => {
+      assert.deepEqual(await listedModels(adapter), ['openai/gpt-5.6', 'res/gemini-4-argon']);
+    },
+    async () => ['openai/gpt-5.6', 'res/gemini-4-argon'],
+  );
+});
+
+test('OpenCode keeps listing v1 `provider` entries as before', async () => {
+  await withOpenCodeHome(
+    async (homeDir) => {
+      await writeOpenCodeAuth(homeDir, { other: { type: 'api', key: 'test' } });
+      await writeOpenCodeConfigFile(
+        homeDir,
+        'opencode.json',
+        JSON.stringify({ provider: { res: { options: { apiKey: 'test' } } } }),
+      );
+    },
+    async (adapter) => {
+      assert.deepEqual(await listedModels(adapter), ['res/gemini-4-argon', 'other/x']);
+    },
+    async () => ['res/gemini-4-argon', 'other/x', 'opencode/gpt-5.6-terra'],
   );
 });
 

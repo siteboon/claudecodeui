@@ -38,7 +38,9 @@
     "selectAllLoaded": "Seleziona le caricate",
     "clearSelection": "Deseleziona tutto",
     "deleteSelected_one": "Elimina {{count}} sessione",
-    "deleteSelected_other": "Elimina {{count}} sessioni"
+    "deleteSelected_other": "Elimina {{count}} sessioni",
+    "expandForks": "Espandi le diramazioni di {{session}}",
+    "collapseForks": "Comprimi le diramazioni di {{session}}"
   },
   "tooltips": {
     "viewEnvironments": "Visualizza ambienti",

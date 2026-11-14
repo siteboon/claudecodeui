@@ -243,6 +243,15 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
             </div>
           )}
         </div>
+      ) : message.contextCleared ? (
+        /* Where the context was cleared: the model remembers nothing above this line */
+        <div className="flex w-full items-center gap-3 py-1" role="separator">
+          <span className="h-px flex-1 bg-border" />
+          <span className="text-xs text-muted-foreground">
+            {t('chat:misc.contextCleared', 'Context cleared')}
+          </span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
       ) : message.compact ? (
         /* A compaction: one row, its numbers, and its summary folded into it */
         <div className="w-full">
