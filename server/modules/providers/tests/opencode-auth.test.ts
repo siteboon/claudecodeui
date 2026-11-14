@@ -9,6 +9,9 @@ import { OpenCodeProviderAuth } from '@/modules/providers/list/opencode/opencode
 const OPENCODE_ENV_CREDENTIAL_KEYS = [
   'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY',
   'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'WALLY_API_KEY',
+  // Location overrides would otherwise point the auth read at a real store.
+  'OPENCODE_CONFIG', 'OPENCODE_CONFIG_CONTENT', 'OPENCODE_CONFIG_DIR',
+  'XDG_CONFIG_HOME', 'XDG_DATA_HOME',
 ];
 
 // Isolate every auth store and env key; never probe a real CLI or user home.
