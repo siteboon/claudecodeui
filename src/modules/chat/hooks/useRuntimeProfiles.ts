@@ -29,15 +29,25 @@ export function useRuntimeProfiles(provider: LLMProvider) {
   const [selectedByProvider, setSelectedByProvider] = useState<Record<LLMProvider, string>>(
     readStoredSelections,
   );
+  // Discovery failures must remain distinguishable from an empty profile list.
+  const [error, setError] = useState<string | null>(null);
+  // The new-chat view uses loading to prevent duplicate retry requests.
+  const [loading, setLoading] = useState(true);
+  // A retry starts a fresh effect and cancels stale responses from its predecessor.
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((current) => current + 1), []);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError(null);
     const load = async () => {
       try {
         const response = await api.providers.runtimeProfiles();
         const body = (await response.json()) as RuntimeProfilesApiResponse;
-        if (cancelled || !body.success || !Array.isArray(body.data?.profiles)) {
-          return;
+        if (cancelled) return;
+        if (response.ok === false || !body.success || !Array.isArray(body.data?.profiles)) {
+          throw new Error('Could not load CLI environments.');
         }
         setProfiles(body.data.profiles);
         setSelectedByProvider((current) => {
@@ -53,8 +63,10 @@ export function useRuntimeProfiles(provider: LLMProvider) {
           }
           return next;
         });
-      } catch (error) {
-        console.error('Error loading runtime profiles:', error);
+      } catch {
+        if (!cancelled) setError('Could not load CLI environments.');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
 
@@ -62,7 +74,7 @@ export function useRuntimeProfiles(provider: LLMProvider) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
 
   const providerProfiles = useMemo(
     () => profiles.filter((profile) => profile.provider === provider),
@@ -75,5 +87,5 @@ export function useRuntimeProfiles(provider: LLMProvider) {
     localStorage.setItem(storageKey(provider), profileId);
   }, [provider]);
 
-  return { providerProfiles, selectedRuntimeProfileId, selectRuntimeProfile };
+  return { providerProfiles, selectedRuntimeProfileId, selectRuntimeProfile, error, loading, retry };
 }

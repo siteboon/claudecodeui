@@ -18,6 +18,20 @@ test('lists a default profile for every provider without configuration', () => {
   );
 });
 
+test('transcript aliases preserve a selected profile only when they share its home', () => {
+  const service = createProviderRuntimeProfilesService({
+    readConfiguration: () => JSON.stringify([
+      { id: 'work', name: 'Work', provider: 'codex', env: { CODEX_HOME: '/tmp/profile-home/work' } },
+      { id: 'alias', name: 'Alias', provider: 'codex', env: { CODEX_HOME: '/tmp/profile-home/work' } },
+      { id: 'other', name: 'Other', provider: 'codex', env: { CODEX_HOME: '/tmp/profile-home/other' } },
+    ]),
+  });
+  assert.equal(service.resolveTranscriptProfileId('codex', 'work', 'alias'), 'alias');
+  assert.equal(service.resolveTranscriptProfileId('codex', 'work', 'other'), 'work');
+  assert.equal(service.resolveTranscriptProfileId('codex', 'work', 'removed'), 'work');
+  assert.equal(service.resolveTranscriptProfileId('codex', 'work', undefined), 'work');
+});
+
 test('keeps executable and environment values out of public summaries', () => {
   const service = createProviderRuntimeProfilesService({
     readConfiguration: () => JSON.stringify([{

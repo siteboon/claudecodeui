@@ -1,6 +1,7 @@
 import { getConnection } from '@/modules/database/connection.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
 import { normalizeProjectPath } from '@/shared/utils.js';
+import { statSync } from 'node:fs';
 
 type SessionRow = {
   session_id: string;
@@ -117,9 +118,20 @@ export const sessionsDb = {
 
     if (existing) {
       const nativeRow = existing.session_id === providerSessionId;
+      if (!nativeRow && (existing.runtime_profile_id ?? null) !== (runtimeProfileId ?? null)) {
+        // A watcher must not replace the selected account's history with another copy.
+        return existing.session_id;
+      }
       if (nativeRow && existing.jsonl_path
         && (existing.runtime_profile_id ?? '') < (runtimeProfileId ?? '')) {
-        return existing.session_id;
+        try {
+          statSync(existing.jsonl_path);
+          return existing.session_id;
+        } catch (error) {
+          // Only a confirmed missing file permits a lower-priority home to take over.
+          if (!(error instanceof Error && 'code' in error
+            && (error.code === 'ENOENT' || error.code === 'ENOTDIR'))) return existing.session_id;
+        }
       }
       db.prepare(
         `UPDATE sessions SET
@@ -281,14 +293,18 @@ export const sessionsDb = {
     const db = getConnection();
 
     const merge = db.transaction(() => {
+      const selected = db.prepare('SELECT provider, runtime_profile_id FROM sessions WHERE session_id = ?')
+        .get(sessionId) as Pick<SessionRow, 'provider' | 'runtime_profile_id'> | undefined;
+      if (!selected) return;
       const duplicate = db
         .prepare(
           `SELECT ${SESSION_ROW_COLUMNS} FROM sessions
            WHERE (session_id = ? OR provider_session_id = ?)
              AND session_id <> ?
+             AND provider = ?
            LIMIT 1`
         )
-        .get(providerSessionId, providerSessionId, sessionId) as SessionRow | undefined;
+        .get(providerSessionId, providerSessionId, sessionId, selected.provider) as SessionRow | undefined;
 
       if (duplicate) {
         db.prepare('DELETE FROM sessions WHERE session_id = ?').run(duplicate.session_id);
@@ -299,7 +315,9 @@ export const sessionsDb = {
              custom_name = COALESCE(custom_name, ?),
              updated_at = CURRENT_TIMESTAMP
            WHERE session_id = ?`
-        ).run(providerSessionId, duplicate.jsonl_path, duplicate.custom_name, sessionId);
+        ).run(providerSessionId,
+          (duplicate.runtime_profile_id ?? null) === (selected.runtime_profile_id ?? null) ? duplicate.jsonl_path : null,
+          duplicate.custom_name, sessionId);
         return;
       }
 

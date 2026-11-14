@@ -134,6 +134,9 @@ function ChatInterface({
     providerProfiles,
     selectedRuntimeProfileId,
     selectRuntimeProfile,
+    error: runtimeProfilesError,
+    loading: runtimeProfilesLoading,
+    retry: retryRuntimeProfiles,
   } = useRuntimeProfiles(provider);
 
   const {
@@ -488,6 +491,9 @@ function ChatInterface({
               provider={provider}
               setProvider={setProvider}
               runtimeProfiles={providerProfiles}
+              runtimeProfilesError={runtimeProfilesError}
+              runtimeProfilesLoading={runtimeProfilesLoading}
+              onRetryRuntimeProfiles={retryRuntimeProfiles}
               selectedRuntimeProfileId={selectedRuntimeProfileId}
               onSelectRuntimeProfile={selectRuntimeProfile}
               textareaRef={textareaRef}

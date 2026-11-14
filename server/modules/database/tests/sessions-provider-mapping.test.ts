@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -128,17 +128,69 @@ test('legacy provider-keyed rows stay resolvable through both lookups', async ()
 for (const provider of ['claude', 'codex']) {
   for (const profiles of [[null, 'work'], ['work', null], ['a-work', 'z-work'], ['z-work', 'a-work']]) {
     test(`${provider} duplicate transcript ids retain one home in order ${JSON.stringify(profiles)}`, async () => {
-      await withIsolatedDatabase(() => {
+      await withIsolatedDatabase(async () => {
+        const root = path.dirname(process.env.DATABASE_PATH!);
         for (const profile of profiles) {
+          const transcript = path.join(root, profile ?? 'default', 'copied.jsonl');
+          await mkdir(path.dirname(transcript), { recursive: true });
+          await writeFile(transcript, '{}\n');
           sessionsDb.createSession('copied-id', provider, '/workspace/demo', `From ${profile}`,
-            undefined, undefined, `/homes/${profile ?? 'default'}/copied.jsonl`, profile);
+            undefined, undefined, transcript, profile);
         }
         const owner = [...profiles].sort((a, b) => (a ?? '') < (b ?? '') ? -1 : 1)[0];
         const row = sessionsDb.getSessionByProviderSessionId('copied-id');
         assert.equal(row?.runtime_profile_id, owner);
-        assert.equal(row?.jsonl_path, `/homes/${owner ?? 'default'}/copied.jsonl`);
+        assert.equal(row?.jsonl_path, path.join(root, owner ?? 'default', 'copied.jsonl'));
         assert.equal(row?.custom_name, `From ${owner}`);
       });
     });
   }
+}
+
+test('a surviving native transcript takes ownership after the preferred copy disappears', async () => {
+  await withIsolatedDatabase(async () => {
+    const root = path.dirname(process.env.DATABASE_PATH!);
+    const preferred = path.join(root, 'default.jsonl');
+    const surviving = path.join(root, 'work.jsonl');
+    await writeFile(preferred, '{}\n');
+    await writeFile(surviving, '{}\n');
+    sessionsDb.createSession('copied-id', 'codex', root, 'Default', undefined, undefined, preferred, null);
+    await rm(preferred);
+    sessionsDb.createSession('copied-id', 'codex', root, 'Work', undefined, undefined, surviving, 'work');
+    const row = sessionsDb.getSessionByProviderSessionId('copied-id');
+    assert.equal(row?.runtime_profile_id, 'work');
+    assert.equal(row?.jsonl_path, surviving);
+  });
+});
+
+for (const selected of [null, 'work']) {
+  test(`app transcript discoveries must match the explicitly selected ${selected ?? 'default'} profile`, async () => {
+    await withIsolatedDatabase(() => {
+      const other = selected === null ? 'work' : null;
+      sessionsDb.createAppSession('app-selected', 'codex', '/workspace/demo', 'My title', selected);
+      sessionsDb.assignProviderSessionId('app-selected', 'native-selected');
+      sessionsDb.createSession('native-selected', 'codex', '/workspace/demo', 'Other account',
+        undefined, undefined, '/other/account.jsonl', other);
+      assert.equal(sessionsDb.getSessionById('app-selected')?.jsonl_path, null);
+      sessionsDb.createSession('native-selected', 'codex', '/workspace/demo', 'Selected account',
+        undefined, undefined, '/selected/account.jsonl', selected);
+      const row = sessionsDb.getSessionById('app-selected');
+      assert.equal(row?.jsonl_path, '/selected/account.jsonl');
+      assert.equal(row?.runtime_profile_id, selected);
+      assert.equal(row?.custom_name, 'My title');
+    });
+  });
+  test(`a watcher race cannot import another profile into an app using ${selected ?? 'default'}`, async () => {
+    await withIsolatedDatabase(() => {
+      sessionsDb.createAppSession('app-race', 'codex', '/workspace/demo', 'My title', selected);
+      sessionsDb.createSession('native-race', 'codex', '/workspace/demo', 'Copied account',
+        undefined, undefined, '/other/account.jsonl', selected === null ? 'work' : null);
+      sessionsDb.assignProviderSessionId('app-race', 'native-race');
+      const row = sessionsDb.getSessionById('app-race');
+      assert.equal(row?.jsonl_path, null);
+      assert.equal(row?.runtime_profile_id, selected);
+      assert.equal(row?.provider_session_id, 'native-race');
+      assert.equal(sessionsDb.getAllSessions().length, 1);
+    });
+  });
 }

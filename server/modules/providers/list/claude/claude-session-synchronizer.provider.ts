@@ -93,30 +93,43 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     let processed = 0;
+    const failures: unknown[] = [];
     for (const filePath of files) {
-      if (this.isSubagentTranscript(filePath)) {
-        continue;
-      }
+      try {
+        if (this.isSubagentTranscript(filePath)) {
+          continue;
+        }
 
-      const parsed = await this.processSessionFile(filePath, nameMap, readOptions);
-      if (!parsed) {
-        continue;
-      }
+        const parsed = await this.processSessionFile(filePath, nameMap, readOptions);
+        if (!parsed) {
+          continue;
+        }
 
-      const timestamps = await readFileTimestamps(filePath);
-      sessionsDb.createSession(
-        parsed.sessionId,
-        this.provider,
-        parsed.projectPath,
-        parsed.sessionName,
-        timestamps.createdAt,
-        timestamps.updatedAt,
-        filePath,
-        profileId,
-      );
-      processed += 1;
+        const existingRow = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
+          ?? sessionsDb.getSessionById(parsed.sessionId);
+        const transcriptProfileId = providerRuntimeProfilesService.resolveTranscriptProfileId(
+          'claude', profileId,
+          existingRow && existingRow.session_id !== parsed.sessionId
+            ? existingRow.runtime_profile_id ?? null : undefined,
+        );
+        const timestamps = await readFileTimestamps(filePath);
+        sessionsDb.createSession(
+          parsed.sessionId,
+          this.provider,
+          parsed.projectPath,
+          parsed.sessionName,
+          timestamps.createdAt,
+          timestamps.updatedAt,
+          filePath,
+          transcriptProfileId,
+        );
+        processed += 1;
+      } catch (error) {
+        failures.push(error);
+      }
     }
 
+    if (failures.length) throw new AggregateError(failures, 'One or more Claude transcripts could not be synchronized.');
     return processed;
   }
 
@@ -146,6 +159,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    const existingRow = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
+      ?? sessionsDb.getSessionById(parsed.sessionId);
+    const transcriptProfileId = providerRuntimeProfilesService.resolveTranscriptProfileId(
+      'claude', location.profileId,
+      existingRow && existingRow.session_id !== parsed.sessionId
+        ? existingRow.runtime_profile_id ?? null : undefined,
+    );
     const timestamps = await readFileTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
@@ -155,7 +175,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.createdAt,
       timestamps.updatedAt,
       filePath,
-      location.profileId,
+      transcriptProfileId,
     );
   }
 

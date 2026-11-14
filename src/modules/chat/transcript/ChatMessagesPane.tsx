@@ -43,6 +43,9 @@ type ChatMessagesPaneProps = {
   provider: LLMProvider;
   setProvider: (provider: LLMProvider) => void;
   runtimeProfiles: ProviderRuntimeProfileSummary[];
+  runtimeProfilesError?: string | null;
+  runtimeProfilesLoading?: boolean;
+  onRetryRuntimeProfiles?: () => void;
   selectedRuntimeProfileId: string;
   onSelectRuntimeProfile: (profileId: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement>;
@@ -115,6 +118,9 @@ function ChatMessagesPane({
   provider,
   setProvider,
   runtimeProfiles,
+  runtimeProfilesError,
+  runtimeProfilesLoading,
+  onRetryRuntimeProfiles,
   selectedRuntimeProfileId,
   onSelectRuntimeProfile,
   textareaRef,
@@ -241,6 +247,9 @@ function ChatMessagesPane({
           provider={provider}
           setProvider={setProvider}
           runtimeProfiles={runtimeProfiles}
+          runtimeProfilesError={runtimeProfilesError}
+          runtimeProfilesLoading={runtimeProfilesLoading}
+          onRetryRuntimeProfiles={onRetryRuntimeProfiles}
           selectedRuntimeProfileId={selectedRuntimeProfileId}
           onSelectRuntimeProfile={onSelectRuntimeProfile}
           textareaRef={textareaRef}

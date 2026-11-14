@@ -174,6 +174,13 @@ export function createProviderRuntimeProfilesService(
     return profile;
   };
 
+  const transcriptHome = (provider: 'claude' | 'codex', profile: ProviderRuntimeProfile): string => {
+    const homeOverride = process.platform === 'win32' ? profile.env.USERPROFILE : profile.env.HOME;
+    const variable = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+    return path.resolve((profile.env[variable] ?? process.env[variable])
+      || path.join(homeOverride || os.homedir(), `.${provider}`));
+  };
+
   return {
     list(): ProviderRuntimeProfileSummary[] {
       return PROVIDERS.flatMap((provider) => [
@@ -186,6 +193,22 @@ export function createProviderRuntimeProfilesService(
 
     resolve,
 
+    /** Indexers preserve an app's exact alias only when it refers to the discovered home. */
+    resolveTranscriptProfileId(
+      provider: 'claude' | 'codex',
+      discoveredProfileId: string | null,
+      selectedProfileId: string | null | undefined,
+    ): string | null {
+      if (selectedProfileId === undefined || selectedProfileId === discoveredProfileId) return discoveredProfileId;
+      try {
+        if (transcriptHome(provider, resolve(provider, discoveredProfileId))
+          === transcriptHome(provider, resolve(provider, selectedProfileId))) return selectedProfileId;
+      } catch {
+        // Removed profiles must not acquire a different account's transcript.
+      }
+      return discoveredProfileId;
+    },
+
     /** Used by the Claude synchronizer and session watcher to share transcript roots. */
     listClaudeHomes(): Array<{ claudeHome: string; profileId: string | null }> {
       const profiles = [
@@ -194,11 +217,7 @@ export function createProviderRuntimeProfilesService(
       ];
       const seen = new Set<string>();
       return profiles.flatMap((profile) => {
-        const homeOverride = process.platform === 'win32' ? profile.env.USERPROFILE : profile.env.HOME;
-        const claudeHome = path.resolve(
-          (profile.env.CLAUDE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR)
-            || path.join(homeOverride || os.homedir(), '.claude'),
-        );
+        const claudeHome = transcriptHome('claude', profile);
         if (seen.has(claudeHome)) {
           return [];
         }
@@ -215,11 +234,7 @@ export function createProviderRuntimeProfilesService(
       ];
       const seen = new Set<string>();
       return profiles.flatMap((profile) => {
-        const homeOverride = process.platform === 'win32' ? profile.env.USERPROFILE : profile.env.HOME;
-        const codexHome = path.resolve(
-          (profile.env.CODEX_HOME ?? process.env.CODEX_HOME)
-            || path.join(homeOverride || os.homedir(), '.codex'),
-        );
+        const codexHome = transcriptHome('codex', profile);
         if (seen.has(codexHome)) {
           return [];
         }

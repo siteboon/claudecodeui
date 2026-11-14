@@ -372,3 +372,22 @@ test('the model picker says which providers list only your models', () => {
   screen.getByText('Only your models are listed for Anthropic');
   assert.equal(isShown('Built-in and custom models in one list'), false);
 });
+
+test('new-chat profile discovery errors show a working retry action', () => {
+  const retry = vi.fn();
+  render(
+    <ProviderSelectionEmptyState
+      selectedSession={null} currentSessionId={null} provider="claude" setProvider={() => {}}
+      runtimeProfiles={[]} runtimeProfilesError="Could not load CLI environments."
+      onRetryRuntimeProfiles={retry} selectedRuntimeProfileId="default" onSelectRuntimeProfile={() => {}}
+      textareaRef={{ current: null }}
+      providerModels={{ claude: 'default', codex: '', cursor: '', opencode: '' }}
+      setProviderModel={() => {}} providerModelCatalog={{ claude: MERGED_CATALOG }}
+      providerModelActions={createActions(async () => {})} providerModelsLoading={false}
+      tasksEnabled={false} isTaskMasterInstalled={null} setInput={() => {}}
+    />,
+  );
+  assert.match(screen.getByRole('alert').textContent ?? '', /Could not load CLI environments/);
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  assert.equal(retry.mock.calls.length, 1);
+});

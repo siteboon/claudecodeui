@@ -12,6 +12,45 @@ import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 
 for (const provider of ['claude', 'codex'] as const) {
+  test(`${provider} indexes later valid transcripts while retrying a malformed file in the same home`, async (t) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'profile-file-recovery-'));
+    const homeKey = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+    const saved = Object.fromEntries(['DATABASE_PATH', 'CLOUDCLI_RUNTIME_PROFILES', homeKey].map((key) => [key, process.env[key]]));
+    process.env.DATABASE_PATH = path.join(root, 'auth.db');
+    process.env[homeKey] = root;
+    delete process.env.CLOUDCLI_RUNTIME_PROFILES;
+    const leaf = path.join(root, provider === 'claude' ? 'projects' : 'sessions');
+    const metadata = (id: string) => JSON.stringify(provider === 'claude'
+      ? { sessionId: id, cwd: root } : { type: 'session_meta', payload: { id, cwd: root } }) + '\n';
+    const synchronizer = provider === 'claude' ? new ClaudeSessionSynchronizer() : new CodexSessionSynchronizer();
+    const registered = providerRegistry.resolveProvider(provider);
+    t.mock.method(providerRegistry, 'listProviders', () => [{ ...registered, sessionSynchronizer: synchronizer }]);
+    try {
+      await mkdir(leaf);
+      await writeFile(path.join(leaf, 'a-broken.jsonl'), '{broken\n');
+      await writeFile(path.join(leaf, 'z-healthy.jsonl'), metadata('healthy'));
+      closeConnection();
+      await initializeDatabase();
+      const previousCursor = new Date('2100-01-01');
+      scanStateDb.updateLastScannedAt(previousCursor);
+      const incomplete = await sessionSynchronizerService.synchronizeSessions();
+      assert.equal(incomplete.failures.length, 1);
+      assert.deepEqual(scanStateDb.getLastScannedAt(), previousCursor);
+      assert.ok(sessionsDb.getSessionById('healthy'));
+      await writeFile(path.join(leaf, 'a-broken.jsonl'), metadata('recovered'));
+      assert.deepEqual((await sessionSynchronizerService.synchronizeSessions()).failures, []);
+      assert.ok(sessionsDb.getSessionById('recovered'));
+    } finally {
+      t.mock.restoreAll();
+      closeConnection();
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test(`${provider} scans later homes despite failures and fully retries failed homes`, async (t) => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'profile-home-recovery-'));
     const homeKey = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';

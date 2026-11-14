@@ -54,6 +54,9 @@ type ProviderSelectionEmptyStateProps = {
   provider: LLMProvider;
   setProvider: (next: LLMProvider) => void;
   runtimeProfiles: ProviderRuntimeProfileSummary[];
+  runtimeProfilesError?: string | null;
+  runtimeProfilesLoading?: boolean;
+  onRetryRuntimeProfiles?: () => void;
   selectedRuntimeProfileId: string;
   onSelectRuntimeProfile: (profileId: string) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
@@ -95,6 +98,9 @@ export default function ProviderSelectionEmptyState({
   provider,
   setProvider,
   runtimeProfiles,
+  runtimeProfilesError,
+  runtimeProfilesLoading = false,
+  onRetryRuntimeProfiles,
   selectedRuntimeProfileId,
   onSelectRuntimeProfile,
   textareaRef,
@@ -295,7 +301,21 @@ export default function ProviderSelectionEmptyState({
             </DialogContent>
           </Dialog>
 
-          {runtimeProfiles.length > 1 && (
+          {runtimeProfilesLoading && (
+            <p role="status" className="mt-3 text-xs text-muted-foreground">
+              {t("providerSelection.runtimeProfilesLoading", { defaultValue: "Loading CLI environments…" })}
+            </p>
+          )}
+          {runtimeProfilesError && (
+            <div role="alert" className="mx-auto mt-3 max-w-xs text-xs text-destructive">
+              <p>{t("providerSelection.runtimeProfilesError", { defaultValue: "Could not load CLI environments." })}</p>
+              <Button type="button" variant="outline" size="sm" onClick={onRetryRuntimeProfiles}
+                disabled={runtimeProfilesLoading || !onRetryRuntimeProfiles} className="mt-2">
+                {t("providerSelection.retryRuntimeProfiles", { defaultValue: "Retry" })}
+              </Button>
+            </div>
+          )}
+          {!runtimeProfilesError && !runtimeProfilesLoading && runtimeProfiles.length > 1 && (
             <div className="mx-auto mt-3 max-w-xs">
               <label
                 htmlFor="runtime-profile"

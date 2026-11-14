@@ -67,35 +67,48 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     let processed = 0;
+    const failures: unknown[] = [];
     for (const filePath of files) {
-      const parsed = await this.processSessionFile(filePath, nameMap, readOptions);
-      if (!parsed) {
-        continue;
-      }
-
-      const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
-        ?? sessionsDb.getSessionById(parsed.sessionId);
-      if (existingSession) {
-        // If session name is untitled and we now have a name, update it
-        if (existingSession.custom_name === 'Untitled Codex Session' && parsed.sessionName && parsed.sessionName !== 'Untitled Codex Session') {
-          sessionsDb.updateSessionCustomName(existingSession.session_id, parsed.sessionName);
+      try {
+        const parsed = await this.processSessionFile(filePath, nameMap, readOptions);
+        if (!parsed) {
+          continue;
         }
-      }
 
-      const timestamps = await readFileTimestamps(filePath);
-      sessionsDb.createSession(
-        parsed.sessionId,
-        this.provider,
-        parsed.projectPath,
-        parsed.sessionName,
-        timestamps.createdAt,
-        timestamps.updatedAt,
-        filePath,
-        profileId,
-      );
-      processed += 1;
+        const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
+          ?? sessionsDb.getSessionById(parsed.sessionId);
+        if (existingSession) {
+          // If session name is untitled and we now have a name, update it
+          if (existingSession.custom_name === 'Untitled Codex Session' && parsed.sessionName && parsed.sessionName !== 'Untitled Codex Session') {
+            sessionsDb.updateSessionCustomName(existingSession.session_id, parsed.sessionName);
+          }
+        }
+
+        const existingRow = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
+          ?? sessionsDb.getSessionById(parsed.sessionId);
+        const transcriptProfileId = providerRuntimeProfilesService.resolveTranscriptProfileId(
+          'codex', profileId,
+          existingRow && existingRow.session_id !== parsed.sessionId
+            ? existingRow.runtime_profile_id ?? null : undefined,
+        );
+        const timestamps = await readFileTimestamps(filePath);
+        sessionsDb.createSession(
+          parsed.sessionId,
+          this.provider,
+          parsed.projectPath,
+          parsed.sessionName,
+          timestamps.createdAt,
+          timestamps.updatedAt,
+          filePath,
+          transcriptProfileId,
+        );
+        processed += 1;
+      } catch (error) {
+        failures.push(error);
+      }
     }
 
+    if (failures.length) throw new AggregateError(failures, 'One or more Codex transcripts could not be synchronized.');
     return processed;
   }
 
@@ -123,6 +136,13 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    const existingRow = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
+      ?? sessionsDb.getSessionById(parsed.sessionId);
+    const transcriptProfileId = providerRuntimeProfilesService.resolveTranscriptProfileId(
+      'codex', location.profileId,
+      existingRow && existingRow.session_id !== parsed.sessionId
+        ? existingRow.runtime_profile_id ?? null : undefined,
+    );
     const timestamps = await readFileTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
@@ -132,7 +152,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.createdAt,
       timestamps.updatedAt,
       filePath,
-      location.profileId,
+      transcriptProfileId,
     );
   }
 
