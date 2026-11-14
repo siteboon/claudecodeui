@@ -124,3 +124,21 @@ test('legacy provider-keyed rows stay resolvable through both lookups', async ()
     assert.equal(sessionsDb.getSessionByProviderSessionId('legacy-1')?.session_id, 'legacy-1');
   });
 });
+
+for (const provider of ['claude', 'codex']) {
+  for (const profiles of [[null, 'work'], ['work', null], ['a-work', 'z-work'], ['z-work', 'a-work']]) {
+    test(`${provider} duplicate transcript ids retain one home in order ${JSON.stringify(profiles)}`, async () => {
+      await withIsolatedDatabase(() => {
+        for (const profile of profiles) {
+          sessionsDb.createSession('copied-id', provider, '/workspace/demo', `From ${profile}`,
+            undefined, undefined, `/homes/${profile ?? 'default'}/copied.jsonl`, profile);
+        }
+        const owner = [...profiles].sort((a, b) => (a ?? '') < (b ?? '') ? -1 : 1)[0];
+        const row = sessionsDb.getSessionByProviderSessionId('copied-id');
+        assert.equal(row?.runtime_profile_id, owner);
+        assert.equal(row?.jsonl_path, `/homes/${owner ?? 'default'}/copied.jsonl`);
+        assert.equal(row?.custom_name, `From ${owner}`);
+      });
+    });
+  }
+}

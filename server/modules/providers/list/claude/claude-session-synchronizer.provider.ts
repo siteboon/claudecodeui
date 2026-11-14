@@ -48,19 +48,27 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   async synchronize(since?: Date): Promise<number> {
     let processed = 0;
+    const failures: unknown[] = [];
     for (const { claudeHome, profileId } of providerRuntimeProfilesService.listClaudeHomes()) {
-      // A newly configured home can contain transcripts older than the global scan cursor.
-      const homeSince = this.scannedHomes.has(claudeHome) ? since : undefined;
-      const homeProcessed = await this.synchronizeHome(claudeHome, profileId, homeSince);
-      if (homeProcessed === null) {
-        // A missing projects root must get a full scan when it becomes available.
+      try {
+        // A newly configured home can contain transcripts older than the global scan cursor.
+        const homeSince = this.scannedHomes.has(claudeHome) ? since : undefined;
+        const homeProcessed = await this.synchronizeHome(claudeHome, profileId, homeSince);
+        if (homeProcessed === null) {
+          // A missing projects root must get a full scan when it becomes available.
+          this.scannedHomes.delete(claudeHome);
+          continue;
+        }
+        processed += homeProcessed;
+        // Failed discovery or transcript reads must leave this home eligible for a full retry.
+        this.scannedHomes.add(claudeHome);
+      } catch (error) {
+        // One broken account must not hide readable conversations in another.
         this.scannedHomes.delete(claudeHome);
-        continue;
+        failures.push(error);
       }
-      processed += homeProcessed;
-      // Failed discovery or transcript reads must leave this home eligible for a full retry.
-      this.scannedHomes.add(claudeHome);
     }
+    if (failures.length) throw new AggregateError(failures, 'One or more Claude homes could not be synchronized.');
     return processed;
   }
 

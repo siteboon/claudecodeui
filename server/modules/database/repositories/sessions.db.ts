@@ -83,7 +83,9 @@ export const sessionsDb = {
    * app-created row keeps its existing name; synchronizer names only update
    * rows that were themselves created by indexing provider storage. Indexers
    * can attach a runtime profile to discovered rows without overwriting a
-   * profile already selected by the app.
+   * profile already selected by the app. If a native id is copied across homes,
+   * the default home wins, then the smallest profile id in code-point order.
+   * Both transcript and profile follow that owner, regardless of scan order.
    */
   createSession(
     providerSessionId: string,
@@ -106,21 +108,28 @@ export const sessionsDb = {
 
     const existing = db
       .prepare(
-        `SELECT session_id FROM sessions
-         WHERE provider_session_id = ? AND provider = ?
+        `SELECT session_id, provider_session_id, runtime_profile_id, jsonl_path FROM sessions
+         WHERE (provider_session_id = ? OR (session_id = ? AND provider_session_id IS NULL)) AND provider = ?
          LIMIT 1`
       )
-      .get(providerSessionId, provider) as { session_id: string } | undefined;
+      .get(providerSessionId, providerSessionId, provider) as Pick<SessionRow,
+        'session_id' | 'provider_session_id' | 'runtime_profile_id' | 'jsonl_path'> | undefined;
 
     if (existing) {
+      const nativeRow = existing.session_id === providerSessionId;
+      if (nativeRow && existing.jsonl_path
+        && (existing.runtime_profile_id ?? '') < (runtimeProfileId ?? '')) {
+        return existing.session_id;
+      }
       db.prepare(
         `UPDATE sessions SET
            provider = ?,
+           provider_session_id = ?,
            updated_at = COALESCE(?, CURRENT_TIMESTAMP),
            project_path = ?,
            jsonl_path = ?,
            runtime_profile_id = CASE WHEN session_id <> provider_session_id
-             THEN runtime_profile_id ELSE COALESCE(runtime_profile_id, ?) END,
+             THEN runtime_profile_id ELSE ? END,
            isArchived = CASE WHEN ? IS NULL OR julianday(?) > julianday(updated_at) THEN 0 ELSE isArchived END,
            custom_name = CASE
              WHEN session_id <> provider_session_id AND custom_name IS NOT NULL THEN custom_name
@@ -129,6 +138,7 @@ export const sessionsDb = {
          WHERE session_id = ?`
       ).run(
         provider,
+        providerSessionId,
         updatedAtValue,
         normalizedProjectPath,
         jsonlPath ?? null,
@@ -155,7 +165,7 @@ export const sessionsDb = {
          project_path = excluded.project_path,
          jsonl_path = excluded.jsonl_path,
          runtime_profile_id = CASE WHEN sessions.session_id <> sessions.provider_session_id
-           THEN sessions.runtime_profile_id ELSE COALESCE(sessions.runtime_profile_id, excluded.runtime_profile_id) END,
+           THEN sessions.runtime_profile_id ELSE excluded.runtime_profile_id END,
          isArchived = CASE WHEN ? IS NULL OR julianday(excluded.updated_at) > julianday(sessions.updated_at) THEN 0 ELSE sessions.isArchived END,
          custom_name = CASE
            WHEN sessions.session_id <> sessions.provider_session_id AND sessions.custom_name IS NOT NULL

@@ -230,6 +230,14 @@ found through the profile's PATH. Both SDK turns and app-server operations resol
 that installation's native `codex.exe`, without passing prompts through a shell.
 Unrecognized batch wrappers must configure their native executable explicitly.
 
+When an externally created native session id is copied across homes, discovery
+prefers the default home, then the smallest configured profile id in code-point
+order. The persisted profile and transcript path always follow the same owner;
+app-created sessions keep their explicitly selected profile. Claude and Codex
+continue scanning readable homes when another home fails, report the failures
+after scanning, and fully retry failed or newly created homes before advancing
+the shared scan cursor.
+
 8. Register the provider.
 
 - Add the new provider class to `server/modules/providers/provider.registry.ts`.

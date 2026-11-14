@@ -11,6 +11,7 @@ import {
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import type { SessionArtifactReadOptions } from '@/shared/types.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -30,26 +31,44 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   async synchronize(since?: Date): Promise<number> {
     let processed = 0;
+    const failures: unknown[] = [];
     for (const { codexHome, profileId } of providerRuntimeProfilesService.listCodexHomes()) {
-      // A newly configured profile can contain transcripts older than the global scan cursor.
-      const homeSince = profileId && !this.scannedHomes.has(codexHome) ? undefined : since;
-      processed += await this.synchronizeHome(codexHome, profileId, homeSince);
-      this.scannedHomes.add(codexHome);
+      try {
+        // A newly configured profile can contain transcripts older than the global scan cursor.
+        const homeSince = this.scannedHomes.has(codexHome) ? since : undefined;
+        const homeProcessed = await this.synchronizeHome(codexHome, profileId, homeSince);
+        if (homeProcessed === null) {
+          this.scannedHomes.delete(codexHome);
+          continue;
+        }
+        processed += homeProcessed;
+        this.scannedHomes.add(codexHome);
+      } catch (error) {
+        this.scannedHomes.delete(codexHome);
+        failures.push(error);
+      }
     }
+    if (failures.length) throw new AggregateError(failures, 'One or more Codex homes could not be synchronized.');
     return processed;
   }
 
-  private async synchronizeHome(codexHome: string, profileId: string | null, since?: Date): Promise<number> {
+  /** Missing roots remain eligible for a full scan when the CLI first creates them. */
+  private async synchronizeHome(codexHome: string, profileId: string | null, since?: Date): Promise<number | null> {
     const nameMap = await buildLookupMap(path.join(codexHome, 'session_index.jsonl'), 'id', 'thread_name');
-    const files = await findFilesRecursivelyCreatedAfter(
-      path.join(codexHome, 'sessions'),
-      '.jsonl',
-      since ?? null
-    );
+    const sessionsRoot = path.join(codexHome, 'sessions');
+    const readOptions: SessionArtifactReadOptions = { throwOnError: true };
+    let files: string[];
+    try {
+      files = await findFilesRecursivelyCreatedAfter(sessionsRoot, '.jsonl', since ?? null, [], readOptions);
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT'
+        && 'path' in error && error.path === sessionsRoot) return null;
+      throw error;
+    }
 
     let processed = 0;
     for (const filePath of files) {
-      const parsed = await this.processSessionFile(filePath, nameMap);
+      const parsed = await this.processSessionFile(filePath, nameMap, readOptions);
       if (!parsed) {
         continue;
       }
@@ -122,7 +141,8 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   private async processSessionFile(
     filePath: string,
-    nameMap: Map<string, string>
+    nameMap: Map<string, string>,
+    readOptions: SessionArtifactReadOptions = {},
   ): Promise<ParsedSession | null> {
     const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, unknown>;
@@ -139,7 +159,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
         projectPath,
         isSubagent: payload ? this.isSubagentSessionMeta(payload) : false,
       };
-    });
+    }, readOptions);
 
     if (!parsed || parsed.isSubagent) {
       return null;

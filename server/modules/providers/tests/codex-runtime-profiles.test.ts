@@ -52,6 +52,9 @@ test('Codex profile transcripts remain usable for history, forks, and edits', as
     assert.equal(await synchronizer.synchronize(new Date('2100-01-01')), 1);
     assert.equal(sessionsDb.getSessionById('app-work')?.jsonl_path, transcriptPath);
     assert.equal(sessionsDb.getSessionById('app-work')?.runtime_profile_id, 'work');
+    assert.equal(sessionsService.resolveRuntimeProfile('codex', 'app-work').id, 'work');
+    assert.equal(sessionsService.resolveRuntimeProfile('codex', nativeId).id, 'work');
+    assert.throws(() => sessionsService.resolveRuntimeProfile('claude', nativeId), /does not belong to claude/);
     const history = await new CodexSessionsProvider().fetchHistory('app-work');
     assert.ok(history.messages.some((message) => message.content === 'Work question'));
 

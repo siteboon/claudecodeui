@@ -74,8 +74,7 @@ export function resolveCodexExecutablePath(
         encoding: 'utf8', env: environment, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true,
       });
       const candidates = found.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
-      selected = candidates.find((entry) => /\.exe$/i.test(entry))
-        ?? candidates.find((entry) => /\.(cmd|bat)$/i.test(entry))
+      selected = candidates.find((entry) => /\.(exe|cmd|bat)$/i.test(entry))
         ?? selected;
     } catch {
       // Preserve native command lookup failures for the caller's normal error path.

@@ -399,12 +399,13 @@ export const sessionsService = {
     };
   },
 
-  /** Returns the server-only runtime profile fixed to an app session. */
+  /** Returns the server-only runtime profile fixed to an app or provider-native session id. */
   resolveRuntimeProfile(provider: LLMProvider, sessionId: string | null | undefined) {
     if (!sessionId) {
       return providerRuntimeProfilesService.resolve(provider, null);
     }
-    const session = sessionsDb.getSessionById(sessionId);
+    const session = sessionsDb.getSessionById(sessionId)
+      ?? sessionsDb.getSessionByProviderSessionId(sessionId);
     if (!session) {
       return providerRuntimeProfilesService.resolve(provider, null);
     }

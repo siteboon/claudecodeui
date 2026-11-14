@@ -24,7 +24,8 @@ for (const arch of ['x64', 'arm64']) {
         execFileSync: ((_command: string, args: string[], options: { env: unknown }) => {
           assert.deepEqual(args, ['codex']);
           assert.equal(options.env, environment);
-          return `${shim.slice(0, -4)}\r\n${shim}\r\n`;
+          // A second installation's native binary must not outrank the first shim.
+          return `${shim.slice(0, -4)}\r\n${shim}\r\nC:\\other-install\\codex.exe\r\n`;
         }) as unknown as ResolveCodexExecutableDependencies['execFileSync'],
         readFileSync: ((file: string) => {
           assert.equal(file, shim);
