@@ -4,6 +4,7 @@ import {
   access,
   lstat,
   mkdir,
+  open,
   readFile,
   readdir,
   readlink,
@@ -1351,6 +1352,73 @@ export async function extractFirstValidJsonlData<T>(
   }
 
   return null;
+}
+
+const LAST_TIMESTAMP_CHUNK_BYTES = 256 * 1024;
+const LAST_TIMESTAMP_MAX_SCAN_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Returns the `timestamp` of the last JSONL row that carries one, as an ISO string.
+ *
+ * The file is read backwards in chunks, so even a transcript of hundreds of
+ * megabytes costs one or two reads. Rows without a valid timestamp, rows that
+ * `accept` rejects and lines that do not parse are skipped. Returns undefined
+ * when no such row is found within the last `LAST_TIMESTAMP_MAX_SCAN_BYTES` or
+ * the file cannot be read.
+ */
+export async function readLastJsonlTimestamp(
+  filePath: string,
+  accept: (row: Record<string, unknown>) => boolean = () => true,
+): Promise<string | undefined> {
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(filePath, 'r');
+    const { size } = await handle.stat();
+    let end = size;
+    // Bytes of a line that started before the chunk read so far; kept as a
+    // Buffer so a multi-byte character split across two chunks stays intact.
+    let carry = Buffer.alloc(0);
+
+    while (end > 0 && size - end < LAST_TIMESTAMP_MAX_SCAN_BYTES) {
+      const start = Math.max(0, end - LAST_TIMESTAMP_CHUNK_BYTES);
+      const chunk = Buffer.alloc(end - start);
+      await handle.read(chunk, 0, chunk.length, start);
+      let data = Buffer.concat([chunk, carry]);
+      end = start;
+
+      if (start > 0) {
+        const firstBreak = data.indexOf(0x0a);
+        if (firstBreak < 0) {
+          carry = data;
+          continue;
+        }
+        carry = data.subarray(0, firstBreak);
+        data = data.subarray(firstBreak + 1);
+      }
+
+      const lines = data.toString('utf8').split('\n');
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index].trim();
+        if (!line.includes('"timestamp"')) {
+          continue;
+        }
+        try {
+          const row = JSON.parse(line) as Record<string, unknown>;
+          if (typeof row.timestamp === 'string' && !Number.isNaN(Date.parse(row.timestamp)) && accept(row)) {
+            return new Date(row.timestamp).toISOString();
+          }
+        } catch {
+          // A row can be half-written while the CLI is streaming into the file.
+        }
+      }
+    }
+  } catch {
+    // Missing or unreadable files fall back to the caller's default.
+  } finally {
+    await handle?.close();
+  }
+
+  return undefined;
 }
 
 // ---------------------------

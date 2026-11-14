@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import nodeFs from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -8,7 +8,7 @@ import test from 'node:test';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { ClaudeSessionSynchronizer } from '@/modules/providers/list/claude/claude-session-synchronizer.provider.js';
-import { buildLookupMap, extractFirstValidJsonlData } from '@/shared/utils.js';
+import { buildLookupMap, extractFirstValidJsonlData, readLastJsonlTimestamp } from '@/shared/utils.js';
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -2283,6 +2283,85 @@ test('extractFirstValidJsonlData closes the file stream on the no-match path', {
     assert.equal(closeCalls, 1, 'the read stream must be closed even when no row matches');
   } finally {
     (nodeFs as { createReadStream: typeof nodeFs.createReadStream }).createReadStream = originalCreateReadStream;
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('synchronizeFile dates a session by its last turn, not by metadata appended later', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-activity-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(path.join(claudeHome, 'history.jsonl'), '', 'utf8');
+
+    // The conversation ended in August; Claude Desktop later appended
+    // untimestamped metadata rows, which moved the file's mtime to today, and
+    // queued a notification for the session's next turn, which is stamped today.
+    const filePath = await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
+      JSON.stringify({
+        type: 'assistant', uuid: 'msg-2', parentUuid: 'msg-1', sessionId: 'test-session-1',
+        timestamp: '2026-08-05T06:28:52.716Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'done' }] },
+      }),
+      JSON.stringify({ type: 'custom-title', customTitle: 'old session', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'last-prompt', lastPrompt: 'redacted', leafUuid: 'msg-2', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'frame-link', timestamp: '2026-11-03T03:17:59.233Z', sessionId: 'test-session-1' }),
+      JSON.stringify({
+        type: 'queue-operation', operation: 'enqueue', timestamp: '2026-11-04T16:54:38.924Z',
+        sessionId: 'test-session-1',
+        content: '<task-notification>Stopped watching Artifact (connection lost)</task-notification>',
+      }),
+    ]);
+    const now = new Date();
+    await utimes(filePath, now, now);
+
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new ClaudeSessionSynchronizer();
+      const sessionId = await synchronizer.synchronizeFile(filePath);
+
+      assert.equal(sessionsDb.getSessionById(sessionId!)?.updated_at, '2026-08-05T06:28:52.716Z');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('readLastJsonlTimestamp finds the last timestamp across chunk boundaries and multi-byte text', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jsonl-last-timestamp-'));
+
+  try {
+    const filePath = path.join(tempRoot, 'session.jsonl');
+    // ~600 KB of untimestamped rows after the last timestamped one, so the
+    // backward scan has to cross several chunk boundaries, some of them in the
+    // middle of a multi-byte character.
+    const filler = Array.from({ length: 3000 }, (_, index) => JSON.stringify({
+      type: 'cost-state', note: `第 ${index} 行 · 元数据 ${'字'.repeat(60)}`,
+    }));
+    await writeFile(filePath, [
+      JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:00.000Z', message: { role: 'user', content: 'first' } }),
+      JSON.stringify({ type: 'assistant', timestamp: '2026-08-05T06:28:52.716Z', message: { role: 'assistant', content: '最后一句' } }),
+      ...filler,
+      '{ "timestamp": "half-written',
+      '',
+    ].join('\n'), 'utf8');
+
+    assert.equal(await readLastJsonlTimestamp(filePath), '2026-08-05T06:28:52.716Z');
+    assert.equal(
+      await readLastJsonlTimestamp(filePath, (row) => row.type === 'user'),
+      '2026-01-01T00:00:00.000Z',
+      'rows the filter rejects are skipped',
+    );
+
+    const noTimestamps = path.join(tempRoot, 'metadata-only.jsonl');
+    await writeFile(noTimestamps, filler.slice(0, 5).join('\n'), 'utf8');
+    assert.equal(await readLastJsonlTimestamp(noTimestamps), undefined);
+    assert.equal(await readLastJsonlTimestamp(path.join(tempRoot, 'missing.jsonl')), undefined);
+  } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
