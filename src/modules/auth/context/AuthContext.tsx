@@ -154,8 +154,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const payload = await parseJsonSafely<AuthSessionPayload>(response);
       if (isValidRefreshedToken(payload?.token)) {
-        setToken(payload.token);
+        // Storage keeps the newer of two tokens when refreshes finish out of
+        // order; publish what it kept, not the response.
         persistToken(payload.token);
+        setToken(readStoredToken());
       }
     } catch (caughtError) {
       // A transient network failure must not sign the user out. Focus/visibility
