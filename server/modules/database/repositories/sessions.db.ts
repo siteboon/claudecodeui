@@ -1,6 +1,6 @@
 import { getConnection } from '@/modules/database/connection.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
-import { normalizeProjectPath } from '@/shared/utils.js';
+import { AppError, normalizeProjectPath } from '@/shared/utils.js';
 import { statSync } from 'node:fs';
 
 type SessionRow = {
@@ -309,6 +309,11 @@ export const sessionsDb = {
         .get(providerSessionId, providerSessionId, sessionId, selected.provider) as SessionRow | undefined;
 
       if (duplicate) {
+        if (duplicate.session_id !== duplicate.provider_session_id) {
+          throw new AppError('This provider session already belongs to another app session.', {
+            code: 'PROVIDER_SESSION_ALREADY_ASSIGNED', statusCode: 409,
+          });
+        }
         const sameProfile = (duplicate.runtime_profile_id ?? null) === (selected.runtime_profile_id ?? null);
         db.prepare('DELETE FROM sessions WHERE session_id = ?').run(duplicate.session_id);
         db.prepare(

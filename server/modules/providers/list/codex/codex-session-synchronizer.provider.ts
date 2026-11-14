@@ -56,7 +56,15 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   private async synchronizeHome(codexHome: string, profileId: string | null, since?: Date): Promise<number | null> {
     const nameMap = await buildLookupMap(path.join(codexHome, 'session_index.jsonl'), 'id', 'thread_name');
     const sessionsRoot = path.join(codexHome, 'sessions');
-    const readOptions: SessionArtifactReadOptions = { throwOnError: true };
+    // A parent home can contain another configured account's transcript tree.
+    const otherRoots = providerRuntimeProfilesService.listCodexHomes()
+      .filter((home) => {
+        const relativePath = path.relative(codexHome, home.codexHome);
+        return relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relativePath);
+      })
+      .map((home) => path.join(home.codexHome, 'sessions'));
+    const readOptions: SessionArtifactReadOptions = { throwOnError: true, excludedDirectoryPaths: otherRoots };
     let files: string[];
     try {
       files = await findFilesRecursivelyCreatedAfter(sessionsRoot, '.jsonl', since ?? null, [], readOptions);
@@ -66,14 +74,6 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       throw error;
     }
 
-    // A parent home can contain another configured account's transcript tree.
-    const otherRoots = providerRuntimeProfilesService.listCodexHomes()
-      .filter((home) => {
-        const relativePath = path.relative(codexHome, home.codexHome);
-        return relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
-          && !path.isAbsolute(relativePath);
-      })
-      .map((home) => path.join(home.codexHome, 'sessions'));
     let processed = 0;
     const failures: unknown[] = [];
     for (const filePath of files) {

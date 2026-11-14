@@ -229,6 +229,11 @@ Cursor profiles likewise share the server's history home. `HOME`, `USERPROFILE`,
 `HOMEDRIVE`, and `HOMEPATH` overrides are rejected; authentication variables and
 custom executables remain available without relocating the transcript storage.
 
+Claude MCP management edits the server's default CLI environment, honoring its
+`CLAUDE_CONFIG_DIR` for both reads and writes. Per-session runtime-profile MCP
+files remain operator-managed; selecting a profile does not retarget global MCP
+management to that account.
+
 On Windows, Codex profiles can name the npm `codex.cmd` shim, including a command
 found through the profile's PATH. Both SDK turns and app-server operations resolve
 that installation's native `codex.exe`, without passing prompts through a shell.

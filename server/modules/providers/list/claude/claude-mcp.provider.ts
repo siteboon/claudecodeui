@@ -47,7 +47,8 @@ export class ClaudeMcpProvider extends McpProvider {
       return readObjectRecord(config.mcpServers) ?? {};
     }
 
-    const filePath = path.join(os.homedir(), '.claude.json');
+    // Management edits the server's default environment; per-session profiles are operator-owned.
+    const filePath = path.join(process.env.CLAUDE_CONFIG_DIR || os.homedir(), '.claude.json');
     const config = await readJsonConfig(filePath);
     if (scope === 'user') {
       return readObjectRecord(config.mcpServers) ?? {};
@@ -71,7 +72,7 @@ export class ClaudeMcpProvider extends McpProvider {
       return;
     }
 
-    const filePath = path.join(os.homedir(), '.claude.json');
+    const filePath = path.join(process.env.CLAUDE_CONFIG_DIR || os.homedir(), '.claude.json');
     const config = await readJsonConfig(filePath);
     if (scope === 'user') {
       config.mcpServers = servers;

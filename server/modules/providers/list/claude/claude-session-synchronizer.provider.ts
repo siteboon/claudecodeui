@@ -74,9 +74,18 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
   /** Returns null when the projects root is absent, so it stays eligible for a full scan. */
   private async synchronizeHome(claudeHome: string, profileId: string | null, since?: Date): Promise<number | null> {
+    // A parent home can contain another configured account's transcript tree.
+    const otherRoots = providerRuntimeProfilesService.listClaudeHomes()
+      .filter((home) => {
+        const relativePath = path.relative(claudeHome, home.claudeHome);
+        return relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relativePath);
+      })
+      .map((home) => path.join(home.claudeHome, 'projects'));
     const readOptions: SessionArtifactReadOptions = {
       throwOnError: true,
       excludedDirectoryNames: ['subagents', 'tool-results'],
+      excludedDirectoryPaths: otherRoots,
     };
     const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
     const projectsRoot = path.join(claudeHome, 'projects');
@@ -92,14 +101,6 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       throw error;
     }
 
-    // A parent home can contain another configured account's transcript tree.
-    const otherRoots = providerRuntimeProfilesService.listClaudeHomes()
-      .filter((home) => {
-        const relativePath = path.relative(claudeHome, home.claudeHome);
-        return relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
-          && !path.isAbsolute(relativePath);
-      })
-      .map((home) => path.join(home.claudeHome, 'projects'));
     let processed = 0;
     const failures: unknown[] = [];
     for (const filePath of files) {

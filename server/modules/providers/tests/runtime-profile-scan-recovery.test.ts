@@ -12,6 +12,51 @@ import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 
 for (const provider of ['claude', 'codex'] as const) {
+  test(`${provider} prunes an unreadable nested account before scanning its readable parent`, async (t) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'nested-unreadable-profile-'));
+    const homeKey = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+    const saved = Object.fromEntries(['DATABASE_PATH', 'CLOUDCLI_RUNTIME_PROFILES', homeKey].map((key) => [key, process.env[key]]));
+    const leaf = provider === 'claude' ? 'projects' : 'sessions';
+    const nestedHome = path.join(root, leaf, 'work');
+    const nestedRoot = path.join(nestedHome, leaf);
+    process.env.DATABASE_PATH = path.join(root, 'auth.db');
+    process.env[homeKey] = root;
+    process.env.CLOUDCLI_RUNTIME_PROFILES = JSON.stringify([
+      { id: 'work', name: 'Work', provider, env: { [homeKey]: nestedHome } },
+    ]);
+    let nestedReads = 0;
+    const originalReaddir = fsPromises.readdir;
+    try {
+      await mkdir(nestedRoot, { recursive: true });
+      await writeFile(path.join(root, leaf, 'parent.jsonl'), JSON.stringify(provider === 'claude'
+        ? { sessionId: 'parent', cwd: root }
+        : { type: 'session_meta', payload: { id: 'parent', cwd: root } }) + '\n');
+      t.mock.method(fsPromises, 'readdir', async (...args: Parameters<typeof fsPromises.readdir>) => {
+        if (String(args[0]) === nestedRoot) {
+          nestedReads += 1;
+          throw Object.assign(new Error('nested root unreadable'), { code: 'EACCES', path: nestedRoot });
+        }
+        return originalReaddir(...args);
+      });
+      syncBuiltinESMExports();
+      closeConnection();
+      await initializeDatabase();
+      const synchronizer = provider === 'claude' ? new ClaudeSessionSynchronizer() : new CodexSessionSynchronizer();
+      await assert.rejects(synchronizer.synchronize(), AggregateError);
+      assert.equal(sessionsDb.getSessionById('parent')?.runtime_profile_id, null);
+      assert.equal(nestedReads, 1, 'only the nested account scan may attempt its unreadable root');
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+      closeConnection();
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test(`${provider} full scans and watcher updates use the deepest configured transcript root`, async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'nested-profile-home-'));
     const homeKey = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';

@@ -15,6 +15,8 @@ export type SessionArtifactReadOptions = {
   throwOnError?: boolean;
   /** Directory leaf names to skip before reading any of their descendants. */
   excludedDirectoryNames?: readonly string[];
+  /** Absolute normalized directory paths to prune before reading nested account roots. */
+  excludedDirectoryPaths?: readonly string[];
 };
 
 // ---------------------------

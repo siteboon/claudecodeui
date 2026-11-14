@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection } from '@/modules/database/connection.js';
+import { closeConnection, getConnection } from '@/modules/database/connection.js';
 import { initializeDatabase } from '@/modules/database/init-db.js';
 import { sessionsDb } from '@/modules/database/repositories/sessions.db.js';
 
@@ -206,5 +206,23 @@ test('ownership-checked discovery can fill an untitled app session from its own 
     sessionsDb.createSession('untitled-native', 'codex', '/workspace/demo', 'Own account title',
       undefined, undefined, '/work/transcript.jsonl', 'work');
     assert.equal(sessionsDb.getSessionById('untitled-app')?.custom_name, 'Own account title');
+  });
+});
+
+test('conflicting provider id assignment preserves app-owned sessions and their scheduled messages', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('existing-app', 'codex', '/workspace/demo', 'Existing', 'work');
+    sessionsDb.assignProviderSessionId('existing-app', 'shared-native');
+    sessionsDb.createAppSession('new-app', 'codex', '/workspace/demo', 'New', null);
+    const db = getConnection();
+    const user = db.prepare("INSERT INTO users (username, password_hash) VALUES ('test-only', 'fixture')").run();
+    db.prepare(`INSERT INTO scheduled_messages (id, user_id, session_id, content, scheduled_for)
+      VALUES ('scheduled', ?, 'existing-app', 'Keep this reminder', '2100-01-01')`).run(user.lastInsertRowid);
+    assert.throws(() => sessionsDb.assignProviderSessionId('new-app', 'shared-native'),
+      (error) => error instanceof Error && 'code' in error && error.code === 'PROVIDER_SESSION_ALREADY_ASSIGNED');
+    assert.equal(sessionsDb.getSessionById('existing-app')?.provider_session_id, 'shared-native');
+    assert.equal(sessionsDb.getSessionById('new-app')?.provider_session_id, null);
+    assert.ok(db.prepare("SELECT id FROM scheduled_messages WHERE id = 'scheduled'").get());
+    assert.equal(sessionsDb.getAllSessions().length, 2);
   });
 });

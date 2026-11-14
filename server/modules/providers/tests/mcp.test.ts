@@ -7,6 +7,7 @@ import test from 'node:test';
 import TOML from '@iarna/toml';
 
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
+import { ClaudeMcpProvider } from '@/modules/providers/list/claude/claude-mcp.provider.js';
 import { AppError } from '@/shared/utils.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
@@ -21,6 +22,41 @@ const readJson = async (filePath: string): Promise<Record<string, unknown>> => {
   const content = await fs.readFile(filePath, 'utf8');
   return JSON.parse(content) as Record<string, unknown>;
 };
+
+test('Claude MCP management and runtime share the server config directory without changing private profiles', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'claude-mcp-profile-management-'));
+  const configDirectory = path.join(root, 'config');
+  const defaultHome = path.join(root, 'home');
+  const privateProfile = path.join(root, 'private-profile');
+  const previous = process.env.CLAUDE_CONFIG_DIR;
+  const restoreHomeDir = patchHomeDir(defaultHome);
+  process.env.CLAUDE_CONFIG_DIR = configDirectory;
+  try {
+    await fs.mkdir(configDirectory);
+    await fs.mkdir(defaultHome);
+    await fs.mkdir(privateProfile);
+    const privateFile = path.join(privateProfile, '.claude.json');
+    await fs.writeFile(privateFile, JSON.stringify({ mcpServers: { private: { command: 'private-server' } } }));
+    for (const scope of ['user', 'local'] as const) {
+      await providerMcpService.upsertProviderMcpServer('claude', {
+        name: scope, scope, workspacePath: root, transport: 'stdio', command: `${scope}-server`,
+      });
+    }
+    const grouped = await providerMcpService.listProviderMcpServers('claude', { workspacePath: root });
+    assert.ok(grouped.user.some((server) => server.name === 'user'));
+    assert.ok(grouped.local.some((server) => server.name === 'local'));
+    const runtime = await new ClaudeMcpProvider().loadRuntimeServers(root, configDirectory);
+    assert.equal((runtime?.user as { command: string })?.command, 'user-server');
+    assert.equal((runtime?.local as { command: string })?.command, 'local-server');
+    await assert.rejects(fs.access(path.join(defaultHome, '.claude.json')));
+    assert.deepEqual(Object.keys((await readJson(privateFile)).mcpServers as object), ['private']);
+  } finally {
+    restoreHomeDir();
+    if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previous;
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 
 /**
  * This test covers Claude MCP support for all scopes (user/local/project) and all transports (stdio/http/sse),

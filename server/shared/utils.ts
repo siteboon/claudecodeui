@@ -1281,6 +1281,7 @@ export async function findFilesRecursivelyCreatedAfter(
 
       if (entry.isDirectory()) {
         if (options.excludedDirectoryNames?.includes(entry.name)) continue;
+        if (options.excludedDirectoryPaths?.includes(path.resolve(fullPath))) continue;
         await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList, options);
         continue;
       }
