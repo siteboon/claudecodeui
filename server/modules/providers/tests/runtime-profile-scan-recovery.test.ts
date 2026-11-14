@@ -12,6 +12,56 @@ import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 
 for (const provider of ['claude', 'codex'] as const) {
+  test(`${provider} indexes readable sibling directories while retrying a failed directory`, async (t) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'partial-directory-discovery-'));
+    const homeKey = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+    const saved = Object.fromEntries(['DATABASE_PATH', 'CLOUDCLI_RUNTIME_PROFILES', homeKey].map((key) => [key, process.env[key]]));
+    const tree = path.join(root, provider === 'claude' ? 'projects' : 'sessions');
+    const broken = path.join(tree, 'a-broken');
+    const healthy = path.join(tree, 'z-healthy');
+    process.env.DATABASE_PATH = path.join(root, 'auth.db');
+    process.env[homeKey] = root;
+    delete process.env.CLOUDCLI_RUNTIME_PROFILES;
+    const synchronizer = provider === 'claude' ? new ClaudeSessionSynchronizer() : new CodexSessionSynchronizer();
+    const registered = providerRegistry.resolveProvider(provider);
+    t.mock.method(providerRegistry, 'listProviders', () => [{ ...registered, sessionSynchronizer: synchronizer }]);
+    const originalReaddir = fsPromises.readdir;
+    let fail = true;
+    try {
+      for (const [directory, id] of [[broken, 'recovered'], [healthy, 'healthy']]) {
+        await mkdir(directory, { recursive: true });
+        await writeFile(path.join(directory, `${id}.jsonl`), JSON.stringify(provider === 'claude'
+          ? { sessionId: id, cwd: root }
+          : { type: 'session_meta', payload: { id, cwd: root } }) + '\n');
+      }
+      t.mock.method(fsPromises, 'readdir', async (...args: Parameters<typeof fsPromises.readdir>) => {
+        if (fail && String(args[0]) === broken) throw Object.assign(new Error('permission denied'), { code: 'EACCES', path: broken });
+        return originalReaddir(...args);
+      });
+      syncBuiltinESMExports();
+      closeConnection();
+      await initializeDatabase();
+      const cursor = new Date('2100-01-01');
+      scanStateDb.updateLastScannedAt(cursor);
+      assert.equal((await sessionSynchronizerService.synchronizeSessions()).failures.length, 1);
+      assert.deepEqual(scanStateDb.getLastScannedAt(), cursor);
+      assert.ok(sessionsDb.getSessionById('healthy'));
+      assert.equal(sessionsDb.getSessionById('recovered'), null);
+      fail = false;
+      assert.deepEqual((await sessionSynchronizerService.synchronizeSessions()).failures, []);
+      assert.ok(sessionsDb.getSessionById('recovered'));
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+      closeConnection();
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test(`${provider} prunes an unreadable nested account before scanning its readable parent`, async (t) => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'nested-unreadable-profile-'));
     const homeKey = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';

@@ -1274,9 +1274,16 @@ export async function findFilesRecursivelyCreatedAfter(
   fileList: string[] = [],
   options: SessionArtifactReadOptions = {},
 ): Promise<string[]> {
-  try {
-    const entries = await readdir(rootDir, { withFileTypes: true });
-    for (const entry of entries) {
+  const reportFailure = (error: unknown) => {
+    if (options.onDiscoveryError) options.onDiscoveryError(error);
+    else if (options.throwOnError) throw error;
+  };
+  const entries = await readdir(rootDir, { withFileTypes: true }).catch((error) => {
+    reportFailure(error);
+    return [];
+  });
+  for (const entry of entries) {
+    try {
       const fullPath = path.join(rootDir, entry.name);
 
       if (entry.isDirectory()) {
@@ -1299,12 +1306,9 @@ export async function findFilesRecursivelyCreatedAfter(
       if (fileStat.birthtime > lastScanAt) {
         fileList.push(fullPath);
       }
+    } catch (error) {
+      reportFailure(error);
     }
-  } catch (error) {
-    if (options.throwOnError) {
-      throw error;
-    }
-    // Missing provider folders are expected in first-run or partial setups.
   }
 
   return fileList;

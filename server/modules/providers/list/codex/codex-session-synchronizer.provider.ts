@@ -55,7 +55,6 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
   /** Missing roots remain eligible for a full scan when the CLI first creates them. */
   private async synchronizeHome(codexHome: string, profileId: string | null, since?: Date): Promise<number | null> {
     const nameMap = await buildLookupMap(path.join(codexHome, 'session_index.jsonl'), 'id', 'thread_name');
-    const sessionsRoot = path.join(codexHome, 'sessions');
     // A parent home can contain another configured account's transcript tree.
     const otherRoots = providerRuntimeProfilesService.listCodexHomes()
       .filter((home) => {
@@ -64,7 +63,17 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
           && !path.isAbsolute(relativePath);
       })
       .map((home) => path.join(home.codexHome, 'sessions'));
-    const readOptions: SessionArtifactReadOptions = { throwOnError: true, excludedDirectoryPaths: otherRoots };
+    const sessionsRoot = path.join(codexHome, 'sessions');
+    const failures: unknown[] = [];
+    let rootMissing = false;
+    const readOptions: SessionArtifactReadOptions = {
+      throwOnError: true, excludedDirectoryPaths: otherRoots,
+      onDiscoveryError: (error) => {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT'
+          && 'path' in error && error.path === sessionsRoot) rootMissing = true;
+        else failures.push(error);
+      },
+    };
     let files: string[];
     try {
       files = await findFilesRecursivelyCreatedAfter(sessionsRoot, '.jsonl', since ?? null, [], readOptions);
@@ -74,8 +83,8 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       throw error;
     }
 
+    if (rootMissing) return null;
     let processed = 0;
-    const failures: unknown[] = [];
     for (const filePath of files) {
       if (otherRoots.some((root) => {
         const relativePath = path.relative(root, filePath);

@@ -17,6 +17,12 @@ export type SessionArtifactReadOptions = {
   excludedDirectoryNames?: readonly string[];
   /** Absolute normalized directory paths to prune before reading nested account roots. */
   excludedDirectoryPaths?: readonly string[];
+  /**
+   * Collect discovery errors and keep scanning sibling entries. Strict indexers
+   * must report these failures after processing the returned partial file list,
+   * retaining their retry cursor. Without this callback strict errors reject.
+   */
+  onDiscoveryError?: (error: unknown) => void;
 };
 
 // ---------------------------

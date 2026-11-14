@@ -82,13 +82,20 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
           && !path.isAbsolute(relativePath);
       })
       .map((home) => path.join(home.claudeHome, 'projects'));
+    const projectsRoot = path.join(claudeHome, 'projects');
+    const failures: unknown[] = [];
+    let rootMissing = false;
     const readOptions: SessionArtifactReadOptions = {
       throwOnError: true,
       excludedDirectoryNames: ['subagents', 'tool-results'],
       excludedDirectoryPaths: otherRoots,
+      onDiscoveryError: (error) => {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT'
+          && 'path' in error && error.path === projectsRoot) rootMissing = true;
+        else failures.push(error);
+      },
     };
     const nameMap = await buildLookupMap(path.join(claudeHome, 'history.jsonl'), 'sessionId', 'display');
-    const projectsRoot = path.join(claudeHome, 'projects');
     let files: string[];
     try {
       files = await findFilesRecursivelyCreatedAfter(projectsRoot, '.jsonl', since ?? null, [], readOptions);
@@ -101,8 +108,8 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       throw error;
     }
 
+    if (rootMissing) return null;
     let processed = 0;
-    const failures: unknown[] = [];
     for (const filePath of files) {
       if (otherRoots.some((root) => {
         const relativePath = path.relative(root, filePath);
