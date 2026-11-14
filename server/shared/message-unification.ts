@@ -343,6 +343,132 @@ export function truncateNestedOutput(value: unknown): unknown {
   return truncated;
 }
 
+/**
+ * Empties the base64 payload of every image part in an MCP content array.
+ *
+ * The transcript draws only a result's text parts, so an image's data is never
+ * shown — yet it is almost always the one string that pushes a result past the
+ * cap. Truncating it there cuts the serialized array mid-string, the client can
+ * no longer parse the parts, and it falls back to showing the raw base64 as
+ * text. Emptying the payload first keeps the array whole and small.
+ *
+ * Takes a parsed content array or a `toolUseResult` and returns a copy with
+ * every image part emptied, however deeply it is nested: some tools keep their
+ * content array inside an object. Values with no image part come back as they
+ * were. Used here by `capToolResult`, and by the Claude sessions provider
+ * (`claude-sessions.provider.ts`) on the live `tool_use_result`, which never
+ * passes through `prepareTranscriptMessages`.
+ */
+export function omitImageData(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(omitImageData);
+  }
+
+  const record = readObjectRecord(value);
+  if (!record) {
+    return value;
+  }
+
+  const source = readObjectRecord(record.source);
+  if (record.type === 'image' && typeof source?.data === 'string') {
+    return { ...record, source: { ...source, data: '' } };
+  }
+
+  const omitted: AnyRecord = {};
+  for (const [key, entry] of Object.entries(record)) {
+    omitted[key] = omitImageData(entry);
+  }
+  return omitted;
+}
+
+/**
+ * Caps a serialized content array by shortening its text parts, so the
+ * result is still an array the client can parse.
+ *
+ * Cutting the serialized string instead would end it mid-part, and the
+ * client would fall back to drawing the raw JSON. Returns null when the
+ * content is not a JSON array of content parts, leaving it to the plain
+ * string cap.
+ */
+function capSerializedParts(content: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  // Only an MCP content array, every entry a typed part. Any other array is a
+  // tool's own text (a Bash run printing JSON, say), and re-serializing it would
+  // change what the tool printed.
+  if (!Array.isArray(parsed) || !parsed.every((entry) => typeof readObjectRecord(entry)?.type === 'string')) {
+    return null;
+  }
+
+  const parts = omitImageData(parsed) as unknown[];
+  // Each trimmed part's full text and how much of it is kept, so a second
+  // pass trims the original rather than stacking a second marker.
+  const trimmed = new Map<number, { original: string; keep: number }>();
+  let serialized = JSON.stringify(parts);
+  while (serialized.length > MAX_TOOL_RESULT_CONTENT) {
+    let longest = -1;
+    let longestLength = 0;
+    parts.forEach((part, index) => {
+      const text = readObjectRecord(part)?.text;
+      if (typeof text === 'string' && text.length > longestLength) {
+        longest = index;
+        longestLength = text.length;
+      }
+    });
+    if (longest === -1) {
+      return null;
+    }
+
+    const record = readObjectRecord(parts[longest]) as AnyRecord;
+    const current = record.text as string;
+    const { original, keep: kept } = trimmed.get(longest) ?? { original: current, keep: current.length };
+    // Escaping makes a character cost one to six in the serialized form, so
+    // scale the cut by what this part's text actually costs there.
+    const cost = JSON.stringify(current).length;
+    const budget = MAX_TOOL_RESULT_CONTENT - (serialized.length - cost) - 64;
+    const keep = budget <= 0 ? 0 : Math.max(0, Math.min(kept - 1, Math.floor((kept * budget) / cost)));
+    trimmed.set(longest, { original, keep });
+    parts[longest] = { ...record, text: `${original.slice(0, keep)}\n… ${original.length - keep} more characters` };
+    const next = JSON.stringify(parts);
+    // The text is already as short as it gets: something other than text
+    // makes the array large, so let the plain string cap take it.
+    if (next.length >= serialized.length) {
+      return null;
+    }
+    serialized = next;
+  }
+  return serialized;
+}
+
+/**
+ * Caps one serialized tool result the way the transcript does.
+ *
+ * Used here by `capToolResult`, and by the Claude sessions provider
+ * (`claude-sessions.provider.ts`) for the live `tool_result` row, which is sent
+ * as it arrives rather than through `prepareTranscriptMessages`. Without it a
+ * running session hands the client every screenshot at full size.
+ *
+ * Image payloads are emptied first. A JSON content array still over the cap is
+ * trimmed through its text parts so it stays parseable; anything else gets the
+ * plain string cap. A result with no content stays without one.
+ */
+export function capToolResultContent(content: string | undefined): string | undefined {
+  if (typeof content !== 'string' || content.length <= MAX_TOOL_RESULT_CONTENT) {
+    return content;
+  }
+  if (content.startsWith('[')) {
+    const capped = capSerializedParts(content);
+    if (capped !== null) {
+      return capped;
+    }
+  }
+  return truncateOutput(content);
+}
+
 function capToolResult(message: NormalizedMessage): void {
   const result = message.toolResult;
   if (!result) {
@@ -350,10 +476,10 @@ function capToolResult(message: NormalizedMessage): void {
   }
 
   if (typeof result.content === 'string') {
-    result.content = truncateOutput(result.content);
+    result.content = capToolResultContent(result.content);
   }
   if (result.toolUseResult !== undefined) {
-    result.toolUseResult = truncateNestedOutput(result.toolUseResult);
+    result.toolUseResult = truncateNestedOutput(omitImageData(result.toolUseResult));
   }
 }
 
