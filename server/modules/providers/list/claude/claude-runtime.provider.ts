@@ -135,6 +135,10 @@ const abortedSessionIds = new Set<string>();
 // (see addSession). Their run loops must stay silent on wind-down: the map
 // entry, the abort flag, and all client-facing events belong to the new run.
 const supersededInstances = new WeakSet<ClaudeQuery>();
+// Query instances whose run loop has finished; a pending supersede kill skips them.
+const endedInstances = new WeakSet<ClaudeQuery>();
+// How long a superseded CLI gets to wind down on its own before it is closed.
+const SUPERSEDE_GRACE_MS = 5000;
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS ?? '', 10) || 55000;
 
@@ -492,13 +496,7 @@ function addSession(
     existing && existing.status === 'active' && existing.instance && existing.instance !== queryInstance
   );
   if (superseding && existing) {
-    supersededInstances.add(existing.instance);
-    Promise.resolve()
-      .then(() => existing.instance.interrupt())
-      .catch((error) => {
-        console.error(`Error interrupting superseded run for session ${sessionId}:`, error?.message || error);
-      });
-    existing.releaseInput?.();
+    supersedeQuery(existing.instance, existing.releaseInput, sessionId);
     // Whatever the superseded process had outstanding dies with it and will
     // never report, so the new run starts from an empty task set.
     backgroundWork.clear(sessionId);
@@ -543,6 +541,54 @@ function addSession(
 }
 
 /**
+ * Ends a process that a newer run on the same session replaces.
+ *
+ * Order matters: the SDK writes a control request synchronously and drops one
+ * written after stdin has ended, so the interrupt has to go out before stdin
+ * is closed. Deferring it (or closing stdin first) loses it, and the old CLI
+ * can then run a follow-up turn next to the new process, both appending to
+ * the same session file. If the process is still up after a short grace it
+ * is closed. Safe to call twice for the same instance (releaseHeldSession,
+ * then addSession when the new run registers).
+ */
+function supersedeQuery(
+  instance: ClaudeQuery | null | undefined,
+  releaseInput: (() => void) | null | undefined,
+  sessionId: string,
+) {
+  if (!instance || supersededInstances.has(instance)) {
+    releaseInput?.();
+    return;
+  }
+  supersededInstances.add(instance);
+  try {
+    Promise.resolve(instance.interrupt()).catch((error) => {
+      if (!endedInstances.has(instance)) {
+        console.error(`Error interrupting superseded run for session ${sessionId}:`, error?.message || error);
+      }
+    });
+  } catch (error) {
+    console.error(`Error interrupting superseded run for session ${sessionId}:`, (error as Error)?.message || error);
+  }
+  try {
+    releaseInput?.();
+  } finally {
+    const timer = setTimeout(() => {
+      if (endedInstances.has(instance)) {
+        return;
+      }
+      console.error(`Superseded Claude run for session ${sessionId} still up after ${SUPERSEDE_GRACE_MS} ms; closing it`);
+      try {
+        instance.close?.();
+      } catch {
+        // Already gone.
+      }
+    }, SUPERSEDE_GRACE_MS);
+    timer.unref?.();
+  }
+}
+
+/**
  * Lets go of the process an earlier run left holding a session open, so the
  * next turn can take the session over.
  *
@@ -552,8 +598,8 @@ function addSession(
  * agent outstanding would run next to the process that replaced it for as
  * long as the agent does, both appending to the same session file. Stop the
  * tasks first, while stdin is still open: the SDK drops control requests
- * written after stdin has ended, which is also why the interrupt a later
- * supersede sends to this process cannot do the job.
+ * written after stdin has ended. Then hand over to supersedeQuery, which
+ * interrupts the process before closing its stdin.
  *
  * The stops are not awaited — each request is written to the CLI before this
  * returns, and a reply is only missing when the process has already gone.
@@ -574,7 +620,7 @@ function releaseHeldSession(sessionId: string) {
       // Same as a rejected stop.
     }
   }
-  held.releaseInput?.();
+  supersedeQuery(held.instance, held.releaseInput, sessionId);
 }
 
 /**
@@ -1867,6 +1913,9 @@ async function queryClaudeSDK(
       steerFollowUpTimer = null;
     }
     releasePromptStream();
+    if (queryInstance) {
+      endedInstances.add(queryInstance);
+    }
   }
 }
 
