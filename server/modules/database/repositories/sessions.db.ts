@@ -144,7 +144,8 @@ export const sessionsDb = {
              THEN runtime_profile_id ELSE ? END,
            isArchived = CASE WHEN ? IS NULL OR julianday(?) > julianday(updated_at) THEN 0 ELSE isArchived END,
            custom_name = CASE
-             WHEN session_id <> provider_session_id AND custom_name IS NOT NULL THEN custom_name
+             WHEN session_id <> provider_session_id AND custom_name IS NOT NULL
+               AND NOT (provider = 'codex' AND custom_name = 'Untitled Codex Session') THEN custom_name
              ELSE COALESCE(?, custom_name)
            END
          WHERE session_id = ?`
@@ -307,6 +308,7 @@ export const sessionsDb = {
         .get(providerSessionId, providerSessionId, sessionId, selected.provider) as SessionRow | undefined;
 
       if (duplicate) {
+        const sameProfile = (duplicate.runtime_profile_id ?? null) === (selected.runtime_profile_id ?? null);
         db.prepare('DELETE FROM sessions WHERE session_id = ?').run(duplicate.session_id);
         db.prepare(
           `UPDATE sessions SET
@@ -316,8 +318,8 @@ export const sessionsDb = {
              updated_at = CURRENT_TIMESTAMP
            WHERE session_id = ?`
         ).run(providerSessionId,
-          (duplicate.runtime_profile_id ?? null) === (selected.runtime_profile_id ?? null) ? duplicate.jsonl_path : null,
-          duplicate.custom_name, sessionId);
+          sameProfile ? duplicate.jsonl_path : null,
+          sameProfile ? duplicate.custom_name : null, sessionId);
         return;
       }
 

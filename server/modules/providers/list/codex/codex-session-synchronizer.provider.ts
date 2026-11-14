@@ -75,15 +75,6 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
           continue;
         }
 
-        const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
-          ?? sessionsDb.getSessionById(parsed.sessionId);
-        if (existingSession) {
-          // If session name is untitled and we now have a name, update it
-          if (existingSession.custom_name === 'Untitled Codex Session' && parsed.sessionName && parsed.sessionName !== 'Untitled Codex Session') {
-            sessionsDb.updateSessionCustomName(existingSession.session_id, parsed.sessionName);
-          }
-        }
-
         const existingRow = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
           ?? sessionsDb.getSessionById(parsed.sessionId);
         const transcriptProfileId = providerRuntimeProfilesService.resolveTranscriptProfileId(

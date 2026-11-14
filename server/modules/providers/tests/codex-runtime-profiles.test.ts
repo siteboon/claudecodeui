@@ -147,3 +147,39 @@ test('session watchers include each configured Codex home once', async (t) => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('Codex discovery does not replace the owning home title with a copied profile title', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'codex-profile-title-'));
+  const saved = Object.fromEntries(['DATABASE_PATH', 'CODEX_HOME', 'CLOUDCLI_RUNTIME_PROFILES'].map((key) => [key, process.env[key]]));
+  const homes = [path.join(root, 'default'), path.join(root, 'work')];
+  process.env.DATABASE_PATH = path.join(root, 'auth.db');
+  process.env.CODEX_HOME = homes[0];
+  process.env.CLOUDCLI_RUNTIME_PROFILES = JSON.stringify([
+    { id: 'work', name: 'Work', provider: 'codex', env: { CODEX_HOME: homes[1] } },
+  ]);
+  try {
+    for (const home of homes) {
+      await mkdir(path.join(home, 'sessions'), { recursive: true });
+      await writeFile(path.join(home, 'sessions', 'copied.jsonl'), JSON.stringify({
+        type: 'session_meta', payload: { id: 'copied', cwd: root },
+      }) + '\n');
+    }
+    await writeFile(path.join(homes[1], 'session_index.jsonl'), JSON.stringify({
+      id: 'copied', thread_name: 'Other account title',
+    }) + '\n');
+    closeConnection();
+    await initializeDatabase();
+    await new CodexSessionSynchronizer().synchronize();
+    const row = sessionsDb.getSessionById('copied');
+    assert.equal(row?.custom_name, 'Untitled Codex Session');
+    assert.equal(row?.jsonl_path, path.join(homes[0], 'sessions', 'copied.jsonl'));
+    assert.equal(row?.runtime_profile_id, null);
+  } finally {
+    closeConnection();
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(root, { recursive: true, force: true });
+  }
+});

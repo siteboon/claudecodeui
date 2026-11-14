@@ -198,6 +198,31 @@ function ChatMessagesPane({
     [messageKeyMap],
   );
 
+  const providerSelection = (
+        <ProviderSelectionEmptyState
+          selectedSession={selectedSession}
+          currentSessionId={currentSessionId}
+          provider={provider}
+          setProvider={setProvider}
+          runtimeProfiles={runtimeProfiles}
+          runtimeProfilesError={runtimeProfilesError}
+          runtimeProfilesLoading={runtimeProfilesLoading}
+          onRetryRuntimeProfiles={onRetryRuntimeProfiles}
+          selectedRuntimeProfileId={selectedRuntimeProfileId}
+          onSelectRuntimeProfile={onSelectRuntimeProfile}
+          textareaRef={textareaRef}
+          providerModels={providerModels}
+          setProviderModel={setProviderModel}
+          providerModelCatalog={providerModelCatalog}
+          providerModelActions={providerModelActions}
+          providerModelsLoading={providerModelsLoading}
+          tasksEnabled={tasksEnabled}
+          isTaskMasterInstalled={isTaskMasterInstalled}
+          onShowAllTasks={onShowAllTasks}
+          setInput={setInput}
+        />
+  );
+
   return (
     <div
       ref={scrollContainerRef}
@@ -233,6 +258,7 @@ function ChatMessagesPane({
         </div>
       )}
       <div className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4">
+      {!selectedSession && !currentSessionId && chatMessages.length > 0 && providerSelection}
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">
@@ -241,28 +267,7 @@ function ChatMessagesPane({
           </div>
         </div>
       ) : chatMessages.length === 0 ? (
-        <ProviderSelectionEmptyState
-          selectedSession={selectedSession}
-          currentSessionId={currentSessionId}
-          provider={provider}
-          setProvider={setProvider}
-          runtimeProfiles={runtimeProfiles}
-          runtimeProfilesError={runtimeProfilesError}
-          runtimeProfilesLoading={runtimeProfilesLoading}
-          onRetryRuntimeProfiles={onRetryRuntimeProfiles}
-          selectedRuntimeProfileId={selectedRuntimeProfileId}
-          onSelectRuntimeProfile={onSelectRuntimeProfile}
-          textareaRef={textareaRef}
-          providerModels={providerModels}
-          setProviderModel={setProviderModel}
-          providerModelCatalog={providerModelCatalog}
-          providerModelActions={providerModelActions}
-          providerModelsLoading={providerModelsLoading}
-          tasksEnabled={tasksEnabled}
-          isTaskMasterInstalled={isTaskMasterInstalled}
-          onShowAllTasks={onShowAllTasks}
-          setInput={setInput}
-        />
+        providerSelection
       ) : (
         <>
           {/* Loading indicator for older messages (hide when load-all is active) */}

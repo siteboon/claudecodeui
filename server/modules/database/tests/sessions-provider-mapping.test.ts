@@ -182,7 +182,7 @@ for (const selected of [null, 'work']) {
   });
   test(`a watcher race cannot import another profile into an app using ${selected ?? 'default'}`, async () => {
     await withIsolatedDatabase(() => {
-      sessionsDb.createAppSession('app-race', 'codex', '/workspace/demo', 'My title', selected);
+      sessionsDb.createAppSession('app-race', 'codex', '/workspace/demo', undefined, selected);
       sessionsDb.createSession('native-race', 'codex', '/workspace/demo', 'Copied account',
         undefined, undefined, '/other/account.jsonl', selected === null ? 'work' : null);
       sessionsDb.assignProviderSessionId('app-race', 'native-race');
@@ -190,7 +190,21 @@ for (const selected of [null, 'work']) {
       assert.equal(row?.jsonl_path, null);
       assert.equal(row?.runtime_profile_id, selected);
       assert.equal(row?.provider_session_id, 'native-race');
+      assert.equal(row?.custom_name, null);
       assert.equal(sessionsDb.getAllSessions().length, 1);
     });
   });
 }
+
+test('ownership-checked discovery can fill an untitled app session from its own profile', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('untitled-app', 'codex', '/workspace/demo', 'Untitled Codex Session', 'work');
+    sessionsDb.assignProviderSessionId('untitled-app', 'untitled-native');
+    sessionsDb.createSession('untitled-native', 'codex', '/workspace/demo', 'Wrong account title',
+      undefined, undefined, '/other/transcript.jsonl', null);
+    assert.equal(sessionsDb.getSessionById('untitled-app')?.custom_name, 'Untitled Codex Session');
+    sessionsDb.createSession('untitled-native', 'codex', '/workspace/demo', 'Own account title',
+      undefined, undefined, '/work/transcript.jsonl', 'work');
+    assert.equal(sessionsDb.getSessionById('untitled-app')?.custom_name, 'Own account title');
+  });
+});
