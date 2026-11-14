@@ -1,7 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { ThemeMode } from '@/shared/types';
+import {
+  BUILT_IN_THEMES,
+  DEFAULT_COLOR_THEME_ID,
+  applyColorThemeToDocument,
+  isDarkModeActiveFor,
+  readImportedThemes,
+  readStoredThemeMode,
+  resolveColorTheme,
+  resolveIsDarkMode,
+} from '@/shared/themes';
+import type { ColorTheme, ThemeMode } from '@/shared/types';
 import {
   readUserPreference,
   subscribeToUserPreferences,
@@ -13,29 +23,20 @@ type ThemeContextValue = {
   toggleDarkMode: () => void;
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
+  /**
+   * False while a theme that fixes its own appearance is active. Toggling dark
+   * mode under such a theme would flip the `dark:` utility classes away from the
+   * palette, so the settings UI disables the switch rather than lying about it.
+   */
+  canToggleDarkMode: boolean;
+  colorTheme: string;
+  setColorTheme: (themeId: string) => void;
+  availableThemes: ColorTheme[];
+  addImportedTheme: (theme: ColorTheme) => void;
+  removeImportedTheme: (themeId: string) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-
-/**
- * Reads the stored preference as a theme mode.
- *
- * Only `'dark'` and `'light'` were ever written before the system option
- * existed, so anything else — `'system'`, an absent value, or a value a newer
- * client wrote — means "follow the OS", which is also the default.
- */
-const readStoredThemeMode = (): ThemeMode => {
-  const savedTheme = readUserPreference<string | null>('theme', null);
-  return savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'system';
-};
-
-/** Whether the OS currently asks for a dark appearance; false when unknown. */
-const prefersDarkAppearance = (): boolean =>
-  Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches);
-
-/** The colour a mode resolves to right now. */
-const resolveIsDarkMode = (mode: ThemeMode): boolean =>
-  mode === 'system' ? prefersDarkAppearance() : mode === 'dark';
 
 export const useTheme = () => {
   const context = useContext(ThemeContext);
@@ -56,47 +57,65 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   // under `system` it changes when the OS does, with no state change here.
   const [isDarkMode, setIsDarkMode] = useState(() => resolveIsDarkMode(readStoredThemeMode()));
 
+  // The palette is a second, independent axis: which set of colour variables is
+  // in force, as opposed to whether the app is in light or dark mode.
+  const [colorTheme, setColorThemeState] = useState(
+    () => readUserPreference<string>('colorTheme', DEFAULT_COLOR_THEME_ID),
+  );
+
+  // Themes converted from VS Code files. They carry their own variables because
+  // they arrive at runtime and so have no stylesheet in the bundle.
+  const [importedThemes, setImportedThemes] = useState<ColorTheme[]>(readImportedThemes);
+
   // The theme now lives in auth.db, so a change made on another device (or in
   // another tab) arrives through the preference store rather than a re-render.
   useEffect(() => subscribeToUserPreferences(() => {
     const storedMode = readStoredThemeMode();
     setThemeModeState(storedMode);
     setIsDarkMode(resolveIsDarkMode(storedMode));
+    setColorThemeState(readUserPreference<string>('colorTheme', DEFAULT_COLOR_THEME_ID));
+    setImportedThemes(readImportedThemes());
   }), []);
+
+  const availableThemes = useMemo(
+    () => [...BUILT_IN_THEMES, ...importedThemes],
+    [importedThemes],
+  );
+
+  const activeTheme = useMemo(
+    () => resolveColorTheme(colorTheme, importedThemes),
+    [colorTheme, importedThemes],
+  );
+
+  // Only the default theme ships both variants; every other palette states which
+  // one it is, and the `dark` class has to follow it or the `dark:` utility
+  // classes sprinkled through the app would contradict the variables.
+  const isDarkModeActive = isDarkModeActiveFor(activeTheme, isDarkMode);
 
   // Applying the theme to the document and persisting it are deliberately
   // separate. Persisting from here would also fire on mount — before the stored
   // theme had been fetched — writing this device's system default over the
   // theme the user actually chose on another one.
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
+    applyColorThemeToDocument(activeTheme, importedThemes, isDarkModeActive);
 
-      // Update iOS status bar style and theme color for dark mode
-      const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-      if (statusBarMeta) {
-        statusBarMeta.setAttribute('content', 'black-translucent');
-      }
-
-      const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-      if (themeColorMeta) {
-        themeColorMeta.setAttribute('content', '#141414'); // Dark background color (hsl(0 0% 8%))
-      }
-    } else {
-      document.documentElement.classList.remove('dark');
-
-      // Update iOS status bar style and theme color for light mode
-      const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-      if (statusBarMeta) {
-        statusBarMeta.setAttribute('content', 'default');
-      }
-
-      const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-      if (themeColorMeta) {
-        themeColorMeta.setAttribute('content', '#f6f4ef'); // Light background color (warm cream)
-      }
+    // Update iOS status bar style for the active mode
+    const statusBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (statusBarMeta) {
+      statusBarMeta.setAttribute('content', isDarkModeActive ? 'black-translucent' : 'default');
     }
-  }, [isDarkMode]);
+
+    // Read the colour back off the document rather than hardcoding one per mode,
+    // so every theme — including an imported one nobody could have hardcoded —
+    // gets a status bar that matches its own background.
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    const background = hslTripletToHex(
+      getComputedStyle(document.documentElement).getPropertyValue('--background'),
+    );
+    if (themeColorMeta && background) {
+      themeColorMeta.setAttribute('content', background);
+    }
+  }, [activeTheme, importedThemes, isDarkModeActive]);
 
   // Listen for system theme changes
   useEffect(() => {
@@ -134,11 +153,62 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  const setColorTheme = useCallback((themeId: string) => {
+    setColorThemeState(themeId);
+    writeUserPreference('colorTheme', themeId);
+  }, []);
+
+  const addImportedTheme = useCallback((theme: ColorTheme) => {
+    setImportedThemes((previous) => {
+      const next = [...previous.filter((existing) => existing.id !== theme.id), theme];
+      writeUserPreference('importedThemes', next);
+      return next;
+    });
+  }, []);
+
+  const removeImportedTheme = useCallback((themeId: string) => {
+    setImportedThemes((previous) => {
+      const next = previous.filter((theme) => theme.id !== themeId);
+      writeUserPreference('importedThemes', next);
+      return next;
+    });
+    // Deleting the palette that is currently on would otherwise leave the app
+    // showing a theme the user just removed until the next reload.
+    setColorThemeState((current) => {
+      if (current !== themeId) {
+        return current;
+      }
+      writeUserPreference('colorTheme', DEFAULT_COLOR_THEME_ID);
+      return DEFAULT_COLOR_THEME_ID;
+    });
+  }, []);
+
   // A fresh object here would re-render every consumer in the app on any
   // render of this provider, theme change or not.
   const value = useMemo<ThemeContextValue>(
-    () => ({ isDarkMode, toggleDarkMode, themeMode, setThemeMode }),
-    [isDarkMode, toggleDarkMode, themeMode, setThemeMode],
+    () => ({
+      isDarkMode: isDarkModeActive,
+      toggleDarkMode,
+      themeMode,
+      setThemeMode,
+      canToggleDarkMode: activeTheme.appearance === 'system',
+      colorTheme: activeTheme.id,
+      setColorTheme,
+      availableThemes,
+      addImportedTheme,
+      removeImportedTheme,
+    }),
+    [
+      isDarkModeActive,
+      toggleDarkMode,
+      themeMode,
+      setThemeMode,
+      activeTheme,
+      setColorTheme,
+      availableThemes,
+      addImportedTheme,
+      removeImportedTheme,
+    ],
   );
 
   return (
@@ -147,3 +217,38 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     </ThemeContext.Provider>
   );
 };
+
+/**
+ * Converts the `h s% l%` triplet a theme stores into the hex colour the
+ * `theme-color` meta tag needs; empty when the variable is not resolvable yet,
+ * which leaves the tag on its previous value rather than blanking it.
+ */
+function hslTripletToHex(triplet: string): string {
+  const match = triplet.trim().match(/^([\d.]+)\s+([\d.]+)%\s+([\d.]+)%/);
+  if (!match) {
+    return '';
+  }
+
+  const hue = Number(match[1]);
+  const saturation = Number(match[2]) / 100;
+  const lightness = Number(match[3]) / 100;
+
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const secondary = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const offset = lightness - chroma / 2;
+
+  const [red, green, blue] = (() => {
+    if (hue < 60) return [chroma, secondary, 0];
+    if (hue < 120) return [secondary, chroma, 0];
+    if (hue < 180) return [0, chroma, secondary];
+    if (hue < 240) return [0, secondary, chroma];
+    if (hue < 300) return [secondary, 0, chroma];
+    return [chroma, 0, secondary];
+  })();
+
+  const toChannel = (value: number) => Math.round((value + offset) * 255)
+    .toString(16)
+    .padStart(2, '0');
+
+  return `#${toChannel(red)}${toChannel(green)}${toChannel(blue)}`;
+}
