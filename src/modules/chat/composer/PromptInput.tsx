@@ -40,7 +40,7 @@ export const PromptInput = React.forwardRef<HTMLFormElement, PromptInputProps>(
           ref={ref}
           data-slot="prompt-input"
           className={cn(
-            'relative overflow-hidden rounded-xl border border-border/50 bg-card/80 shadow-sm backdrop-blur-sm transition-all duration-200 focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-1 focus-within:ring-primary/15',
+            'relative overflow-hidden rounded-xl border border-border/50 bg-card/80 shadow-sm transition-all duration-200 focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-1 focus-within:ring-primary/15',
             className
           )}
           {...props}
