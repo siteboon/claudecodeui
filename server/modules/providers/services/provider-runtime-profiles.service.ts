@@ -121,6 +121,11 @@ const parseProfiles = (rawConfiguration: string | undefined): ProviderRuntimePro
       // History, usage, models and watchers currently share the server's OpenCode DB.
       throw invalidConfiguration(`profile ${index + 1} OpenCode env cannot override HOME, USERPROFILE, HOMEDRIVE, HOMEPATH or XDG_DATA_HOME; profiles must share the server's history storage.`);
     }
+    if (record.provider === 'cursor' && Object.keys(env).some((name) => (
+      ['HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH'].includes(name.toUpperCase())
+    ))) {
+      throw invalidConfiguration(`profile ${index + 1} Cursor env cannot override HOME, USERPROFILE, HOMEDRIVE or HOMEPATH; profiles must share the server's history storage.`);
+    }
 
     return {
       id,

@@ -225,6 +225,10 @@ validation so runtime writes cannot silently diverge from history readers, model
 lookups, usage accounting, and watchers. Provider config and authentication
 environment variables remain available for selecting a different account.
 
+Cursor profiles likewise share the server's history home. `HOME`, `USERPROFILE`,
+`HOMEDRIVE`, and `HOMEPATH` overrides are rejected; authentication variables and
+custom executables remain available without relocating the transcript storage.
+
 On Windows, Codex profiles can name the npm `codex.cmd` shim, including a command
 found through the profile's PATH. Both SDK turns and app-server operations resolve
 that installation's native `codex.exe`, without passing prompts through a shell.

@@ -108,3 +108,21 @@ test('rejects OpenCode profile storage relocation before exposing a selectable p
   });
   assert.equal(service.resolve('opencode', 'work').env.OPENCODE_CONFIG, '/work/config.json');
 });
+
+test('rejects Cursor profile storage relocation while retaining authentication overrides', () => {
+  for (const key of ['HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'home', 'UserProfile']) {
+    const service = createProviderRuntimeProfilesService({
+      readConfiguration: () => JSON.stringify([{
+        id: 'work', name: 'Work', provider: 'cursor', env: { [key]: '/other-storage' },
+      }]),
+    });
+    assert.throws(() => service.list(), /Cursor env cannot override/);
+    assert.throws(() => service.resolve('cursor', 'work'), /history storage/);
+  }
+  const service = createProviderRuntimeProfilesService({
+    readConfiguration: () => JSON.stringify([{
+      id: 'work', name: 'Work', provider: 'cursor', env: { CURSOR_API_KEY: 'test-only' },
+    }]),
+  });
+  assert.equal(service.resolve('cursor', 'work').env.CURSOR_API_KEY, 'test-only');
+});
