@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { LLMProvider, ProviderRuntimeProfileSummary } from '@/shared/types';
@@ -13,7 +13,11 @@ type RuntimeProfilesApiResponse = {
 
 const readStoredSelections = (): Record<LLMProvider, string> => PROVIDERS.reduce(
   (selections, provider) => {
-    selections[provider] = localStorage.getItem(storageKey(provider)) || 'default';
+    try {
+      selections[provider] = localStorage.getItem(storageKey(provider)) || 'default';
+    } catch {
+      selections[provider] = 'default';
+    }
     return selections;
   },
   {} as Record<LLMProvider, string>,
@@ -29,6 +33,19 @@ export function useRuntimeProfiles(provider: LLMProvider) {
   const [selectedByProvider, setSelectedByProvider] = useState<Record<LLMProvider, string>>(
     readStoredSelections,
   );
+  // Persist only changed choices after React commits; restricted storage never blocks chat.
+  const previousSelections = useRef(selectedByProvider);
+  useEffect(() => {
+    for (const targetProvider of PROVIDERS) {
+      if (previousSelections.current[targetProvider] === selectedByProvider[targetProvider]) continue;
+      try {
+        localStorage.setItem(storageKey(targetProvider), selectedByProvider[targetProvider]);
+      } catch {
+        // Session selection remains usable in memory when persistence is denied.
+      }
+    }
+    previousSelections.current = selectedByProvider;
+  }, [selectedByProvider]);
   // Discovery failures must remain distinguishable from an empty profile list.
   const [error, setError] = useState<string | null>(null);
   // The new-chat view uses loading to prevent duplicate retry requests.
@@ -58,7 +75,6 @@ export function useRuntimeProfiles(provider: LLMProvider) {
             );
             if (!available) {
               next[targetProvider] = 'default';
-              localStorage.setItem(storageKey(targetProvider), 'default');
             }
           }
           return next;
@@ -84,7 +100,6 @@ export function useRuntimeProfiles(provider: LLMProvider) {
 
   const selectRuntimeProfile = useCallback((profileId: string) => {
     setSelectedByProvider((current) => ({ ...current, [provider]: profileId }));
-    localStorage.setItem(storageKey(provider), profileId);
   }, [provider]);
 
   return { providerProfiles, selectedRuntimeProfileId, selectRuntimeProfile, error, loading, retry };

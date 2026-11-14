@@ -12,6 +12,46 @@ import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 
 for (const provider of ['claude', 'codex'] as const) {
+  test(`${provider} full scans and watcher updates use the deepest configured transcript root`, async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'nested-profile-home-'));
+    const homeKey = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';
+    const saved = Object.fromEntries(['DATABASE_PATH', 'CLOUDCLI_RUNTIME_PROFILES', homeKey].map((key) => [key, process.env[key]]));
+    const leaf = provider === 'claude' ? 'projects' : 'sessions';
+    const nestedHome = path.join(root, leaf, 'work');
+    const transcript = path.join(nestedHome, leaf, 'nested.jsonl');
+    process.env.DATABASE_PATH = path.join(root, 'auth.db');
+    process.env[homeKey] = root;
+    process.env.CLOUDCLI_RUNTIME_PROFILES = JSON.stringify([
+      { id: 'work', name: 'Work', provider, env: { [homeKey]: nestedHome } },
+    ]);
+    try {
+      await mkdir(path.dirname(transcript), { recursive: true });
+      await writeFile(transcript, JSON.stringify(provider === 'claude'
+        ? { sessionId: 'nested', cwd: root }
+        : { type: 'session_meta', payload: { id: 'nested', cwd: root } }) + '\n');
+      closeConnection();
+      await initializeDatabase();
+      const synchronizer = provider === 'claude' ? new ClaudeSessionSynchronizer() : new CodexSessionSynchronizer();
+      assert.equal(await synchronizer.synchronize(), 1);
+      assert.equal(sessionsDb.getSessionById('nested')?.runtime_profile_id, 'work');
+      assert.equal(await synchronizer.synchronizeFile(transcript), 'nested');
+      assert.equal(sessionsDb.getSessionById('nested')?.runtime_profile_id, 'work');
+      // Repair a native row tagged by an older parent scan for this exact file.
+      sessionsDb.deleteSessionById('nested');
+      sessionsDb.createSession('nested', provider, root, 'Old tag', undefined, undefined, transcript, null);
+      await synchronizer.synchronize();
+      assert.equal(sessionsDb.getSessionById('nested')?.runtime_profile_id, 'work');
+      assert.equal(sessionsDb.getSessionById('nested')?.jsonl_path, transcript);
+    } finally {
+      closeConnection();
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test(`${provider} indexes later valid transcripts while retrying a malformed file in the same home`, async (t) => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'profile-file-recovery-'));
     const homeKey = provider === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME';

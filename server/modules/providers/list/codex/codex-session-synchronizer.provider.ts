@@ -66,9 +66,22 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       throw error;
     }
 
+    // A parent home can contain another configured account's transcript tree.
+    const otherRoots = providerRuntimeProfilesService.listCodexHomes()
+      .filter((home) => {
+        const relativePath = path.relative(codexHome, home.codexHome);
+        return relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relativePath);
+      })
+      .map((home) => path.join(home.codexHome, 'sessions'));
     let processed = 0;
     const failures: unknown[] = [];
     for (const filePath of files) {
+      if (otherRoots.some((root) => {
+        const relativePath = path.relative(root, filePath);
+        return relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relativePath);
+      })) continue;
       try {
         const parsed = await this.processSessionFile(filePath, nameMap, readOptions);
         if (!parsed) {

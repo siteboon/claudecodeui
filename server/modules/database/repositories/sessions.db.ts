@@ -123,6 +123,7 @@ export const sessionsDb = {
         return existing.session_id;
       }
       if (nativeRow && existing.jsonl_path
+        && existing.jsonl_path !== jsonlPath
         && (existing.runtime_profile_id ?? '') < (runtimeProfileId ?? '')) {
         try {
           statSync(existing.jsonl_path);

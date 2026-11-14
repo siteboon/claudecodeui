@@ -92,9 +92,22 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       throw error;
     }
 
+    // A parent home can contain another configured account's transcript tree.
+    const otherRoots = providerRuntimeProfilesService.listClaudeHomes()
+      .filter((home) => {
+        const relativePath = path.relative(claudeHome, home.claudeHome);
+        return relativePath !== '' && relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relativePath);
+      })
+      .map((home) => path.join(home.claudeHome, 'projects'));
     let processed = 0;
     const failures: unknown[] = [];
     for (const filePath of files) {
+      if (otherRoots.some((root) => {
+        const relativePath = path.relative(root, filePath);
+        return relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`)
+          && !path.isAbsolute(relativePath);
+      })) continue;
       try {
         if (this.isSubagentTranscript(filePath)) {
           continue;

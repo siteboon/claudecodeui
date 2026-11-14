@@ -51,6 +51,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.resetModules();
 });
 
@@ -93,5 +94,21 @@ for (const failure of ['network', 'http', 'invalid-body']) {
     assert.equal(result.current.loading, false);
     assert.equal(result.current.selectedRuntimeProfileId, 'work');
     assert.equal(runtimeProfilesRequest.mock.calls.length, 2);
+  });
+}
+
+for (const operation of ['read', 'write', 'fallback-write']) {
+  test(`storage ${operation} denial preserves an in-memory profile selection`, async () => {
+    if (operation === 'fallback-write') localStorage.setItem('runtime-profile:codex', 'removed-profile');
+    vi.spyOn(Storage.prototype, operation === 'read' ? 'getItem' : 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage access denied', 'SecurityError');
+    });
+    const { result } = await renderProfiles('codex');
+    await waitFor(() => assert.equal(result.current.providerProfiles.length, 2));
+    assert.equal(result.current.selectedRuntimeProfileId, 'default');
+    assert.equal(result.current.error, null);
+    act(() => result.current.selectRuntimeProfile('work'));
+    assert.equal(result.current.selectedRuntimeProfileId, 'work');
+    assert.equal(result.current.error, null);
   });
 }
