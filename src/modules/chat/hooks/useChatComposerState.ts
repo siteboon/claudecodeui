@@ -253,6 +253,13 @@ function isSoftKeyboardEnvironment(): boolean {
   return window.matchMedia('(pointer: coarse)').matches;
 }
 
+// Drops one chat's edit anchor; keyed by draft scope, '' for a chat with none.
+function withoutEdit(anchors: Record<string, string>, scope: string | null): Record<string, string> {
+  const next = { ...anchors };
+  delete next[scope ?? ''];
+  return next;
+}
+
 /** The composer's input state machine — text, drafts, sending, queueing and the keyboard handling around them; used by ChatInterface. */
 export function useChatComposerState({
   selectedProject,
@@ -301,7 +308,8 @@ export function useChatComposerState({
    * needs and it keeps a stale message object from being captured while the
    * transcript refreshes underneath the composer.
    */
-  const [editingAnchorId, setEditingAnchorId] = useState<string | null>(null);
+  // The sent message being edited in each chat, by draft scope; see `editingAnchorId`.
+  const [editingAnchors, setEditingAnchors] = useState<Record<string, string>>({});
 
   const [inputState, setInputState] = useState<{ scope: string | null; value: string }>(() => {
     if (typeof window === 'undefined') {
@@ -346,6 +354,9 @@ export function useChatComposerState({
   const draftScope = sessionKey ?? (selectedProjectId ? `project:${selectedProjectId}` : null);
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
+  // An edit holds only in the chat it started in: elsewhere (a new chat opened by "Continue in
+  // new chat" included) the next send would go out as a rejected `chat.edit-send`. Back in that chat it resumes.
+  const editingAnchorId = editingAnchors[draftScope ?? ''] ?? null;
   // Composition is tracked on `window` in the capture phase rather than on the textarea, so a
   // composition that starts in one field and ends after focus moves still closes cleanly.
   const isComposingRef = useRef(false);
@@ -829,6 +840,7 @@ export function useChatComposerState({
     if (scope !== draftScopeRef.current) {
       if (scope && readDraftText(scope) === text) {
         writeDraftText(scope, '');
+        setEditingAnchors((anchors) => withoutEdit(anchors, scope));
       }
       return;
     }
@@ -837,7 +849,8 @@ export function useChatComposerState({
     }
     setInput('');
     inputValueRef.current = '';
-    setEditingAnchorId(null);
+    // Only this chat's edit ends; one left open in another chat resumes there.
+    setEditingAnchors((anchors) => withoutEdit(anchors, draftScopeRef.current));
     resetCommandMenuState();
     setIsTextareaExpanded(false);
     if (textareaRef.current) {
@@ -1418,8 +1431,8 @@ export function useChatComposerState({
           attachments: uploadedAttachments,
         },
       });
-      // Only this send's edit: an edit begun in another chat during the upload stays.
-      setEditingAnchorId((current) => (current === editingAnchorId ? null : current));
+      // Only the edit just sent ends; one started meanwhile, or open in another chat, stays.
+      setEditingAnchors((anchors) => (anchors[draftScope ?? ''] === editingAnchorId ? withoutEdit(anchors, draftScope) : anchors));
 
       // Recorded under the (possibly just-allocated) session id, so the first
       // message of a new chat lands in the history of the session the user is
@@ -1457,6 +1470,7 @@ export function useChatComposerState({
       attachedFiles,
       buildSendOptions,
       currentSessionId,
+      draftScope,
       editingAnchorId,
       executeCommand,
       isLoading,
@@ -1875,14 +1889,15 @@ export function useChatComposerState({
   /** Loads an already-sent message back into the composer to be replaced. */
   const beginEditMessage = useCallback((message: ChatMessage) => {
     if (!message.transcriptAnchorId) return;
-    setEditingAnchorId(message.transcriptAnchorId);
+    const anchorId = message.transcriptAnchorId;
+    setEditingAnchors((anchors) => ({ ...anchors, [draftScopeRef.current ?? '']: anchorId }));
     setInput(message.content || '');
     inputValueRef.current = message.content || '';
     textareaRef.current?.focus();
   }, [setInput]);
 
   const cancelEditMessage = useCallback(() => {
-    setEditingAnchorId(null);
+    setEditingAnchors((anchors) => withoutEdit(anchors, draftScopeRef.current));
     setInput('');
     inputValueRef.current = '';
   }, [setInput]);

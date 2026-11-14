@@ -24,11 +24,11 @@ type Frame = { type: string; sessionId?: string; anchorId?: string; content?: st
 
 const render = () => {
   const sent: Frame[] = [];
-  const view = renderHook(() =>
+  const view = renderHook(({ session }: { session: ProjectSession | null }) =>
     useChatComposerState({
       selectedProject: PROJECT,
-      selectedSession: SESSION,
-      currentSessionId: SESSION.id,
+      selectedSession: session,
+      currentSessionId: session?.id ?? null,
       provider: 'claude',
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
@@ -50,6 +50,7 @@ const render = () => {
       setIsUserScrolledUp: () => undefined,
       setPendingPermissionRequests: () => undefined,
     }),
+    { initialProps: { session: SESSION as ProjectSession | null } },
   );
   const of = (type: string) => sent.filter((message) => message.type === type);
   return { view, of };
@@ -97,4 +98,47 @@ test('Asking a side question while editing ends edit mode, so the next send is a
   assert.equal(sendFrames.length, 1, 'the next send is a plain send');
   assert.equal(editSendFrames.length, 0, 'not an edit-send, which would replace the edited turn and everything after it');
   assert.equal(sendFrames[0]?.anchorId, undefined, 'no anchor is carried over from the ended edit');
+});
+
+test('Opening another chat while editing leaves edit mode out of it', async () => {
+  const { view } = render();
+
+  await act(async () => { view.result.current.beginEditMessage(EDITED_MESSAGE); });
+  assert.equal(view.result.current.editingAnchorId, 'anchor-1', 'editing started');
+
+  // A new chat in the same project, as "Continue in new chat" opens it.
+  await act(async () => { view.rerender({ session: null }); });
+  assert.equal(view.result.current.editingAnchorId, null, 'the old chat\'s anchor does not follow into the new one');
+
+  await act(async () => { view.rerender({ session: SESSION }); });
+  assert.equal(view.result.current.editingAnchorId, 'anchor-1', 'back in the first chat, the edit resumes');
+});
+
+test('Sending in another chat leaves an edit open in the first chat', async () => {
+  const { view, of } = render();
+
+  await act(async () => { view.result.current.beginEditMessage(EDITED_MESSAGE); });
+  await act(async () => { view.rerender({ session: { id: 'session-2' } }); });
+  await act(async () => { view.result.current.setInput('a message in the other chat'); });
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  assert.equal(of('chat.send').length, 1, 'the other chat sends a plain message');
+
+  await act(async () => { view.rerender({ session: SESSION }); });
+  assert.equal(view.result.current.editingAnchorId, 'anchor-1', 'the first chat\'s edit is still open');
+});
+
+test('An edit in a second chat leaves the first chat\'s edit open', async () => {
+  const { view } = render();
+
+  await act(async () => { view.result.current.beginEditMessage(EDITED_MESSAGE); });
+  await act(async () => { view.rerender({ session: { id: 'session-2' } }); });
+  await act(async () => {
+    view.result.current.beginEditMessage({ ...EDITED_MESSAGE, transcriptAnchorId: 'anchor-2' });
+  });
+  assert.equal(view.result.current.editingAnchorId, 'anchor-2', 'the second chat edits its own message');
+
+  await act(async () => { view.rerender({ session: SESSION }); });
+  assert.equal(view.result.current.editingAnchorId, 'anchor-1', 'the first chat\'s edit is still open');
 });

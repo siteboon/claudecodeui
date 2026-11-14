@@ -37,6 +37,15 @@ function readString(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+/** The file a tool call worked on: its tool config's, else the raw input's (MultiEdit, NotebookEdit). */
+function toolFilePath(message: ChatMessage): string | undefined {
+  const input = (parseToolPayload(message.toolInput) ?? {}) as Record<string, unknown>;
+  const contentProps = getToolConfig(message.toolName || 'Tool').input.getContentProps?.(input) as
+    Record<string, unknown> | undefined;
+  const filePath = contentProps?.filePath ?? input.file_path ?? input.notebook_path;
+  return typeof filePath === 'string' ? filePath : undefined;
+}
+
 /**
  * Renders one tool call the way the transcript summarizes it: what ran, on
  * what, and what came back.
@@ -138,4 +147,104 @@ export function buildTranscriptMarkdown(input: BuildTranscriptMarkdownInput): st
   }
 
   return `${sections.join('\n').replace(/\n{4,}/g, '\n\n\n')}\n`;
+}
+
+type BuildHandoffMarkdownInput = {
+  messages: ChatMessage[];
+  sessionTitle: string;
+  provider: LLMProvider | string;
+  maxChars?: number;
+};
+
+/**
+ * Condenses a transcript into a first message for a new chat, so the work can
+ * continue with another provider once this one hits its usage limit. Keeps the
+ * original task, the files touched and as many recent turns as fit; drops tool
+ * payloads, results and thinking, which are most of the tokens.
+ *
+ * shortcut: a character cap stands in for a token budget; switch to a real
+ * token count if users need it to match a provider's limit exactly.
+ */
+export function buildHandoffMarkdown({
+  messages,
+  sessionTitle,
+  provider,
+  maxChars = 16000,
+}: BuildHandoffMarkdownInput): string {
+  const providerLabel = PROVIDER_LABELS[String(provider)] ?? 'Assistant';
+  const files = new Set<string>();
+  const turns: Array<{ isUser: boolean; text: string }> = [];
+
+  for (const message of messages) {
+    if (message.isToolUse) {
+      const filePath = toolFilePath(message);
+      if (filePath) {
+        // Re-add so the Set's order is last touch, which the newest-40 cap below relies on.
+        files.delete(filePath);
+        files.add(filePath);
+      }
+      continue;
+    }
+    // Side-question asides never reached the session itself, so they are not part of its work.
+    if (message.sideQuestion || message.isThinking || message.isLocalCommand || message.isLocalCommandStdout) continue;
+    if (message.type !== 'user' && message.type !== 'assistant') continue;
+    // A compaction row keeps its summary of everything before it apart from the content.
+    let text = message.compactSummary
+      ? `Summary of the earlier conversation:\n\n${message.compactSummary.trim()}`
+      : readString(message.content).trim();
+    const attachments = (message.images?.length ?? 0) + (message.files?.length ?? 0);
+    if (attachments > 0) text = `${text}\n\n_[${attachments} attachment(s) not carried over]_`.trim();
+    if (text) turns.push({ isUser: message.type === 'user', text });
+  }
+
+  const taskIndex = turns.findIndex((turn) => turn.isUser);
+  const head = [
+    `I am continuing a ${providerLabel} session ("${sessionTitle}") here. The context is below. Pick up where it left off.`,
+  ];
+  if (taskIndex >= 0) {
+    const task = turns[taskIndex].text;
+    const taskCap = Math.floor(maxChars / 4);
+    head.push('', '## Original task', '', task.length > taskCap ? `${task.slice(0, taskCap)}…` : task);
+  }
+  if (files.size > 0) {
+    // The newest paths, capped by count and to a quarter of maxChars so a sweeping
+    // refactor or deep paths cannot crowd out the conversation.
+    const shown = [...files].slice(-40);
+    const listChars = () => shown.reduce((sum, file) => sum + file.length + 5, 0);
+    while (shown.length > 1 && listChars() > maxChars / 4) shown.shift();
+    head.push('', '## Files touched', '', ...shown.map((file) => `- \`${file}\``));
+    if (files.size > shown.length) head.push(`- _…${files.size - shown.length} more_`);
+  }
+
+  // Newest turns first until the budget runs out, then back into reading order.
+  // 80 reserves room for the section heading and the omitted-turns marker. The
+  // floor keeps the latest turn when a long task and file list fill the head;
+  // both are capped to about a quarter each above, so the total stays within
+  // maxChars unless a single path alone is longer than that quarter.
+  let budget = Math.max(maxChars - head.join('\n').length - 80, Math.floor(maxChars / 4));
+  const recent: string[] = [];
+  for (let index = turns.length - 1; index > taskIndex; index -= 1) {
+    const turn = turns[index];
+    const heading = `### ${turn.isUser ? 'User' : providerLabel}\n\n`;
+    const block = `${heading}${turn.text}`;
+    if (block.length + 2 > budget) {
+      // The latest turn matters most and ends with where it got to, so keep its tail.
+      if (recent.length === 0 && budget > 200) {
+        recent.unshift(`${heading}…${turn.text.slice(-(budget - heading.length - 4))}`);
+      }
+      break;
+    }
+    budget -= block.length + 2;
+    recent.unshift(block);
+  }
+
+  const omitted = turns.length - (taskIndex + 1) - recent.length;
+  const sections = [...head];
+  if (recent.length > 0 || omitted > 0) {
+    sections.push('', '## Latest conversation');
+    if (omitted > 0) sections.push('', `_…${omitted} earlier turn(s) omitted_`);
+    for (const block of recent) sections.push('', block);
+  }
+
+  return sections.join('\n');
 }

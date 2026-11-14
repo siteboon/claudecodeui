@@ -1,17 +1,21 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Braces, Download, FileCode2, FileText, Loader2 } from 'lucide-react';
+import { ArrowRightLeft, Braces, Download, FileCode2, FileText, Loader2 } from 'lucide-react';
 
 import { ActionMenu } from '@/shared/ui';
+import { readDraftText, writeDraftText } from '@/shared/chatDrafts';
 import type { ChatMessage, DiffLine, LLMProvider, Project } from '@/shared/types';
 import {
   downloadTranscriptExport,
   type TranscriptExportFormat,
 } from '@/modules/chat/utils/chatExport';
+import { buildHandoffMarkdown } from '@/modules/chat/export/buildTranscriptMarkdown';
 
 type ChatExportMenuProps = {
   messages: ChatMessage[];
   sessionTitle?: string;
+  /** Tells two sessions' digests apart when their titles match. */
+  sessionId?: string | null;
   provider: LLMProvider | string;
   selectedProject?: Project | null;
   createDiff: (oldStr: string, newStr: string) => DiffLine[];
@@ -23,6 +27,8 @@ type ChatExportMenuProps = {
    * last twenty messages.
    */
   onLoadFullTranscript?: () => Promise<ChatMessage[]>;
+  /** Opens a new chat in the project; enables "Continue in new chat". */
+  onNewSession?: (project: Project) => void;
 };
 
 const FORMATS: Array<{ id: TranscriptExportFormat; icon: typeof FileText; labelKey: string; descriptionKey: string }> = [
@@ -31,6 +37,10 @@ const FORMATS: Array<{ id: TranscriptExportFormat; icon: typeof FileText; labelK
   { id: 'json', icon: Braces, labelKey: 'export.json.label', descriptionKey: 'export.json.description' },
 ];
 
+// Last digest written per draft scope, so a repeat click replaces only that digest, untouched and at the end.
+// shortcut: page memory only, so after a reload a repeat click appends; keep it with the draft if that bites.
+const lastHandoffDigests = new Map<string, { sessionId: string; digest: string }>();
+
 /**
  * Rendered by chat's ChatMessagesPane header so the open conversation can be
  * downloaded as a self-contained web page, as Markdown, or as JSON.
@@ -38,29 +48,48 @@ const FORMATS: Array<{ id: TranscriptExportFormat; icon: typeof FileText; labelK
 export default function ChatExportMenu({
   messages,
   sessionTitle,
+  sessionId,
   provider,
   selectedProject,
   createDiff,
   onLoadFullTranscript,
+  onNewSession,
 }: ChatExportMenuProps) {
   const { t } = useTranslation('chat');
   // Building a large transcript takes long enough to notice, and the download
   // only appears at the end — without this the button looks unresponsive.
-  const [busyFormat, setBusyFormat] = useState<TranscriptExportFormat | null>(null);
+  const [busyFormat, setBusyFormat] = useState<TranscriptExportFormat | 'handoff' | null>(null);
   // Whether the side-question asides go into the file. Off by default, so a plain export
   // matches what the session itself saw; the operator opts in from this option.
   const [includeSideQuestions, setIncludeSideQuestions] = useState(false);
+  // The item whose last run failed shows that in its description; a log line alone left the click looking ignored.
+  // Kept per chat, since the menu stays mounted when another chat opens.
+  const [failure, setFailure] = useState<{ chat: string; item: TranscriptExportFormat | 'handoff' } | null>(null);
+  // The chat open now: project and session, since two new chats both lack a session id.
+  const openChat = `${selectedProject?.projectId ?? ''}:${sessionId ?? ''}`;
+  const failedItem = failure && failure.chat === openChat ? failure.item : null;
+  // Read after the transcript loads to tell whether the user has moved on, or away from the chat.
+  const openChatRef = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    openChatRef.current = openChat;
+    return () => { openChatRef.current = null; };
+  }, [openChat]);
 
   if (messages.length === 0) {
     return null;
   }
 
+  const loadMessages = async () => {
+    const fullMessages = (await onLoadFullTranscript?.()) ?? messages;
+    return fullMessages.length > 0 ? fullMessages : messages;
+  };
+
   const runExport = async (format: TranscriptExportFormat) => {
     setBusyFormat(format);
+    setFailure(null);
     try {
-      const fullMessages = (await onLoadFullTranscript?.()) ?? messages;
       await downloadTranscriptExport(format, {
-        messages: fullMessages.length > 0 ? fullMessages : messages,
+        messages: await loadMessages(),
         sessionTitle: sessionTitle?.trim() || t('export.untitled'),
         provider,
         selectedProject,
@@ -69,10 +98,65 @@ export default function ChatExportMenu({
       });
     } catch (error) {
       console.error('Failed to export conversation:', error);
+      setFailure({ chat: openChat, item: format });
     } finally {
       setBusyFormat(null);
     }
   };
+
+  // The digest lands in the new chat's draft, where the user picks the other
+  // provider and can edit it before sending.
+  const continueInNewChat = async (project: Project, openNewSession: (project: Project) => void) => {
+    setBusyFormat('handoff');
+    setFailure(null);
+    try {
+      const fullMessages = await loadMessages();
+      // The user opened another chat while it loaded: do not pull them away from it.
+      if (openChatRef.current !== openChat) return;
+      const scope = `project:${project.projectId}`;
+      const digest = buildHandoffMarkdown({
+        messages: fullMessages,
+        sessionTitle: sessionTitle?.trim() || t('export.untitled'),
+        provider,
+      });
+      // Keep whatever was already typed for a new chat in this project, but
+      // replace an unsent, unedited digest of this same session instead of stacking a second one.
+      const draft = readDraftText(scope);
+      // Without a session id two chats cannot be told apart, so nothing is replaced.
+      const previous = sessionId ? lastHandoffDigests.get(scope) : undefined;
+      // The user's own text stays verbatim; only the old digest and the separator before it go.
+      const existing = previous && previous.sessionId === sessionId && draft.endsWith(previous.digest)
+        ? draft.slice(0, -previous.digest.length).replace(/\n\n$/, '')
+        : draft;
+      writeDraftText(scope, existing.trim() ? `${existing}\n\n${digest}` : digest);
+      if (sessionId) lastHandoffDigests.set(scope, { sessionId, digest });
+      openNewSession(project);
+    } catch (error) {
+      console.error('Failed to continue conversation in a new chat:', error);
+      setFailure({ chat: openChat, item: 'handoff' });
+    } finally {
+      setBusyFormat(null);
+    }
+  };
+
+  const items = FORMATS.map((format) => ({
+    key: format.id as string,
+    label: t(format.labelKey),
+    description: t(failedItem === format.id ? 'export.failed' : format.descriptionKey),
+    icon: format.icon,
+    loading: busyFormat === format.id,
+    onSelect: () => { void runExport(format.id); },
+  }));
+  if (selectedProject && onNewSession) {
+    items.push({
+      key: 'handoff',
+      label: t('export.handoff.label'),
+      description: t(failedItem === 'handoff' ? 'export.failed' : 'export.handoff.description'),
+      icon: ArrowRightLeft,
+      loading: busyFormat === 'handoff',
+      onSelect: () => { void continueInNewChat(selectedProject, onNewSession); },
+    });
+  }
 
   return (
     <ActionMenu
@@ -101,14 +185,7 @@ export default function ChatExportMenu({
           </label>
         </div>
       )}
-      items={FORMATS.map((format) => ({
-        key: format.id,
-        label: t(format.labelKey),
-        description: t(format.descriptionKey),
-        icon: format.icon,
-        loading: busyFormat === format.id,
-        onSelect: () => { void runExport(format.id); },
-      }))}
+      items={items}
     />
   );
 }
