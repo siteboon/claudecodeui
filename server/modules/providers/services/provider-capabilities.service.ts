@@ -44,8 +44,8 @@ type ProviderCapabilities = {
   supportsSessionForking: boolean;
   /**
    * Whether the provider can answer a question on the side without touching
-   * the session's main turn. False only for Cursor, which has no headless
-   * way to do that.
+   * the session's main turn. Requires a side-question adapter in the
+   * provider's own runtime.
    */
   supportsSideQuestions: boolean;
   /**
@@ -152,6 +152,31 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsSessionForking: false,
     supportsSideQuestions: true,
     supportsSteering: false,
+    supportsContextClearing: false,
+  },
+  kiro: {
+    provider: 'kiro',
+    // Kiro runs ACP with `--trust-all-tools`, so it has no interactive
+    // permission ladder and no tool-approval prompts. Token/credit usage is
+    // not yet surfaced by the runtime, so it stays off.
+    // Model/agent selection happens at spawn time via CLI flags, not a
+    // reasoning-effort parameter, so effort is unsupported like Cursor.
+    permissionModes: ['default'],
+    defaultPermissionMode: 'default',
+    supportsImages: false,
+    supportsFiles: false,
+    supportsAbort: true,
+    supportsPermissionRequests: false,
+    supportsTokenUsage: false,
+    supportsEffort: false,
+    effortLevels: [],
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
+    // The ACP runtime has neither an isolated side-question adapter nor a
+    // way to inject a message into its running prompt.
+    supportsSideQuestions: false,
+    supportsSteering: false,
+    // Kiro cannot read retired transcripts or keep them out of session indexing.
     supportsContextClearing: false,
   },
 };
