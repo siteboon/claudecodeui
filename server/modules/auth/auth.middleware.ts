@@ -22,6 +22,40 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
+// A log line is one line: a newline, a control character or a quote coming
+// from the request would let a caller forge entries or break the `ua="..."`
+// field. Everything interpolated below goes through this first.
+const forLogLine = (value: unknown, maxLength: number): string =>
+  String(value ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/"/g, "'")
+    .slice(0, maxLength);
+
+/**
+ * Records why a request was rejected with 401.
+ *
+ * Every rejection branch below used to be silent apart from a bad signature,
+ * so the server logs could not distinguish "the client sent no token" from
+ * "the token expired" from "the signing secret changed" - all three of which
+ * surface identically in the UI as an expired session.
+ */
+const logAuthRejection = (req, reason: string, detail = ''): void => {
+  // `baseUrl + path` deliberately, never `originalUrl`: SSE endpoints pass the
+  // JWT as a `?token=` query parameter, which would put bearer credentials in
+  // the log. `path` alone is router-relative, so it loses the endpoint.
+  const target = forLogLine(`${req.method} ${req.baseUrl || ''}${req.path}`, 200);
+
+  // Every client reaches this server through the same loopback proxy, so the
+  // remote address cannot tell one device from another. The user agent can,
+  // which is what makes a rejection attributable to a specific browser.
+  const userAgent = forLogLine(req.headers['user-agent'] ?? 'unknown', 120);
+  const safeDetail = forLogLine(detail, 200);
+
+  console.warn(
+    `[Auth] 401 ${reason} ${target}${safeDetail ? ` ${safeDetail}` : ''} ua="${userAgent}"`
+  );
+};
+
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
   // Platform mode:  use single database user
@@ -49,6 +83,7 @@ const authenticateToken = async (req, res, next) => {
   }
 
   if (!token) {
+    logAuthRejection(req, 'no-token');
     res.setHeader('X-Auth-Error', 'invalid-token');
     return res.status(401).json({
       error: 'Access denied. No token provided.',
@@ -62,6 +97,7 @@ const authenticateToken = async (req, res, next) => {
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
+      logAuthRejection(req, 'user-not-found', `userId=${decoded.userId}`);
       res.setHeader('X-Auth-Error', 'invalid-token');
       return res.status(401).json({
         error: 'Invalid token. User not found.',
@@ -83,6 +119,19 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
+      // `issued` shows how old the token was: a full lifetime means the client
+      // never picked up an X-Refreshed-Token, which is a refresh bug rather
+      // than a user who simply stayed away past the expiry window.
+      const claims = jwt.decode(token);
+      const issued =
+        claims && typeof claims === 'object' && typeof claims.iat === 'number'
+          ? new Date(claims.iat * 1000).toISOString()
+          : 'unknown';
+      logAuthRejection(
+        req,
+        'session-expired',
+        `issued=${issued} expired=${error.expiredAt?.toISOString() ?? 'unknown'}`,
+      );
       res.setHeader('X-Auth-Error', 'session-expired');
       return res.status(401).json({
         error: 'Session expired. Please log in again.',
@@ -90,8 +139,9 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    console.warn(
-      'Token verification failed:',
+    logAuthRejection(
+      req,
+      'invalid-token',
       error instanceof Error ? error.message : String(error),
     );
     res.setHeader('X-Auth-Error', 'invalid-token');

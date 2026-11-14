@@ -102,9 +102,9 @@ let instance: Database.Database | null = null;
  *   1. Resolves the target database path
  *   2. Ensures the parent directory exists
  *   3. Migrates from the legacy install-directory path if needed
- *   4. Opens the SQLite connection
+ *   4. Opens the SQLite connection and applies concurrency pragmas
  *   5. Eagerly creates the app_config table (auth reads JWT secret at import time)
- *   6. Logs the database location
+ *   6. Publishes the singleton only once the above succeeded
  */
 export function getConnection(): Database.Database {
   if (instance) return instance;
@@ -114,12 +114,36 @@ export function getConnection(): Database.Database {
   ensureDatabaseDirectory(dbPath);
   migrateLegacyDatabase(dbPath);
 
-  instance = new Database(dbPath);
+  const connection = new Database(dbPath);
 
-  // app_config must exist immediately — the auth middleware reads
-  // the JWT secret at module-load time, before initializeDatabase() runs.
-  instance.exec(APP_CONFIG_TABLE_SCHEMA_SQL);
+  try {
+    // Several processes can hold this file open at once (server, CLI, dev
+    // watcher). The busy timeout comes first so the journal-mode switch, which
+    // needs a brief exclusive lock, waits for a contended file instead of
+    // failing outright; WAL then keeps readers from blocking the writer.
+    connection.pragma('busy_timeout = 5000');
+    const journalMode = connection.pragma('journal_mode = WAL', { simple: true });
 
+    // SQLite answers with the mode actually in force, so a file on a mount
+    // that cannot do WAL (NFS, some container volumes) silently stays on
+    // rollback journaling. That is slower under concurrency but still correct,
+    // so it belongs in the log rather than in a refusal to start.
+    if (journalMode !== 'wal') {
+      console.warn(`[Database] WAL unavailable for ${dbPath}; journal mode is '${journalMode}'`);
+    }
+
+    // app_config must exist immediately — the auth middleware reads
+    // the JWT secret at module-load time, before initializeDatabase() runs.
+    connection.exec(APP_CONFIG_TABLE_SCHEMA_SQL);
+  } catch (error) {
+    // Never publish a half-initialised handle: callers would go on to write
+    // through a connection whose schema setup had failed. Discard it so the
+    // next call retries from scratch.
+    connection.close();
+    throw error;
+  }
+
+  instance = connection;
   return instance;
 }
 
