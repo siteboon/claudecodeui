@@ -11,6 +11,46 @@ import {
 
 const router = express.Router();
 
+/** Per-file chat attachment limit, in megabytes, when CHAT_ATTACHMENT_MAX_SIZE_MB is unset. */
+const DEFAULT_CHAT_ATTACHMENT_MAX_SIZE_MB = 10;
+const BYTES_PER_MEGABYTE = 1024 * 1024;
+
+/**
+ * Reads the per-file chat attachment limit, in megabytes, from the
+ * CHAT_ATTACHMENT_MAX_SIZE_MB value the server was started with.
+ *
+ * Unset or blank means the 10 MB default. Anything that is not a whole number
+ * of at least 1 (a unit suffix, a fraction, zero, a negative number, or a value
+ * too large to count in bytes exactly) falls back to the default with a warning,
+ * rather than silently disabling the limit or rejecting every upload.
+ *
+ * Exported for the assets module's tests; the router reads the variable once, at load.
+ */
+export function resolveChatAttachmentMaxSizeMb(
+  rawValue: string | undefined,
+  warn: (message: string) => void = console.warn,
+): number {
+  const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+  if (!value) {
+    return DEFAULT_CHAT_ATTACHMENT_MAX_SIZE_MB;
+  }
+
+  const megabytes = /^\d+$/.test(value) ? Number(value) : Number.NaN;
+  // The byte count must stay an exact integer, including the +1 multer is given below.
+  if (megabytes >= 1 && Number.isSafeInteger(megabytes * BYTES_PER_MEGABYTE + 1)) {
+    return megabytes;
+  }
+
+  warn(
+    `[Assets] Ignoring CHAT_ATTACHMENT_MAX_SIZE_MB="${value}": expected a whole number of megabytes, `
+    + `at least 1 (for example 50). Using the default of ${DEFAULT_CHAT_ATTACHMENT_MAX_SIZE_MB} MB.`,
+  );
+  return DEFAULT_CHAT_ATTACHMENT_MAX_SIZE_MB;
+}
+
+const chatAttachmentMaxSizeMb = resolveChatAttachmentMaxSizeMb(process.env.CHAT_ATTACHMENT_MAX_SIZE_MB);
+const chatAttachmentMaxSizeBytes = chatAttachmentMaxSizeMb * BYTES_PER_MEGABYTE;
+
 // Multer writes uploads straight into the global assets folder; the service
 // owns the folder location and the response record shape.
 const storage = multer.diskStorage({
@@ -44,7 +84,10 @@ const upload = multer({
 const attachmentUpload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    // Busboy rejects a file as soon as its byte count reaches `fileSize`, so the
+    // limit given to multer is one past the largest accepted size: a file of
+    // exactly the advertised maximum is accepted, as the composer's check assumes.
+    fileSize: chatAttachmentMaxSizeBytes + 1,
     files: 10,
   },
 });
@@ -70,13 +113,28 @@ router.post('/images', (req, res) => {
 });
 
 /**
+ * Reports the chat attachment limits the composer checks files against before
+ * uploading, so the browser never carries its own copy of a limit the
+ * operator can change with CHAT_ATTACHMENT_MAX_SIZE_MB.
+ */
+router.get('/limits', (req, res) => {
+  res.json({ maxFileSizeBytes: chatAttachmentMaxSizeBytes });
+});
+
+/**
  * Stores provider-neutral chat attachments. Files of any MIME type are
  * accepted because providers inspect them as data through their file-reading
- * tools; uploads are capped at 10 files and 10MB per file.
+ * tools; uploads are capped at 10 files and CHAT_ATTACHMENT_MAX_SIZE_MB
+ * (default 10 MB) per file.
  */
 router.post('/files', (req, res) => {
   attachmentUpload.array('files', 10)(req, res, (err: unknown) => {
     if (err) {
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          error: `File too large. Maximum size is ${chatAttachmentMaxSizeMb} MB.`,
+        });
+      }
       const message = err instanceof Error ? err.message : 'Upload failed';
       return res.status(400).json({ error: message });
     }

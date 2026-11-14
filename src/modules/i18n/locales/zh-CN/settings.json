@@ -158,6 +158,7 @@
       "title": "声音",
       "description": "聊天运行完成时播放短提示音。",
       "enabled": "已启用",
+      "volume": "音量",
       "test": "测试声音"
     },
     "events": {

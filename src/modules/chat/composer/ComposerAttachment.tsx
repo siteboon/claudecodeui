@@ -6,7 +6,6 @@ import { ImageLightbox } from '@/modules/chat/transcript/ChatMessageImages';
 type ComposerAttachmentProps = {
   file: File;
   onRemove: () => void;
-  error?: string;
 };
 
 const formatFileSize = (size: number) => {
@@ -19,7 +18,7 @@ const formatFileSize = (size: number) => {
  * Rendered by chat's ChatComposer for each pending attachment, showing its
  * thumbnail or file chip, upload progress and remove control.
  */
-const ComposerAttachment = ({ file, onRemove, error }: ComposerAttachmentProps) => {
+const ComposerAttachment = ({ file, onRemove }: ComposerAttachmentProps) => {
   const [preview, setPreview] = useState<string | undefined>(undefined);
   const [expanded, setExpanded] = useState(false);
   const isImage = file.type.startsWith('image/');
@@ -56,13 +55,6 @@ const ComposerAttachment = ({ file, onRemove, error }: ComposerAttachmentProps) 
             <p className="truncate text-sm font-medium text-foreground" title={file.name}>{file.name}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
           </div>
-        </div>
-      )}
-      {error && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-red-500/50">
-          <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
         </div>
       )}
       <button

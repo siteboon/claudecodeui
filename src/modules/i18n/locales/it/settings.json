@@ -132,6 +132,7 @@
       "title": "Suono",
       "description": "Riproduci un breve tono quando termina un'esecuzione della chat.",
       "enabled": "Attivato",
+      "volume": "Volume",
       "test": "Prova suono"
     },
     "events": {

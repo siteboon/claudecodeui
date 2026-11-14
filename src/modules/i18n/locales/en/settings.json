@@ -158,6 +158,7 @@
       "title": "Sound",
       "description": "Play a short tone when a chat run finishes or needs tool approval.",
       "enabled": "Enabled",
+      "volume": "Volume",
       "test": "Test sound"
     },
     "events": {

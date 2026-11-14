@@ -138,6 +138,7 @@
       "title": "Zvuk",
       "description": "Přehrát krátký tón, když běh chatu skončí nebo čeká na schválení nástroje.",
       "enabled": "Zapnuto",
+      "volume": "Hlasitost",
       "test": "Vyzkoušet zvuk"
     },
     "events": {

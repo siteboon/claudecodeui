@@ -158,6 +158,7 @@
       "title": "소리",
       "description": "채팅 실행이 완료되면 짧은 알림음을 재생합니다.",
       "enabled": "사용",
+      "volume": "음량",
       "test": "소리 테스트"
     },
     "events": {

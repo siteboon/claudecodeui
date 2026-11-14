@@ -132,6 +132,7 @@
       "title": "Son",
       "description": "Jouer un court son lorsqu'une exécution de chat se termine.",
       "enabled": "Activé",
+      "volume": "Volume",
       "test": "Tester le son"
     },
     "events": {

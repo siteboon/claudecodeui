@@ -158,6 +158,7 @@
       "title": "Som",
       "description": "Tocar um tom curto quando uma execução de chat termina ou precisa de aprovação de ferramenta.",
       "enabled": "Ativado",
+      "volume": "Volume",
       "test": "Testar som"
     },
     "events": {

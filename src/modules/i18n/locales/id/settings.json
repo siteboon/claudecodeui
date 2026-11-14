@@ -158,6 +158,7 @@
       "title": "Suara",
       "description": "Putar nada singkat saat proses chat selesai atau memerlukan persetujuan tool.",
       "enabled": "Aktif",
+      "volume": "Volume",
       "test": "Uji suara"
     },
     "events": {
