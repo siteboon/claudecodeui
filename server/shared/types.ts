@@ -822,6 +822,7 @@ export type ProviderRuntimeContext = {
   createQuery?: (input: { prompt: AsyncIterable<unknown>; options: AnyRecord }) => AsyncIterable<unknown> & {
     interrupt(): Promise<unknown>;
     stopTask?(taskId: string): Promise<void>;
+    close?(): void;
   };
 };
 
