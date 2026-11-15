@@ -2249,6 +2249,44 @@ test('synchronizeFile indexes a forked transcript under its own file name, not t
   }
 });
 
+test('synchronizeFile indexes a fork of a session whose context was cleared, and keeps the cleared record on the parent\'s own file', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-fork-cleared-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(path.join(claudeHome, 'history.jsonl'), '', 'utf8');
+    const { parentPath, forkPath } = await writeParentAndFork(workspacePath);
+
+    await withIsolatedDatabase(async () => {
+      // The parent's context was cleared before the indexer saw either file.
+      sessionsDb.markProviderSessionSuperseded({
+        providerSessionId: PARENT_SESSION_ID,
+        provider: 'claude',
+        sessionId: 'app-session-1',
+        jsonlPath: null,
+        reason: 'context_cleared',
+      });
+
+      const synchronizer = new ClaudeSessionSynchronizer();
+      // The fork opens with the parent's rows, but it is a session of its own.
+      assert.equal(await synchronizer.synchronizeFile(forkPath), FORK_SESSION_ID);
+      assert.equal(sessionsDb.getSessionById(FORK_SESSION_ID)?.jsonl_path, forkPath);
+      assert.deepEqual(sessionsDb.getSupersededTranscriptPaths('app-session-1'), []);
+
+      // The parent's own file is still skipped, and its path is recorded.
+      assert.equal(await synchronizer.synchronizeFile(parentPath), null);
+      assert.deepEqual(sessionsDb.getSupersededTranscriptPaths('app-session-1'), [parentPath]);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test('Claude history of a fork includes the history it copied from its parent', { concurrency: false }, async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-history-fork-'));
 
