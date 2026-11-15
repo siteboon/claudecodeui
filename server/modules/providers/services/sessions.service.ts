@@ -6,16 +6,18 @@ import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
+import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
+  ClearedContextSegment,
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
-import { AppError, sliceTailPage } from '@/shared/utils.js';
+import { AppError, createNormalizedMessage, sliceTailPage } from '@/shared/utils.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -145,6 +147,137 @@ function resolveProjectDisplayName(
  * class, keeping normalization/history call sites decoupled from implementation
  * file layout.
  */
+/**
+ * Reads one earlier part of a conversation — a provider transcript the
+ * session's context was cleared off — as the rows shown above the marker.
+ *
+ * The part never changes again, so it is cached under a key of its own next
+ * to the session's live transcript. Its rows lose their transcript anchors:
+ * an anchor is what "edit this message" and "fork from here" address, and
+ * neither can reach a transcript the session no longer runs on.
+ */
+async function readClearedContextSegment(
+  sessionId: string,
+  provider: LLMProvider,
+  projectPath: string,
+  segment: ClearedContextSegment,
+): Promise<NormalizedMessage[]> {
+  const providerSessions = providerRegistry.resolveProvider(provider).sessions;
+  const loadFull = () => providerSessions.fetchHistory(sessionId, {
+    limit: null,
+    offset: 0,
+    projectPath,
+    providerSessionId: segment.providerSessionId,
+    transcriptPath: segment.jsonlPath ?? undefined,
+  });
+
+  // A reader that parses a per-session file cannot find this part without its
+  // path — it would fall back to the session's current transcript and read
+  // the wrong conversation. The path is missing only for a session cleared
+  // before the indexer saw its file, and only until the indexer does.
+  const readsTranscriptFile = provider === 'claude' || provider === 'codex';
+  const full = readsTranscriptFile && !segment.jsonlPath
+    ? null
+    : await sessionHistoryCache.getFullHistory({
+      sessionId: `${sessionId}\u0000${segment.providerSessionId}`,
+      transcriptPath: segment.jsonlPath,
+      loadFull,
+    }) ?? await loadFull();
+
+  const messages: NormalizedMessage[] = (full?.messages ?? [])
+    .map((message) => ({ ...message, transcriptAnchorId: undefined }));
+  messages.push(createNormalizedMessage({
+    // Stable across reads, so the client can tell it already has this row.
+    id: `context_cleared_${segment.providerSessionId}`,
+    sessionId,
+    timestamp: segment.clearedAt,
+    provider,
+    kind: 'text',
+    role: 'assistant',
+    content: 'Context cleared',
+    contextCleared: true,
+  }));
+  return messages;
+}
+
+/**
+ * Reads a page of the transcript a session is running on now — its whole
+ * history, unless its context was cleared, in which case only what has run
+ * since the last clear.
+ */
+async function readCurrentContextHistory(
+  session: { session_id: string; provider: string; provider_session_id: string | null; project_path: string | null; jsonl_path: string | null },
+  requestedLimit: number | null,
+  requestedOffset: number,
+): Promise<FetchHistoryResult> {
+  const sessionId = session.session_id;
+
+  // App-created sessions that never produced a provider transcript yet
+  // (e.g. first message still streaming) simply have no history.
+  if (!session.provider_session_id) {
+    return {
+      messages: [],
+      total: 0,
+      hasMore: false,
+      offset: requestedOffset,
+      limit: requestedLimit,
+    };
+  }
+
+  const provider = session.provider as LLMProvider;
+  const providerSessions = providerRegistry.resolveProvider(provider).sessions;
+  const providerSessionId = session.provider_session_id;
+  const projectPath = session.project_path ?? '';
+
+  // Claude and Codex history readers parse `jsonl_path` itself, so a page
+  // can be sliced from the stat-validated full-transcript cache instead of
+  // re-parsing the whole file per request. Cursor and OpenCode read their
+  // messages from elsewhere (store.db / shared SQLite), so that file's stat
+  // says nothing about their history — they stay on the direct path.
+  const transcriptPath = provider === 'claude' || provider === 'codex'
+    ? session.jsonl_path
+    : null;
+  const fullHistory = await sessionHistoryCache.getFullHistory({
+    sessionId,
+    transcriptPath,
+    loadFull: () => providerSessions.fetchHistory(sessionId, {
+      limit: null,
+      offset: 0,
+      projectPath,
+      providerSessionId,
+    }),
+  });
+
+  let result: FetchHistoryResult;
+  if (fullHistory) {
+    // Providers slice with this same helper, so a cached page is identical
+    // to what a direct `(limit, offset)` read would have returned.
+    const { page, hasMore } = sliceTailPage(fullHistory.messages, requestedLimit, Math.max(0, requestedOffset));
+    result = {
+      ...fullHistory,
+      messages: page,
+      hasMore,
+      offset: requestedOffset,
+      limit: requestedLimit,
+    };
+  } else {
+    result = await providerSessions.fetchHistory(sessionId, {
+      limit: requestedLimit,
+      offset: requestedOffset,
+      projectPath,
+      providerSessionId,
+    });
+  }
+
+  return {
+    ...result,
+    messages: result.messages.map((message) => ({
+      ...message,
+      sessionId,
+    })),
+  };
+}
+
 export const sessionsService = {
   /**
    * Lists provider ids that can load session history and normalize live messages.
@@ -481,6 +614,66 @@ export const sessionsService = {
     await sessions.rewindSession?.(sessionId, keepThroughId);
   },
 
+  /**
+   * Clears a session's context. The session keeps its id, its name and its
+   * whole visible history; the next message starts a new provider session, so
+   * the model reads none of what came before.
+   *
+   * `cleared` is false when there was nothing to clear — the session has not
+   * run since it was created or last cleared. Refused while the session is
+   * working: a turn or background task still writing to the old transcript
+   * would be answering into a context the user has already left.
+   */
+  async clearSessionContext(sessionId: string): Promise<{ sessionId: string; cleared: boolean }> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const provider = session.provider as LLMProvider;
+    if (!providerCapabilitiesService.getProviderCapabilities(provider)?.supportsContextClearing) {
+      throw new AppError(`Context cannot be cleared for provider "${provider}".`, {
+        code: 'CONTEXT_CLEAR_NOT_SUPPORTED',
+        statusCode: 409,
+      });
+    }
+
+    const hasBackgroundWork = (providerRegistry.resolveProvider(provider).runtime.listBackgroundWork?.() ?? [])
+      .some((entry) => entry.sessionId === sessionId);
+    if (chatRunRegistry.isProcessing(sessionId) || hasBackgroundWork) {
+      throw new AppError('Wait for the session to finish, or stop it, before clearing its context.', {
+        code: 'SESSION_BUSY',
+        statusCode: 409,
+      });
+    }
+
+    // A session cleared seconds after a turn may not have been indexed yet,
+    // and the transcript path is what the earlier conversation is read back
+    // through. Index what was written since the session began, so the path is
+    // on the row before the row lets go of it. Best effort: the indexer also
+    // records the path when it meets the file later.
+    if (session.provider_session_id && !session.jsonl_path) {
+      try {
+        await providerRegistry.resolveProvider(provider).sessionSynchronizer
+          .synchronize(new Date(session.created_at));
+      } catch (error) {
+        console.warn(`[Sessions] Could not index session ${sessionId} before clearing its context:`, error);
+      }
+    }
+
+    const cleared = sessionsDb.clearProviderSessionContext(sessionId);
+    if (cleared) {
+      // The cached transcript is the one the session just left.
+      sessionHistoryCache.invalidate(sessionId);
+      await broadcastSessionUpserted(sessionId);
+    }
+
+    return { sessionId, cleared };
+  },
+
   async fetchHistory(
     sessionId: string,
     options: Pick<FetchHistoryOptions, 'limit' | 'offset'> = {},
@@ -493,72 +686,42 @@ export const sessionsService = {
       });
     }
 
-    // App-created sessions that never produced a provider transcript yet
-    // (e.g. first message still streaming) simply have no history.
-    if (!session.provider_session_id) {
-      return {
-        messages: [],
-        total: 0,
-        hasMore: false,
-        offset: options.offset ?? 0,
-        limit: options.limit ?? null,
-      };
-    }
-
     const provider = session.provider as LLMProvider;
-    const providerSessions = providerRegistry.resolveProvider(provider).sessions;
-    const providerSessionId = session.provider_session_id;
     const projectPath = session.project_path ?? '';
     const requestedLimit = options.limit ?? null;
     const requestedOffset = options.offset ?? 0;
 
-    // Claude and Codex history readers parse `jsonl_path` itself, so a page
-    // can be sliced from the stat-validated full-transcript cache instead of
-    // re-parsing the whole file per request. Cursor and OpenCode read their
-    // messages from elsewhere (store.db / shared SQLite), so that file's stat
-    // says nothing about their history — they stay on the direct path.
-    const transcriptPath = provider === 'claude' || provider === 'codex'
-      ? session.jsonl_path
-      : null;
-    const fullHistory = await sessionHistoryCache.getFullHistory({
-      sessionId,
-      transcriptPath,
-      loadFull: () => providerSessions.fetchHistory(sessionId, {
-        limit: null,
-        offset: 0,
-        projectPath,
-        providerSessionId,
-      }),
-    });
+    // A session whose context was cleared reads as one conversation: every
+    // earlier part, each closed by its marker, then whatever has run since.
+    const clearedSegments = sessionsDb.getClearedContextSegments(sessionId);
+    if (clearedSegments.length > 0) {
+      const messages: NormalizedMessage[] = [];
+      for (const segment of clearedSegments) {
+        messages.push(...await readClearedContextSegment(sessionId, provider, projectPath, segment));
+      }
 
-    let result: FetchHistoryResult;
-    if (fullHistory) {
-      // Providers slice with this same helper, so a cached page is identical
-      // to what a direct `(limit, offset)` read would have returned.
-      const { page, hasMore } = sliceTailPage(fullHistory.messages, requestedLimit, Math.max(0, requestedOffset));
-      result = {
-        ...fullHistory,
-        messages: page,
+      // Nothing has run since the last clear until the next run announces its
+      // provider session, and an explicit null usage says so — leaving it out
+      // would let the client keep showing the cleared context's numbers.
+      let tokenUsage: unknown = null;
+      if (session.provider_session_id) {
+        const current = await readCurrentContextHistory(session, null, 0);
+        messages.push(...current.messages);
+        tokenUsage = current.tokenUsage;
+      }
+
+      const { page, hasMore } = sliceTailPage(messages, requestedLimit, Math.max(0, requestedOffset));
+      return {
+        messages: page.map((message) => ({ ...message, sessionId })),
+        total: messages.length,
         hasMore,
         offset: requestedOffset,
         limit: requestedLimit,
+        tokenUsage,
       };
-    } else {
-      result = await providerSessions.fetchHistory(sessionId, {
-        limit: requestedLimit,
-        offset: requestedOffset,
-        projectPath,
-        providerSessionId,
-      });
     }
 
-    return {
-      ...result,
-      messages: result.messages.map((message) => ({
-        ...message,
-        sessionId,
-      })),
-    };
+    return readCurrentContextHistory(session, requestedLimit, requestedOffset);
   },
 
   /**

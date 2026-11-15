@@ -141,9 +141,23 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     // session (Claude Desktop does this) opens with rows copied from its parent,
     // which still carry the parent's id, so the first row would index the fork
     // as a second copy of the parent and overwrite the parent's `jsonl_path`.
+    // This runs before the superseded check below so that check looks at the
+    // file's own id, not the parent's.
     const fileSessionId = path.basename(filePath, '.jsonl');
     if (UUID_PATTERN.test(fileSessionId)) {
       parsed.sessionId = fileSessionId;
+    }
+
+    // A transcript a session's context was cleared off stays on disk as an
+    // earlier part of that conversation. Re-indexing it would list it as a
+    // session of its own — and for a session discovered from disk, whose app
+    // id is that transcript's id, it would hand the row back to the context
+    // the user cleared.
+    if (sessionsDb.isProviderSessionSuperseded(parsed.sessionId, this.provider)) {
+      // Cleared before this file was ever indexed: its path is not on record
+      // yet, and the history reader needs it to show that part.
+      sessionsDb.recordSupersededTranscriptPath(parsed.sessionId, this.provider, filePath);
+      return null;
     }
 
     // App-created sessions are keyed by an app id, so disk-discovered provider

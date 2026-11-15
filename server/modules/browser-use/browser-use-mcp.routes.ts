@@ -84,6 +84,12 @@ router.post('/tools/:toolName', async (req, res) => {
           Array.isArray(input.values) ? input.values.filter((value): value is string => typeof value === 'string') : [],
         );
         break;
+      case 'browser_upload_file':
+        result = await browserUseService.agentUploadFiles(sessionId, {
+          selector: typeof input.selector === 'string' ? input.selector : undefined,
+          paths: Array.isArray(input.paths) ? input.paths.filter((value): value is string => typeof value === 'string') : [],
+        });
+        break;
       case 'browser_wait_for':
         result = await browserUseService.agentWaitFor(sessionId, {
           text: typeof input.text === 'string' ? input.text : undefined,

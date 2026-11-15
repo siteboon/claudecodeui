@@ -141,6 +141,13 @@ export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
 /** Transports offered when configuring a global (provider-agnostic) MCP server. */
 export const MCP_GLOBAL_SUPPORTED_TRANSPORTS: McpTransport[] = ['stdio', 'http'];
 
+/**
+ * Tool name the backend gives an MCP server's request for input ("elicitation") when it
+ * forwards it as a permission request. The permission banner draws it with the elicitation
+ * panel, and the composer steps aside while one is open, as it does for a question.
+ */
+export const MCP_ELICITATION_TOOL_NAME = 'McpElicitation';
+
 /** Whether a provider honours an MCP server's working-directory setting; the form hides the field when it does not. */
 export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = {
   claude: false,

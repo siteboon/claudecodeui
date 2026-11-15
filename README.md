@@ -111,6 +111,7 @@ CloudCLI Desktop is an optional native companion for CloudCLI Cloud and Local Cl
 
 - **[macOS](https://cloudcli.ai/download/macos)**
 - **[Windows](https://cloudcli.ai/download/windows)**
+- **Linux** — `.deb` (Debian/Ubuntu) from [GitHub Releases](https://github.com/siteboon/claudecodeui/releases)
 - **[Download page](https://cloudcli.ai/download)** · **[GitHub Releases and checksums](https://github.com/siteboon/claudecodeui/releases)**
 
 Use it to open CloudCLI Cloud environments, switch between local and remote workspaces, and copy mobile/browser URLs. To work locally, choose **Local CloudCLI** in the desktop app; it will use your running local server or start one for you.
@@ -181,6 +182,7 @@ CloudCLI has a plugin system that lets you add custom tabs with their own fronte
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Calculate API costs from model prices and token usage, with preset model pricing support |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Task queue dashboard to view, filter, and launch agent tasks |
 | **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | Kanban board for GitHub Issues with bidirectional TaskMaster sync and /github-task CLI skill auto-install |
+| **[ccx](https://github.com/AaronWong1999/cloudcli-plugin-ccx)** | Shows Claude and Codex usage and hands the open session to the other agent with its conversation history (macOS, needs ccx) |
 
 ### Build Your Own
 

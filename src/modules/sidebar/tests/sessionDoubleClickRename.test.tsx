@@ -19,7 +19,7 @@ function renderRow(overrides: { isSelecting?: boolean; isEditing?: boolean } = {
     needsAttention: false, currentTime: new Date('2026-10-29T11:00:00Z'), isEditing: false,
     renameDraft: '', onRenameDraftChange: noop, onStartEditingSession: rename,
     onCancelEditingSession: noop, onSaveEditingSession: noop, onProjectSelect: noop,
-    onSessionSelect: select, onDeleteSession: noop, isSelecting: false, isChecked: false,
+    onSessionSelect: select, onArchiveSession: noop, onDeleteSession: noop, isSelecting: false, isChecked: false,
     onToggleSessionSelected: noop, t: ((key: string) => key) as SidebarProjectListProps['t'], ...overrides,
   }));
   const title = rendered.getByText('Fix login');

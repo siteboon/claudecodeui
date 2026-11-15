@@ -183,6 +183,19 @@ const tools: ToolDefinition[] = [
     },
   },
   {
+    name: 'browser_upload_file',
+    description: 'Attach local files to a file input (defaults to the first input[type=file]). Paths must be absolute files on the CloudCLI host, up to 10 files of 25 MB each.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        selector: { type: 'string', description: 'CSS selector of the file input. Defaults to input[type="file"].' },
+        paths: { type: 'array', items: { type: 'string' }, description: 'Absolute paths of the files to upload.' },
+      },
+      required: ['sessionId', 'paths'],
+    },
+  },
+  {
     name: 'browser_wait_for',
     description: 'Wait for visible text, a URL pattern, or a short timeout.',
     inputSchema: {
@@ -275,6 +288,12 @@ async function callTool(name: string, args: Record<string, unknown>) {
         sessionId: readString(args.sessionId, 'sessionId'),
         selector: readString(args.selector, 'selector'),
         values: Array.isArray(args.values) ? args.values.filter((value): value is string => typeof value === 'string') : [],
+      }));
+    case 'browser_upload_file':
+      return jsonResponse(await callBrowserUseApi(name, {
+        sessionId: readString(args.sessionId, 'sessionId'),
+        selector: readOptionalString(args.selector),
+        paths: Array.isArray(args.paths) ? args.paths.filter((value): value is string => typeof value === 'string') : [],
       }));
     case 'browser_wait_for':
       return jsonResponse(await callBrowserUseApi(name, {

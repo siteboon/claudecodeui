@@ -654,12 +654,20 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *                                       'composer-1', 'auto', 'gpt-5.1', 'gpt-5.1-high',
    *                                       'gpt-5.1-codex', 'gpt-5.1-codex-high', 'gpt-5.1-codex-max',
    *                                       'gpt-5.1-codex-max-high', 'opus-4.1', 'grok', and thinking variants
-   *                        Codex models: 'gpt-5.4' (default), 'gpt-5.5', 'gpt-5.4-mini'
+   *                        Codex models: 'gpt-5.6-sol' (default), 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-astra',
+   *                                      'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5'
    *
    * @param {string} effort - (Optional) Reasoning effort for providers/models that support it.
    *                          Claude supports: 'low', 'medium', 'high', 'xhigh', 'max' depending on model.
-   *                          Codex supports: 'low', 'medium', 'high', 'xhigh'.
+   *                          Codex supports: 'low', 'medium', 'high', 'xhigh', 'max', 'ultra' depending on model.
    *                          'default' or omission lets the provider decide.
+   *
+   * @param {boolean} unattended - (Optional) Whether nobody will answer the run's MCP elicitation forms.
+   *                              Claude only. Default: true
+   *                              - true: a form an MCP server sends mid-call is declined at once
+   *                              - false: the form is shown in any tab that opens the session and
+   *                                waits for an answer there, as in a chat turn. Pass it when a person
+   *                                will watch the run in the UI.
    *
    * @param {boolean} cleanup - (Optional) Auto-cleanup project directory after completion.
    *                           Default: true
@@ -878,6 +886,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     // Parse stream and cleanup as booleans (handle string "true"/"false" from curl)
     const stream = req.body.stream === undefined ? true : (req.body.stream === true || req.body.stream === 'true');
     const cleanup = req.body.cleanup === undefined ? true : (req.body.cleanup === true || req.body.cleanup === 'true');
+    // Only an explicit false switches it off. A run that waits on a form
+    // nobody sees holds until the MCP server gives up, so a value that is
+    // neither true nor false keeps the declining default.
+    const unattended = !(req.body.unattended === false || req.body.unattended === 'false');
 
     // If branchName is provided, automatically enable createBranch
     const createBranch = branchName ? true : (req.body.createBranch === true || req.body.createBranch === 'true');
@@ -1047,7 +1059,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           sessionId: appSessionId,
           model: model || providerModels?.DEFAULT,
           effort,
-          permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
+          permissionMode: 'bypassPermissions', // Bypass all permissions for API calls
+          // A caller that only reads this response cannot answer an MCP form;
+          // one whose run a person watches in the UI says so with `false`.
+          unattended
         }, run.writer);
 
       } else if (provider === 'cursor') {
