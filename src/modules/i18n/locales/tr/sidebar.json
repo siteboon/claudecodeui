@@ -38,7 +38,9 @@
     "selectAllLoaded": "Yüklenenleri seç",
     "clearSelection": "Seçimi kaldır",
     "deleteSelected_one": "{{count}} oturumu sil",
-    "deleteSelected_other": "{{count}} oturumu sil"
+    "deleteSelected_other": "{{count}} oturumu sil",
+    "expandForks": "{{session}} dallarını genişlet",
+    "collapseForks": "{{session}} dallarını daralt"
   },
   "tooltips": {
     "viewEnvironments": "Ortamları Görüntüle",

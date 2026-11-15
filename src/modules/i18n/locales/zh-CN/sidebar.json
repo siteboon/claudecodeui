@@ -38,7 +38,9 @@
     "selectAllLoaded": "全选已加载",
     "clearSelection": "清除选择",
     "deleteSelected_one": "删除 {{count}} 个会话",
-    "deleteSelected_other": "删除 {{count}} 个会话"
+    "deleteSelected_other": "删除 {{count}} 个会话",
+    "expandForks": "展开 {{session}} 的分支",
+    "collapseForks": "折叠 {{session}} 的分支"
   },
   "tooltips": {
     "viewEnvironments": "查看环境",
