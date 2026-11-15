@@ -2331,6 +2331,54 @@ test('synchronizeFile dates a session by its last turn, not by metadata appended
   }
 });
 
+test('synchronizeFile dates a session by its last user turn when no answer followed it', { concurrency: false }, async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-activity-user-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(path.join(claudeHome, 'history.jsonl'), '', 'utf8');
+
+    // The last turn is a prompt that was never answered (the turn was
+    // interrupted), followed by the same later bookkeeping rows.
+    const filePath = await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
+      JSON.stringify({
+        type: 'assistant', uuid: 'msg-2', parentUuid: 'msg-1', sessionId: 'test-session-1',
+        timestamp: '2026-08-05T06:28:52.716Z',
+        message: { role: 'assistant', model: 'claude-opus-5', content: [{ type: 'text', text: 'done' }] },
+      }),
+      JSON.stringify({
+        type: 'user', uuid: 'msg-3', parentUuid: 'msg-2', sessionId: 'test-session-1',
+        timestamp: '2026-08-05T06:31:10.204Z',
+        message: { role: 'user', content: [{ type: 'text', text: 'one more thing' }] },
+      }),
+      JSON.stringify({ type: 'custom-title', customTitle: 'old session', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'last-prompt', lastPrompt: 'redacted', leafUuid: 'msg-3', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'frame-link', timestamp: '2026-11-03T03:17:59.233Z', sessionId: 'test-session-1' }),
+      JSON.stringify({
+        type: 'queue-operation', operation: 'enqueue', timestamp: '2026-11-04T16:54:38.924Z',
+        sessionId: 'test-session-1',
+        content: '<task-notification>Stopped watching Artifact (connection lost)</task-notification>',
+      }),
+    ]);
+    const now = new Date();
+    await utimes(filePath, now, now);
+
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new ClaudeSessionSynchronizer();
+      const sessionId = await synchronizer.synchronizeFile(filePath);
+
+      assert.equal(sessionsDb.getSessionById(sessionId!)?.updated_at, '2026-08-05T06:31:10.204Z');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test('readLastJsonlTimestamp finds the last timestamp across chunk boundaries and multi-byte text', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'jsonl-last-timestamp-'));
 
