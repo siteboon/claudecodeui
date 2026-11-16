@@ -809,6 +809,12 @@ export const sessionsDb = {
       .run(providerSessionId, provider).changes > 0;
   },
 
+  /** Clears a stale transcript pointer during index repair, preserving the session and its metadata. */
+  clearTranscriptPathIfMatches(sessionId: string, expectedPath: string): void {
+    getConnection().prepare('UPDATE sessions SET jsonl_path = NULL WHERE session_id = ? AND jsonl_path = ?')
+      .run(sessionId, expectedPath);
+  },
+
   /**
    * Lists every indexed session that claims a transcript file on disk.
    *
@@ -818,14 +824,14 @@ export const sessionsDb = {
    * Used by the session synchronizer to find rows whose transcript has been
    * deleted underneath the index.
    */
-  getSessionsWithTranscriptPath(): Array<{ session_id: string; jsonl_path: string }> {
+  getSessionsWithTranscriptPath(): Array<{ session_id: string; provider: string; provider_session_id: string | null; jsonl_path: string }> {
     const db = getConnection();
     return db
       .prepare(
-        `SELECT session_id, jsonl_path
+        `SELECT session_id, provider, provider_session_id, jsonl_path
          FROM sessions
          WHERE jsonl_path IS NOT NULL AND jsonl_path <> ''`
       )
-      .all() as Array<{ session_id: string; jsonl_path: string }>;
+      .all() as Array<{ session_id: string; provider: string; provider_session_id: string | null; jsonl_path: string }>;
   },
 };

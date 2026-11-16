@@ -1198,11 +1198,13 @@ export function sanitizeLeafDirectoryName(inputName: string, label = 'directory 
  * home directories. Pass `lastScanAt` to include only files created after the
  * previous scan, or pass `null` to perform a full rescan. Missing directories
  * are treated as empty because not every provider exists on every machine.
+ * Set includeModified when an existing file can become indexable after creation.
  */
 export async function findFilesRecursivelyCreatedAfter(
   rootDir: string,
   extension: string,
   lastScanAt: Date | null,
+  options: { includeModified?: boolean } = {},
   fileList: string[] = []
 ): Promise<string[]> {
   try {
@@ -1211,7 +1213,7 @@ export async function findFilesRecursivelyCreatedAfter(
       const fullPath = path.join(rootDir, entry.name);
 
       if (entry.isDirectory()) {
-        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, fileList);
+        await findFilesRecursivelyCreatedAfter(fullPath, extension, lastScanAt, options, fileList);
         continue;
       }
 
@@ -1225,7 +1227,7 @@ export async function findFilesRecursivelyCreatedAfter(
       }
 
       const fileStat = await stat(fullPath);
-      if (fileStat.birthtime > lastScanAt) {
+      if (fileStat.birthtime > lastScanAt || (options.includeModified && fileStat.mtime > lastScanAt)) {
         fileList.push(fullPath);
       }
     }
