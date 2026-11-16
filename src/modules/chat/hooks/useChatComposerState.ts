@@ -838,12 +838,17 @@ export function useChatComposerState({
   // `scope` is the chat the question was typed in: a send that waited for an
   // upload can be answered from the background-work dialog after a chat
   // switch, and the chat open by then keeps its text. The chat left keeps text edited since, too.
-  const clearComposerAfterSideQuestion = useCallback((text: string, scope: string | null = draftScopeRef.current) => {
+  const clearComposerAfterSideQuestion = useCallback((text: string, sentFrom?: string | null) => {
+    const scope = sentFrom === undefined ? draftScopeRef.current : sentFrom;
     if (scope !== draftScopeRef.current) {
       if (scope && readDraftText(scope) === text) {
         writeDraftText(scope, '');
         setEditingAnchors((anchors) => withoutEdit(anchors, scope));
       }
+      return;
+    }
+    // A send that waited for an upload: text typed or an edit begun meanwhile in this chat stays.
+    if (sentFrom !== undefined && inputValueRef.current !== text) {
       return;
     }
     if (scope) {
