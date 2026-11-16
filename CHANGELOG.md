@@ -3,6 +3,29 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.9](https://github.com/siteboon/claudecodeui/compare/v1.37.8...v1.37.9) (2026-11-16)
+
+### New Features
+
+* **claude:** offer pinned model versions in the Claude model picker ([#1790](https://github.com/siteboon/claudecodeui/issues/1790)) ([5bf1e91](https://github.com/siteboon/claudecodeui/commit/5bf1e91da160cffdd0767b5cbe6c17da4d9395b1))
+* **desktop:** add Linux .deb build ([#1092](https://github.com/siteboon/claudecodeui/issues/1092)) ([a8c7813](https://github.com/siteboon/claudecodeui/commit/a8c781397e38bde5f9020d4605bcfc382350c4e1)), closes [#1066](https://github.com/siteboon/claudecodeui/issues/1066)
+* **i18n:** complete Turkish translation and add Turkish git namespace ([#1768](https://github.com/siteboon/claudecodeui/issues/1768)) ([62cfa8e](https://github.com/siteboon/claudecodeui/commit/62cfa8e526051ceff52a3b50d755b3598d2364fc))
+* **sidebar:** load older conversations on scroll ([#1784](https://github.com/siteboon/claudecodeui/issues/1784)) ([d18035f](https://github.com/siteboon/claudecodeui/commit/d18035f4c1087d0e5de930a58ea06ac19b0353eb)), closes [#1735](https://github.com/siteboon/claudecodeui/issues/1735)
+* **sidebar:** show forked sessions as a tree in Projects ([#1621](https://github.com/siteboon/claudecodeui/issues/1621)) ([9497bcb](https://github.com/siteboon/claudecodeui/commit/9497bcb94a25ad44b379ec2f9fd9f5da36b7059e))
+
+### Bug Fixes
+
+* **agent:** let an API caller run Claude attended for MCP forms ([#1766](https://github.com/siteboon/claudecodeui/issues/1766)) ([8b46503](https://github.com/siteboon/claudecodeui/commit/8b46503e9a1e4c6aaa3e0d90110dc540ac8b5af5))
+* **chat:** clean up only the chat a send came from ([#1775](https://github.com/siteboon/claudecodeui/issues/1775)) ([44fb09e](https://github.com/siteboon/claudecodeui/commit/44fb09e6646b20a934924219861f8b9e96d75309)), closes [#1774](https://github.com/siteboon/claudecodeui/issues/1774)
+* **chat:** dispatch a queued message as soon as the run it waited on settles ([#1697](https://github.com/siteboon/claudecodeui/issues/1697)) ([affe25d](https://github.com/siteboon/claudecodeui/commit/affe25d7a455052460e9c6bb9d9a6759847bb990)), closes [#1331](https://github.com/siteboon/claudecodeui/issues/1331) [#1331](https://github.com/siteboon/claudecodeui/issues/1331) [#1338](https://github.com/siteboon/claudecodeui/issues/1338) [#1763](https://github.com/siteboon/claudecodeui/issues/1763)
+* **chat:** keep token usage visible while the agent asks a question ([#1785](https://github.com/siteboon/claudecodeui/issues/1785)) ([a3a1d3a](https://github.com/siteboon/claudecodeui/commit/a3a1d3ab0f210649607c2291fd59a4a4ed1c5164))
+* **chat:** report a background task stop that does not take ([#1762](https://github.com/siteboon/claudecodeui/issues/1762)) ([4e20c29](https://github.com/siteboon/claudecodeui/commit/4e20c29c313071baef2d973051e8ac272afb6b4a))
+* **chat:** stop Escape in a rename or menu from aborting the running turn ([#1791](https://github.com/siteboon/claudecodeui/issues/1791)) ([e3980d6](https://github.com/siteboon/claudecodeui/commit/e3980d60082c047292497ace1aceec3905f8389c))
+* clarify Fable naming convention ([0d94dcc](https://github.com/siteboon/claudecodeui/commit/0d94dcc616acbb6b307dec11d8245d9b785bcb78))
+* **opencode:** read v2 `providers` config and JSONC for status and models ([#1783](https://github.com/siteboon/claudecodeui/issues/1783)) ([66c507a](https://github.com/siteboon/claudecodeui/commit/66c507ae4eae1ac2c151a0581fcd022caebd270f)), closes [#1771](https://github.com/siteboon/claudecodeui/issues/1771)
+* **scheduled-messages:** stop one held-open turn from blocking every queued message ([#1763](https://github.com/siteboon/claudecodeui/issues/1763)) ([a306d01](https://github.com/siteboon/claudecodeui/commit/a306d01cb7ebdad33317e84a8b73142283167dc9))
+* **side-questions:** keep reasoning out of answers and break between messages ([#1767](https://github.com/siteboon/claudecodeui/issues/1767)) ([fe5b2e7](https://github.com/siteboon/claudecodeui/commit/fe5b2e71fce6e79b18f451f9bee026019bc719aa))
+
 ## [1.37.8](https://github.com/siteboon/claudecodeui/compare/v1.37.7...v1.37.8) (2026-11-07)
 
 ### New Features
