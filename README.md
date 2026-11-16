@@ -257,6 +257,8 @@ This project is open source and free to use, modify, and distribute under the AG
 
 CloudCLI UI - (https://cloudcli.ai).
 
+Unattended root bypass runs reject interactive tools instead of waiting for a UI response. See [features](features.md) and [manual change records](docs/changelog.md).
+
 ## Acknowledgments
 
 ### Built With

@@ -1439,6 +1439,10 @@ async function queryClaudeSDK(
     sdkOptions.canUseTool = async (toolName: string, input: unknown, context?: { signal?: AbortSignal }) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
+      if (requiresInteraction && options.unattended && bypassPermissionsRequested && process.getuid?.() === 0) {
+        return { behavior: 'deny', message: 'Interactive tools require an attended session' };
+      }
+
       if (!requiresInteraction) {
         if (bypassPermissionsRequested) {
           return { behavior: 'allow', updatedInput: input };

@@ -199,6 +199,6 @@ test('an unattended run sets no callback, so the SDK declines at once instead of
   assert.equal(typeof (await startedWith({})).onElicitation, 'function');
   // What an attended agent-API run passes: the form must survive bypass mode.
   const attendedBypass = await startedWith({ unattended: false, permissionMode: 'bypassPermissions' });
-  assert.equal(attendedBypass.permissionMode, 'bypassPermissions');
+  assert.equal(attendedBypass.permissionMode, process.getuid?.() === 0 ? 'default' : 'bypassPermissions');
   assert.equal(typeof attendedBypass.onElicitation, 'function');
 });

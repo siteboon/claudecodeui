@@ -1,5 +1,12 @@
 # Manual Changelog
 
+## 1.37.9
+
+### 2026-11-16
+
+- Reject interactive tool requests during unattended root bypass runs rather than waiting indefinitely.
+- Adapt the upstream elicitation regression to the root-specific bypass fallback.
+
 ## 1.37.7
 
 ### 2026-11-04

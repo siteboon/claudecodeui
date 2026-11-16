@@ -68,6 +68,23 @@ test('non-root bypass keeps the native permission mode', { skip: !process.getuid
   }
 });
 
+test('unattended root bypass denies interactive tools without waiting for a UI', { skip: !process.getuid }, async t => {
+  t.mock.method(process as { getuid: () => number }, 'getuid', () => 0);
+  const { options, sent } = await captureOptions({ permissionMode: 'bypassPermissions', unattended: true });
+  for (const tool of ['AskUserQuestion', 'ExitPlanMode']) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30);
+    try {
+      const result = await options.canUseTool(tool, {}, { signal: controller.signal });
+      assert.equal(controller.signal.aborted, false, 'must not wait for a UI response');
+      assert.equal(result.behavior, 'deny');
+      assert.equal(sent.some(message => message.kind === 'permission_request'), false);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+});
+
 test('root plan and explicit non-bypass modes keep their approval behavior', { skip: !process.getuid }, async t => {
   t.mock.method(process as { getuid: () => number }, 'getuid', () => 0);
   for (const mode of ['plan', 'acceptEdits', 'default']) {

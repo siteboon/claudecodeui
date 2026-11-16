@@ -1,5 +1,7 @@
 # Features
 
+Unattended root bypass runs reject interactive tool requests without waiting for an unavailable UI; attended requests remain interactive.
+
 ## Claude Root Bypass Approval
 
 Claude Chat uses the SDK default permission mode and its approval callback when root selects Bypass Permissions or Skip Permissions. This prevents the immediate exit caused by Claude Code rejecting native bypass mode as root. Ordinary tool requests reaching the callback are approved automatically, while AskUserQuestion and ExitPlanMode remain interactive. Claude Code policies and explicit deny rules still apply; this is not an OS security bypass or the `auto` classifier.
