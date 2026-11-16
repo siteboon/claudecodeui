@@ -58,7 +58,8 @@ export default function ChatExportMenu({
   const { t } = useTranslation('chat');
   // Building a large transcript takes long enough to notice, and the download
   // only appears at the end — without this the button looks unresponsive.
-  const [busyFormat, setBusyFormat] = useState<TranscriptExportFormat | 'handoff' | null>(null);
+  // Kept per chat like `failure`, so another chat's run does not show a spinner here.
+  const [busy, setBusy] = useState<{ chat: string; item: TranscriptExportFormat | 'handoff' } | null>(null);
   // Whether the side-question asides go into the file. Off by default, so a plain export
   // matches what the session itself saw; the operator opts in from this option.
   const [includeSideQuestions, setIncludeSideQuestions] = useState(false);
@@ -68,6 +69,7 @@ export default function ChatExportMenu({
   // The chat open now: project and session, since two new chats both lack a session id.
   const openChat = `${selectedProject?.projectId ?? ''}:${sessionId ?? ''}`;
   const failedItem = failure && failure.chat === openChat ? failure.item : null;
+  const busyFormat = busy && busy.chat === openChat ? busy.item : null;
   // Read after the transcript loads to tell whether the user has moved on, or away from the chat.
   const openChatRef = useRef<string | null>(null);
   useLayoutEffect(() => {
@@ -85,7 +87,7 @@ export default function ChatExportMenu({
   };
 
   const runExport = async (format: TranscriptExportFormat) => {
-    setBusyFormat(format);
+    setBusy({ chat: openChat, item: format });
     setFailure(null);
     try {
       await downloadTranscriptExport(format, {
@@ -100,14 +102,14 @@ export default function ChatExportMenu({
       console.error('Failed to export conversation:', error);
       setFailure({ chat: openChat, item: format });
     } finally {
-      setBusyFormat(null);
+      setBusy((current) => (current?.chat === openChat ? null : current));
     }
   };
 
   // The digest lands in the new chat's draft, where the user picks the other
   // provider and can edit it before sending.
   const continueInNewChat = async (project: Project, openNewSession: (project: Project) => void) => {
-    setBusyFormat('handoff');
+    setBusy({ chat: openChat, item: 'handoff' });
     setFailure(null);
     try {
       const fullMessages = await loadMessages();
@@ -135,7 +137,7 @@ export default function ChatExportMenu({
       console.error('Failed to continue conversation in a new chat:', error);
       setFailure({ chat: openChat, item: 'handoff' });
     } finally {
-      setBusyFormat(null);
+      setBusy((current) => (current?.chat === openChat ? null : current));
     }
   };
 

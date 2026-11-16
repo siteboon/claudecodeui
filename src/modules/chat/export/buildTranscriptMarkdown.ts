@@ -37,12 +37,10 @@ function readString(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-/** The file a tool call worked on: its tool config's, else the raw input's (MultiEdit, NotebookEdit). */
+/** The file a tool call worked on (NotebookEdit names it `notebook_path`). */
 function toolFilePath(message: ChatMessage): string | undefined {
   const input = (parseToolPayload(message.toolInput) ?? {}) as Record<string, unknown>;
-  const contentProps = getToolConfig(message.toolName || 'Tool').input.getContentProps?.(input) as
-    Record<string, unknown> | undefined;
-  const filePath = contentProps?.filePath ?? input.file_path ?? input.notebook_path;
+  const filePath = input.file_path ?? input.notebook_path;
   return typeof filePath === 'string' ? filePath : undefined;
 }
 

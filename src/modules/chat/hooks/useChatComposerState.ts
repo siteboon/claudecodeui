@@ -255,6 +255,8 @@ function isSoftKeyboardEnvironment(): boolean {
 
 // Drops one chat's edit anchor; keyed by draft scope, '' for a chat with none.
 function withoutEdit(anchors: Record<string, string>, scope: string | null): Record<string, string> {
+  // Same object when nothing changes, so React skips the re-render.
+  if (!((scope ?? '') in anchors)) return anchors;
   const next = { ...anchors };
   delete next[scope ?? ''];
   return next;
