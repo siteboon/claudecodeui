@@ -394,6 +394,7 @@
     "backgroundTasks": "Tarefas em segundo plano",
     "backgroundAgent": "Agente",
     "backgroundCommand": "Comando",
+    "backgroundMonitor": "Monitor",
     "stopTask": "Parar",
     "taskRowNotLoaded": "Iniciado anteriormente nesta conversa; clique para carregar",
     "taskOfAgent": "Iniciado por um dos agentes desta sessão"

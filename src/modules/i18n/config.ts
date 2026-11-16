@@ -97,6 +97,7 @@ import trSidebar from '@/modules/i18n/locales/tr/sidebar.json';
 import trChat from '@/modules/i18n/locales/tr/chat.json';
 import trCodeEditor from '@/modules/i18n/locales/tr/codeEditor.json';
 import trTasks from '@/modules/i18n/locales/tr/tasks.json';
+import trGit from '@/modules/i18n/locales/tr/git.json';
 import itCommon from '@/modules/i18n/locales/it/common.json';
 import itSettings from '@/modules/i18n/locales/it/settings.json';
 import itAuth from '@/modules/i18n/locales/it/auth.json';
@@ -270,6 +271,7 @@ git: enGit,
         chat: trChat,
         codeEditor: trCodeEditor,
         tasks: trTasks,
+        git: trGit,
       },
       it: {
         common: itCommon,
