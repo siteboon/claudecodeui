@@ -22,6 +22,7 @@ import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { useEscapeToAbortSession } from '@/modules/chat/hooks/useEscapeToAbortSession';
 import {
   useProcessingSessions,
   useSessionProtectionActions,
@@ -378,25 +379,11 @@ function ChatInterface({
 
   usePaletteOpsRegister({ insertComposerText });
 
-  useEffect(() => {
-    if (!canAbortSession) {
-      return;
-    }
-
-    const handleGlobalEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) {
-        return;
-      }
-
-      event.preventDefault();
-      handleAbortSession();
-    };
-
-    document.addEventListener('keydown', handleGlobalEscape, { capture: true });
-    return () => {
-      document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
-    };
-  }, [canAbortSession, handleAbortSession]);
+  useEscapeToAbortSession({
+    canAbortSession,
+    onAbortSession: handleAbortSession,
+    composerRef: textareaRef,
+  });
 
   useEffect(() => {
     return () => {
