@@ -1,7 +1,7 @@
 import { scheduledMessagesDb, sessionDraftsDb, sessionsDb, userPreferencesDb } from '@/modules/database/index.js';
 import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
 import { announceScheduledMessagesChanged } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
-import { chatRunRegistry, runDetachedChatTurn } from '@/modules/websocket/index.js';
+import { chatRunRegistry, onRunSettled, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 import { readQueuedChatMessage } from '@/shared/utils.js';
 
@@ -11,6 +11,12 @@ import { readQueuedChatMessage } from '@/shared/utils.js';
  * A minute is the granularity the composer offers, and a claim is indexed on
  * `(status, scheduled_for)`, so the poll is one cheap query. Anything finer
  * would buy precision nobody asked for.
+ *
+ * Queued messages do not wait for this: they are also dispatched the moment
+ * the run that blocked them settles (see `unsubscribeRunSettled` below). The
+ * poll remains their safety net for the cases no run-settled event covers —
+ * a message queued while nothing was running, or one left behind by a server
+ * restart.
  */
 const POLL_INTERVAL_MS = 30_000;
 
@@ -29,13 +35,13 @@ const AUTO_CONTINUE_MAX_WAIT_MS = 60 * 60_000;
 const AUTO_CONTINUE_MAX_LATE_MS = 24 * 60 * 60_000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let unsubscribeRunSettled: (() => void) | null = null;
 /**
- * Each session's sends still going, from this pass or an earlier one. A send
- * waits for its whole turn, and a Claude turn that leaves background work
- * running stays open until that work reports back (a Monitor never does), so
- * passes must not wait on each other; a queued turn just skips such a session.
+ * Sessions whose scheduled sends are still going, from this pass or an
+ * earlier one. Their next due rows stay pending (and keep their banner) until
+ * those sends finish, so they neither overtake nor interrupt them.
  */
-const sendsInFlight = new Map<string, Promise<void>>();
+const sessionsSending = new Set<string>();
 
 function readOptions(raw: string): Record<string, unknown> {
   try {
@@ -66,40 +72,6 @@ function readToolsSettings(raw: unknown): { allowedTools: string[]; disallowedTo
 /** For logs: the stack when there is one, so a failure can be traced. */
 function describeError(error: unknown): string {
   return error instanceof Error ? error.stack || error.message : String(error);
-}
-
-/**
- * Runs every session's sends side by side and waits for all of them. One
- * session failing is logged as it happens and must neither end the pass early,
- * while another session's turn still runs, nor go unseen. (Scheduled sends
- * record their own failures on the row; this mostly catches queued ones.)
- *
- * With `skipBusy`, a session that still has a send in flight is left for a
- * later pass (its row stays unclaimed). A scheduled send does not wait for
- * one: it interrupts a running turn anyway, and waiting would hold it behind
- * a turn kept open for background work.
- */
-async function settleEach(
-  sends: { sessionId: string; userId: number; run: () => Promise<void> }[],
-  { skipBusy = false }: { skipBusy?: boolean } = {},
-): Promise<void> {
-  await Promise.all(sends.map(({ sessionId, userId, run }) => {
-    if (skipBusy && sendsInFlight.has(sessionId)) {
-      return undefined;
-    }
-    const current: Promise<void> = Promise.resolve()
-      .then(run)
-      .catch((error: unknown) => {
-        console.error('[ScheduledMessages] Send failed for one session', { sessionId, userId, error: describeError(error) });
-      })
-      .finally(() => {
-        if (sendsInFlight.get(sessionId) === current) {
-          sendsInFlight.delete(sessionId);
-        }
-      });
-    sendsInFlight.set(sessionId, current);
-    return current;
-  }));
 }
 
 async function sendClaimedQueuedMessage(
@@ -141,28 +113,34 @@ async function sendClaimedQueuedMessage(
  * turn was promised to go "when this finishes", so it waits for that work too.
  */
 function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
-  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId);
+  // sessionsSending too: a scheduled turn can complete before its send settles,
+  // and the session's next due row would then interrupt this queued turn.
+  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId) || sessionsSending.has(sessionId);
 }
 
-/** Sends every persisted queued turn whose session is currently idle. */
-export async function dispatchQueuedMessages(runtime: ProviderRuntimeGateway): Promise<number> {
-  const candidates = sessionDraftsDb.listQueuedMessages();
+/**
+ * Sends every persisted queued turn whose session is currently idle.
+ *
+ * With a `sessionId`, only that session's queued turn is looked at: a run that
+ * settles can only have unblocked its own session.
+ */
+export async function dispatchQueuedMessages(
+  runtime: ProviderRuntimeGateway,
+  sessionId?: string,
+): Promise<number> {
+  const candidates = sessionDraftsDb.listQueuedMessages(sessionId);
   let claimed = 0;
 
-  await settleEach(candidates.map((candidate) => ({
-    sessionId: candidate.sessionId,
-    userId: candidate.userId,
-    run: async () => {
-      if (isSessionBusy(candidate.sessionId, runtime)) {
-        return;
-      }
-      if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
-        return;
-      }
-      claimed += 1;
-      await sendClaimedQueuedMessage(candidate, runtime);
-    },
-  })), { skipBusy: true });
+  await Promise.all(candidates.map(async (candidate) => {
+    if (isSessionBusy(candidate.sessionId, runtime)) {
+      return;
+    }
+    if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
+      return;
+    }
+    claimed += 1;
+    await sendClaimedQueuedMessage(candidate, runtime);
+  }));
 
   return claimed;
 }
@@ -193,6 +171,7 @@ function waitsForBackgroundWork(row: ScheduledMessageRow, runtime: ProviderRunti
     && runtime.hasBackgroundWork(row.session_id);
 }
 
+/** Whether the message's turn started. */
 async function sendClaimedMessage(
   row: ScheduledMessageRow,
   runtime: ProviderRuntimeGateway,
@@ -282,7 +261,7 @@ async function sendClaimedMessage(
 }
 
 /**
- * Sends every message whose time has come.
+ * Sends every message whose time has come and returns how many it handled.
  *
  * Exported so a test can drive one pass without waiting on the timer.
  */
@@ -296,7 +275,7 @@ export async function dispatchDueScheduledMessages(
   // left going is not claimed: it stays pending, so a turn the user starts
   // meanwhile drops it, and nothing flickers on every poll. Past the wait
   // limit it is claimed, to be dropped.
-  const due = scheduledMessagesDb.claimDue(now, (row) => !waitsForBackgroundWork(row, runtime, now.getTime()));
+  const due = scheduledMessagesDb.claimDue(now, sessionsSending, (row) => !waitsForBackgroundWork(row, runtime, now.getTime()));
   if (due.length === 0) {
     return 0;
   }
@@ -307,54 +286,70 @@ export async function dispatchDueScheduledMessages(
     announceScheduledMessagesChanged(sessionId);
   }
 
-  // Sequentially within a session: it can only have one run at a time, and two
-  // due messages for it must not race each other into it. Sessions run side by
-  // side, since a send waits for its whole turn and one long turn must not hold
-  // back every other session's message (e.g. two sessions continuing after the
-  // same usage limit).
-  const bySession = new Map<string, ScheduledMessageRow[]>();
-  for (const row of due) {
-    const rows = bySession.get(row.session_id);
-    if (rows) rows.push(row);
-    else bySession.set(row.session_id, [row]);
-  }
-  await settleEach([...bySession].map(([sessionId, rows]) => ({
-    sessionId,
-    userId: rows[0].user_id,
-    run: async () => {
-      // A message the user scheduled for this pass takes the session over,
-      // like a turn of their own would: the automatic continue after it is dropped.
+  // Sessions side by side, since a turn can stay open a long time (see
+  // runDispatchPass). A session's rows that were due at `now` go one after
+  // another in this pass, each claimed only when the earlier send ends, so
+  // none is recorded as sent while it still waits and no poll gap opens
+  // between them. A turn the user starts meanwhile is still interrupted, as
+  // any scheduled send interrupts the active run.
+  // shortcut: a session's next row waits for the whole earlier send, background work included (the runtime ends that hold after 30 idle minutes); interrupt instead if timeliness matters more.
+  let sent = 0;
+  await Promise.all(due.map(async (first) => {
+    const sessionId = first.session_id;
+    sessionsSending.add(sessionId);
+    try {
+      // A message the user scheduled takes the session over, like a turn of
+      // their own would: the automatic continue after it is dropped.
+      // shortcut: claimNextDue does not hold back an auto-continue waiting for background work (sendClaimedMessage then drops it); pass the predicate along if that shows up.
       let userTookOver = false;
-      for (const row of rows) {
+      let row: ScheduledMessageRow | null = first;
+      while (row) {
         if (userTookOver && isAutoContinue(row)) {
           recordCancelled(row);
-          continue;
+        } else {
+          const started = await sendClaimedMessage(row, runtime);
+          userTookOver ||= started && !isAutoContinue(row);
+          sent += 1;
         }
-        const started = await sendClaimedMessage(row, runtime);
-        userTookOver ||= started && !isAutoContinue(row);
+        row = scheduledMessagesDb.claimNextDue(sessionId, now);
+        if (row) announceScheduledMessagesChanged(sessionId);
       }
-    },
-  })));
+    } catch (error) {
+      logPassFailure(error);
+    } finally {
+      sessionsSending.delete(sessionId);
+      // A run that settled while this session's sends were going was skipped
+      // by the run-settled listener (isSessionBusy), so the queued turn it
+      // unblocked goes now instead of waiting for the next poll.
+      if (unsubscribeRunSettled) {
+        void dispatchQueuedMessages(runtime, sessionId).catch(logPassFailure);
+      }
+    }
+  }));
 
-  return due.length;
+  return sent;
+}
+
+function logPassFailure(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('[ScheduledMessages] Dispatch pass failed', { error: message });
 }
 
 /**
- * One poll: claims what is due and starts sending it. Resolves once those
- * sends finish, but the next pass never waits for it: claims are transactional,
- * a session's due rows go one at a time, and a queued turn skips a session
- * with a send in flight, so a long or held-open turn holds back only its own
- * session. The scheduled sends are registered (synchronously, in settleEach)
- * before the queued pass looks, so a queued turn never races a scheduled one
- * for the same session.
+ * One poll's work. A send waits for its whole turn, and a Claude turn that
+ * leaves background work running (a Monitor, say) stays open until that work
+ * reports back, so passes must not wait on each other: claims are
+ * transactional, and a queued turn skips a session that is still busy.
+ *
+ * Exported so a test can drive overlapping passes.
  */
 export function runDispatchPass(runtime: ProviderRuntimeGateway): Promise<void> {
-  const logFailure = (error: unknown) => {
-    console.error('[ScheduledMessages] Dispatch pass failed', { error: describeError(error) });
-  };
-  const scheduled = dispatchDueScheduledMessages(runtime).catch(logFailure);
-  const queued = dispatchQueuedMessages(runtime).catch(logFailure);
-  return Promise.all([scheduled, queued]).then(() => undefined);
+  return Promise.all([
+    // First, so a due send that starts a run at once has registered it before
+    // the queued pass checks whether that session is busy.
+    dispatchDueScheduledMessages(runtime).catch(logPassFailure),
+    dispatchQueuedMessages(runtime).catch(logPassFailure),
+  ]).then(() => undefined);
 }
 
 /**
@@ -377,11 +372,31 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   // Never keep the process alive just to poll for scheduled messages.
   pollTimer.unref?.();
 
+  // A message queued during a turn is sent as soon as that turn ends. Without
+  // this the only sender is the poll above, so the user watches an idle
+  // session for up to POLL_INTERVAL_MS before their queued turn starts — the
+  // frontend deliberately does not send it ("the VPS dispatcher owns sending",
+  // useChatComposerState.ts). `dispatchQueuedMessages` re-checks `isSessionBusy`
+  // (which also covers a session whose scheduled sends are still going) and
+  // claims transactionally, so racing with the poll is harmless. Scoped to
+  // the settled session, so several runs ending together do not each rescan
+  // every queued turn.
+  unsubscribeRunSettled = onRunSettled((appSessionId) => {
+    void dispatchQueuedMessages(runtime, appSessionId).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[ScheduledMessages] Run-settled dispatch failed', { error: message });
+    });
+  });
+
   // Catch up on anything that came due while the server was not running.
   poll();
 }
 
 export function closeScheduledMessageDispatcher(): void {
+  if (unsubscribeRunSettled) {
+    unsubscribeRunSettled();
+    unsubscribeRunSettled = null;
+  }
   if (pollTimer) {
     clearInterval(pollTimer);
     pollTimer = null;

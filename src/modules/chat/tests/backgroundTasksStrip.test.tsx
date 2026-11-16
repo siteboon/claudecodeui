@@ -86,6 +86,26 @@ describe('the background tasks strip', () => {
     expect(screen.getByRole('button').textContent).toBe('Workflowfrontend-architecture-audit· 2/4 agents · audit:sidebar');
   });
 
+  it('calls a running Monitor a monitor, not an agent', () => {
+    render(
+      <BackgroundTasksStrip
+        sessionId="session-1"
+        sendMessage={() => {}}
+        onReveal={() => {}}
+        onLoadAll={() => {}}
+        messages={[
+          toolRow({
+            toolName: 'Monitor',
+            toolId: 'toolu_monitor_1',
+            taskStatus: { status: 'running', taskId: 'm1', description: 'Watch camera events' },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole('button')[0].textContent).toBe('MonitorWatch camera events');
+  });
+
   it('renders nothing when no task is running', () => {
     const { container } = render(
       <BackgroundTasksStrip

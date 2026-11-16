@@ -75,6 +75,12 @@
   "json": {
     "response": "JSON 响应"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} 需要你的输入",
+    "dismiss": "拒绝",
+    "alwaysAllow": "始终允许",
+    "alwaysAllowCovers": "“始终允许”适用于"
+  },
   "permissions": {
     "grant": "授予 {{tool}} 权限",
     "added": "权限已添加",

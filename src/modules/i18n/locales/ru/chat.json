@@ -92,6 +92,12 @@
   "json": {
     "response": "JSON ответ"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} ждёт вашего ответа",
+    "dismiss": "Отклонить",
+    "alwaysAllow": "Всегда разрешать",
+    "alwaysAllowCovers": "«Всегда разрешать» распространяется на"
+  },
   "permissions": {
     "grant": "Предоставить разрешение для {{tool}}",
     "added": "Разрешение добавлено",

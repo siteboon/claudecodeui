@@ -42,12 +42,32 @@ type ProviderCapabilities = {
    * Whether a session's transcript can be branched into an independent one.
    */
   supportsSessionForking: boolean;
+  /**
+   * Whether the provider can answer a question on the side without touching
+   * the session's main turn. False only for Cursor, which has no headless
+   * way to do that.
+   */
+  supportsSideQuestions: boolean;
+  /**
+   * Whether a message can be sent into a running turn (`chat.steer`), which the
+   * model reads at its next tool-call boundary without the turn stopping.
+   * Requires a runtime that keeps its CLI's input open during a turn.
+   */
+  supportsSteering: boolean;
+  /**
+   * Whether a session's context can be cleared: the next message starts a new
+   * provider session while the earlier conversation stays readable as history.
+   * Requires a history reader that can read a transcript the session row no
+   * longer points at, and an indexer that leaves such a transcript alone.
+   */
+  supportsContextClearing: boolean;
 };
 
 /**
  * The capability matrix mirrors what each runtime actually implements today:
  * - permission modes match the option sets accepted by each CLI/SDK.
- * - only the Claude SDK integration surfaces interactive permission requests.
+ * - the Claude and OpenCode SDK integrations surface interactive permission
+ *   requests (and the agent's questions); Cursor and Codex run without them.
  * - Cursor has no token usage endpoint support (its store.db has no usage rows).
  */
 const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
@@ -66,6 +86,11 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSideQuestions: true,
+    // Streaming input stays open for the whole run, and a user message written
+    // to it with priority `next` joins the running turn.
+    supportsSteering: true,
+    supportsContextClearing: true,
   },
   cursor: {
     provider: 'cursor',
@@ -80,6 +105,9 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: [],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSideQuestions: false,
+    supportsSteering: false,
+    supportsContextClearing: false,
   },
   codex: {
     provider: 'codex',
@@ -98,25 +126,33 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSideQuestions: true,
+    supportsSteering: false,
+    supportsContextClearing: false,
   },
   opencode: {
     provider: 'opencode',
-    // Mapped by the runtime onto OpenCode's controls: `--agent plan` (plan),
-    // `--auto` (bypassPermissions) and the OPENCODE_PERMISSION env var
-    // (acceptEdits). See resolveOpenCodePermissionOptions in the OpenCode runtime adapter.
+    // Mapped by the runtime onto OpenCode's controls: the `plan` agent (plan),
+    // and its answers to OpenCode's permission requests — every request
+    // approved once (bypassPermissions), file edits approved once
+    // (acceptEdits), or the chat asked (default). See
+    // resolveAutomaticPermissionReply in the OpenCode runtime adapter.
     permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
     defaultPermissionMode: 'default',
     supportsImages: true,
     supportsFiles: true,
     supportsAbort: true,
-    supportsPermissionRequests: false,
+    supportsPermissionRequests: true,
     supportsTokenUsage: true,
     supportsEffort: true,
-    // Passed on as OpenCode's `--variant`. `thinking` (MiniMax's on/off
+    // Passed on as OpenCode's model `variant`. `thinking` (MiniMax's on/off
     // variant, paired with `none`) is not a strength, so it sorts last.
     effortLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSideQuestions: true,
+    supportsSteering: false,
+    supportsContextClearing: false,
   },
 };
 

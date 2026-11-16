@@ -80,7 +80,7 @@ function parseToolInput(toolInput: unknown): Record<string, unknown> {
 
 /** Tokens the way the CLI writes them: 725k rather than 724,871. */
 function formatTokenCount(tokens: number): string {
-  if (tokens >= 1_000_000) {
+  if (tokens >= 999_500) {
     return `${(tokens / 1_000_000).toFixed(1)}M`;
   }
   return tokens >= 1_000 ? `${Math.round(tokens / 1_000)}k` : `${tokens}`;

@@ -165,6 +165,7 @@ CloudCLI는 커스텀 탭과 선택적 Node.js 백엔드가 포함된 플러그�
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | 모델 가격과 토큰 사용량으로 API 비용을 계산하고 모델 가격 프리셋을 지원 |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | 에이전트 작업을 보고, 필터링하고, 실행하는 작업 큐 대시보드 |
 | **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | GitHub Issues용 Kanban 보드. TaskMaster 양방향 동기화와 /github-task CLI 스킬 자동 설치 지원 |
+| **[ccx](https://github.com/AaronWong1999/cloudcli-plugin-ccx)** | Claude와 Codex 사용량을 표시하고, 열린 세션을 대화 기록과 함께 다른 에이전트에 인계 (macOS, ccx 필요) |
 
 ### 직접 만들기
 

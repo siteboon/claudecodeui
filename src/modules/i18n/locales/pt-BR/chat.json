@@ -94,6 +94,12 @@
   "json": {
     "response": "Resposta JSON"
   },
+  "agentPrompts": {
+    "needsInput": "{{agent}} precisa da sua resposta",
+    "dismiss": "Recusar",
+    "alwaysAllow": "Sempre permitir",
+    "alwaysAllowCovers": "\"Sempre permitir\" cobre"
+  },
   "permissions": {
     "grant": "Conceder permissão para {{tool}}",
     "added": "Permissão adicionada",

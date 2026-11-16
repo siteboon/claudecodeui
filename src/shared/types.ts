@@ -96,6 +96,10 @@ export type ProjectSession = {
   updated_at?: string;
   lastActivity?: string;
   messageCount?: number;
+  /** Canonical app id of the fork source; absent/null for unrelated sessions. */
+  forkedFromSessionId?: string | null;
+  /** Ancestor context for Projects only; excluded from pagination and the Conversations feed. */
+  forkAncestors?: ProjectSession[];
   provider?: LLMProvider;
   __provider?: LLMProvider;
   // Tags the session with the owning project's DB `projectId` so UI handlers
@@ -402,6 +406,8 @@ export type ChatMessage = {
   compact?: CompactionInfo;
   /** The summary that compaction produced, folded into the row above rather than left loose. */
   compactSummary?: string;
+  /** Set on the row marking where the session's context was cleared, so it is drawn as a divider. */
+  contextCleared?: boolean;
   isSubagentContainer?: boolean;
   /** The agent this row spawned, when it spawned one. Its presence is what makes a row a subagent container. */
   subagent?: SubagentInfo;
@@ -418,6 +424,8 @@ export type ChatMessage = {
   memoryCitations?: MemoryCitation[];
   /** Lifecycle the provider reported for this tool call, when it reports one; otherwise the status is inferred from whether a result has arrived. */
   toolStatus?: string;
+  /** Set when this row is the question or answer half of a side question pair, so it draws and behaves apart from the session's own transcript (no edit, fork or retry; never a grouping, last-message or fork anchor). The session id is carried here because `ChatMessage` otherwise has none of its own, and the dismiss control's DELETE needs it. */
+  sideQuestion?: { sideQuestionId: string; sessionId: string; status: SideQuestionStatus };
   [key: string]: unknown;
 };
 
@@ -455,12 +463,13 @@ export type PendingPermissionRequest = {
   receivedAt?: Date;
 };
 
-/** One question asked by the AskUserQuestion tool, with its answer options and whether more than one option may be selected. */
+/** One question asked by the AskUserQuestion tool, with its answer options, whether more than one option may be selected, and whether a typed answer is offered (`custom: false` hides it; OpenCode's questions can set it). */
 export type Question = {
   question: string;
   header?: string;
   options: QuestionOption[];
   multiSelect?: boolean;
+  custom?: boolean;
 };
 
 /** Options for a programmatic session navigation, currently only whether the route change should replace the current history entry instead of pushing a new one. */
@@ -488,6 +497,46 @@ export type ToolResult = {
 type QuestionOption = {
   label: string;
   description?: string;
+};
+
+// ---------------------------
+
+//----------------- SIDE QUESTIONS ------------
+
+/** Where a side question stands: `running` while the fork is still answering, `done` once it finished, `error` if the fork failed or the question was refused. */
+export type SideQuestionStatus = 'running' | 'done' | 'error';
+
+/** A side question asked beside a session's own transcript — answered by a fork of the session's provider that never joins the session itself. Same shape on client and server. */
+export type SideQuestion = {
+  id: string;
+  /** App session id the question was asked beside. */
+  sessionId: string;
+  question: string;
+  /** '' until text arrives; partial while `running`. */
+  answer: string;
+  status: SideQuestionStatus;
+  error: string | null;
+  model: string | null;
+  /** ISO timestamp. */
+  createdAt: string;
+  /** ISO timestamp, set once the fork reaches `done` or `error`. */
+  finishedAt: string | null;
+};
+
+/** One `side_question` chat socket event broadcast to every connected chat client as a side question's fork progresses, so another tab or a reconnected one sees it too. */
+export type SideQuestionEvent = {
+  kind: 'side_question';
+  sessionId: string;
+  sideQuestionId: string;
+  phase: 'started' | 'delta' | 'done' | 'error' | 'dismissed';
+  /** Delta only: the next piece of the answer. */
+  text?: string;
+  /** Error only. */
+  error?: string;
+  /** Carried on `started`, `done`, and `error` when a row exists: the whole row, so a tab that missed deltas still ends with the full answer. */
+  sideQuestion?: SideQuestion;
+  /** ISO, when the server sent it. */
+  timestamp: string;
 };
 
 // ---------------------------
@@ -562,6 +611,8 @@ export type NormalizedMessage = {
   isCompactSummary?: boolean;
   /** Set by the provider on the row that stands in for a compaction. */
   compact?: CompactionInfo;
+  /** Set by the server on the row marking where the session's context was cleared. */
+  contextCleared?: boolean;
   images?: Array<{ path?: string; data?: string; name?: string }>;
   files?: Array<{ path?: string; name?: string; mimeType?: string; size?: number }>;
   toolName?: string;
@@ -783,8 +834,36 @@ export type QueuedDraft = {
   options?: QueuedSendOptions;
 };
 
-/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, or do nothing. */
-export type BackgroundSendChoice = 'send' | 'queue' | 'cancel';
+/**
+ * A message sent into a running turn (steering) that the agent has not read
+ * yet. The composer shows it as a card until its echo reaches the transcript;
+ * `status` is `sending` until the server confirms it reached the turn, then
+ * `accepted`. Local to the tab that sent it.
+ */
+export type PendingSteer = {
+  /** The UUID the message was sent with; its transcript row and live echo carry it too. */
+  messageId: string;
+  /** The session whose turn it was sent into. */
+  sessionKey: string;
+  content: string;
+  /** Browser files kept so the message can go back into the composer intact. */
+  attachments: File[];
+  /** Descriptors uploaded before it was sent, reused if it has to be queued instead. */
+  uploadedAttachments: unknown[];
+  status: 'sending' | 'accepted';
+};
+
+/**
+ * What became of a steered message, as the realtime handler reports it to the
+ * composer: `accepted` (the server put it into the turn), `refused` (the turn
+ * had already ended, so it should go out as the next turn) or `delivered` (the
+ * agent read it; its echo is in the transcript). `delivered` is reported for
+ * every live user message, so the composer matches it against its own ids.
+ */
+export type SteerOutcome = 'accepted' | 'refused' | 'delivered';
+
+/** The answer to the prompt shown when sending over a session's background work: send now (stopping that work), queue the message until the work finishes, ask a side question instead, or do nothing. */
+export type BackgroundSendChoice = 'send' | 'queue' | 'sideQuestion' | 'cancel';
 
 /** An open background-work send prompt, listing the session's own background tasks as display strings. */
 export type BackgroundSendPrompt = {
@@ -887,9 +966,10 @@ export type TodoItem = {
 /** Display state of a tool call — 'running', 'completed', 'error' or 'denied' — used to choose the status badge and styling shown beside it in the transcript. */
 export type ToolStatus = 'running' | 'completed' | 'error' | 'denied';
 
-/** Props contract that every interactive permission panel implements, giving the panel the pending request and the callback it calls to allow or deny that request; use it when registering a panel in the permission panel registry. */
+/** Props contract that every interactive permission panel implements, giving the panel the pending request, the name of the agent asking (for its header) and the callback it calls to allow or deny that request; use it when registering a panel in the permission panel registry. */
 export type PermissionPanelProps = {
   request: PendingPermissionRequest;
+  agentLabel?: string;
   onDecision: (
     requestIds: string | string[],
     decision: { allow?: boolean; message?: string; updatedInput?: unknown },
@@ -1509,6 +1589,43 @@ export type GithubCredentialItem = {
 
 // ---------------------------
 
+//----------------- SETTINGS NOTIFICATION WEBHOOK ------------
+
+/** Why a webhook delivery failed, exactly as the server stores it; the webhook card maps each value to a localized reason. */
+export type NotificationWebhookDeliveryError =
+  | 'invalidUrl'
+  | 'insecureUrl'
+  | 'blockedAddress'
+  | 'timeout'
+  | 'redirect'
+  | 'httpStatus'
+  | 'network'
+  | 'tls'
+  | 'dropped';
+
+/** The outcome of the most recent webhook event after its last attempt, as the server records it; `status` is the HTTP status when the receiver answered, `type` the event type (e.g. run.completed, webhook.test). */
+export type NotificationWebhookDelivery = {
+  eventId: string;
+  type: string;
+  ok: boolean;
+  status: number | null;
+  error: NotificationWebhookDeliveryError | null;
+  attempts: number;
+  at: string;
+};
+
+/** The saved webhook destination as the notifications API returns it. The signing secret is never part of it, only whether one is set; `configured` is false until a URL has been saved. */
+export type NotificationWebhookState = {
+  configured: boolean;
+  enabled: boolean;
+  url: string;
+  allowHttp: boolean;
+  hasSecret: boolean;
+  lastDelivery: NotificationWebhookDelivery | null;
+};
+
+// ---------------------------
+
 //----------------- SHELL ------------
 
 /** Handle returned when touch text-selection is installed on an xterm terminal; call updateHandles after the terminal reflows and dispose when tearing the terminal down. */
@@ -1543,6 +1660,9 @@ export type SessionRowActions = {
   onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectId: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  /** Archives the session straight away; it stays restorable from the archive. */
+  onArchiveSession: (sessionId: string) => void;
+  /** Asks to confirm, then deletes the session permanently. */
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Branches a session into an independent one. Rows hide it for providers that cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
@@ -1655,7 +1775,7 @@ export type ActiveSidebarRename =
  */
 export type PendingSidebarDeletion =
   | { kind: 'project'; project: Project; sessionCount: number }
-  | { kind: 'session'; sessionId: string; sessionTitle: string; isArchived: boolean }
+  | { kind: 'session'; sessionId: string; sessionTitle: string }
   | { kind: 'sessions'; sessionIds: string[] };
 
 /**

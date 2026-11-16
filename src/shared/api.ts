@@ -286,6 +286,10 @@ export const api = {
   // `upToAnchorId` (all of it when omitted). The source is left untouched.
   forkSession: (sessionId: string, body: { upToAnchorId?: string; title?: string } = {}) =>
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
+  // Starts the session's next message on a fresh context. Its history stays
+  // visible; `cleared` is false when there was no context to clear.
+  clearSessionContext: (sessionId: string) =>
+    post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/clear-context`),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
   // Whether a turn stopped by the usage limit continues automatically once it resets.
@@ -439,6 +443,10 @@ export const api = {
       del(`/api/providers/${provider}/models/${recordId}`),
     setCustomModelsOnly: (provider: string, enabled: boolean) =>
       put(`/api/providers/${provider}/models/custom-only`, { enabled }),
+    dismissSideQuestion: (sessionId: string, sideQuestionId: string) =>
+      del(
+        `/api/providers/sessions/${encodeURIComponent(sessionId)}/side-questions/${encodeURIComponent(sideQuestionId)}`,
+      ),
 
     createSession: (payload: {
       provider: string;
@@ -578,6 +586,18 @@ export const api = {
         post('/api/settings/push/subscribe', subscription),
       unsubscribe: (endpoint: string) => post('/api/settings/push/unsubscribe', { endpoint }),
     },
+
+    // Outbound webhook for run lifecycle events. `createSecret` is the only
+    // response that ever carries the signing secret.
+    notificationWebhook: {
+      get: () => get('/api/notifications/webhook'),
+      save: (config: { url: string; allowHttp: boolean; enabled: boolean }) =>
+        put('/api/notifications/webhook', config),
+      remove: () => del('/api/notifications/webhook'),
+      createSecret: () => post('/api/notifications/webhook/secret'),
+      removeSecret: () => del('/api/notifications/webhook/secret'),
+      sendTest: () => post('/api/notifications/webhook/test'),
+    },
   },
 
   plugins: {
@@ -609,6 +629,7 @@ export const api = {
     sessions: () => get('/api/browser-use/sessions'),
     stopSession: (sessionId: string) => post(`/api/browser-use/sessions/${sessionId}/stop`),
     deleteSession: (sessionId: string) => del(`/api/browser-use/sessions/${sessionId}`),
+    sendInput: (sessionId: string, input: unknown) => post(`/api/browser-use/sessions/${sessionId}/input`, input),
     installRuntime: () => post('/api/browser-use/runtime/install'),
   },
 
