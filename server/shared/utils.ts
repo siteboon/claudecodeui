@@ -43,6 +43,20 @@ import type {
  */
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 
+/**
+ * Returns the configured Codex CLI executable for Chat, Shell, and app-server
+ * operations. Leading and trailing whitespace is removed; unset, empty, or
+ * whitespace-only values return undefined for the bundled-CLI fallback.
+ * The path must identify a compatible executable. This helper does not check
+ * whether the executable exists or supports the required CLI protocol.
+ */
+export function resolveCodexCliPath(
+  configuredPath: string | undefined = process.env.CODEX_CLI_PATH,
+): string | undefined {
+  const normalizedPath = configuredPath?.trim();
+  return normalizedPath || undefined;
+}
+
 // ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
 /**
