@@ -19,6 +19,7 @@ import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
 import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksStrip';
+import { findDesktopWrapUp, DesktopWrapUpCard } from '@/modules/chat/transcript/DesktopWrapUpCard';
 
 /**
  * How many of the newest rows mount with real content on the first commit,
@@ -51,6 +52,7 @@ type ChatMessagesPaneProps = {
   isTaskMasterInstalled: boolean | null;
   onShowAllTasks?: (() => void) | null;
   setInput: Dispatch<SetStateAction<string>>;
+  onInsertComposerText?: (text: string) => void;
   isLoadingMoreMessages: boolean;
   hasMoreMessages: boolean;
   totalMessages: number;
@@ -120,6 +122,7 @@ function ChatMessagesPane({
   isTaskMasterInstalled,
   onShowAllTasks,
   setInput,
+  onInsertComposerText,
   isLoadingMoreMessages,
   hasMoreMessages,
   totalMessages,
@@ -148,10 +151,18 @@ function ChatMessagesPane({
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
   const lazyRows = useLazyRowObserver(scrollContainerRef);
-  const groupedVisibleMessages = useMemo(
-    () => groupConsecutiveTools(visibleMessages, Boolean(showThinking)),
-    [visibleMessages, showThinking],
+  const wrapUp = useMemo(
+    () => provider === 'claude' ? findDesktopWrapUp(chatMessages) : null,
+    [chatMessages, provider],
   );
+  const groupedVisibleMessages = useMemo(() => {
+    const transcript = wrapUp
+      ? visibleMessages.filter((message) => message !== wrapUp.message && (
+        !wrapUp.message.toolId || message.toolId !== wrapUp.message.toolId
+      ))
+      : visibleMessages;
+    return groupConsecutiveTools(transcript, Boolean(showThinking));
+  }, [visibleMessages, showThinking, wrapUp]);
 
   // Stable, deterministic keys for the messages rendered this pass.
   //
@@ -362,6 +373,15 @@ function ChatMessagesPane({
               );
             });
           })()}
+          {!isLoadingSessionMessages && !isProcessing && wrapUp && (
+            <DesktopWrapUpCard
+              key={`${selectedSession?.id ?? currentSessionId}:${wrapUp.message.toolId ?? wrapUp.message.timestamp}`}
+              recap={wrapUp.recap}
+              question={wrapUp.question}
+              actions={wrapUp.actions}
+              onChoose={onInsertComposerText}
+            />
+          )}
         </>
       )}
       </div>

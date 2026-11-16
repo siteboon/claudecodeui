@@ -1025,7 +1025,9 @@ export function useChatSessionState({
         }
       }, 50);
     }
-  }, [chatMessages.length, isActive, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
+    // The Desktop wrap-up can become visible when a turn settles without
+    // appending a row. Reapply the same scroll-to-bottom policy in that case.
+  }, [chatMessages.length, isActive, isLoadingMoreMessages, isProcessing, isUserScrolledUp, scrollToBottom]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;

@@ -527,6 +527,7 @@ function ChatInterface({
               isTaskMasterInstalled={isTaskMasterInstalled}
               onShowAllTasks={onShowAllTasks}
               setInput={setInput}
+              onInsertComposerText={insertComposerText}
               isLoadingMoreMessages={isLoadingMoreMessages}
               hasMoreMessages={hasMoreMessages}
               totalMessages={totalMessages}

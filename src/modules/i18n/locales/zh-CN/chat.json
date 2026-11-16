@@ -175,6 +175,7 @@
     "chooseModelDescriptionCustomOnly": "{{providers, list}} 仅列出您的模型"
   },
   "session": {
+    "dismissWrapUp": "关闭收尾卡片",
     "continue": {
       "title": "继续您的对话",
       "description": "询问有关代码的问题、请求更改或获取开发任务的帮助"
