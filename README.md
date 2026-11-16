@@ -258,6 +258,8 @@ This project is open source and free to use, modify, and distribute under the AG
 
 CloudCLI UI - (https://cloudcli.ai).
 
+Codex model refreshes cannot overwrite a newer custom-model change. See [features](features.md) and [manual change records](docs/changelog.md).
+
 ## Acknowledgments
 
 ### Built With

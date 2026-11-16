@@ -1,5 +1,7 @@
 # Features
 
+Codex catalog responses started before a custom-model change are discarded so they cannot overwrite the updated picker.
+
 ## Codex CLI Model Discovery
 
 Chat obtains visible Codex models, display names, the default model, and supported reasoning efforts through the existing CLI's `app-server model/list` protocol, including pagination. Discovery uses the same CLI launcher as existing app-server operations and never opens or resumes a conversation.

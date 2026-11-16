@@ -195,3 +195,33 @@ test('Codex refreshes on focus and visible intervals without changing a supporte
   window.dispatchEvent(new Event('focus'));
   assert.equal(models.mock.calls.length, 0);
 });
+
+test('an older Codex refresh cannot overwrite a custom model mutation', async () => {
+  writeUserPreference('selectedProvider', 'codex');
+  const { api } = await import('@/shared/api');
+  const initial = { OPTIONS: [{ value: 'cli-model', label: 'CLI Model' }], DEFAULT: 'cli-model' };
+  const updated = { ...initial, OPTIONS: [...initial.OPTIONS, { value: 'custom-model', label: 'Custom' }] };
+  const models = vi.spyOn(api.providers, 'models').mockImplementation(async () => ({
+    ok: true, json: async () => ({ success: true, data: { models: initial } }),
+  } as Response));
+  vi.spyOn(api.providers, 'createModel').mockResolvedValue({
+    ok: true, json: async () => ({ success: true, data: { model: updated.OPTIONS[1], models: updated } }),
+  } as Response);
+  const { result, unmount } = await renderProviderState();
+  await waitFor(() => assert.equal(result.current.providerModelsLoading, false));
+  await waitFor(() => assert.equal(result.current.currentProviderModel, 'cli-model'));
+
+  let finishRefresh!: (value: Response) => void;
+  models.mockImplementationOnce(() => new Promise<Response>((resolve) => { finishRefresh = resolve; }));
+  act(() => { window.dispatchEvent(new Event('focus')); });
+  await act(async () => { await result.current.providerModelActions.create('codex', { model: 'custom-model', id: 'custom-model' }); });
+  assert.equal(result.current.currentProviderModelOptions.length, 2);
+  await act(async () => { finishRefresh({ ok: true, json: async () => ({ success: true, data: { models: initial } }) } as Response); });
+  assert.equal(result.current.currentProviderModelOptions.length, 2);
+  assert.equal(result.current.currentProviderModel, 'cli-model');
+  const refreshed = { ...updated, OPTIONS: [...updated.OPTIONS, { value: 'new-cli-model', label: 'New CLI Model' }] };
+  models.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: { models: refreshed } }) } as Response);
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  await waitFor(() => assert.equal(result.current.currentProviderModelOptions.length, 3));
+  unmount();
+});

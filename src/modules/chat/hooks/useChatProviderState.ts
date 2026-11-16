@@ -171,6 +171,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [providerModelsLoading, setProviderModelsLoading] = useState(true);
 
   const providerModelsRequestIdRef = useRef(0);
+  const catalogMutationIdRef = useRef<Partial<Record<LLMProvider, number>>>({});
   const sessionSelectionLoadRequestIdRef = useRef(0);
   const sessionModelMutationIdRef = useRef(0);
   const sessionEffortMutationIdRef = useRef(0);
@@ -204,10 +205,11 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       await Promise.all(
         PROVIDERS.map(async (p) => {
           try {
+            const mutationId = catalogMutationIdRef.current[p] ?? 0;
             const response = await api.providers.models(p);
             const body = (await response.json()) as ProviderModelsApiResponse;
             const models = body.success ? body.data?.models : undefined;
-            if (!models || providerModelsRequestIdRef.current !== requestId) {
+            if (!models || providerModelsRequestIdRef.current !== requestId || (catalogMutationIdRef.current[p] ?? 0) !== mutationId) {
               return;
             }
 
@@ -236,10 +238,11 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     const refresh = async () => {
       if (document.visibilityState !== 'visible' || refreshing) return;
       refreshing = true;
+      const mutationId = catalogMutationIdRef.current.codex ?? 0;
       try {
         const response = await api.providers.models('codex');
         const body = (await response.json()) as ProviderModelsApiResponse;
-        if (!cancelled && response.ok && body.success && body.data?.models) {
+        if (!cancelled && (catalogMutationIdRef.current.codex ?? 0) === mutationId && response.ok && body.success && body.data?.models) {
           const models = body.data.models;
           setProviderModelCatalog((previous) => ({ ...previous, codex: models }));
         }
@@ -743,6 +746,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     targetProvider: LLMProvider,
     models: ProviderModelsDefinition,
   ) => {
+    catalogMutationIdRef.current[targetProvider] = (catalogMutationIdRef.current[targetProvider] ?? 0) + 1;
     setProviderModelCatalog((previous) => ({
       ...previous,
       [targetProvider]: models,

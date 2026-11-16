@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.37.9
+
+### 2026-11-16
+
+- Keep stale model refreshes from overwriting newer custom-model mutations.
+
 ## 1.37.3
 
 ### 2026-10-12
