@@ -403,7 +403,7 @@ test('createEntry performs filesystem mutation only through the injected adapter
  * which is the only way to exercise the read-only roots: the whole guarantee
  * rests on `realpath` resolving symlinks before the comparison.
  */
-function createRealFileSystemService(projectRoot: string): FileTreeServices {
+function createRealFileSystemService(projectRoot: string, workspaceRoot = projectRoot): FileTreeServices {
   return createFileTreeService({
     fileSystem: {
       access: (candidatePath) => fsPromises.access(candidatePath),
@@ -428,7 +428,7 @@ function createRealFileSystemService(projectRoot: string): FileTreeServices {
     },
     projects: { getProjectPathById: async () => projectRoot },
     workspace: {
-      rootPath: projectRoot,
+      rootPath: workspaceRoot,
       validatePath: (candidatePath) => validateWorkspacePath(candidatePath),
       resolveReadOnlyRootPath: (candidatePath) => resolveReadOnlyRootPath(candidatePath),
     },
@@ -528,6 +528,50 @@ test('reading through a symlink out of the temp directory is still refused', asy
   } finally {
     await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
     await fsPromises.rm(projectRoot, { recursive: true, force: true });
+    await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('a file in another folder of the workspace can be read, but never written to', async () => {
+  // Both sit beside this file, outside every read-only root, for the reason
+  // given in the symlink test above.
+  const workspaceRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-workspace-'));
+  const projectRoot = path.join(workspaceRoot, 'project');
+  const siblingDirectory = path.join(workspaceRoot, '.runs', 'run-1');
+  const outsideDirectory = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-outside-'));
+
+  try {
+    await fsPromises.mkdir(projectRoot);
+    await fsPromises.mkdir(siblingDirectory, { recursive: true });
+    const reportPath = path.join(siblingDirectory, 'report.md');
+    await fsPromises.writeFile(reportPath, 'what the run found', 'utf8');
+    await fsPromises.writeFile(path.join(outsideDirectory, 'secret.txt'), 'secret', 'utf8');
+    await fsPromises.symlink(outsideDirectory, path.join(workspaceRoot, 'escape'));
+
+    const service = createRealFileSystemService(projectRoot, workspaceRoot);
+
+    const opened = await service.readTextFile('project-1', reportPath);
+    assert.equal(opened.content, 'what the run found');
+    const streamed = await service.openFile('project-1', reportPath);
+    streamed.stream.destroy();
+
+    await assert.rejects(
+      service.saveTextFile('project-1', reportPath, 'overwritten'),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+    await assert.rejects(
+      service.deleteEntry({ projectId: 'project-1', targetPath: reportPath }),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+    assert.equal(await fsPromises.readFile(reportPath, 'utf8'), 'what the run found');
+
+    // A link inside the workspace does not open what lies outside it.
+    await assert.rejects(
+      service.readTextFile('project-1', path.join(workspaceRoot, 'escape', 'secret.txt')),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+    );
+  } finally {
+    await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
   }
 });

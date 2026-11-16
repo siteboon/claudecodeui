@@ -117,7 +117,10 @@
     "addPRD": "Añadir PRD",
     "addTask": "Añadir tarea",
     "createNewPRD": "Crear PRD nuevo",
-    "prdsAvailable": "{{count}} PRD(s) disponibles"
+    "prdsAvailable": "{{count}} PRD(s) disponibles",
+    "prdsAvailable_one": "{{count}} PRD disponible",
+    "prdsAvailable_other": "{{count}} PRD disponibles",
+    "prdsAvailable_many": "{{count}} PRD disponibles"
   },
   "prd": {
     "modified": "Modificado: {{date}}"
@@ -133,10 +136,26 @@
   "priorities": {
     "high": "Alta",
     "medium": "Media",
-    "low": "Baja"
+    "low": "Baja",
+    "highTitle": "Prioridad alta",
+    "mediumTitle": "Prioridad media",
+    "lowTitle": "Prioridad baja"
   },
   "noMatchingTasks": {
     "title": "Ninguna tarea coincide con tus filtros",
     "description": "Prueba a ajustar la búsqueda o los criterios de filtrado."
+  },
+  "banner": {
+    "initialize": "Inicializar",
+    "hideDetails": "Ocultar detalles",
+    "whatIsTaskmaster": "¿Qué es TaskMaster?",
+    "detailAiPowered": "- Gestión de tareas con IA, con dependencias y subtareas.",
+    "detailPrdDriven": "- Generación de tareas a partir de un PRD para arrancar el proyecto más rápido.",
+    "detailKanbanList": "- Vistas Kanban y de lista para el trabajo del día a día.",
+    "startTask": "Empezar",
+    "viewTaskDetails": "Ver detalles de la tarea",
+    "viewAllTasks": "Ver todas las tareas",
+    "allComplete": "Todas las tareas completadas",
+    "noPending": "No hay tareas pendientes"
   }
 }

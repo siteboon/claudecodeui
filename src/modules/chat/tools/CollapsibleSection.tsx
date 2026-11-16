@@ -6,6 +6,8 @@ import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRende
 
 type CollapsibleSectionProps = {
   title: string;
+  /** Extra classes for the title, clickable or not. */
+  titleClassName?: string;
   toolName?: string;
   open?: boolean;
   action?: React.ReactNode;
@@ -23,6 +25,7 @@ type CollapsibleSectionProps = {
  */
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   title,
+  titleClassName,
   toolName,
   open = false,
   action,
@@ -58,7 +61,10 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           )}
           <button
             onClick={onTitleClick}
-            className="flex-1 truncate text-left font-mono text-primary transition-colors hover:text-primary/80 hover:underline"
+            className={cn(
+              'flex-1 truncate text-left font-mono text-primary transition-colors hover:text-primary/80 hover:underline',
+              titleClassName,
+            )}
           >
             {title}
           </button>
@@ -81,7 +87,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
           {toolName && (
             <span className="flex-shrink-0 text-[10px] text-muted-foreground/40">/</span>
           )}
-          <span className="flex-1 truncate text-left">{title}</span>
+          <span className={cn('flex-1 truncate text-left', titleClassName)}>{title}</span>
           {badge && <span className="ml-auto flex-shrink-0">{badge}</span>}
           {action && <span className="ml-1 flex-shrink-0">{action}</span>}
         </CollapsibleTrigger>

@@ -2,12 +2,10 @@ import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import spawn from 'cross-spawn';
-
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProviderAuth } from '@/shared/interfaces.js';
-import type { ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types.js';
-import { readObjectRecord, readOptionalString } from '@/shared/utils.js';
+import type { CliVersionProbe, ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types.js';
+import { probeCliVersion, readObjectRecord, readOptionalString } from '@/shared/utils.js';
 
 type ClaudeCredentialsStatus = {
   authenticated: boolean;
@@ -32,30 +30,30 @@ const hasErrorCode = (error: unknown, code: string): boolean => (
 
 export class ClaudeProviderAuth implements IProviderAuth {
   /**
-   * Checks whether the Claude Code CLI is available on this host.
+   * Checks whether the Claude Code CLI that chats run is available on this
+   * host, and which version it is.
    */
-  private checkInstalled(): boolean {
-    // cross-spawn resolves shims and PATHEXT itself, so the bare command is a
-    // usable fallback here even where the SDK's raw spawn could not use it.
-    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH) ?? 'claude';
-    try {
-      spawn.sync(cliPath, ['--version'], { stdio: 'ignore', timeout: 5000 });
-      return true;
-    } catch {
-      return false;
+  checkInstalled(): CliVersionProbe {
+    const cliPath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+    if (!cliPath) {
+      // Windows with no resolvable CLI: the SDK falls back to the binary it
+      // bundles, so chats still work. Its version is not this CLI's to report.
+      return { installed: true, exitCode: null, version: null };
     }
+    return probeCliVersion(cliPath);
   }
 
   /**
    * Returns Claude installation and credential status using Claude Code's auth priority.
    */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const installed = this.checkInstalled();
+    const { installed, version: installedVersion } = this.checkInstalled();
 
     if (!installed) {
       return {
         installed,
         provider: 'claude',
+        installedVersion,
         authenticated: false,
         email: null,
         method: null,
@@ -68,6 +66,7 @@ export class ClaudeProviderAuth implements IProviderAuth {
     return {
       installed,
       provider: 'claude',
+      installedVersion,
       authenticated: credentials.authenticated,
       email: credentials.authenticated ? credentials.email || 'Authenticated' : credentials.email,
       method: credentials.method,

@@ -4,6 +4,7 @@ import type { DiffLine, Project,ToolStatus } from '@/shared/types';
 import { formatToolDisplayName, getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
 import { OneLineDisplay } from '@/modules/chat/tools/OneLineDisplay';
 import { BashCommandDisplay } from '@/modules/chat/tools/BashCommandDisplay';
+import { BashEditDiff } from '@/modules/chat/tools/BashEditDiff';
 import { CollapsibleDisplay } from '@/modules/chat/tools/CollapsibleDisplay';
 import { ToolDiffViewer } from '@/modules/chat/tools/ToolDiffViewer';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
@@ -117,6 +118,8 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   // Bash renders as a Codex-style command row: the command on a single line with
   // a chevron that expands to show the output inline. The combined view lives on
   // the input render; the separate result section is suppressed in MessageComponent.
+  // Files the command changed are listed under the row, outside its collapse, so
+  // they read like the Edit rows they stand in for.
   if (toolName === 'Bash' && mode === 'input') {
     const command = typeof parsedData === 'object' && parsedData !== null && 'command' in parsedData
       ? String(parsedData.command || '')
@@ -134,16 +137,23 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         ? String(toolResult.content)
         : '';
     return (
-      <BashCommandDisplay
-        command={command}
-        description={description}
-        output={output}
-        isError={Boolean(toolResult?.isError)}
-        status={toolStatus !== 'completed' ? toolStatus : undefined}
-        // Commands stay collapsed by default — including failures; the status
-        // badge marks errors and the output expands via the chevron.
-        defaultOpen={false}
-      />
+      <>
+        <BashCommandDisplay
+          command={command}
+          description={description}
+          output={output}
+          isError={Boolean(toolResult?.isError)}
+          status={toolStatus !== 'completed' ? toolStatus : undefined}
+          // Commands stay collapsed by default — including failures; the status
+          // badge marks errors and the output expands via the chevron.
+          defaultOpen={false}
+        />
+        <BashEditDiff
+          toolUseResult={toolResult?.toolUseResult}
+          onFileOpen={onFileOpen}
+          projectRoot={selectedProject?.fullPath}
+        />
+      </>
     );
   }
 

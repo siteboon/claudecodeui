@@ -34,7 +34,9 @@
     "failed": "Selhalo",
     "pending": "Čeká",
     "completed": "Dokončeno",
-    "inProgress": "Probíhá"
+    "inProgress": "Probíhá",
+    "reconnecting": "Obnovování připojení...",
+    "chatConnectionLost": "Spojení chatu bylo přerušeno. Obnovování připojení..."
   },
   "messages": {
     "savedSuccessfully": "Uloženo",
@@ -463,6 +465,7 @@
     "backgroundTasks": "Úlohy na pozadí",
     "backgroundAgent": "Agent",
     "backgroundCommand": "Příkaz",
+    "backgroundMonitor": "Monitor",
     "stopTask": "Zastavit",
     "taskRowNotLoaded": "Spuštěno dříve v této konverzaci; kliknutím načtete",
     "taskOfAgent": "Spuštěno jedním z agentů této relace"

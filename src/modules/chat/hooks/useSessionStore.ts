@@ -11,6 +11,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { LLMProvider, NormalizedMessage } from '@/shared/types';
+import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
 import { removeOptimisticUserEchoes } from '@/modules/chat/utils/sessionMessageReconciliation';
 import {
   hasReachedCachedTailTimeBoundary,
@@ -106,6 +107,13 @@ async function requestSessionHistoryPage(
   const body = await response.json();
   const data = body?.data ?? body;
   const messages: NormalizedMessage[] = Array.isArray(data.messages) ? data.messages : [];
+
+  // The server sends the session's whole side-question list on every page
+  // (not just the page's own rows), so the store is replaced here rather
+  // than merged, regardless of which page this request fetched.
+  if (Array.isArray(data.sideQuestions)) {
+    sideQuestionStore.replaceForSession(sessionId, data.sideQuestions);
+  }
 
   return {
     messages,

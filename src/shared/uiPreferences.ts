@@ -14,6 +14,7 @@ export type UiPreferences = {
   showThinking: boolean;
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
+  keepProjectsExpanded: boolean;
   voiceEnabled: boolean;
 };
 
@@ -28,6 +29,7 @@ const DEFAULTS: UiPreferences = {
   showThinking: true,
   sendByCtrlEnter: false,
   sidebarVisible: true,
+  keepProjectsExpanded: false,
   voiceEnabled: false,
 };
 
