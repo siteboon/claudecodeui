@@ -68,6 +68,9 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const loadedDocumentKeyRef = useRef<string | null>(null);
   // The open request the current buffer came from, to tell a new open from a reload.
   const loadedFileRef = useRef<CodeEditorFile | null>(null);
+  // The reload request the current buffer answers. A load with a newer count was
+  // asked for by hand, and has to read the disk even for an edit opened from a diff.
+  const loadedReloadCountRef = useRef(0);
   // A diff payload is its own document: the chat opening an edit on a file that
   // is already open must show that edit, not reuse the plain buffer.
   const diffKey = file.diffInfo ? JSON.stringify([fileDiffOldString, fileDiffNewString]) : '';
@@ -110,6 +113,9 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     // The editor sidebar asks before a new open with an edit to show replaces a
     // dirty buffer, so that answer is already given.
     const discardConfirmed = file !== loadedFileRef.current && Boolean(file.diffInfo);
+    // Consumed even when refused below, so a later open is not taken for this reload.
+    const isExplicitReload = reloadCount !== loadedReloadCountRef.current;
+    loadedReloadCountRef.current = reloadCount;
 
     // Re-reading here would silently throw away someone's edits. Refuse, and say
     // so; `reloadDiscardingChanges` is the deliberate way through.
@@ -157,7 +163,8 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         }
 
         // Diff payload may already include full old/new snapshots, so avoid disk read.
-        if (file.diffInfo && fileDiffNewString !== undefined && fileDiffOldString !== undefined) {
+        // Not on a reload: the file may have been saved since the diff was opened.
+        if (!isExplicitReload && file.diffInfo && fileDiffNewString !== undefined && fileDiffOldString !== undefined) {
           setLoadedContent(fileDiffNewString);
           setLoading(false);
           return;
@@ -205,14 +212,28 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   // The way out of that notice, taken by hand: the unsaved buffer is dropped on
   // purpose, so the guard above has nothing left to protect.
   const reloadDiscardingChanges = useCallback(() => {
+    // A read started now could land before the pending write and show the
+    // discarded text as clean; the save ends the notice anyway.
+    if (saving) {
+      return;
+    }
+    // The state too, not only the ref: a save before the read lands must not
+    // write the discarded buffer back.
     contentRef.current = savedContentRef.current;
+    setContentState(savedContentRef.current);
     setReloadCount((previous) => previous + 1);
-  }, []);
+  }, [saving]);
 
   const handleSave = useCallback(async () => {
     // Preview-only and binary files have no editable text buffer; never write
     // them back (e.g. via Cmd/Ctrl+S) or we'd corrupt the file on disk.
     if (previewKind || isBinaryFile(fileName)) {
+      return;
+    }
+
+    // While a load is out, the buffer still holds the text it is replacing,
+    // which may belong to another file.
+    if (loading) {
       return;
     }
 
@@ -266,7 +287,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         setSaving(false);
       }
     }
-  }, [content, filePath, fileProjectId, previewKind, fileName, setSavedContent]);
+  }, [content, filePath, fileProjectId, loading, previewKind, fileName, setSavedContent]);
 
   const handleDownload = useCallback(() => {
     downloadBlob(new Blob([content], { type: 'text/plain' }), file.name);

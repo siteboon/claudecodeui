@@ -255,6 +255,129 @@ test('the reload action still keeps unsaved changes on an edit', async () => {
   assert.equal(result.current.content, 'work in progress');
 });
 
+test('the reload action reads an edit from disk, not from the payload it was opened with', async () => {
+  const { result } = renderHook(
+    ({ file }: { file: CodeEditorFile }) => useCodeEditorDocument({ file }),
+    {
+      initialProps: {
+        file: { ...openSameFile(), diffInfo: { old_string: 'first version', new_string: 'edited by the agent' } },
+      },
+    },
+  );
+  await waitFor(() => assert.equal(result.current.content, 'edited by the agent'));
+
+  act(() => result.current.setContent('my edit on top'));
+  await act(async () => {
+    await result.current.handleSave();
+  });
+  const readsBeforeReload = readFile.mock.calls.length;
+
+  act(() => result.current.reload());
+
+  await waitFor(() => assert.equal(readFile.mock.calls.length, readsBeforeReload + 1));
+  await waitFor(() => assert.equal(result.current.loading, false));
+  assert.equal(result.current.content, 'my edit on top');
+  assert.equal(result.current.hasUnsavedChanges, false);
+});
+
+test('opening an edit again after a refused reload still shows the edit', async () => {
+  const openEdit = (): CodeEditorFile => ({
+    ...openSameFile(),
+    diffInfo: { old_string: 'first version', new_string: 'edited by the agent' },
+  });
+  const { result, rerender } = renderHook(
+    ({ file }: { file: CodeEditorFile }) => useCodeEditorDocument({ file }),
+    { initialProps: { file: openEdit() } },
+  );
+  await waitFor(() => assert.equal(result.current.content, 'edited by the agent'));
+
+  act(() => result.current.setContent('work in progress'));
+  act(() => result.current.reload());
+  await waitFor(() => assert.equal(result.current.unsavedChangesBlockedReload, true));
+  const readsBeforeReopen = readFile.mock.calls.length;
+
+  rerender({ file: openEdit() });
+
+  await waitFor(() => assert.equal(result.current.content, 'edited by the agent'));
+  assert.equal(readFile.mock.calls.length, readsBeforeReopen);
+});
+
+test('a save while the discarding reload is still reading writes nothing', async () => {
+  const { result, rerender } = renderDocument();
+  await waitFor(() => assert.equal(result.current.content, 'first version'));
+
+  act(() => result.current.setContent('changes given up'));
+  rerender({ file: openSameFile() });
+  await waitFor(() => assert.equal(result.current.unsavedChangesBlockedReload, true));
+
+  let finishRead: () => void = () => undefined;
+  readFile.mockImplementation(() => new Promise<Response>((resolve) => {
+    finishRead = () => resolve(jsonResponse({ content: disk.content }));
+  }));
+  act(() => result.current.reloadDiscardingChanges());
+  await waitFor(() => assert.equal(result.current.loading, true));
+
+  await act(async () => {
+    await result.current.handleSave();
+  });
+
+  assert.equal(saveFile.mock.calls.length, 0);
+  await act(async () => finishRead());
+  await waitFor(() => assert.equal(result.current.content, 'first version'));
+  assert.equal(disk.content, 'first version');
+});
+
+test('a save while another file is still loading does not write the previous buffer into it', async () => {
+  const { result, rerender } = renderDocument();
+  await waitFor(() => assert.equal(result.current.content, 'first version'));
+  act(() => result.current.setContent('app edit given up by opening another file'));
+
+  readFile.mockImplementation(() => new Promise<Response>(() => undefined));
+  rerender({ file: openOtherFile() });
+  await waitFor(() => assert.equal(result.current.loading, true));
+
+  await act(async () => {
+    await result.current.handleSave();
+  });
+
+  assert.equal(saveFile.mock.calls.length, 0);
+});
+
+test('discarding changes waits for a save that is still in flight', async () => {
+  let finishSave: () => void = () => undefined;
+  saveFile.mockImplementation((_projectId: string, _path: string, content: string) => new Promise<Response>((resolve) => {
+    finishSave = () => {
+      disk.content = content;
+      resolve(jsonResponse({ success: true }));
+    };
+  }));
+
+  const { result, rerender } = renderDocument();
+  await waitFor(() => assert.equal(result.current.content, 'first version'));
+
+  act(() => result.current.setContent('saved edit'));
+  rerender({ file: openSameFile() });
+  await waitFor(() => assert.equal(result.current.unsavedChangesBlockedReload, true));
+
+  let save: Promise<void> = Promise.resolve();
+  act(() => {
+    save = result.current.handleSave();
+  });
+  await waitFor(() => assert.equal(result.current.saving, true));
+  const readsBeforeDiscard = readFile.mock.calls.length;
+
+  act(() => result.current.reloadDiscardingChanges());
+
+  assert.equal(readFile.mock.calls.length, readsBeforeDiscard);
+  assert.equal(result.current.content, 'saved edit');
+  await act(async () => {
+    finishSave();
+    await save;
+  });
+  assert.equal(result.current.hasUnsavedChanges, false);
+  assert.equal(disk.content, 'saved edit');
+});
+
 test('opening a file again while its first read is still out is not refused', async () => {
   const pendingReads = new Map<string, (content: string) => void>();
   const { result, rerender } = renderDocument();

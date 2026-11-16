@@ -347,7 +347,8 @@ export default function CodeEditor({
               <button
                 type="button"
                 onClick={reloadDiscardingChanges}
-                className="shrink-0 rounded px-1.5 py-0.5 font-medium underline underline-offset-2 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                disabled={saving}
+                className="shrink-0 rounded px-1.5 py-0.5 font-medium underline underline-offset-2 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-amber-900/40"
               >
                 {t('reload.discardChanges', 'Discard them and reload')}
               </button>
