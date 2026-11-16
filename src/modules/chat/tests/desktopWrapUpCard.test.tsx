@@ -4,7 +4,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { test, vi } from 'vitest';
 
 import '@/modules/i18n';
-import { DesktopWrapUpCard, findDesktopWrapUp } from '@/modules/chat/transcript/DesktopWrapUpCard';
+import { DesktopWrapUpCard } from '@/modules/chat/transcript/DesktopWrapUpCard';
+import { findDesktopWrapUp } from '@/modules/chat/utils/desktopWrapUp';
 import type { ChatMessage } from '@/shared/types';
 
 const wrapUp: ChatMessage = {

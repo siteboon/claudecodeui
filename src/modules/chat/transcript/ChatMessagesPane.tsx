@@ -19,7 +19,8 @@ import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
 import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksStrip';
-import { findDesktopWrapUp, DesktopWrapUpCard } from '@/modules/chat/transcript/DesktopWrapUpCard';
+import { DesktopWrapUpCard } from '@/modules/chat/transcript/DesktopWrapUpCard';
+import { findDesktopWrapUp } from '@/modules/chat/utils/desktopWrapUp';
 
 /**
  * How many of the newest rows mount with real content on the first commit,
