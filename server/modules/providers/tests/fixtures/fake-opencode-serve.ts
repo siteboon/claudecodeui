@@ -30,9 +30,17 @@ import http from 'node:http';
 
 type PermissionRule = { permission: string; pattern: string; action: string };
 
+/**
+ * A text or reasoning part. Without `chunks` it is published once, complete,
+ * through `message.part.updated`. With `chunks` it streams the way opencode
+ * 1.18.30 does: an empty `message.part.updated` (text-start), each chunk as a
+ * `message.part.delta` on the field `text` (reasoning parts use that field
+ * too), then the complete part again (text-end). `chunks` must join to `text`.
+ */
+type PartStep = { type: 'text' | 'reasoning'; text: string; chunks?: string[] };
+
 type Step =
-  | { type: 'text'; text: string }
-  | { type: 'reasoning'; text: string }
+  | PartStep
   | {
     type: 'permission';
     id: string;
@@ -247,6 +255,23 @@ async function playTurn(sessionID: string, shape: TurnShape, assistant: StoredMe
       emit('session.error', { sessionID, error: { name: 'MessageAbortedError', data: { message: 'Aborted' } } });
       emit('session.status', { sessionID, status: { type: 'idle' } });
       return;
+    }
+
+    if ((step.type === 'text' || step.type === 'reasoning') && step.chunks) {
+      const started = publishPart(sessionID, { messageID: shape.assistantMessageID, type: step.type, text: '', time: { start: now } });
+      for (const chunk of step.chunks) {
+        emit('message.part.delta', {
+          sessionID,
+          messageID: shape.assistantMessageID,
+          partID: started.id,
+          field: 'text',
+          delta: chunk,
+        });
+      }
+      const finished = { ...started, text: step.text, time: { start: now, end: Date.now() } };
+      emit('message.part.updated', { sessionID, part: finished, time: Date.now() });
+      assistant.parts.push(finished);
+      continue;
     }
 
     if (step.type === 'text' || step.type === 'reasoning') {

@@ -386,13 +386,40 @@ test('only the answer streams: deltas and outcome hold neither the question, the
     steps: [{ type: 'text', text: 'Hel' }, { type: 'reasoning', text: 'REASONING about the router' }, { type: 'text', text: 'lo' }],
   }));
   const { outcome, log, requests } = await asking.finish();
-  assert.deepEqual(asking.deltas, ['Hel', 'lo'], 'each piece of the answer streams as it arrives');
-  assert.deepEqual(outcome, { status: 'done', answer: 'Hello' });
+  // 'Hel' and 'lo' are two separate text parts here, so a paragraph break
+  // joins them (see the joining test below).
+  assert.deepEqual(asking.deltas, ['Hel', '\n\n', 'lo'], 'each piece of the answer streams as it arrives');
+  assert.deepEqual(outcome, { status: 'done', answer: 'Hel\n\nlo' });
   assert.ok(!asking.deltas.some((delta) => delta.includes('REASONING')), 'no reasoning streams');
   assert.ok(!outcome.answer.includes('REASONING'), 'no reasoning is in the answer');
   // Guards the fixture: the copies really were published, some after the fork's response.
   assert.ok(log.some((entry) => entry.publishedLateCopies === FORK_SESSION && entry.count > 0), 'the fake published copied history after the fork');
   assertParentOnlyReadAndForked(requests);
+});
+
+test('reasoning that streams as message.part.delta never reaches the deltas or the answer', async () => {
+  // Measured live on opencode 1.18.30 with a thinking model (qwen3.8:27b):
+  // reasoning streams on the same `text` field as the answer does.
+  const { outcome } = await ask(scenario({
+    steps: [
+      { type: 'reasoning', text: 'REASONING about the router', chunks: ['REASONING ', 'about the router'] },
+      { type: 'text', text: 'The router is in src/router.ts.', chunks: ['The router ', 'is in src/router.ts.'] },
+    ],
+  }));
+  assert.deepEqual(outcome, { status: 'done', answer: 'The router is in src/router.ts.' });
+});
+
+test('two text parts are joined with a paragraph break, streamed as its own delta', async () => {
+  const asking = startAsk(scenario({
+    steps: [
+      { type: 'text', text: "I'll read notes.md.", chunks: ["I'll read ", 'notes.md.'] },
+      { type: 'reasoning', text: 'REASONING: found it', chunks: ['REASONING: ', 'found it'] },
+      { type: 'text', text: 'The codeword is HERON.', chunks: ['The codeword ', 'is HERON.'] },
+    ],
+  }));
+  const { outcome } = await asking.finish();
+  assert.deepEqual(asking.deltas, ["I'll read ", 'notes.md.', '\n\n', 'The codeword ', 'is HERON.']);
+  assert.deepEqual(outcome, { status: 'done', answer: "I'll read notes.md.\n\nThe codeword is HERON." }, 'not "…notes.md.The codeword…"');
 });
 
 test('the fork id is registered while the answer runs and leaves the registry only after its delete finished', async () => {
