@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { IProviderAuth } from '@/shared/interfaces.js';
 import type { CliVersionProbe, ProviderAuthStatus } from '@/shared/types.js';
 import { probeCliVersion, readObjectRecord, readOptionalString } from '@/shared/utils.js';
+import { codexApiConnectionService } from '@/modules/providers/services/codex-api-connection.service.js';
 
 type CodexCredentialsStatus = {
   authenticated: boolean;
@@ -17,10 +18,13 @@ type CodexCredentialsStatus = {
 export class CodexProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Codex CLI that chats run is available, and which version
-   * it is. That is the `@openai/codex` package CloudCLI depends on, which
-   * `@openai/codex-sdk` resolves from node_modules, not a `codex` on PATH.
+   * it is. An explicit deployment path takes precedence over the bundled CLI,
+   * matching the SDK path override used by the runtime.
    */
   checkInstalled(): CliVersionProbe {
+    if (process.env.CLOUDCLI_CODEX_PATH) {
+      return probeCliVersion(process.env.CLOUDCLI_CODEX_PATH, ['--version']);
+    }
     let launcherPath: string;
     try {
       launcherPath = createRequire(import.meta.url).resolve('@openai/codex/bin/codex.js');
@@ -52,6 +56,9 @@ export class CodexProviderAuth implements IProviderAuth {
    * Reads Codex auth.json and checks OAuth tokens or an API key fallback.
    */
   private async checkCredentials(): Promise<CodexCredentialsStatus> {
+    if (codexApiConnectionService.getPublic().hasApiKey) {
+      return { authenticated: true, email: 'CloudCLI API Key', method: 'api_key' };
+    }
     try {
       const authPath = path.join(os.homedir(), '.codex', 'auth.json');
       const content = await readFile(authPath, 'utf8');

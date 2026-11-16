@@ -57,6 +57,31 @@ async function withProviderServer(
   }
 }
 
+test('Codex API connection routes validate inputs and return only redacted settings', async () => {
+  await withProviderServer(async baseUrl => {
+    const endpoint = `${baseUrl}/api/providers/codex/api-connection`;
+    const save = (body: unknown) => fetch(endpoint, {
+      method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    assert.equal((await save({ baseUrl: 42, apiKey: 'secret' })).status, 400);
+    assert.equal((await save({ provider: 42, baseUrl: 'https://example.com/v1', apiKey: 'secret' })).status, 400);
+    assert.equal((await save({ provider: 'bad.id', baseUrl: 'https://example.com/v1', apiKey: 'secret' })).status, 400);
+    assert.equal((await save({ baseUrl: 'https://example.com/v1' })).status, 400);
+    const saved = await save({ provider: 'aicode', baseUrl: 'https://example.com/v1', apiKey: 'route-only-test-secret' });
+    assert.equal(saved.status, 200);
+    assert.equal(saved.headers.get('cache-control'), 'no-store');
+    const text = await saved.text();
+    assert(!text.includes('route-only-test-secret'));
+    assert.equal((JSON.parse(text) as { data: { hasApiKey: boolean } }).data.hasApiKey, true);
+    assert.equal((JSON.parse(text) as { data: { provider: string } }).data.provider, 'aicode');
+    assert.equal((await save({ baseUrl: 'https://other.example/v1', apiKey: '' })).status, 200);
+    const read = await fetch(endpoint);
+    assert(!String(await read.text()).includes('route-only-test-secret'));
+    const removed = await fetch(endpoint, { method: 'DELETE' });
+    assert.equal((await removed.json() as { data: { hasApiKey: boolean } }).data.hasApiKey, false);
+  });
+});
+
 test('session creation route names a CloudCLI session from the initial message', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     const response = await fetch(`${baseUrl}/api/providers/sessions`, {

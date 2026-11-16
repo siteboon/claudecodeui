@@ -370,6 +370,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setCodexPermissionMode,
     providerAuthStatus,
     openLoginForProvider,
+    checkProviderAuthStatus,
     showLoginModal,
     setShowLoginModal,
     loginProvider,

@@ -2,6 +2,7 @@ import { AlertTriangle, LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import ProviderCliVersion from '@/modules/settings/tabs/agents-settings/sections/content/ProviderCliVersion';
+import CodexApiConnection from '@/modules/settings/tabs/agents-settings/sections/content/CodexApiConnection';
 import { Badge, Button, LLMProviderLogo } from '@/shared/ui';
 import type { AgentProvider, ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types';
 
@@ -9,6 +10,7 @@ type AccountContentProps = {
   agent: AgentProvider;
   authStatus: ProviderAuthStatus;
   onLogin: () => void;
+  onAuthChanged?: () => void;
 };
 
 type AgentVisualConfig = {
@@ -96,7 +98,7 @@ function SubscriptionOverrideNotice({ override }: SubscriptionOverrideNoticeProp
 }
 
 /** Rendered by AgentCategoryContentSection for the "account" category to show sign-in state for one provider. */
-export default function AccountContent({ agent, authStatus, onLogin }: AccountContentProps) {
+export default function AccountContent({ agent, authStatus, onLogin, onAuthChanged }: AccountContentProps) {
   const { t } = useTranslation('settings');
   const config = agentConfig[agent];
 
@@ -114,6 +116,7 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
         </div>
       </div>
 
+      {agent === 'codex' && <CodexApiConnection onSaved={onAuthChanged} />}
       <div className={`${config.bgClass} border ${config.borderClass} rounded-lg p-4`}>
         <div className="space-y-4">
           <div className="flex items-center gap-3">
