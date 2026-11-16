@@ -15,6 +15,14 @@ export { sessionsService } from './services/sessions.service.js';
 // OpenCode turn servers a killed CloudCLI process left running.
 export { reapOrphanedOpenCodeServers } from './list/opencode/opencode-runtime.provider.js';
 
+// findBackgroundClaudeJobId: used by the server entrypoint to hand the Shell
+// gateway the background job to attach to instead of a refused `--resume`.
+export { findBackgroundClaudeJobId } from './services/claude-cli-liveness.service.js';
+
+// findClaudeCliProcessSession: used by the server entrypoint so the Shell
+// gateway can follow a Claude CLI that `/clear` or `/resume` moved to another session.
+export { findClaudeCliProcessSession } from './services/claude-cli-liveness.service.js';
+
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
 

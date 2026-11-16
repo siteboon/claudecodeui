@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, type Dispatch, type SetStateAction, useState } from 'react';
+import { useParams } from 'react-router-dom';
 
 import { ChatInterface } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
@@ -66,6 +67,19 @@ function WorkspaceMain({
   const browserUseEnabled = useBrowserUseEnabled();
 
   useTaskMasterProjectSync(selectedProject);
+  // The session the URL names. It runs ahead of `selectedSession` while a
+  // session that is not loaded yet is being looked up.
+  const { sessionId: routeSessionId } = useParams<{ sessionId?: string }>();
+  // `/clear` or `/resume` in the Shell tab moved its Claude CLI to another
+  // session. Replace the URL rather than push it: the page was showing a
+  // session the terminal had already left. If the user has navigated away
+  // from that session meanwhile, their navigation wins.
+  const handleShellSessionChange = useCallback((sessionId: string, previousSessionId: string | null) => {
+    if (previousSessionId && routeSessionId !== previousSessionId) {
+      return;
+    }
+    onNavigateToSession(sessionId, { replace: true });
+  }, [onNavigateToSession, routeSessionId]);
   // The folder an in-chat `path/` reference asked to reveal. Held as an object
   // so that re-clicking the same folder is a new request the tree acts on.
   const [revealDirectory, setRevealDirectory] = useState<DirectoryRevealRequest | null>(null);
@@ -196,6 +210,7 @@ function WorkspaceMain({
                 session={selectedSession}
                 showHeader={false}
                 isActive={activeTab === 'shell'}
+                onSessionChange={handleShellSessionChange}
               />
             </div>
           )}

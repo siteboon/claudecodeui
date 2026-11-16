@@ -12,6 +12,8 @@ import cors from 'cors';
 import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
+    findBackgroundClaudeJobId,
+    findClaudeCliProcessSession,
     initializeSessionsWatcher,
     providerRuntimeService,
     reapOrphanedOpenCodeServers,
@@ -120,6 +122,12 @@ createWebSocketServer(server, {
             }
 
             return null;
+        },
+        findBackgroundClaudeJobId,
+        findClaudeCliProcessSession,
+        resolveAppSession: (providerSessionId) => {
+            const row = sessionsDb.getSessionByProviderSessionId(providerSessionId);
+            return row ? { sessionId: row.session_id, projectPath: row.project_path ?? null } : null;
         },
     },
     getPluginPort,
