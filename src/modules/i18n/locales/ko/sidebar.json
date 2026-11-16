@@ -38,7 +38,9 @@
     "selectAllLoaded": "불러온 항목 모두 선택",
     "clearSelection": "선택 해제",
     "deleteSelected_one": "세션 {{count}}개 삭제",
-    "deleteSelected_other": "세션 {{count}}개 삭제"
+    "deleteSelected_other": "세션 {{count}}개 삭제",
+    "expandForks": "{{session}}의 포크 펼치기",
+    "collapseForks": "{{session}}의 포크 접기"
   },
   "tooltips": {
     "viewEnvironments": "환경 보기",
