@@ -275,7 +275,8 @@ export async function dispatchDueScheduledMessages(
   // left going is not claimed: it stays pending, so a turn the user starts
   // meanwhile drops it, and nothing flickers on every poll. Past the wait
   // limit it is claimed, to be dropped.
-  const due = scheduledMessagesDb.claimDue(now, sessionsSending, (row) => !waitsForBackgroundWork(row, runtime, now.getTime()));
+  const shouldClaim = (row: ScheduledMessageRow) => !waitsForBackgroundWork(row, runtime, now.getTime());
+  const due = scheduledMessagesDb.claimDue(now, sessionsSending, shouldClaim);
   if (due.length === 0) {
     return 0;
   }
@@ -300,7 +301,6 @@ export async function dispatchDueScheduledMessages(
     try {
       // A message the user scheduled takes the session over, like a turn of
       // their own would: the automatic continue after it is dropped.
-      // shortcut: claimNextDue does not hold back an auto-continue waiting for background work (sendClaimedMessage then drops it); pass the predicate along if that shows up.
       let userTookOver = false;
       let row: ScheduledMessageRow | null = first;
       while (row) {
@@ -309,9 +309,9 @@ export async function dispatchDueScheduledMessages(
         } else {
           const started = await sendClaimedMessage(row, runtime);
           userTookOver ||= started && !isAutoContinue(row);
-          sent += 1;
         }
-        row = scheduledMessagesDb.claimNextDue(sessionId, now);
+        sent += 1;
+        row = scheduledMessagesDb.claimNextDue(sessionId, now, shouldClaim);
         if (row) announceScheduledMessagesChanged(sessionId);
       }
     } catch (error) {

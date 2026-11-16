@@ -1165,6 +1165,23 @@ test('a user message that never started does not stand in for the automatic cont
   });
 });
 
+test('an automatic continue still waiting for background work stays pending behind a user message that never started', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const at = new Date(Date.now() - 1_000);
+    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'do X instead', options: {}, scheduledFor: new Date(at.getTime() - 1_000) });
+    scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'continue', options: { autoContinue: true }, scheduledFor: at });
+
+    const runs: RunCall[] = [];
+    // The provider is unavailable for the user's message; the stopped turn's background work still runs.
+    const runtime = { ...(createRuntime(runs, 'ok', [], () => true) as object), hasRuntime: () => false } as never;
+    await dispatchDueScheduledMessages(runtime);
+
+    assert.deepEqual(runs, []);
+    const auto = scheduledMessagesDb.listForSession(userId, SESSION_ID).find((row) => row.content === 'continue');
+    assert.equal(auto?.status, 'pending');
+  });
+});
+
 test('a client cannot mark its own message as the automatic continue', async () => {
   await withIsolatedDatabase(async (userId) => {
     const scheduled = scheduledMessagesService.schedule({
