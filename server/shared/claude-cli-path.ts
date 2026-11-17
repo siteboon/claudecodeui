@@ -1,19 +1,40 @@
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const DEFAULT_CLAUDE_COMMAND = 'claude';
 const CLAUDE_SCRIPT_EXTENSIONS = new Set(['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']);
 const CLAUDE_WRAPPER_SEGMENTS = ['node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'] as const;
+const NATIVE_EXECUTABLE_EXTENSION = '.exe';
+
+/**
+ * Extensions Windows appends to a bare command name while walking PATH. Used
+ * only when the host does not export PATHEXT; the value mirrors the cmd.exe
+ * default so a lookup stays equivalent to what `where.exe` would report.
+ */
+const DEFAULT_PATH_EXTENSIONS = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
 
 export type ResolveClaudeCodeExecutablePathDependencies = {
-  execFileSync?: typeof execFileSync;
+  currentWorkingDirectory?: string;
   existsSync?: typeof fs.existsSync;
+  pathEnvironment?: string;
+  pathExtensions?: string;
   platform?: NodeJS.Platform;
   readFileSync?: typeof fs.readFileSync;
 };
 
-function getPathApi(platform: NodeJS.Platform) {
+/**
+ * `process.cwd()` throws when the directory the server was started from has
+ * since been deleted, which must not take the CLI lookup down with it.
+ */
+function safeCurrentWorkingDirectory(): string | undefined {
+  try {
+    return process.cwd();
+  } catch {
+    return undefined;
+  }
+}
+
+function getPathApi(platform: NodeJS.Platform): path.PlatformPath {
   return platform === 'win32' ? path.win32 : path;
 }
 
@@ -30,6 +51,94 @@ function stripWrappingQuotes(value: string): string {
 
 function isPathLike(value: string): boolean {
   return value.includes('/') || value.includes('\\');
+}
+
+/**
+ * Builds the directory list to search, in Windows command-resolution order:
+ * the current directory first, then PATH — the same order `where.exe` and
+ * `cmd.exe` use. Entries are resolved to absolute, quote-stripped form, and
+ * duplicates are dropped so a repeated entry cannot shadow a later install.
+ */
+function readSearchDirectories(
+  pathEnvironment: string,
+  currentWorkingDirectory: string | undefined,
+  pathApi: path.PlatformPath,
+): string[] {
+  const rawEntries = currentWorkingDirectory
+    ? [currentWorkingDirectory, ...pathEnvironment.split(pathApi.delimiter)]
+    : [...pathEnvironment.split(pathApi.delimiter)];
+  const seen = new Set<string>();
+  const entries: string[] = [];
+
+  for (const rawEntry of rawEntries) {
+    const entry = stripWrappingQuotes(rawEntry);
+    if (!entry) {
+      continue;
+    }
+
+    const normalized = pathApi.resolve(entry);
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    entries.push(normalized);
+  }
+
+  return entries;
+}
+
+/**
+ * Builds the extension list to try for a bare command. The empty extension is
+ * included because npm installs a POSIX-style `claude` shim without one, and
+ * `where.exe` reports it alongside `claude.cmd`.
+ */
+function readPathExtensions(pathExtensions: string | undefined): string[] {
+  const configured = (pathExtensions ?? '')
+    .split(';')
+    .map((extension) => extension.trim().toLowerCase())
+    .filter(Boolean);
+  const extensions = configured.length > 0
+    ? configured
+    : DEFAULT_PATH_EXTENSIONS.split(';').map((extension) => extension.toLowerCase());
+
+  return ['', ...extensions];
+}
+
+/**
+ * Walks PATH exactly like Windows does: directory order first, extension order
+ * within a directory, every hit verified against the filesystem.
+ *
+ * This replaces shelling out to `where.exe`, whose output is written in the
+ * console code page. Reading those bytes as UTF-8 mangled any non-ASCII path
+ * (for example `C:\Users\星辰\...` decoded into unmappable replacement
+ * characters), and the unresolvable mojibake handed to the SDK failed with
+ * "Claude Code native binary not found at <mangled path>".
+ */
+function findClaudeCandidates(
+  configuredPath: string,
+  deps: Required<ResolveClaudeCodeExecutablePathDependencies>,
+): string[] {
+  const pathApi = getPathApi(deps.platform);
+  const extensions = readPathExtensions(deps.pathExtensions);
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+
+  for (const directory of readSearchDirectories(deps.pathEnvironment, deps.currentWorkingDirectory, pathApi)) {
+    for (const extension of extensions) {
+      const candidate = pathApi.join(directory, `${configuredPath}${extension}`);
+      const key = candidate.toLowerCase();
+      if (seen.has(key) || !deps.existsSync(candidate)) {
+        continue;
+      }
+
+      seen.add(key);
+      candidates.push(candidate);
+    }
+  }
+
+  return candidates;
 }
 
 function resolveClaudeWrapperBinary(
@@ -92,7 +201,7 @@ function resolveWindowsClaudeExecutablePath(
     return configuredPath;
   }
 
-  if (explicitPath && extension === '.exe') {
+  if (explicitPath && extension === NATIVE_EXECUTABLE_EXTENSION) {
     return configuredPath;
   }
 
@@ -100,31 +209,21 @@ function resolveWindowsClaudeExecutablePath(
     return resolveClaudeWrapperBinary(configuredPath, deps) ?? unresolved;
   }
 
-  try {
-    const stdout = deps.execFileSync('where.exe', [configuredPath], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      windowsHide: true,
-    });
-    const candidates = stdout
-      .split(/\r?\n/)
-      .map((entry) => entry.trim())
-      .filter(Boolean);
+  const candidates = findClaudeCandidates(configuredPath, deps);
 
-    for (const candidate of candidates) {
-      if (pathApi.extname(candidate).toLowerCase() === '.exe') {
-        return candidate;
-      }
+  // A native binary is spawnable as-is, so it wins over the npm shims that
+  // need their wrapped target resolved first.
+  for (const candidate of candidates) {
+    if (pathApi.extname(candidate).toLowerCase() === NATIVE_EXECUTABLE_EXTENSION) {
+      return candidate;
     }
+  }
 
-    for (const candidate of candidates) {
-      const resolved = resolveClaudeWrapperBinary(candidate, deps);
-      if (resolved) {
-        return resolved;
-      }
+  for (const candidate of candidates) {
+    const resolved = resolveClaudeWrapperBinary(candidate, deps);
+    if (resolved) {
+      return resolved;
     }
-  } catch {
-    return unresolved;
   }
 
   return unresolved;
@@ -141,8 +240,12 @@ export function resolveClaudeCodeExecutablePath(
   dependencies: ResolveClaudeCodeExecutablePathDependencies = {},
 ): string | undefined {
   const deps: Required<ResolveClaudeCodeExecutablePathDependencies> = {
-    execFileSync: dependencies.execFileSync ?? execFileSync,
+    // An empty string reads as "no current directory" in the search below,
+    // which is exactly what a deleted working directory should mean.
+    currentWorkingDirectory: dependencies.currentWorkingDirectory ?? safeCurrentWorkingDirectory() ?? '',
     existsSync: dependencies.existsSync ?? fs.existsSync,
+    pathEnvironment: dependencies.pathEnvironment ?? process.env.PATH ?? '',
+    pathExtensions: dependencies.pathExtensions ?? process.env.PATHEXT ?? DEFAULT_PATH_EXTENSIONS,
     platform: dependencies.platform ?? process.platform,
     readFileSync: dependencies.readFileSync ?? fs.readFileSync,
   };
