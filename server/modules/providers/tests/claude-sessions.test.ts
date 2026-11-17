@@ -2249,6 +2249,53 @@ test('synchronizeFile indexes a forked transcript under its own file name, not t
   }
 });
 
+test('synchronizeFile takes a fork\'s working directory from its own rows, not the copied ones', { concurrency: false }, async () => {
+  // Reported by maksutovnurda on #1712: the parent ran in a folder that was
+  // renamed since, so the copied rows' `cwd` no longer exists.
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-fork-cwd-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  const oldCwd = path.join(tmp, 'old-folder-name');
+  const forkCwd = path.join(tmp, 'project');
+  await mkdir(workspacePath, { recursive: true });
+  await mkdir(forkCwd, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+  const row = (sessionId: string, cwd: string, uuid: string, parentUuid: string | null, type: 'user' | 'assistant', text: string) =>
+    JSON.stringify({
+      ...JSON.parse(forkFixtureRow(sessionId, type, uuid, parentUuid, text)),
+      cwd,
+    });
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(path.join(claudeHome, 'history.jsonl'), '', 'utf8');
+    const forkPath = path.join(workspacePath, `${FORK_SESSION_ID}.jsonl`);
+    await writeFile(forkPath, `${[
+      row(PARENT_SESSION_ID, oldCwd, 'p1', null, 'user', 'parent prompt'),
+      row(PARENT_SESSION_ID, oldCwd, 'p2', 'p1', 'assistant', 'parent answer'),
+      row(FORK_SESSION_ID, forkCwd, 'f3', 'p2', 'user', 'fork prompt'),
+      row(FORK_SESSION_ID, forkCwd, 'f4', 'f3', 'assistant', 'fork answer'),
+    ].join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      assert.equal(await new ClaudeSessionSynchronizer().synchronizeFile(forkPath), FORK_SESSION_ID);
+      assert.equal(sessionsDb.getSessionById(FORK_SESSION_ID)?.project_path, forkCwd);
+      assert.ok(!sessionsDb.getSessionById(PARENT_SESSION_ID), 'no row is left under the parent id');
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(FORK_SESSION_ID, {
+        providerSessionId: FORK_SESSION_ID,
+      });
+      assert.deepEqual(
+        history.messages.map((message) => message.content),
+        ['parent prompt', 'parent answer', 'fork prompt', 'fork answer'],
+      );
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test('synchronizeFile indexes a fork of a session whose context was cleared, and keeps the cleared record on the parent\'s own file', { concurrency: false }, async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-fork-cleared-'));
   const workspacePath = path.join(tmp, 'workspace');

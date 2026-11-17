@@ -144,8 +144,21 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     // This runs before the superseded check below so that check looks at the
     // file's own id, not the parent's.
     const fileSessionId = path.basename(filePath, '.jsonl');
-    if (UUID_PATTERN.test(fileSessionId)) {
+    if (UUID_PATTERN.test(fileSessionId) && parsed.sessionId !== fileSessionId) {
       parsed.sessionId = fileSessionId;
+      // The copied rows also keep the parent's `cwd`, which may since have been
+      // renamed or deleted; the fork's own rows say where it actually runs.
+      // Until the fork writes a row of its own, the parent's `cwd` is all
+      // there is.
+      const ownProjectPath = await extractFirstValidJsonlData(filePath, (rawData) => {
+        const data = rawData as Record<string, unknown>;
+        return data.sessionId === fileSessionId && typeof data.cwd === 'string' && data.cwd
+          ? data.cwd
+          : null;
+      });
+      if (ownProjectPath) {
+        parsed.projectPath = ownProjectPath;
+      }
     }
 
     // A transcript a session's context was cleared off stays on disk as an
