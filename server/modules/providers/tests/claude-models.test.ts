@@ -12,6 +12,59 @@ import { findProviderModelOption } from '@/shared/utils.js';
 
 const SESSION_ID = 'session-1';
 
+// Pinned versions as Claude Code's own model picker declares them: id, effort default,
+// whether xhigh is offered. `null` marks a model with no effort control.
+const PINNED_MODELS: ReadonlyArray<[id: string, defaultEffort: string | null, xhigh: boolean]> = [
+  ['claude-fable-5-2', 'medium', true],
+  ['claude-fable-5-1', 'high', true],
+  ['claude-fable-5', 'high', true],
+  ['claude-opus-5-5', 'medium', true],
+  ['claude-opus-5', 'high', true],
+  ['claude-opus-4-8', 'high', true],
+  ['claude-opus-4-7', 'xhigh', true],
+  ['claude-opus-4-6', 'high', false],
+  ['claude-sonnet-5-5', 'medium', true],
+  ['claude-sonnet-5', 'high', true],
+  ['claude-sonnet-4-6', 'high', false],
+  ['claude-haiku-5-5', 'medium', true],
+  ['claude-haiku-4-5-20251001', null, false],
+];
+
+test('offers each pinned version with the effort levels and default Claude Code uses for it', () => {
+  for (const [id, defaultEffort, xhigh] of PINNED_MODELS) {
+    const option = findClaudeModelOption(id);
+    assert.ok(option, `${id} is missing from the catalog`);
+
+    if (defaultEffort === null) {
+      assert.equal(option.effort, undefined, `${id} should have no effort control`);
+      continue;
+    }
+
+    const levels = option.effort?.values.map((level) => level.value) ?? [];
+    assert.equal(option.effort?.default, defaultEffort, `${id} default effort`);
+    assert.ok(levels.includes(defaultEffort), `${id} default must be one of its levels`);
+    assert.equal(levels.includes('xhigh'), xhigh, `${id} xhigh`);
+  }
+});
+
+test('offers ultracode only on xhigh-capable pinned versions outside the Haiku family', () => {
+  for (const [id, , xhigh] of PINNED_MODELS) {
+    const levels = findClaudeModelOption(id)?.effort?.values.map((level) => level.value) ?? [];
+    const expected = xhigh && !id.startsWith('claude-haiku-');
+    assert.equal(levels.includes(CLAUDE_ULTRACODE_EFFORT), expected, `${id} ultracode`);
+  }
+});
+
+test('keeps the aliases first, the default unchanged, and every model id unique', () => {
+  const values = CLAUDE_PREDEFINED_MODELS.OPTIONS.map((option) => option.value);
+
+  assert.equal(CLAUDE_PREDEFINED_MODELS.DEFAULT, 'default');
+  assert.deepEqual(values.slice(0, 9), [
+    'default', 'best', 'fable', 'sonnet', 'sonnet[1m]', 'opus', 'opus[1m]', 'haiku', 'opusplan',
+  ]);
+  assert.equal(new Set(values).size, values.length);
+});
+
 test('offers Haiku the effort levels Claude Code accepts for it, starting at its own default', () => {
   const haikuEffort = findClaudeModelOption('haiku')?.effort;
   const levels = haikuEffort?.values.map((level) => level.value);
@@ -103,12 +156,13 @@ test('falls back to the message model when every content hit is a placeholder', 
   );
 });
 
-test('offers fast mode only on the Opus alias, not on Default', () => {
+test('offers fast mode only on the Opus alias and the version it points at, not on Default', () => {
   // Default resolves to Sonnet on some accounts, and fast mode runs only on Opus.
+  // Older pinned Opus versions are not known to run it.
   const withFast = CLAUDE_PREDEFINED_MODELS.OPTIONS
     .filter((option) => option.speed?.values.some((speed) => speed.value === 'fast'))
     .map((option) => option.value);
-  assert.deepEqual(withFast, ['opus']);
+  assert.deepEqual(withFast, ['opus', 'claude-opus-5-5']);
 });
 
 test('turns on fast mode only when it is asked for and the model offers it', () => {
@@ -132,6 +186,11 @@ test('turns on fast mode only when it is asked for and the model offers it', () 
   const resumed: Record<string, any> = { model: 'claude-opus-5-5' };
   applyClaudeSpeed(resumed, 'fast', CLAUDE_PREDEFINED_MODELS);
   assert.deepEqual(resumed.settings, { fastMode: true });
+
+  // Older pinned Opus versions are listed on their own and do not offer it.
+  const olderPinned: Record<string, any> = { model: 'claude-opus-4-8' };
+  applyClaudeSpeed(olderPinned, 'fast', CLAUDE_PREDEFINED_MODELS);
+  assert.equal(olderPinned.settings, undefined);
 });
 
 test('matches the concrete model a session reports to the catalog entry that lists it', () => {
@@ -148,11 +207,13 @@ test('matches the concrete model a session reports to the catalog entry that lis
   assert.equal(findProviderModelOption(live, 'claude-sonnet-5-5'), null);
   assert.equal(findProviderModelOption(live, ''), null);
 
-  // The built-in catalog has unversioned labels, so ids fall back to their family alias.
+  // The built-in catalog lists pinned versions by exact id; any other id falls
+  // back to its family alias, as does a [1m] id, which no pinned entry carries.
   const builtIn = CLAUDE_PREDEFINED_MODELS.OPTIONS;
-  assert.equal(findProviderModelOption(builtIn, 'claude-opus-5-5')?.value, 'opus');
+  assert.equal(findProviderModelOption(builtIn, 'claude-opus-5-5')?.value, 'claude-opus-5-5');
+  assert.equal(findProviderModelOption(builtIn, 'claude-opus-4-5')?.value, 'opus');
   assert.equal(findProviderModelOption(builtIn, 'claude-opus-5-5[1m]')?.value, 'opus[1m]');
-  assert.equal(findProviderModelOption(builtIn, 'claude-sonnet-5-5')?.value, 'sonnet');
+  assert.equal(findProviderModelOption(builtIn, 'claude-sonnet-4-5')?.value, 'sonnet');
 });
 
 test('matches a [1m] model id only to an entry with the same context tag', () => {
