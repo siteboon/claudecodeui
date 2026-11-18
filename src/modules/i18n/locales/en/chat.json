@@ -167,6 +167,13 @@
     "placeholderDefault": "Type your message...",
     "disabled": "Input disabled",
     "attachFiles": "Attach files",
+    "attachmentRejected": {
+      "title_one": "Couldn't attach {{count}} file",
+      "title_other": "Couldn't attach {{count}} files",
+      "tooLarge": "is larger than {{maxSize}} MB",
+      "tooMany": "is over the {{maxCount}}-file limit",
+      "dismiss": "Dismiss"
+    },
     "attachImages": "Attach images",
     "send": "Send",
     "stop": "Stop",

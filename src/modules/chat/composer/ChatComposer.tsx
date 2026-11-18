@@ -15,7 +15,7 @@ import { EraserIcon, PaperclipIcon, MessageSquareIcon, XIcon, Loader2, PencilIco
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
 import { MCP_ELICITATION_TOOL_NAME } from '@/shared/constants';
-import type { BackgroundSendChoice, BackgroundSendPrompt, PendingSteer, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import type { AttachmentRejection, BackgroundSendChoice, BackgroundSendPrompt, PendingSteer, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -29,6 +29,7 @@ import {
 import CommandMenu from '@/modules/chat/composer/CommandMenu';
 import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
 import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
+import AttachmentRejectionNotice from '@/modules/chat/composer/AttachmentRejectionNotice';
 import VoiceInputButton from '@/modules/chat/composer/VoiceInputButton';
 import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
@@ -105,7 +106,9 @@ type ChatComposerProps = {
   pendingSteers?: PendingSteer[];
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
-  fileErrors: Map<string, string>;
+  /** Files the latest attach attempt refused (too large, or past the count limit), listed in a notice above the chips. */
+  attachmentRejections: AttachmentRejection[];
+  onDismissAttachmentRejections: () => void;
   showFileDropdown: boolean;
   filteredFiles: MentionableFile[];
   selectedFileIndex: number;
@@ -186,7 +189,8 @@ export default function ChatComposer({
   pendingSteers = NO_PENDING_STEERS,
   attachedFiles,
   onRemoveAttachment,
-  fileErrors,
+  attachmentRejections,
+  onDismissAttachmentRejections,
   showFileDropdown,
   filteredFiles,
   selectedFileIndex,
@@ -436,20 +440,25 @@ export default function ChatComposer({
             </div>
           )}
 
-          {attachedFiles.length > 0 && (
-            <PromptInputHeader>
-              <div className="rounded-xl bg-muted/40 p-2">
-                <div className="flex flex-wrap gap-2">
-                  {attachedFiles.map((file, index) => (
-                    <ComposerAttachment
-                      key={`${file.name}-${file.lastModified}-${index}`}
-                      file={file}
-                      onRemove={() => onRemoveAttachment(index)}
-                      error={fileErrors.get(file.name)}
-                    />
-                  ))}
+          {(attachmentRejections.length > 0 || attachedFiles.length > 0) && (
+            <PromptInputHeader className="flex flex-col gap-2">
+              <AttachmentRejectionNotice
+                rejections={attachmentRejections}
+                onDismiss={onDismissAttachmentRejections}
+              />
+              {attachedFiles.length > 0 && (
+                <div className="rounded-xl bg-muted/40 p-2">
+                  <div className="flex flex-wrap gap-2">
+                    {attachedFiles.map((file, index) => (
+                      <ComposerAttachment
+                        key={`${file.name}-${file.lastModified}-${index}`}
+                        file={file}
+                        onRemove={() => onRemoveAttachment(index)}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </PromptInputHeader>
           )}
 
