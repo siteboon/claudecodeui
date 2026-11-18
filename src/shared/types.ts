@@ -21,6 +21,19 @@ export type ProviderModelOption = {
       description?: string;
     }[];
   };
+  /**
+   * Faster service levels the model offers on top of its normal speed, such as
+   * Claude fast mode or a Codex service tier. The composer lists them next to
+   * `Default`, which leaves the provider's own setting in place. Absent when
+   * the model has none.
+   */
+  speed?: {
+    values: {
+      value: string;
+      label?: string;
+      description?: string;
+    }[];
+  };
 };
 
 /**

@@ -26,6 +26,22 @@ const ULTRACODE_EFFORT_OPTION = {
   description: 'Highest effort plus standing workflow orchestration.',
 };
 
+/** Speed value the composer sends to run a turn in Claude fast mode. */
+export const CLAUDE_FAST_SPEED = 'fast';
+
+/**
+ * Fast mode is a CLI setting the Agent SDK only turns on when asked
+ * (`fast_mode_disabled_reason: 'sdk_opt_in_required'` otherwise). It runs only
+ * on Opus, so it is offered on the `opus` alias and the pinned version that
+ * alias points at, and not on `default`, which resolves to Sonnet on some
+ * accounts: there fast mode would switch the session to Opus or be ignored.
+ */
+const FAST_SPEED_OPTION = {
+  value: CLAUDE_FAST_SPEED,
+  label: 'Fast',
+  description: 'Faster output, billed at a higher rate.',
+};
+
 const EFFORT_LEVELS_WITH_XHIGH = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 // Opus 4.6 and Sonnet 4.6 predate the xhigh level; Claude Code rejects it for them.
 const EFFORT_LEVELS_WITHOUT_XHIGH = ['low', 'medium', 'high', 'max'] as const;
@@ -78,6 +94,10 @@ const CLAUDE_PINNED_MODEL_OPTIONS: ProviderModelOption[] = [
     label: 'Opus 5.5',
     description: 'Pinned to Opus 5.5, the current Opus release.',
     effort: buildPinnedModelEffort('medium', EFFORT_LEVELS_WITH_XHIGH, { ultracode: true }),
+    // The release the `opus` alias points at, so it offers the same Fast option.
+    // Older pinned Opus versions are left without it: fast mode is not known
+    // to run on them.
+    speed: { values: [FAST_SPEED_OPTION] },
   },
   {
     value: 'claude-opus-5',
@@ -231,6 +251,7 @@ export const CLAUDE_PREDEFINED_MODELS: ProviderModelsDefinition = {
           ULTRACODE_EFFORT_OPTION,
         ],
       },
+      speed: { values: [FAST_SPEED_OPTION] },
     },
     {
       value: 'opus[1m]',

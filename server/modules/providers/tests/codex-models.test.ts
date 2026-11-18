@@ -116,3 +116,19 @@ test('bundles a Codex CLI new enough to know the GPT-6 Sol and Luna models', () 
   const [major, minor] = version.split('.').map(Number);
   assert.ok(major > 0 || minor >= 155, `bundled @openai/codex ${version} predates 0.155.0`);
 });
+
+test('lists the service tiers the bundled Codex CLI offers for each model', async () => {
+  // A tier the CLI's metadata does not list for a model is not offered for it,
+  // so each entry mirrors that model's `service_tiers` exactly.
+  const { models } = JSON.parse(await runChatCodexCli(['debug', 'models', '--bundled'])) as {
+    models: Array<{ slug: string; service_tiers?: Array<{ id: string; name: string; description?: string }> }>;
+  };
+  const bundledTiers = new Map(models.map((model) => [model.slug, model.service_tiers ?? []]));
+  for (const option of CODEX_PREDEFINED_MODELS.OPTIONS) {
+    assert.deepEqual(
+      (option.speed?.values ?? []).map((tier) => ({ id: tier.value, name: tier.label, description: tier.description })),
+      (bundledTiers.get(option.value) ?? []).map((tier) => ({ id: tier.id, name: tier.name, description: tier.description })),
+      `${option.value} speed tiers differ from the bundled Codex CLI's service_tiers`,
+    );
+  }
+});

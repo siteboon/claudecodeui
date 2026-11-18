@@ -1,10 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Zap } from 'lucide-react';
 
 import type { ProviderModelOption } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
+import { findProviderModelOption } from '@/shared/utils';
 import { useComposerMenuAnchor } from '@/modules/chat/hooks/useComposerMenuAnchor';
 import {
   ComposerMenuHeading,
@@ -14,12 +15,17 @@ import {
 } from '@/modules/chat/composer/ComposerMenuPrimitives';
 
 type EffortOption = NonNullable<ProviderModelOption['effort']>['values'][number];
+type SpeedOption = NonNullable<ProviderModelOption['speed']>['values'][number];
 
 type ComposerModelMenuProps = {
   effort: string;
   /** Effort values the active provider/model actually accepts; empty hides the section. */
   effortOptions: EffortOption[];
   onSelectEffort: (effort: string) => void;
+  speed: string;
+  /** Faster tiers the active model offers on top of Default; empty hides the section. */
+  speedOptions: SpeedOption[];
+  onSelectSpeed: (speed: string) => void;
   model: string;
   /** Model catalog for the active provider; empty hides the section. */
   modelOptions: ProviderModelOption[];
@@ -29,12 +35,15 @@ type ComposerModelMenuProps = {
 
 /**
  * Rendered by chat's ChatComposer as the popover for choosing the active
- * provider's model and reasoning effort for the next turn.
+ * provider's model, reasoning effort and speed tier for the next turn.
  */
 function ComposerModelMenu({
   effort,
   effortOptions,
   onSelectEffort,
+  speed,
+  speedOptions,
+  onSelectSpeed,
   model,
   modelOptions,
   onSelectModel,
@@ -61,15 +70,35 @@ function ComposerModelMenu({
   );
   const effortLabel = effort === DEFAULT_EFFORT_VALUE ? defaultEffortLabel : effort;
 
+  const defaultSpeedLabel = t('composer.speedDefault', { defaultValue: 'Standard' });
+  // A tier the options do not list can only be one the composer still sends while the
+  // provider's catalog is loading or failed to load. It is shown by its value, and the
+  // section stays, so a paid tier never applies unseen and can be switched off.
+  const knownSpeedOptions = useMemo<SpeedOption[]>(
+    () => (speed !== DEFAULT_EFFORT_VALUE && !speedOptions.some((option) => option.value === speed)
+      ? [...speedOptions, { value: speed }]
+      : speedOptions),
+    [speed, speedOptions],
+  );
+  const resolvedSpeedOptions = useMemo<SpeedOption[]>(
+    () => (knownSpeedOptions.length > 0
+      ? [{ value: DEFAULT_EFFORT_VALUE, label: defaultSpeedLabel }, ...knownSpeedOptions]
+      : []),
+    [defaultSpeedLabel, knownSpeedOptions],
+  );
+  const selectedSpeedOption = knownSpeedOptions.find((option) => option.value === speed) ?? null;
+  const selectedSpeedLabel = selectedSpeedOption ? selectedSpeedOption.label || selectedSpeedOption.value : null;
+  const hasSpeedSection = resolvedSpeedOptions.length > 0;
+
   const selectedModelOption = useMemo(
-    () => modelOptions.find((option) => option.value === model) ?? null,
+    () => findProviderModelOption(modelOptions, model),
     [model, modelOptions],
   );
   const modelLabel = selectedModelOption?.label || model;
 
   const hasEffortSection = resolvedEffortOptions.length > 0;
   const hasModelSection = modelOptions.length > 0 || modelsLoading;
-  if (!hasEffortSection && !hasModelSection) {
+  if (!hasEffortSection && !hasModelSection && !hasSpeedSection) {
     return null;
   }
 
@@ -77,6 +106,15 @@ function ComposerModelMenu({
   const ariaLabel = t('composer.modelMenu', {
     defaultValue: 'Select model and reasoning effort',
   });
+  // A paid speed tier stays announced and visible: the trigger's name carries it,
+  // and narrow screens, which drop the "· Fast" text, show an icon instead.
+  const triggerAriaLabel = selectedSpeedLabel
+    ? t('composer.modelMenuWithSpeed', {
+      defaultValue: '{{label}} (speed: {{speed}})',
+      label: ariaLabel,
+      speed: selectedSpeedLabel,
+    })
+    : ariaLabel;
 
   return (
     <>
@@ -90,12 +128,18 @@ function ComposerModelMenu({
         className="flex h-8 max-w-20 shrink-0 items-center gap-1 rounded-lg border border-border/60 bg-muted/40 px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:max-w-56"
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        aria-label={ariaLabel}
-        title={ariaLabel}
+        aria-label={triggerAriaLabel}
+        title={triggerAriaLabel}
       >
         <span className="truncate">{triggerLabel}</span>
         {hasModelSection && hasEffortSection && effort !== DEFAULT_EFFORT_VALUE && (
           <span className="hidden shrink-0 capitalize text-muted-foreground sm:inline">· {effortLabel}</span>
+        )}
+        {selectedSpeedLabel && (
+          <>
+            <Zap aria-hidden="true" className="h-3 w-3 shrink-0 text-muted-foreground sm:hidden" />
+            <span className="hidden shrink-0 capitalize text-muted-foreground sm:inline">· {selectedSpeedLabel}</span>
+          </>
         )}
       </button>
 
@@ -122,9 +166,31 @@ function ComposerModelMenu({
             </>
           )}
 
-          {hasModelSection && (
+          {hasSpeedSection && (
             <>
               {hasEffortSection && <ComposerMenuSeparator />}
+              <ComposerMenuHeading>
+                {t('composer.speed', { defaultValue: 'Speed' })}
+              </ComposerMenuHeading>
+              {resolvedSpeedOptions.map((option) => (
+                <ComposerMenuItem
+                  key={option.value}
+                  label={option.label || option.value}
+                  description={option.description}
+                  isSelected={option.value === speed}
+                  onSelect={() => {
+                    onSelectSpeed(option.value);
+                    setIsOpen(false);
+                  }}
+                  className={option.label ? undefined : 'capitalize'}
+                />
+              ))}
+            </>
+          )}
+
+          {hasModelSection && (
+            <>
+              {(hasEffortSection || hasSpeedSection) && <ComposerMenuSeparator />}
               <ComposerMenuItem
                 role="menuitem"
                 label={modelLabel}
@@ -152,6 +218,7 @@ function ComposerModelMenu({
                     <ComposerMenuItem
                       key={option.value}
                       label={option.label || option.value}
+                      description={option.description}
                       isSelected={option.value === model}
                       onSelect={() => {
                         onSelectModel(option.value);

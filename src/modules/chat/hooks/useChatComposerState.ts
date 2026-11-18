@@ -47,6 +47,8 @@ type UseChatComposerStateArgs = {
    */
   currentProviderModel: string;
   currentProviderEffort: string;
+  /** Speed tier for the next turn; omitted means Default. */
+  currentProviderSpeed?: string;
   isLoading: boolean;
   processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
@@ -264,6 +266,7 @@ export function useChatComposerState({
   resolvePermissionModeForProvider,
   currentProviderModel,
   currentProviderEffort,
+  currentProviderSpeed,
   isLoading,
   processingSessions,
   canAbortSession,
@@ -760,6 +763,7 @@ export function useChatComposerState({
     return {
       model: currentProviderModel,
       effort: currentProviderEffort,
+      speed: currentProviderSpeed,
       permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
       toolsSettings,
       skipPermissions: toolsSettings?.skipPermissions || false,
@@ -768,6 +772,7 @@ export function useChatComposerState({
   }, [
     currentProviderEffort,
     currentProviderModel,
+    currentProviderSpeed,
     permissionMode,
     provider,
     resolvePermissionModeForProvider,
