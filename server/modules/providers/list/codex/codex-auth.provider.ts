@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
 import type { IProviderAuth } from '@/shared/interfaces.js';
+import { resolveCodexCli } from '@/shared/index.js';
 import type { CliVersionProbe, ProviderAuthStatus } from '@/shared/types.js';
 import { probeCliVersion, readObjectRecord, readOptionalString } from '@/shared/utils.js';
 
@@ -14,16 +14,16 @@ type CodexCredentialsStatus = {
   error?: string;
 };
 
+/** Used by the providers module to report Codex installation and account status. */
 export class CodexProviderAuth implements IProviderAuth {
   /**
    * Checks whether the Codex CLI that chats run is available, and which version
-   * it is. That is the `@openai/codex` package CloudCLI depends on, which
-   * `@openai/codex-sdk` resolves from node_modules, not a `codex` on PATH.
+   * it is, including updates installed independently of CloudCLI.
    */
   checkInstalled(): CliVersionProbe {
     let launcherPath: string;
     try {
-      launcherPath = createRequire(import.meta.url).resolve('@openai/codex/bin/codex.js');
+      launcherPath = resolveCodexCli().launcherPath;
     } catch {
       return { installed: false, exitCode: null, version: null };
     }

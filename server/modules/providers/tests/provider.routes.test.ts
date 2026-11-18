@@ -456,10 +456,10 @@ test('the CLI update route refuses while that provider is busy in a session', {
   // A session held open for background work counts as busy, like a running
   // chat: replacing the CLI under it could break the work it is still doing.
   const realListProviders = providerRegistry.listProviders;
-  providerRegistry.listProviders = () => [{
-    id: 'claude',
+  providerRegistry.listProviders = () => ['claude', 'codex'].map((id) => ({
+    id,
     runtime: { listBackgroundWork: () => [{ sessionId: 'held-session', tasks: [] }] },
-  } as unknown as IProvider];
+  } as unknown as IProvider));
 
   // The route runs the real service, so the CLI it would update is a stub that
   // only logs its calls: if the busy guard ever broke, this test must not run
@@ -475,6 +475,14 @@ test('the CLI update route refuses while that provider is busy in a session', {
       : `#!/bin/sh\necho "$*" >> "${callLog}"\necho "2.1.200 (Claude Code)"\n`,
   );
   await chmod(stubPath, 0o755);
+  // Keep the Codex route regression safe even if the busy guard breaks:
+  // npm must be a stub too, never the developer's actual package manager.
+  const npmStubPath = path.join(cliDirectory, process.platform === 'win32' ? 'npm.cmd' : 'npm');
+  await writeFile(npmStubPath, await readFile(stubPath));
+  await chmod(npmStubPath, 0o755);
+  const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
+  const previousPath = process.env[pathKey];
+  process.env[pathKey] = cliDirectory;
   const previousCliPath = process.env.CLAUDE_CLI_PATH;
   process.env.CLAUDE_CLI_PATH = stubPath;
 
@@ -486,17 +494,16 @@ test('the CLI update route refuses while that provider is busy in a session', {
       assert.equal(busyPayload.error.code, 'PROVIDER_CLI_BUSY');
       assert.equal(await readFile(callLog, 'utf8'), '', 'a refused update never runs the CLI');
 
-      // Codex ships with CloudCLI: nothing to update, and the status says why.
+      // Codex uses the same busy guard before npm can run.
       const codex = await fetch(`${baseUrl}/api/providers/codex/cli/update`, { method: 'POST' });
-      assert.equal(codex.status, 400);
-      const codexStatus = await fetch(`${baseUrl}/api/providers/codex/cli`);
-      const codexPayload = await codexStatus.json() as { data: { updateUnavailableReason: string; updateCommand: null } };
-      assert.equal(codexStatus.status, 200);
-      assert.equal(codexPayload.data.updateUnavailableReason, 'bundled');
-      assert.equal(codexPayload.data.updateCommand, null);
+      assert.equal(codex.status, 409);
+      const codexPayload = await codex.json() as { error: { code: string } };
+      assert.equal(codexPayload.error.code, 'PROVIDER_CLI_BUSY');
     });
   } finally {
     providerRegistry.listProviders = realListProviders;
+    if (previousPath === undefined) delete process.env[pathKey];
+    else process.env[pathKey] = previousPath;
     if (previousCliPath === undefined) {
       delete process.env.CLAUDE_CLI_PATH;
     } else {

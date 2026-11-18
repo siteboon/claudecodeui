@@ -2,6 +2,7 @@ import spawn from 'cross-spawn';
 
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { getCodexInstallPrefix, resolveCodexCli } from '@/shared/index.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import type { IProvider } from '@/shared/interfaces.js';
 import type { CliVersionProbe, LLMProvider } from '@/shared/types.js';
@@ -32,10 +33,10 @@ const FAILURE_PATTERN = /\bfailed\b/i;
 const RELEASE_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
 
 type CliUpdater = {
-  /** The CLI chats run, or undefined when they run a binary that ships inside CloudCLI's dependencies. */
+  /** The updater executable; undefined when this installation cannot be updated separately. */
   resolveCommand: () => string | undefined;
   /** Arguments that make the CLI update itself. */
-  args: string[];
+  args: string[] | (() => string[]);
   /** The npm package whose `latest` dist-tag is the newest release, or null when the CLI is not on npm. */
   npmPackage: string | null;
 };
@@ -43,9 +44,14 @@ type CliUpdater = {
 // Each CLI updates itself with its own updater. That updater knows how it was
 // installed (npm, a native installer, Homebrew, ...), which a blanket
 // `npm install -g` does not: on a native or Homebrew install it would add a
-// second copy that PATH may not even pick. Codex is absent on purpose: chats
-// run the @openai/codex build CloudCLI depends on, so it changes with CloudCLI.
+// second copy that PATH may not even pick. Codex uses an explicit user-owned
+// npm prefix, which its auth, SDK and app-server resolvers all prefer.
 const CLI_UPDATERS: Partial<Record<LLMProvider, CliUpdater>> = {
+  codex: {
+    resolveCommand: () => 'npm',
+    args: () => ['install', '-g', '@openai/codex@latest', '--prefix', getCodexInstallPrefix(), '--include=optional'],
+    npmPackage: '@openai/codex',
+  },
   claude: {
     // undefined only on Windows when no CLI resolves: the SDK then runs its bundled binary.
     resolveCommand: () => resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
@@ -361,7 +367,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
   const resolveUpdateCommand = (provider: LLMProvider): { command: string; args: string[] } | null => {
     const updater = CLI_UPDATERS[provider];
     const command = updater?.resolveCommand();
-    return updater && command ? { command, args: updater.args } : null;
+    return updater && command ? { command, args: typeof updater.args === 'function' ? updater.args() : updater.args } : null;
   };
 
   const runUpdate = async (
@@ -374,6 +380,17 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       killGraceMs: dependencies.updateKillGraceMs,
     });
     const installedVersion = provider.auth.checkInstalled().version;
+    let failure = classifyUpdateFailure(run, before.version, installedVersion);
+    if (provider.id === 'codex' && !failure) {
+      // npm may exit successfully without installing the optional native
+      // dependency. Falling back to the bundle must not count as an update.
+      try {
+        if (!resolveCodexCli().managed || !installedVersion) failure = 'failed';
+      } catch {
+        failure = 'failed';
+      }
+      if (failure) run.output += '\nThe updated Codex executable could not be verified. Check that npm installed optional dependencies.';
+    }
 
     return {
       provider: provider.id,
@@ -382,7 +399,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       output: run.output,
       previousVersion: before.version,
       installedVersion,
-      failure: classifyUpdateFailure(run, before.version, installedVersion),
+      failure,
     };
   };
 

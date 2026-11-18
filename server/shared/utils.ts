@@ -11,6 +11,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -42,6 +43,64 @@ import type {
  * Environment variables must be loaded before this module is evaluated.
  */
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+
+// ---------------------------
+//----------------- CODEX CLI INSTALLATION ------------
+/**
+ * Used by the providers module's updater and executable resolver. npm's global
+ * prefix keeps user-requested Codex updates separate from CloudCLI's pinned
+ * dependencies and system-wide CLI installations. Resolved on every call.
+ */
+export function getCodexInstallPrefix(): string {
+  return path.join(os.homedir(), '.cloudcli', 'codex');
+}
+
+/**
+ * Used by provider auth, SDK chats and app-server operations to run the same
+ * Codex installation. Prefer the user-updated npm package, falling back to the
+ * bundled package when no complete managed install exists. Do not cache this:
+ * new operations must pick up an update without restarting the server.
+ * Supports both native package layouts shipped by the official npm launcher.
+ * Throws when neither installation contains a supported native executable.
+ */
+export function resolveCodexCli(): { launcherPath: string; executablePath: string; pathDirectory: string; managed: boolean } {
+  const platform = process.platform === 'android' ? 'linux' : process.platform;
+  const cpu = process.arch === 'x64' ? 'x86_64' : process.arch === 'arm64' ? 'aarch64' : null;
+  const targets: Record<string, string> = { linux: 'unknown-linux-musl', darwin: 'apple-darwin', win32: 'pc-windows-msvc' };
+  const target = targets[platform];
+  if (!cpu || !target) {
+    throw new Error(`Unsupported Codex platform: ${platform} (${process.arch})`);
+  }
+  const managedPackage = path.join(
+    getCodexInstallPrefix(), ...(process.platform === 'win32' ? [] : ['lib']),
+    'node_modules', '@openai', 'codex', 'package.json',
+  );
+  const candidates = [managedPackage];
+  try {
+    candidates.push(createRequire(import.meta.url).resolve('@openai/codex/package.json'));
+  } catch {
+    // A managed install also works when the bundled dependency is absent.
+  }
+  for (const packageJson of candidates) {
+    const launcherPath = path.join(path.dirname(packageJson), 'bin', 'codex.js');
+    if (!fs.existsSync(launcherPath)) continue;
+    let vendorRoot = path.join(path.dirname(packageJson), 'vendor');
+    try {
+      const nativePackage = createRequire(packageJson).resolve(`@openai/codex-${platform}-${process.arch}/package.json`);
+      vendorRoot = path.join(path.dirname(nativePackage), 'vendor');
+    } catch {
+      // Older npm packages included vendor directly inside @openai/codex.
+    }
+    const root = path.join(vendorRoot, `${cpu}-${target}`);
+    for (const [binaryDir, pathDir] of [['bin', 'codex-path'], ['codex', 'path']]) {
+      const executablePath = path.join(root, binaryDir, process.platform === 'win32' ? 'codex.exe' : 'codex');
+      if (fs.existsSync(executablePath)) {
+        return { launcherPath, executablePath, pathDirectory: path.join(root, pathDir), managed: packageJson === managedPackage };
+      }
+    }
+  }
+  throw new Error('The Codex CLI package is missing its native executable. Reinstall it with optional dependencies.');
+}
 
 // ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------

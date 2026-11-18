@@ -14,6 +14,9 @@ import { CodexProviderAuth } from '@/modules/providers/list/codex/codex-auth.pro
 import { CursorProviderAuth } from '@/modules/providers/list/cursor/cursor-auth.provider.js';
 import { OpenCodeProviderAuth } from '@/modules/providers/list/opencode/opencode-auth.provider.js';
 import { createProviderCliService } from '@/modules/providers/services/provider-cli.service.js';
+import { getCodexInstallPrefix, resolveCodexCli } from '@/shared/index.js';
+import { codexAppServer } from '@/modules/providers/list/codex/codex-app-server.client.js';
+import { codexRuntime } from '@/modules/providers/list/codex/codex-runtime.provider.js';
 import type { LLMProvider } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
@@ -114,6 +117,7 @@ async function withIsolatedCliEnv(fn: (binDir: string) => Promise<void>): Promis
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'provider-cli-test-'));
   const binDir = path.join(rootDir, 'bin');
   await mkdir(binDir, { recursive: true });
+  const homeMock = mock.method(os, 'homedir', () => rootDir);
   const previous = {
     [pathKey]: process.env[pathKey],
     [pathExtKey]: process.env[pathExtKey],
@@ -129,6 +133,7 @@ async function withIsolatedCliEnv(fn: (binDir: string) => Promise<void>): Promis
   try {
     await fn(binDir);
   } finally {
+    homeMock.mock.restore();
     // Assigning undefined to process.env stores the string "undefined", so unset keys are deleted.
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) {
@@ -428,7 +433,7 @@ test('getCliStatus does not ask the registry about a CLI that is not installed',
   });
 });
 
-test('Cursor has no npm release to compare with; Codex ships with CloudCLI; platform mode offers no update', async () => {
+test('Cursor has no npm release to compare with; platform mode offers no update', async () => {
   await withIsolatedCliEnv(async (binDir) => {
     const cursor = await createFakeCli(binDir, 'cursor-agent');
     await cursor.set('version', '2026.07.20-8cc9c0b\n');
@@ -438,12 +443,6 @@ test('Cursor has no npm release to compare with; Codex ships with CloudCLI; plat
     assert.equal(cursorStatus.latestVersion, null);
     assert.equal(cursorStatus.updateCommand, 'cursor-agent update');
     assert.equal(cursorStatus.updateUnavailableReason, null);
-
-    const codexStatus = await service.getCliStatus('codex');
-    assert.equal(codexStatus.installed, true);
-    assert.equal(codexStatus.updateCommand, null);
-    assert.equal(codexStatus.updateUnavailableReason, 'bundled');
-    await rejectsWithAppError(service.updateCli('codex'), 'PROVIDER_CLI_UPDATE_UNAVAILABLE', 400);
 
     const platformService = createService({ platformMode: true });
     const platformStatus = await platformService.getCliStatus('cursor');
@@ -461,6 +460,104 @@ test('Cursor has no npm release to compare with; Codex ships with CloudCLI; plat
     assert.equal(platformClaude.installedVersion, '2.1.200');
     assert.equal(platformClaude.latestVersion, null);
     assert.equal(platformClaude.updateAvailable, false);
+    const platformCodex = await platformService.getCliStatus('codex');
+    assert.equal(platformCodex.updateUnavailableReason, 'platform');
+    assert.equal(platformCodex.latestVersion, null);
+    await rejectsWithAppError(platformService.updateCli('codex'), 'PROVIDER_CLI_UPDATE_UNAVAILABLE', 403);
+  });
+});
+
+test('Codex offers the latest npm release and refuses updates while busy', async () => {
+  await withIsolatedCliEnv(async () => {
+    const registry = createFakeRegistry(async () => jsonResponse({ version: '99.0.0' }));
+    const service = createService({ fetch: registry.fetch, listBusyProviders: async () => ['codex'] });
+    const status = await service.getCliStatus('codex');
+    assert.equal(status.updateAvailable, true);
+    assert.equal(status.updateUnavailableReason, null);
+    assert.match(status.updateCommand!, /^npm install -g @openai\/codex@latest --prefix /);
+    assert.ok(status.updateCommand!.includes(getCodexInstallPrefix()));
+    assert.deepEqual(registry.calls, [{ url: 'https://registry.npmjs.org/@openai%2Fcodex/latest' }]);
+    await rejectsWithAppError(service.updateCli('codex'), 'PROVIDER_CLI_BUSY', 409);
+  });
+});
+
+test('Codex npm update switches version probes and app-server resolution without restarting', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    await createFakeCli(binDir, 'npm');
+    const initial = resolveCodexCli();
+    const nativeRelative = path.relative(path.dirname(createRequire(import.meta.url).resolve(`@openai/codex-${process.platform}-${process.arch}/package.json`)), initial.executablePath);
+    const scriptPath = path.join(binDir, '.npm-state', 'npm.cjs');
+    // Simulate npm's global layout, including its platform-specific package.
+    await writeFile(scriptPath, `
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const args = process.argv.slice(2);
+      if (args[0] !== 'install' || args[1] !== '-g' || args[2] !== '@openai/codex@latest' || !args.includes('--include=optional')) process.exit(2);
+      const prefix = args[args.indexOf('--prefix') + 1];
+      const modules = path.join(prefix, ${JSON.stringify(process.platform === 'win32' ? '' : 'lib')}, 'node_modules');
+      const pkg = path.join(modules, '@openai', 'codex');
+      const native = path.join(modules, '@openai', ${JSON.stringify(`codex-${process.platform}-${process.arch}`)});
+      fs.mkdirSync(path.join(pkg, 'bin'), { recursive: true });
+      fs.mkdirSync(path.dirname(path.join(native, ${JSON.stringify(nativeRelative)})), { recursive: true });
+      fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: '@openai/codex', type: 'module' }));
+      fs.writeFileSync(path.join(pkg, 'bin', 'codex.js'), 'console.log("codex-cli 99.0.0")');
+      fs.writeFileSync(path.join(native, 'package.json'), '{}');
+      fs.writeFileSync(path.join(native, ${JSON.stringify(nativeRelative)}), 'fake native binary');
+    `);
+    const registry = createFakeRegistry(async () => jsonResponse({ version: '99.0.0' }));
+    const service = createService({ fetch: registry.fetch });
+    const result = await service.updateCli('codex');
+    assert.equal(result.failure, null);
+    assert.equal(result.installedVersion, '99.0.0');
+    assert.notEqual(result.previousVersion, result.installedVersion);
+    const status = await service.getCliStatus('codex');
+    assert.equal(status.installedVersion, '99.0.0');
+    assert.equal(status.updateAvailable, false);
+    assert.deepEqual(status.lastUpdate, result);
+    const updated = resolveCodexCli();
+    assert.equal(updated.managed, true);
+    assert.ok(updated.executablePath.startsWith(getCodexInstallPrefix()));
+    assert.equal(codexAppServer.resolveLauncher(), updated.launcherPath);
+    if (process.platform !== 'win32') {
+      // Exercise the real SDK spawn: an update must change chats as well as
+      // the displayed version. A script stands in for the native executable.
+      await writeFile(updated.executablePath, `#!${process.execPath}\n
+        console.log(JSON.stringify({ type: 'thread.started', thread_id: 'updated-codex-thread' }));
+        console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 0, output_tokens: 0 } }));
+      `);
+      await chmod(updated.executablePath, 0o755);
+      const messages: Array<Record<string, unknown>> = [];
+      await codexRuntime.run('hello', { cwd: binDir }, {
+        isWebSocketWriter: true,
+        send: (message) => messages.push(message as Record<string, unknown>),
+      }, {
+        resolveProviderSessionId: () => null,
+        resolveResumeModel: async () => 'test-model',
+        getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'test-model' }),
+        normalizeMessage: () => [],
+        isProviderInstalled: async () => true,
+      });
+      assert.ok(messages.some((message) => message.kind === 'complete' && message.exitCode === 0));
+      assert.ok(!messages.some((message) => message.kind === 'error'));
+    }
+    // Incomplete installs must not override the working bundle.
+    await rm(updated.executablePath);
+    assert.deepEqual(resolveCodexCli(), initial);
+  });
+});
+
+test('Codex reports npm permission errors and rejects an unverified successful install', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    await createFakeCli(binDir, 'npm');
+    const script = path.join(binDir, '.npm-state', 'npm.cjs');
+    await writeFile(script, 'console.error("npm error EACCES"); process.exit(243);');
+    const denied = await createService().updateCli('codex');
+    assert.equal(denied.failure, 'permission_denied');
+    assert.equal(denied.installedVersion, denied.previousVersion);
+    await writeFile(script, 'process.exit(0);');
+    const incomplete = await createService().updateCli('codex');
+    assert.equal(incomplete.failure, 'failed');
+    assert.match(incomplete.output, /could not be verified/);
   });
 });
 

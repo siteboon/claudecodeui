@@ -11,6 +11,8 @@
  * - codexRuntime.abort(sessionId) - Cancel an active session
  */
 
+import path from 'node:path';
+
 import { Codex } from '@openai/codex-sdk';
 import type { ModelReasoningEffort, Thread, ThreadOptions } from '@openai/codex-sdk';
 
@@ -20,6 +22,7 @@ import {
   normalizeImageDescriptors,
   createCompleteMessage,
   createNormalizedMessage,
+  resolveCodexCli,
 } from '@/shared/index.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
 import type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/index.js';
@@ -324,7 +327,19 @@ async function queryCodex(
   const sessionKey = () => sessionId || capturedSessionId || null;
 
   try {
-    codex = new Codex();
+    const cli = resolveCodexCli();
+    const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    // An explicit SDK executable bypasses its PATH setup for bundled helpers.
+    const pathKey = process.platform === 'win32'
+      ? Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'PATH'
+      : 'PATH';
+    if (process.platform === 'win32') {
+      for (const key of Object.keys(env)) {
+        if (key.toLowerCase() === 'path' && key !== pathKey) delete env[key];
+      }
+    }
+    env[pathKey] = [cli.pathDirectory, env[pathKey]].filter(Boolean).join(path.delimiter);
+    codex = new Codex({ codexPathOverride: cli.executablePath, env });
 
     const threadOptions: ThreadOptions = {
       workingDirectory,

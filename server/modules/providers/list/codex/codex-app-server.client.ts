@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import readline from 'node:readline';
 
+import { resolveCodexCli } from '@/shared/index.js';
 import {
   AppError,
   SIDE_CONVERSATION_BOUNDARY_PROMPT,
@@ -260,20 +260,15 @@ async function withAppServer<T>(
   }
 }
 
+/** Used by Codex provider operations for forks, edits and side questions. */
 export const codexAppServer = {
   /**
-   * Resolves the `codex` launcher shipped in node_modules.
-   *
-   * Deliberately not the `codex` on PATH: a machine can have a second, older
-   * install, and the protocol this speaks is only guaranteed against the
-   * version this package depends on. A property on the exported object
-   * rather than a module function so tests can swap in a fake app-server
-   * script, the same seam `forkThread` already uses.
+   * Resolves the same managed or bundled CLI used by chats. Kept as a
+   * property so tests can substitute a fake app-server script.
    */
   resolveLauncher(): string {
-    const require_ = createRequire(import.meta.url);
     try {
-      return require_.resolve('@openai/codex/bin/codex.js');
+      return resolveCodexCli().launcherPath;
     } catch {
       throw new AppError('The Codex CLI package is not installed, so Codex conversations cannot be branched.', {
         code: 'CODEX_APP_SERVER_UNAVAILABLE',

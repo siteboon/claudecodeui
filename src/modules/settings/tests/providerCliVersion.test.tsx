@@ -154,9 +154,28 @@ describe('ProviderCliVersion', () => {
       .toBe('This agent is working in a session. Wait for it to finish or stop it, then update.');
   });
 
-  it('offers no update for a CLI that ships with CloudCLI, and hides itself when the CLI is missing', async () => {
+  it('updates Codex and refreshes its displayed version', async () => {
+    const command = 'npm install -g @openai/codex@latest --prefix /home/user/.cloudcli/codex --include=optional';
+    const before = claudeStatus({
+      provider: 'codex', installedVersion: '0.166.0', latestVersion: '0.167.0', updateCommand: command,
+    });
+    const result = updateResult({
+      provider: 'codex', command, previousVersion: '0.166.0', installedVersion: '0.167.0', output: 'added 2 packages',
+    });
+    responses.status = [before, { ...before, installedVersion: '0.167.0', updateAvailable: false, lastUpdate: result }];
+    responses.update = async () => json({ success: true, data: result });
+    render(<ProviderCliVersion agent="codex" installedVersion="0.166.0" textClass="" subtextClass="" />);
+    const button = await screen.findByRole('button', { name: 'Update to v0.167.0' });
+    expect(button.title).toContain(command);
+    fireEvent.click(button);
+    expect(await screen.findByText('Updated to v0.167.0.')).toBeTruthy();
+    await waitFor(() => expect(calls).toEqual(['status:codex', 'update:codex', 'status:codex']));
+    expect(await screen.findByText('Installed: v0.167.0')).toBeTruthy();
+    expect(screen.queryByText('Ships with CloudCLI and is updated together with it.')).toBeNull();
+  });
+
+  it('offers no update for a bundled-only CLI, and hides itself when the CLI is missing', async () => {
     responses.status = [claudeStatus({
-      provider: 'codex',
       installedVersion: '0.156.1',
       latestVersion: null,
       updateAvailable: false,

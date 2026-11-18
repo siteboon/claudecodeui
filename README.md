@@ -93,6 +93,8 @@ cloudcli
 
 Open `http://localhost:3001` — all your existing sessions are discovered automatically.
 
+Update Codex independently in **Settings → Agents → Codex → Account**. The version row checks for newer releases and runs the official npm package update in `~/.cloudcli/codex` (npm must be available on the server). CloudCLI uses that copy for new chat turns and other Codex operations immediately; no server restart or CloudCLI rebuild is required. Until you update, CloudCLI uses its bundled Codex. Hosted environments manage CLI updates separately.
+
 Visit the **[documentation →](https://cloudcli.ai/docs)** for full configuration options, PM2, remote server setup and more.
 
 #### Docker Sandboxes (Experimental)
