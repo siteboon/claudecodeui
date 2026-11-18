@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import readline from 'node:readline';
 
+import { createCodexProcessEnv, resolveCodexCli } from '@/modules/providers/list/codex/codex-cli.js';
 import {
   AppError,
   SIDE_CONVERSATION_BOUNDARY_PROMPT,
@@ -94,11 +94,11 @@ async function withAppServer<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   // Resolved through the exported object, not a module-local function, so
-  // tests can replace `codexAppServer.resolveLauncher` with a fake app-server
+  // tests can replace `codexAppServer.resolveCommand` with a fake app-server
   // script the same way they already replace `forkThread`.
-  const launcher = codexAppServer.resolveLauncher();
-  const child = spawn(process.execPath, [launcher, 'app-server'], {
-    env: process.env,
+  const launch = codexAppServer.resolveCommand();
+  const child = spawn(launch.command, [...launch.args, 'app-server'], {
+    env: launch.env,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
@@ -260,26 +260,25 @@ async function withAppServer<T>(
   }
 }
 
+/** Used by the Codex fork, sessions and runtime providers for forks, edits and side questions, which the SDK cannot express. */
 export const codexAppServer = {
   /**
-   * Resolves the `codex` launcher shipped in node_modules.
-   *
-   * Deliberately not the `codex` on PATH: a machine can have a second, older
-   * install, and the protocol this speaks is only guaranteed against the
-   * version this package depends on. A property on the exported object
-   * rather than a module function so tests can swap in a fake app-server
-   * script, the same seam `forkThread` already uses.
+   * Resolves how to start the Codex that chats run, without its `app-server`
+   * argument. That is never older than the bundled `@openai/codex`, the
+   * version this protocol is known to work with (see codex-cli.ts). A
+   * property on the exported object rather than a module function so tests
+   * can swap in a fake app-server script, the same seam `forkThread` already
+   * uses.
    */
-  resolveLauncher(): string {
-    const require_ = createRequire(import.meta.url);
-    try {
-      return require_.resolve('@openai/codex/bin/codex.js');
-    } catch {
-      throw new AppError('The Codex CLI package is not installed, so Codex conversations cannot be branched.', {
+  resolveCommand(): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
+    const cli = resolveCodexCli();
+    if (!cli) {
+      throw new AppError('The Codex CLI is not installed, so Codex conversations cannot be branched.', {
         code: 'CODEX_APP_SERVER_UNAVAILABLE',
         statusCode: 501,
       });
     }
+    return { command: cli.command, args: cli.commandArgs, env: createCodexProcessEnv(cli) };
   },
 
   /**

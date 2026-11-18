@@ -1509,6 +1509,44 @@ export function probeCliVersion(command: string, args: string[] = ['--version'])
   };
 }
 
+const RELEASE_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/**
+ * Whether `version` is a whole `major.minor.patch` release, with an optional
+ * `-prerelease` and `+build`. Used by the providers module's CLI update
+ * service to drop a registry answer it could not compare.
+ */
+export function isReleaseVersion(version: string): boolean {
+  return RELEASE_VERSION_PATTERN.test(version);
+}
+
+/**
+ * Whether `candidate` is a later release than `current`. Both are
+ * `major.minor.patch` with an optional prerelease; a release outranks its own
+ * prereleases. Anything else (a date-based or unparsable version) compares as
+ * not newer, so callers never act on a guess.
+ *
+ * Used by the providers module's CLI update service (whether npm has a newer
+ * release) and its Codex CLI resolver (whether CloudCLI's bundled Codex is
+ * newer than the user's own install).
+ */
+export function isNewerVersion(candidate: string, current: string): boolean {
+  const next = RELEASE_VERSION_PATTERN.exec(candidate);
+  const installed = RELEASE_VERSION_PATTERN.exec(current);
+  if (!next || !installed) {
+    return false;
+  }
+
+  for (let index = 1; index <= 3; index += 1) {
+    const difference = Number(next[index]) - Number(installed[index]);
+    if (difference !== 0) {
+      return difference > 0;
+    }
+  }
+
+  return !next[4] && Boolean(installed[4]);
+}
+
 // ---------------------------
 //----------------- RUNTIME PATH RESOLUTION UTILITIES ------------
 /**
