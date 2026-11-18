@@ -154,9 +154,9 @@ describe('ProviderCliVersion', () => {
       .toBe('This agent is working in a session. Wait for it to finish or stop it, then update.');
   });
 
+  // Claude on Windows with no CLI to resolve: chats then run the SDK's bundled binary.
   it('offers no update for a CLI that ships with CloudCLI, and hides itself when the CLI is missing', async () => {
     responses.status = [claudeStatus({
-      provider: 'codex',
       installedVersion: '0.156.1',
       latestVersion: null,
       updateAvailable: false,

@@ -17,7 +17,7 @@ import {
  * own side-conversation instructions, plus one `turn/start` on the fork. These
  * run `codexAppServer.askSideQuestion` against a fake app-server — a node
  * script speaking newline-delimited JSON-RPC that records every line it
- * receives — installed through `codexAppServer.resolveLauncher`, so no real
+ * receives — installed through `codexAppServer.resolveCommand`, so no real
  * Codex binary ever starts.
  *
  * Shapes follow the protocol generated from Codex 0.156.1
@@ -32,7 +32,7 @@ const QUESTION = 'Which file holds the router?';
 
 type AskInput = { threadId: string; cwd: string; model: string; question: string; signal: AbortSignal };
 type AppServerSideQuestion = {
-  resolveLauncher?: () => string;
+  resolveCommand?: () => { command: string; args: string[]; env: NodeJS.ProcessEnv };
   askSideQuestion?: (input: AskInput, onDelta: (text: string) => void) => Promise<string>;
 };
 type RuntimeSideQuestion = {
@@ -191,7 +191,7 @@ async function withFakeAppServer(
   appsConfig: Record<string, unknown> = {},
   projectOnlyMcpServerNames: string[] = [],
 ): Promise<void> {
-  assert.equal(typeof appServer.resolveLauncher, 'function', 'codexAppServer.resolveLauncher is missing (contract-server: the launcher seam)');
+  assert.equal(typeof appServer.resolveCommand, 'function', 'codexAppServer.resolveCommand is missing (contract-server: the launcher seam)');
   assert.equal(typeof appServer.askSideQuestion, 'function', 'codexAppServer.askSideQuestion is missing (contract-server)');
 
   const dir = await mkdtemp(path.join(os.tmpdir(), 'codex-side-question-'));
@@ -205,15 +205,15 @@ async function withFakeAppServer(
   );
   await writeFile(log, '', 'utf8');
 
-  const original = appServer.resolveLauncher;
-  appServer.resolveLauncher = () => script;
+  const original = appServer.resolveCommand;
+  appServer.resolveCommand = () => ({ command: process.execPath, args: [script], env: process.env });
   const received = async () => (await readFile(log, 'utf8'))
     .split('\n').filter((line) => line.trim()).map((line) => JSON.parse(line) as Record<string, any>);
 
   try {
     await runTest({ dir, log, pidFile, received });
   } finally {
-    appServer.resolveLauncher = original;
+    appServer.resolveCommand = original;
     await rm(dir, { recursive: true, force: true });
   }
 }
