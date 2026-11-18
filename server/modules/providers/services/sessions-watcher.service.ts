@@ -16,8 +16,10 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
     rootPath: path.join(os.homedir(), '.claude', 'projects'),
   },
   {
+    // cursor-agent's chat stores, not `~/.cursor/projects`: transcripts there
+    // also come from Cursor IDE chats, which the CLI cannot load or resume.
     provider: 'cursor',
-    rootPath: path.join(os.homedir(), '.cursor', 'projects'),
+    rootPath: path.join(os.homedir(), '.cursor', 'chats'),
   },
   {
     provider: 'codex',
@@ -105,9 +107,17 @@ let watcherRescheduleAfterRefresh = false;
 /**
  * Filters watcher events to provider-specific session artifact file types.
  */
-function isWatcherTargetFile(provider: LLMProvider, filePath: string): boolean {
+function isWatcherTargetFile(provider: LLMProvider, filePath: string, eventType: WatcherEventType): boolean {
   if (provider === 'opencode') {
     return path.basename(filePath) === 'opencode.db';
+  }
+
+  if (provider === 'cursor') {
+    // meta.json is rewritten by cursor-agent on every turn, unlike the busy
+    // store.db. A store.db that appears after its meta.json still needs its
+    // own `add`, or the chat waits for the next turn to be indexed.
+    const baseName = path.basename(filePath);
+    return baseName === 'meta.json' || (baseName === 'store.db' && eventType === 'add');
   }
 
   return filePath.endsWith('.jsonl');
@@ -205,7 +215,7 @@ async function onUpdate(
   filePath: string,
   provider: LLMProvider
 ): Promise<void> {
-  if (!isWatcherTargetFile(provider, filePath)) {
+  if (!isWatcherTargetFile(provider, filePath, eventType)) {
     return;
   }
 
