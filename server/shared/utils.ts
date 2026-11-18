@@ -47,7 +47,7 @@ export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
 // ---------------------------
 //----------------- CODEX CLI INSTALLATION ------------
 /**
- * Used by the providers module's updater and executable resolver. npm's global
+ * Used by the providers updater, executable resolver and websocket shell. npm's global
  * prefix keeps user-requested Codex updates separate from CloudCLI's pinned
  * dependencies and system-wide CLI installations. Resolved on every call.
  */
@@ -56,7 +56,7 @@ export function getCodexInstallPrefix(): string {
 }
 
 /**
- * Used by provider auth, SDK chats and app-server operations to run the same
+ * Used by provider auth, SDK chats, app-server and websocket shells to run the same
  * Codex installation. Prefer the user-updated npm package, falling back to the
  * bundled package when no complete managed install exists. Do not cache this:
  * new operations must pick up an update without restarting the server.

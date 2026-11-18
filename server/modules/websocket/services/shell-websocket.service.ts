@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { getCodexInstallPrefix, resolveCodexCli } from '@/shared/index.js';
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -120,6 +121,7 @@ type ShellWebSocketDependencies = {
     provider: string,
   ) => string | null | undefined;
   spawnPty?: typeof pty.spawn;
+  resolveCodexCli?: typeof resolveCodexCli;
 };
 
 /**
@@ -196,6 +198,8 @@ function resolveResumeSessionId(
 
 type ShellLaunch = {
   command: string;
+  /** Per-launch environment, such as the npm prefix owned by the Codex updater. */
+  env?: Record<string, string>;
   /**
    * Whether the command starts a Claude CLI that paints in the app's colour
    * scheme, so a later theme toggle can be applied by restarting it.
@@ -234,13 +238,21 @@ function buildShellCommand(
   }
 
   if (provider === 'codex') {
+    // PATH may still point at the bundle or another global install after an
+    // update. Resolve the same launcher as Settings, chats and app-server.
+    const cli = (dependencies.resolveCodexCli ?? resolveCodexCli)();
+    const invocation = `${os.platform() === 'win32' ? '& ' : ''}${quoteShellArgument(process.execPath)} ${quoteShellArgument(cli.launcherPath)}`;
+    let command = invocation;
     if (resumeSessionId) {
-      if (os.platform() === 'win32') {
-        return otherProgram(`codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`);
-      }
-      return otherProgram(`codex resume "${resumeSessionId}" || codex`);
+      command = os.platform() === 'win32'
+        ? `${invocation} resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { ${invocation} }`
+        : `${invocation} resume "${resumeSessionId}" || ${invocation}`;
     }
-    return otherProgram('codex');
+    return {
+      ...otherProgram(command),
+      // Codex's own interactive update action must update this installation too.
+      ...(cli.managed ? { env: { npm_config_prefix: getCodexInstallPrefix() } } : {}),
+    };
   }
 
   if (provider === 'opencode') {
@@ -633,7 +645,7 @@ export function handleShellConnection(
           return;
         }
 
-        const { command: shellCommand, claudeFollowsAppTheme } = buildShellCommand(
+        const { command: shellCommand, claudeFollowsAppTheme, env: launchEnv } = buildShellCommand(
           data,
           dependencies,
           resolvedProjectPath,
@@ -654,6 +666,7 @@ export function handleShellConnection(
           cwd: resolvedProjectPath,
           env: {
             ...process.env,
+            ...launchEnv,
             [prioritizedPath.key]: prioritizedPath.value,
             TERM: 'xterm-256color',
             COLORTERM: 'truecolor',

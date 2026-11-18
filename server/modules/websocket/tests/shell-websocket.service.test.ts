@@ -737,12 +737,77 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
     launch(dependencies, { provider: 'codex', colorScheme: 'dark' }, projectPath);
 
     assert.deepEqual(
-      calls.map((call) => call.command),
-      ['npx task-master init', loginCommand, 'codex', 'codex']
+      calls.slice(0, 2).map((call) => call.command),
+      ['npx task-master init', loginCommand]
     );
+    assert.match(calls[2].command, /codex\.js/);
+    assert.equal(calls[2].command, calls[3].command);
+    assert.ok(!calls[2].command.includes('--settings'));
     assert.deepEqual(
       calls.map((call) => call.env.COLORFGBG),
       ['0;15', '0;15', '0;15', '15;0']
     );
   });
+});
+
+test('Codex shells run the resolved launcher for new sessions, resume and fallback, with literal paths', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "shell codex 'quoted'-$-"));
+  const launcherPath = path.join(root, 'codex.cjs');
+  fs.writeFileSync(launcherPath, `
+    console.log(JSON.stringify({ args: process.argv.slice(2), prefix: process.env.npm_config_prefix }));
+    if (process.argv[2] === 'resume') process.exit(1);
+  `);
+  t.mock.method(os, 'homedir', () => root);
+  const { calls, dependencies } = spawnRecorder('native-session-id');
+  const resolvedDependencies = {
+    ...dependencies,
+    resolveCodexCli: () => ({ launcherPath, executablePath: launcherPath, pathDirectory: root, managed: true }),
+  };
+  try {
+    launch(resolvedDependencies, { provider: 'codex' }, root);
+    launch(resolvedDependencies, { provider: 'codex', hasSession: true }, root);
+    const expectedPrefix = path.join(root, '.cloudcli', 'codex');
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].env.npm_config_prefix, expectedPrefix);
+    if (os.platform() !== 'win32') {
+      // Execute the generated bash command, including failed-resume fallback.
+      // No real Codex is launched, regardless of what is on the host PATH.
+      const outputs = calls.map((call) => execFileSync(call.shell, call.args, { env: call.env, encoding: 'utf8' })
+        .trim().split('\n').map((line) => JSON.parse(line)));
+      assert.deepEqual(outputs, [
+        [{ args: [], prefix: expectedPrefix }],
+        [{ args: ['resume', 'native-session-id'], prefix: expectedPrefix }, { args: [], prefix: expectedPrefix }],
+      ]);
+    }
+    t.mock.method(os, 'platform', () => 'win32');
+    launch(resolvedDependencies, { provider: 'codex' }, root);
+    launch(resolvedDependencies, { provider: 'codex', hasSession: true }, root);
+    const quote = (value: string) => `'${value.replace(/'/g, "''")}'`;
+    const invocation = `& ${quote(process.execPath)} ${quote(launcherPath)}`;
+    assert.equal(calls[2].command, invocation);
+    assert.equal(calls[3].command, `${invocation} resume "native-session-id"; if ($LASTEXITCODE -ne 0) { ${invocation} }`);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('restarting a Codex shell resolves the updated installation while reattaching preserves the running PTY', () => {
+  const { calls, dependencies } = spawnRecorder();
+  let managed = false;
+  const resolvedDependencies = {
+    ...dependencies,
+    resolveCodexCli: () => ({
+      launcherPath: managed ? '/managed/codex.js' : '/bundled/codex.js',
+      executablePath: '/unused/codex', pathDirectory: '/unused', managed,
+    }),
+  };
+  const init = { provider: 'codex', sessionId: `codex-restart-${Date.now()}` };
+  launch(resolvedDependencies, init);
+  managed = true;
+  launch(resolvedDependencies, init);
+  assert.equal(calls.length, 1, 'reattaching does not replace a running CLI');
+  launch(resolvedDependencies, { ...init, forceRestart: true });
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].command, /\/bundled\/codex\.js/);
+  assert.match(calls[1].command, /\/managed\/codex\.js/);
 });
