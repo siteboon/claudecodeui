@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import Database from 'better-sqlite3';
+
 import { closeConnection, getConnection } from '@/modules/database/index.js';
 
 const skip = process.platform === 'win32' ? 'POSIX permissions only' : false;
@@ -54,6 +56,29 @@ test('an existing world-readable database is tightened', { skip }, async () => {
     getConnection();
 
     assert.equal(await modeOf(databasePath), 0o600);
+  });
+});
+
+test('a leftover world-readable WAL file is tightened before the database opens', { skip }, async () => {
+  await withDatabasePath(async (tempDirectory) => {
+    const databasePath = path.join(tempDirectory, 'auth.db');
+    const walPath = `${databasePath}-wal`;
+    process.env.DATABASE_PATH = databasePath;
+
+    // A connection that is never closed stands in for a crashed process: it
+    // leaves a populated WAL behind, made before the database was tightened.
+    const crashedProcess = new Database(databasePath);
+    try {
+      crashedProcess.pragma('journal_mode = WAL');
+      crashedProcess.exec("CREATE TABLE secrets (value TEXT); INSERT INTO secrets VALUES ('token')");
+      await chmod(walPath, 0o644);
+
+      getConnection();
+
+      assert.equal(await modeOf(walPath), 0o600);
+    } finally {
+      crashedProcess.close();
+    }
   });
 });
 

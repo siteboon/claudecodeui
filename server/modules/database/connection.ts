@@ -73,14 +73,19 @@ function ensureDatabaseDirectory(dbPath: string): void {
 
 /**
  * Creates the database file owner-only before SQLite opens it, and tightens an
- * existing (or just migrated) one. SQLite creates its journal with the
- * database file's permissions, so the journal follows automatically.
+ * existing (or just migrated) one. SQLite creates new sidecar files with the
+ * database file's permissions, but sidecars left over from an earlier run keep
+ * whatever mode they had, so those are tightened too before the open.
  */
 function ensurePrivateDatabaseFile(dbPath: string): void {
   if (!fs.existsSync(dbPath)) {
     fs.closeSync(fs.openSync(dbPath, 'a', PRIVATE_FILE_MODE));
   }
-  restrictMode(dbPath, PRIVATE_FILE_MODE);
+  for (const filePath of [dbPath, `${dbPath}-journal`, `${dbPath}-wal`, `${dbPath}-shm`]) {
+    if (fs.existsSync(filePath)) {
+      restrictMode(filePath, PRIVATE_FILE_MODE);
+    }
+  }
 }
 
 function restrictMode(targetPath: string, mode: number): void {
