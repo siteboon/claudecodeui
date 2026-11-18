@@ -66,6 +66,22 @@ export const userDb = {
       .get(username) as UserRow | undefined;
   },
 
+  /** Returns the full active user row by ID for authenticated credential checks. */
+  getUserAuthById(userId: number): UserRow | undefined {
+    const db = getConnection();
+    return db
+      .prepare('SELECT * FROM users WHERE id = ? AND is_active = 1')
+      .get(userId) as UserRow | undefined;
+  },
+
+  /** Updates the password hash for an active user. */
+  updatePasswordHash(userId: number, passwordHash: string): void {
+    const db = getConnection();
+    db.prepare(
+      'UPDATE users SET password_hash = ? WHERE id = ? AND is_active = 1'
+    ).run(passwordHash, userId);
+  },
+
   /** Updates the last_login timestamp. Non-fatal — logs but does not throw. */
   updateLastLogin(userId: number): void {
     try {
