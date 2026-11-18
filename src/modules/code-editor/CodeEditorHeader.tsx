@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, Save, Settings as SettingsIcon, X } from 'lucide-react';
+import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, PenLine, Save, Settings as SettingsIcon, X } from 'lucide-react';
 
 import { copyTextToClipboard } from '@/shared/utils';
-import type { CodeEditorFile } from '@/shared/types';
+import type { CodeEditorFile, MarkdownViewMode } from '@/shared/types';
 
 type CodeEditorHeaderProps = {
   file: CodeEditorFile;
@@ -10,11 +10,11 @@ type CodeEditorHeaderProps = {
   isFullscreen: boolean;
   isMarkdownFile: boolean;
   isHtmlPreviewFile: boolean;
-  markdownPreview: boolean;
+  markdownMode: MarkdownViewMode;
   saving: boolean;
   saveSuccess: boolean;
   hasUnsavedChanges: boolean;
-  onToggleMarkdownPreview: () => void;
+  onMarkdownModeChange: (mode: MarkdownViewMode) => void;
   onOpenHtmlPreview: () => void;
   onOpenSettings: () => void;
   onDownload: () => void;
@@ -27,6 +27,7 @@ type CodeEditorHeaderProps = {
     pathCopied: string;
     editMarkdown: string;
     previewMarkdown: string;
+    liveMarkdown: string;
     previewHtml: string;
     settings: string;
     download: string;
@@ -40,18 +41,18 @@ type CodeEditorHeaderProps = {
   };
 };
 
-/** Rendered by CodeEditor inside the code-editor module to show the open file's path and the save, preview, download and window controls. */
+/** Rendered by CodeEditor inside the code-editor module to show the open file's path, the Markdown Code / Preview / Live switch, and the save, download and window controls. */
 export default function CodeEditorHeader({
   file,
   isSidebar,
   isFullscreen,
   isMarkdownFile,
   isHtmlPreviewFile,
-  markdownPreview,
+  markdownMode,
   saving,
   saveSuccess,
   hasUnsavedChanges,
-  onToggleMarkdownPreview,
+  onMarkdownModeChange,
   onOpenHtmlPreview,
   onOpenSettings,
   onDownload,
@@ -125,18 +126,30 @@ export default function CodeEditorHeader({
       {/* Buttons - don't shrink, always visible */}
       <div className="flex shrink-0 items-center gap-0.5">
         {isMarkdownFile && (
-          <button
-            type="button"
-            onClick={onToggleMarkdownPreview}
-            className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
-              markdownPreview
-                ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
-            }`}
-            title={markdownPreview ? labels.editMarkdown : labels.previewMarkdown}
-          >
-            {markdownPreview ? <Code2 className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
+          <div className="mr-1 flex items-center rounded-md border border-border p-0.5" role="group">
+            {([
+              ['code', labels.editMarkdown, Code2],
+              ['preview', labels.previewMarkdown, Eye],
+              ['live', labels.liveMarkdown, PenLine],
+            ] as const).map(([mode, title, Icon]) => (
+              <button
+                key={mode}
+                type="button"
+                data-markdown-mode={mode}
+                aria-pressed={markdownMode === mode}
+                onClick={() => onMarkdownModeChange(mode)}
+                className={`flex items-center justify-center rounded p-1 transition-colors ${
+                  markdownMode === mode
+                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
+                }`}
+                title={title}
+                aria-label={title}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
         )}
 
         {isHtmlPreviewFile && (
