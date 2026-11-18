@@ -1,7 +1,7 @@
 // @ts-nocheck -- JWT request augmentation is narrowed by Auth route contracts.
 import jwt from 'jsonwebtoken';
 
-import { IS_PLATFORM } from '@/shared/utils.js';
+import { IS_PLATFORM, secretsMatch } from '@/shared/utils.js';
 
 import { userDb, appConfigDb } from '../database/index.js';
 
@@ -15,8 +15,7 @@ const validateApiKey = (req, res, next) => {
     return next();
   }
   
-  const apiKey = req.headers['x-api-key'];
-  if (apiKey !== process.env.API_KEY) {
+  if (!secretsMatch(req.headers['x-api-key'], process.env.API_KEY)) {
     return res.status(401).json({ error: 'Invalid API key' });
   }
   next();

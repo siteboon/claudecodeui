@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import {
   access,
@@ -42,6 +42,25 @@ import type {
  * Environment variables must be loaded before this module is evaluated.
  */
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+
+// ---------------------------
+//----------------- SECRET COMPARISON UTILITIES ------------
+/**
+ * Compares a caller-supplied credential against the expected secret in
+ * constant time. Both values are hashed first so neither the content nor the
+ * length of the secret leaks through response timing. A non-string candidate
+ * (a missing header, or a repeated query parameter parsed as an array) never
+ * matches. The Auth module uses it for the global `API_KEY`, and Browser Use
+ * for its MCP bridge token.
+ */
+export function secretsMatch(candidate: unknown, expected: string): boolean {
+  if (typeof candidate !== 'string') {
+    return false;
+  }
+  const candidateDigest = createHash('sha256').update(candidate).digest();
+  const expectedDigest = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(candidateDigest, expectedDigest);
+}
 
 // ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
