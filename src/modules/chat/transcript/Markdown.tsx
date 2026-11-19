@@ -2,7 +2,6 @@ import React, { memo, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +10,7 @@ import { MermaidDiagram } from '@/modules/code-editor';
 import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
 import { normalizeLatexDelimiters } from '@/modules/chat/utils/latexDelimiters';
-import { copyTextToClipboard } from '@/shared/utils';
+import { copyTextToClipboard, remarkMathWithCurrencyProtection } from '@/shared/utils';
 import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
 import { usePaletteOps } from '@/modules/command-palette';
 import { buildSyntaxTheme } from '@/modules/chat/utils/syntaxHighlightTheme';
@@ -85,10 +84,9 @@ const childrenToText = (children: React.ReactNode): string => {
   return '';
 };
 
-// The only delimiter `remark-math` recognizes with `singleDollarTextMath` off.
-// `\(…\)` and `\[…\]` are already rewritten to `$$` by normalizeLatexDelimiters,
-// so this one probe covers both notations.
-const MATH_DELIMITER = /\$\$/;
+// TeX delimiters are normalized to dollars before this cheap plugin gate.
+// A single dollar must also enable parsing for inline formulas like `$Q$`.
+const MATH_DELIMITER = /\$/;
 
 const EMPTY_PLUGINS: never[] = [];
 
@@ -291,7 +289,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
     () => {
       const plugins: unknown[] = [remarkGfm];
       if (hasMath) {
-        plugins.push([remarkMath, { singleDollarTextMath: false }]);
+        plugins.push(remarkMathWithCurrencyProtection);
       }
       if (breaks) {
         plugins.push(remarkBreaks);
