@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import * as nodeCrypto from 'node:crypto';
-import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { EventEmitter, once } from 'node:events';
+import * as fileSystem from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import test from 'node:test';
 
 import express from 'express';
@@ -28,14 +29,14 @@ import { createAgentRouter } from '../agent.routes.js';
 type AgentDependencies = Parameters<typeof createAgentRouter>[0];
 type RunFunction = AgentDependencies['queryClaude'];
 
-async function withIsolatedDatabase(run: () => Promise<void>): Promise<void> {
+async function withIsolatedDatabase(run: (tempDirectory: string) => Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
-  const tempDirectory = await mkdtemp(path.join(tmpdir(), 'agent-run-registration-'));
+  const tempDirectory = await fileSystem.mkdtemp(path.join(tmpdir(), 'agent-run-registration-'));
   closeConnection();
   process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
   await initializeDatabase();
   try {
-    await run();
+    await run(tempDirectory);
   } finally {
     connectedClients.clear();
     chatRunRegistry.clearAll();
@@ -45,7 +46,7 @@ async function withIsolatedDatabase(run: () => Promise<void>): Promise<void> {
     } else {
       process.env.DATABASE_PATH = previousDatabasePath;
     }
-    await rm(tempDirectory, { recursive: true, force: true });
+    await fileSystem.rm(tempDirectory, { recursive: true, force: true });
   }
 }
 
@@ -173,6 +174,234 @@ test('a second API request on a session mid-run is refused with 409, as the chat
 
       runtime.release();
       await first;
+    });
+  });
+});
+
+test('draining API requests return 503 before cloning or starting a provider', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    const dependencies = createDependencies(runtime.queryClaude);
+    let clones = 0;
+    dependencies.spawnProcess = (() => { clones += 1; throw new Error('no clone expected'); }) as AgentDependencies['spawnProcess'];
+    await chatRunRegistry.drain(1_000);
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const response = await post(baseUrl, {
+        githubUrl: 'https://github.com/owner/repo.git',
+        projectPath: '/home/test/project', message: 'Wait until restart', stream: false,
+      });
+      assert.equal(response.status, 503);
+      assert.equal((await response.json() as { code: string }).code, 'SERVER_DRAINING');
+      assert.equal(runtime.seen.length, 0);
+      assert.equal(clones, 0);
+    });
+  });
+});
+
+test('an API request overtaken by drain reports shutdown instead of a busy session', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    const dependencies = createDependencies(runtime.queryClaude);
+    let pathEntered = () => {};
+    const entered = new Promise<void>((resolve) => { pathEntered = resolve; });
+    let releasePath = () => {};
+    const heldPath = new Promise<void>((resolve) => { releasePath = resolve; });
+    let sessionsCreated = 0;
+    const createSession = dependencies.sessions.createAppSession;
+    dependencies.sessions.createAppSession = (...args) => { sessionsCreated += 1; return createSession(...args); };
+    dependencies.fileSystem = {
+      access: async () => { pathEntered(); await heldPath; },
+    } as unknown as AgentDependencies['fileSystem'];
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const request = post(baseUrl, {
+        projectPath: '/home/test/project', message: 'Wait until restart', stream: false,
+      });
+      await entered;
+      let drained = false;
+      const drain = chatRunRegistry.drain(1_000).then((result) => { drained = true; return result; });
+      try {
+        await Promise.resolve();
+        assert.equal(drained, false, 'pre-run setup is included in the drain');
+      } finally {
+        releasePath();
+      }
+      const response = await request;
+      assert.equal(response.status, 503);
+      assert.equal((await response.json() as { code: string }).code, 'SERVER_DRAINING');
+      assert.equal(runtime.seen.length, 0);
+      assert.equal(sessionsCreated, 0, 'a rejected request must not leave a visible empty session');
+      assert.equal(await drain, true);
+    });
+  });
+});
+
+test('shutdown waits for an in-flight clone, removes it, and rejects it before session creation', async () => {
+  await withIsolatedDatabase(async (tempDirectory) => {
+    const runtime = createHeldRuntime();
+    const dependencies = createDependencies(runtime.queryClaude);
+    dependencies.homeDirectory = () => tempDirectory;
+    dependencies.fileSystem = fileSystem;
+    const target = path.join(tempDirectory, '.claude', 'external-projects', 'clone');
+    const clone = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+    let cloneStarted = () => {};
+    const started = new Promise<void>((resolve) => { cloneStarted = resolve; });
+    dependencies.spawnProcess = ((_command: string, args?: readonly string[]) => {
+      assert.equal(args?.[0], 'clone');
+      cloneStarted();
+      return clone;
+    }) as unknown as AgentDependencies['spawnProcess'];
+    let sessionsCreated = 0;
+    dependencies.sessions.createAppSession = () => { sessionsCreated += 1; return { sessionId: 'should-not-exist' }; };
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const request = post(baseUrl, {
+        githubUrl: 'https://github.com/owner/repo.git', projectPath: target,
+        message: 'Run after cloning', stream: false,
+      });
+      await started;
+      await fileSystem.mkdir(target);
+      let drained = false;
+      const drain = chatRunRegistry.drain(1_000).then((result) => { drained = true; return result; });
+      try {
+        await Promise.resolve();
+        assert.equal(drained, false, 'shutdown cannot exit while the admitted clone is running');
+      } finally {
+        clone.emit('close', 0);
+      }
+      const response = await request;
+      assert.equal(response.status, 503);
+      assert.equal((await response.json() as { code: string }).code, 'SERVER_DRAINING');
+      assert.equal(sessionsCreated, 0);
+      assert.equal(runtime.seen.length, 0);
+      await assert.rejects(fileSystem.access(target), { code: 'ENOENT' });
+      assert.equal(await drain, true);
+    });
+  });
+});
+
+for (const cleanupFails of [false, true]) {
+  test(`drain includes delayed cloned-project cleanup when cleanup ${cleanupFails ? 'fails' : 'succeeds'}`, async (t) => {
+    await withIsolatedDatabase(async (tempDirectory) => {
+      const runtime = createHeldRuntime('cleanup-session');
+      runtime.release();
+      const dependencies = createDependencies(runtime.queryClaude);
+      dependencies.homeDirectory = () => tempDirectory;
+      const target = path.join(tempDirectory, '.claude', 'external-projects', 'clone');
+      const sessionDirectory = path.join(tempDirectory, '.claude', 'sessions', 'cleanup-session');
+      await fileSystem.mkdir(sessionDirectory, { recursive: true });
+      let cleanupEntered = () => {};
+      const entered = new Promise<void>((resolve) => { cleanupEntered = resolve; });
+      let releaseCleanup = () => {};
+      const held = new Promise<void>((resolve) => { releaseCleanup = resolve; });
+      dependencies.fileSystem = {
+        ...fileSystem,
+        rm: async (location, options) => {
+          if (location === target) {
+            cleanupEntered();
+            await held;
+            if (cleanupFails) { throw new Error('cleanup failed'); }
+          }
+          return fileSystem.rm(location, options);
+        },
+      };
+      dependencies.spawnProcess = (() => {
+        const clone = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+        void fileSystem.mkdir(target).then(() => { clone.emit('close', 0); });
+        return clone;
+      }) as unknown as AgentDependencies['spawnProcess'];
+      let beginCleanup = () => {};
+      const originalTimeout = globalThis.setTimeout;
+      t.mock.method(globalThis, 'setTimeout', ((callback: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => {
+        if (delay === 5_000) {
+          beginCleanup = () => callback(...args);
+          return originalTimeout(() => {}, 0);
+        }
+        return originalTimeout(callback, delay, ...args);
+      }) as typeof setTimeout);
+      if (cleanupFails) { t.mock.method(console, 'error', () => {}); }
+      await withAgentServer(dependencies, async (baseUrl) => {
+        let drain: Promise<boolean> | undefined;
+        try {
+          const response = await post(baseUrl, {
+            githubUrl: 'https://github.com/owner/repo.git', projectPath: target,
+            message: 'Run and clean up', stream: false,
+          });
+          assert.equal(response.status, 200);
+          assert.equal(chatRunRegistry.listRunningRuns().length, 0);
+          let drained = false;
+          drain = chatRunRegistry.drain(30_000).then((result) => { drained = true; return result; });
+          await Promise.resolve();
+          assert.equal(drained, false, 'the five-second delay keeps the request in drain');
+          beginCleanup();
+          await entered;
+          assert.equal(drained, false, 'cleanup completion remains part of drain');
+          releaseCleanup();
+          assert.equal(await drain, true, 'cleanup success or failure releases the reservation');
+          if (!cleanupFails) {
+            await assert.rejects(fileSystem.access(target), { code: 'ENOENT' });
+            await assert.rejects(fileSystem.access(sessionDirectory), { code: 'ENOENT' });
+          }
+        } finally {
+          beginCleanup();
+          releaseCleanup();
+          await drain;
+        }
+      });
+    });
+  });
+}
+
+test('shutdown waits for agent branch, push, and PR creation after the provider completes', async () => {
+  await withIsolatedDatabase(async () => {
+    const runtime = createHeldRuntime();
+    runtime.release();
+    const dependencies = createDependencies(runtime.queryClaude);
+    dependencies.githubTokens.getActiveGithubToken = () => 'test-token';
+    const gitCalls: string[] = [];
+    dependencies.spawnProcess = ((_command: string, args?: readonly string[]) => {
+      const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+      gitCalls.push(String(args?.[0]));
+      queueMicrotask(() => {
+        if (args?.[0] === 'config') {
+          child.stdout.write('https://github.com/owner/repo.git\n');
+        } else if (args?.[0] === 'log') {
+          child.stdout.write('Agent changes\n');
+        }
+        child.emit('close', 0);
+      });
+      return child;
+    }) as unknown as AgentDependencies['spawnProcess'];
+    let prStarted = () => {};
+    const started = new Promise<void>((resolve) => { prStarted = resolve; });
+    let finishPR = () => {};
+    const pendingPR = new Promise<void>((resolve) => { finishPR = resolve; });
+    dependencies.GithubClient = class {
+      pulls = { create: async () => {
+        prStarted();
+        await pendingPR;
+        return { data: { number: 1, html_url: 'https://github.com/owner/repo/pull/1' } };
+      } };
+    } as unknown as AgentDependencies['GithubClient'];
+    await withAgentServer(dependencies, async (baseUrl) => {
+      const request = post(baseUrl, {
+        projectPath: '/home/test/project', message: 'Make changes', stream: false,
+        branchName: 'agent-test', createPR: true,
+      });
+      await started;
+      assert.deepEqual(chatRunRegistry.listRunningRuns(), [], 'the provider has emitted complete');
+      assert.deepEqual(gitCalls, ['config', 'checkout', 'push', 'log']);
+      let drained = false;
+      const drain = chatRunRegistry.drain(1_000).then((result) => { drained = true; return result; });
+      try {
+        await Promise.resolve();
+        assert.equal(drained, false, 'the pending PR still belongs to the agent request');
+      } finally {
+        finishPR();
+      }
+      const response = await request;
+      assert.equal(response.status, 200);
+      const body = await response.json() as { pullRequest: { number: number } };
+      assert.equal(body.pullRequest.number, 1);
+      assert.equal(await drain, true);
     });
   });
 });
