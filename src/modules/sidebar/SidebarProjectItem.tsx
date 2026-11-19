@@ -14,6 +14,8 @@ type SidebarProjectItemProps = {
   project: Project;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
+  /** Rendered under a folder-name group, where sibling rows can share a display name. */
+  groupPathHint?: string | null;
   isExpanded: boolean;
   isDeleting: boolean;
   isStarred: boolean;
@@ -68,6 +70,7 @@ function SidebarProjectItem({
   project,
   selectedProject,
   selectedSession,
+  groupPathHint = null,
   isExpanded,
   isDeleting,
   isStarred,
@@ -237,7 +240,12 @@ function SidebarProjectItem({
                           />
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{sessionCountLabel}</p>
+                      <p className="truncate text-xs text-muted-foreground">{sessionCountLabel}</p>
+                      {groupPathHint && (
+                        <p className="break-all text-xs text-muted-foreground opacity-60" title={project.fullPath}>
+                          {groupPathHint}
+                        </p>
+                      )}
                     </>
                   )}
                 </div>
@@ -376,7 +384,8 @@ function SidebarProjectItem({
                     {project.fullPath !== project.displayName && (
                       <span className="ml-1 opacity-60" title={project.fullPath}>
                         {' - '}
-                        {project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath}
+                        {groupPathHint
+                          ?? (project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath)}
                       </span>
                     )}
                   </div>
