@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 
 import {
+  buildStoredAssetFileName,
   buildStoredAttachmentRecords,
   buildStoredImageRecords,
   ensureImageAssetsDir,
@@ -12,7 +13,7 @@ import {
 const router = express.Router();
 
 // Multer writes uploads straight into the global assets folder; the service
-// owns the folder location and the response record shape.
+// owns the folder location, the stored filename, and the response record shape.
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     ensureImageAssetsDir()
@@ -20,9 +21,7 @@ const storage = multer.diskStorage({
       .catch((error) => cb(error as Error, ''));
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-    cb(null, `${uniqueSuffix}-${sanitizedName}`);
+    cb(null, buildStoredAssetFileName(file.originalname));
   },
 });
 
@@ -135,9 +134,14 @@ router.get('/files/:filename', async (req, res) => {
     return res.status(404).json({ error: 'Asset not found' });
   }
 
+  // Stored names keep non-Latin letters, and Node throws on a raw header value
+  // outside latin1, so res.attachment() writes the RFC 6266 form: a latin1
+  // `filename` fallback, plus a UTF-8 `filename*` when the name has characters
+  // above U+00FF. It also guesses a Content-Type from the extension (with a
+  // charset for text types), which the service's type then replaces.
+  res.attachment(req.params.filename);
   res.setHeader('Content-Type', asset.contentType);
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename.replace(/["\r\n]/g, '_')}"`);
   asset.stream.pipe(res);
   asset.stream.on('error', (error) => {
     console.error('Error streaming attachment asset:', error);
