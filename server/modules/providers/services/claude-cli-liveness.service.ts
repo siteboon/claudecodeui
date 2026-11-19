@@ -1,6 +1,10 @@
+import { execFile } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * One Claude CLI process that is currently producing a response.
@@ -29,13 +33,66 @@ const registryDirectory = () => path.join(os.homedir(), '.claude', 'sessions');
 const MAX_REGISTRY_FILES = 256;
 
 /**
+ * Start-time verdicts on Windows, keyed by `<pid>:<procStart>`.
+ *
+ * Reading a start time there costs a PowerShell spawn, and the endpoint is
+ * polled every few seconds. A mismatch is final, since that registry record
+ * can never describe a live process again, so it is kept for good. A match is
+ * re-checked after a minute so a pid reused after a crash is still noticed.
+ */
+const windowsStartTimeVerdicts = new Map<string, { alive: boolean; checkedAt: number }>();
+const WINDOWS_MATCH_TTL_MS = 60_000;
+
+/**
+ * Whether the Windows process `pid` was created at `procStart`.
+ *
+ * Signal 0 alone is not enough on Windows: pids are reused quickly, and a
+ * reused pid owned by a system process (svchost.exe, say) answers EPERM, so a
+ * registry file left behind by a reboot or crash kept reporting its session
+ * as running indefinitely. The CLI records `procStart` there as the creation
+ * time in FILETIME ticks (100 ns since 1601, UTC), which is exactly what
+ * `StartTime.ToFileTimeUtc()` prints.
+ */
+async function isWindowsProcessStartedAt(pid: number, procStart: string): Promise<boolean> {
+  const key = `${pid}:${procStart}`;
+  const cached = windowsStartTimeVerdicts.get(key);
+  if (cached && (!cached.alive || Date.now() - cached.checkedAt < WINDOWS_MATCH_TTL_MS)) {
+    return cached.alive;
+  }
+
+  let alive: boolean;
+  try {
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).StartTime.ToFileTimeUtc()`],
+      { windowsHide: true, timeout: 5_000 },
+    );
+    alive = stdout.trim() === procStart;
+  } catch (error) {
+    // A non-zero exit means no such process, or one whose start time this user
+    // may not read, so not a CLI this user started. Anything else (PowerShell
+    // missing, a timeout) is no evidence either way: keep the signal-0 answer.
+    if (typeof (error as { code?: unknown }).code !== 'number') {
+      return true;
+    }
+    alive = false;
+  }
+
+  if (windowsStartTimeVerdicts.size >= MAX_REGISTRY_FILES) {
+    windowsStartTimeVerdicts.clear();
+  }
+  windowsStartTimeVerdicts.set(key, { alive, checkedAt: Date.now() });
+  return alive;
+}
+
+/**
  * Whether `pid` is still the process the registry recorded.
  *
  * A registry file outlives a crash, so its mere presence proves nothing. The
  * signal-0 probe answers "does this pid exist" (EPERM means it exists but is
- * owned by someone else, which still counts), and on Linux the recorded
- * `procStart` is compared against the kernel's start-time for that pid so a
- * reused pid cannot be mistaken for the original process.
+ * owned by someone else, which still counts), and on Linux and Windows the
+ * recorded `procStart` is compared against that pid's start time so a reused
+ * pid cannot be mistaken for the original process.
  */
 async function isRecordedProcessAlive(pid: number, procStart: unknown): Promise<boolean> {
   try {
@@ -46,7 +103,15 @@ async function isRecordedProcessAlive(pid: number, procStart: unknown): Promise<
     }
   }
 
-  if (process.platform !== 'linux' || typeof procStart !== 'string' || !procStart) {
+  if (typeof procStart !== 'string' || !procStart) {
+    return true;
+  }
+
+  if (process.platform === 'win32') {
+    return isWindowsProcessStartedAt(pid, procStart);
+  }
+
+  if (process.platform !== 'linux') {
     return true;
   }
 
