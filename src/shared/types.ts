@@ -758,6 +758,16 @@ type MessageKind =
 
 //----------------- CHAT COMPOSER ------------
 
+/**
+ * A file the chat composer refused to attach, with why: `too-large` is over the size limit,
+ * `too-many` arrived after the composer was full. The composer hook produces these and the
+ * composer lists them in a dismissible notice, since a refused file never becomes an attachment chip.
+ */
+export type AttachmentRejection = {
+  fileName: string;
+  reason: 'too-large' | 'too-many';
+};
+
 /** Result payload of the chat `/model` slash command, describing the session's current provider and model plus the model catalog it may switch to, used to populate the command modal's model picker. */
 export type ModelCommandData = {
   current?: {
