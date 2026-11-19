@@ -11,7 +11,7 @@ import type { SessionWithProvider } from '@/shared/types';
 
 const compact = vi.hoisted(() => ({ value: false }));
 vi.mock('@/modules/sidebar/hooks/useCompactSidebar', () => ({ useCompactSidebar: () => compact.value }));
-vi.mock('@/shared/hooks/useProviderCapabilities', () => ({ useSessionForkingProviders: () => new Set(['claude', 'codex']) }));
+vi.mock('@/shared/hooks/useProviderCapabilities', () => ({ useSessionForkingProviders: () => new Set(['claude', 'codex']), useSessionMovingProviders: () => new Set() }));
 vi.mock('@/modules/sidebar/SessionOptions', () => ({ default: () => null }));
 
 const t = ((key: string, options?: { session?: string }) => options?.session ? `${key} ${options.session}` : key) as TFunction;

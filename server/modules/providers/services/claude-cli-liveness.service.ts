@@ -63,8 +63,8 @@ async function isRecordedProcessAlive(pid: number, procStart: unknown): Promise<
   }
 }
 
-/** Reads one registry file, returning null for anything that is not a live busy session. */
-async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSession | null> {
+/** Reads one registry file, returning null for anything that is not a live (by default: busy) session. */
+async function readLiveBusySession(filePath: string, includeIdle = false): Promise<LiveClaudeCliSession | null> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(await fsp.readFile(filePath, 'utf8'));
@@ -81,7 +81,7 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
 
   const providerSessionId = typeof record.sessionId === 'string' ? record.sessionId : '';
   const pid = typeof record.pid === 'number' ? record.pid : NaN;
-  if (!providerSessionId || !Number.isInteger(pid) || pid <= 0 || record.status !== 'busy') {
+  if (!providerSessionId || !Number.isInteger(pid) || pid <= 0 || (!includeIdle && record.status !== 'busy')) {
     return null;
   }
 
@@ -102,7 +102,9 @@ async function readLiveBusySession(filePath: string): Promise<LiveClaudeCliSessi
  * the PTY map rather than the chat-run registry. Liveness is ephemeral, so it
  * is recomputed on every read instead of being cached or persisted.
  */
-export async function listBusyClaudeCliSessions(): Promise<LiveClaudeCliSession[]> {
+export async function listBusyClaudeCliSessions(
+  { includeIdle = false }: { includeIdle?: boolean } = {},
+): Promise<LiveClaudeCliSession[]> {
   let entries: string[];
   try {
     entries = await fsp.readdir(registryDirectory());
@@ -114,7 +116,7 @@ export async function listBusyClaudeCliSessions(): Promise<LiveClaudeCliSession[
 
   const registryFiles = entries.filter((entry) => entry.endsWith('.json')).slice(0, MAX_REGISTRY_FILES);
   const sessions = await Promise.all(
-    registryFiles.map((entry) => readLiveBusySession(path.join(registryDirectory(), entry))),
+    registryFiles.map((entry) => readLiveBusySession(path.join(registryDirectory(), entry), includeIdle)),
   );
 
   return sessions.filter((session): session is LiveClaudeCliSession => session !== null);
