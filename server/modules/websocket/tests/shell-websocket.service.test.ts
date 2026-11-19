@@ -230,10 +230,16 @@ test('a missing project directory is reported as an error frame and starts no pt
 
 type SpawnCall = { shell: string; args: string[]; command: string; env: Record<string, string | undefined> };
 
-function spawnRecorder(resumeSessionId: string | null = null) {
+/**
+ * Records every pty spawn. `codexCommandLine` stands in for the Codex install
+ * resolver, so no test depends on the Codex installed on this machine; null
+ * (no Codex found) launches a bare `codex`.
+ */
+function spawnRecorder(resumeSessionId: string | null = null, codexCommandLine: string[] | null = null) {
   const calls: SpawnCall[] = [];
   const dependencies = {
     resolveProviderSessionId: () => resumeSessionId,
+    resolveCodexCommandLine: () => codexCommandLine,
     spawnPty: (shell: string, args: string | string[], options?: { env?: Record<string, string | undefined> }) => {
       calls.push({
         shell,
@@ -628,6 +634,37 @@ test('the settings file path is quoted for bash and for PowerShell', (t) => {
     assert.ok(calls[2].command.endsWith(`/it''s a \u2019\u2019quoted\u2019\u2019 home/.cloudcli/claude-shell-theme-light.json'`));
     assert.deepEqual(JSON.parse(fs.readFileSync(settingsPath, 'utf8')), { theme: 'light' });
   }, "it's a \u2019quoted\u2019 home");
+});
+
+// The Shell starts the Codex install that chats run, by path: under `npm run`
+// a bare `codex` would find the bundled CLI in CloudCLI's node_modules/.bin
+// first, even when the user's own Codex is newer.
+test('codex launches the resolved install by path, quoted for bash and for PowerShell', (t) => {
+  if (os.platform() === 'win32') {
+    t.skip('asserts the bash launch first');
+    return;
+  }
+  const commandLine = ['/opt/node 24/bin/node', "/home/it's/lib/node_modules/@openai/codex/bin/codex.js"];
+  const { calls, dependencies } = spawnRecorder('codex-thread-1', commandLine);
+
+  launch(dependencies, { provider: 'codex' });
+  launch(dependencies, { provider: 'codex', hasSession: true });
+  t.mock.method(os, 'platform', () => 'win32');
+  launch(dependencies, { provider: 'codex' });
+  launch(dependencies, { provider: 'codex', hasSession: true });
+
+  const bash = `'/opt/node 24/bin/node' '/home/it'\\''s/lib/node_modules/@openai/codex/bin/codex.js'`;
+  const powerShell = `& '/opt/node 24/bin/node' '/home/it''s/lib/node_modules/@openai/codex/bin/codex.js'`;
+  assert.deepEqual(calls.map((call) => [call.shell, ...call.args]), [
+    ['bash', '-c', bash],
+    ['bash', '-c', `${bash} resume "codex-thread-1" || ${bash}`],
+    ['powershell.exe', '-Command', powerShell],
+    [
+      'powershell.exe',
+      '-Command',
+      `${powerShell} resume "codex-thread-1"; if ($LASTEXITCODE -ne 0) { ${powerShell} }`,
+    ],
+  ]);
 });
 
 test('a settings file that cannot be written drops the flag, logs once and still launches', (t) => {

@@ -47,6 +47,9 @@ export default function ChatExportMenu({
   // Building a large transcript takes long enough to notice, and the download
   // only appears at the end — without this the button looks unresponsive.
   const [busyFormat, setBusyFormat] = useState<TranscriptExportFormat | null>(null);
+  // Whether the side-question asides go into the file. Off by default, so a plain export
+  // matches what the session itself saw; the operator opts in from this option.
+  const [includeSideQuestions, setIncludeSideQuestions] = useState(false);
 
   if (messages.length === 0) {
     return null;
@@ -62,6 +65,7 @@ export default function ChatExportMenu({
         provider,
         selectedProject,
         createDiff,
+        includeSideQuestions,
       });
     } catch (error) {
       console.error('Failed to export conversation:', error);
@@ -79,8 +83,22 @@ export default function ChatExportMenu({
       triggerClassName="h-8 w-8 rounded-lg border border-border/50 text-muted-foreground hover:bg-accent hover:text-foreground"
       menuClassName="w-[260px] rounded-xl p-1.5 shadow-xl"
       header={(
-        <div className="mb-1 border-b border-border px-3 py-2">
+        <div className="space-y-1.5 border-b border-border px-3 py-2">
           <p className="text-xs font-medium text-foreground">{t('export.heading')}</p>
+          {/*
+            The side-question asides are not part of the session, so the file leaves them
+            out unless this stays on. It is drawn as a checkbox (not a menu
+            item) so it does not close the menu when it is toggled.
+          */}
+          <label className="flex cursor-pointer select-none items-center gap-2 rounded-md px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 accent-primary"
+              checked={includeSideQuestions}
+              onChange={(event) => setIncludeSideQuestions(event.target.checked)}
+            />
+            {t('export.includeSideQuestions')}
+          </label>
         </div>
       )}
       items={FORMATS.map((format) => ({

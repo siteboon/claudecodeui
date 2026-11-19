@@ -165,6 +165,7 @@ CloudCLI にはプラグインシステムがあり、独自のフロントエ�
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | モデル価格とトークン使用量から API コストを計算し、モデル価格プリセットにも対応 |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | エージェントタスクを表示、フィルタリング、起動するためのタスクキューダッシュボード |
 | **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | GitHub Issues 用の Kanban ボード。TaskMaster との双方向同期と /github-task CLI スキルの自動インストールに対応 |
+| **[ccx](https://github.com/AaronWong1999/cloudcli-plugin-ccx)** | Claude と Codex の使用量を表示し、開いているセッションを会話履歴ごともう一方のエージェントへ引き継ぎ（macOS、ccx が必要） |
 
 ### 自作する
 

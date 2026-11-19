@@ -171,6 +171,7 @@ CloudCLI UI — это open source UI-слой, на котором постро
 | **[Token Cost Calculator](https://github.com/NightmareAway/cloudcli-plugin-token-cost-calculator)** | Расчёт стоимости API по ценам моделей и использованию токенов, с поддержкой пресетов цен |
 | **[Task Queue](https://github.com/TadMSTR/cloudcli-plugin-task-queue)** | Дашборд очереди задач для просмотра, фильтрации и запуска агентских задач |
 | **[GitHub Issues Board](https://github.com/szmidtpiotr/claude-github-issue)** | Kanban-доска для GitHub Issues с двусторонней синхронизацией TaskMaster и автоустановкой CLI-навыка /github-task |
+| **[ccx](https://github.com/AaronWong1999/cloudcli-plugin-ccx)** | Показывает расход лимитов Claude и Codex и передаёт открытую сессию другому агенту вместе с историей диалога (macOS, нужен ccx) |
 
 ### Создать свой
 

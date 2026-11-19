@@ -143,6 +143,13 @@
     "queue": {
       "append": "An Nachricht in der Warteschlange anhängen",
       "notCombinable": "Nachricht konnte nicht in die Warteschlange gestellt werden: Ein Slash-Befehl läuft für sich allein und kann daher nicht mit der Nachricht in der Warteschlange kombiniert werden. Sende ihn, nachdem die Nachricht in der Warteschlange gesendet wurde."
+    },
+    "steer": {
+      "label": "Steuern",
+      "sending": "Wird gesendet…",
+      "willRead": "{{provider}} liest es beim nächsten Tool-Aufruf",
+      "attachments_one": "{{count}} Datei angehängt",
+      "attachments_other": "{{count}} Dateien angehängt"
     }
   },
   "providerSelection": {
@@ -233,6 +240,16 @@
       "label": "{{time}} vergangen",
       "startingNow": "Startet jetzt"
     },
+    "backgroundTask": {
+      "prompt": {
+        "title": "Diese Sitzung hat noch Hintergrundarbeit laufen",
+        "description": "Eine neue Nachricht startet einen neuen Turn, der diese Arbeit stoppt; alles, was sie noch nicht gemeldet hat, geht verloren. Stell die Nachricht in die Warteschlange, um sie zu senden, wenn die Arbeit fertig ist.",
+        "cancel": "Abbrechen",
+        "queue": "Einreihen",
+        "sendAnyway": "Trotzdem senden",
+        "sideQuestion": "Nebenfrage"
+      }
+    },
     "controls": {
       "stopGeneration": "Generierung stoppen",
       "pressEscToStop": "Jederzeit Esc drücken, um zu stoppen"
@@ -277,7 +294,8 @@
     "json": {
       "label": "JSON (.json)",
       "description": "Alle Nachrichten, unformatiert, für Tools."
-    }
+    },
+    "includeSideQuestions": "Nebenfragen mitexportieren"
   },
   "schedule": {
     "trigger": "Nachricht planen",
@@ -294,6 +312,38 @@
     "failed": "Nicht gesendet – {{reason}}",
     "cancel": "Geplante Nachricht abbrechen",
     "dismiss": "Fehlerhinweis ausblenden"
+  },
+  "sideQuestion": {
+    "label": "Nebenfrage · gehört nicht zur Sitzung",
+    "pending": "Wird nebenbei beantwortet",
+    "failed": "Die Nebenfrage ist fehlgeschlagen.",
+    "dismiss": "Entfernen",
+    "unsupported": "Dieser Anbieter kann keine Nebenfragen beantworten.",
+    "noSession": "Nebenfragen brauchen einen bestehenden Chat; dieser hat noch nicht begonnen."
+  },
+  "sendMenu": {
+    "trigger": "Sendeoptionen",
+    "queue": {
+      "label": "In Warteschlange stellen",
+      "descriptionResponding": "Senden, wenn dieser Durchlauf endet",
+      "descriptionBackground": "Senden, wenn die Hintergrundarbeit endet"
+    },
+    "steer": {
+      "label": "Steuern",
+      "description": "In diesen Durchlauf senden; wird beim nächsten Tool-Aufruf gelesen"
+    },
+    "sideQuestion": {
+      "label": "Nebenfrage",
+      "description": "Jetzt nebenbei fragen; die Sitzung sieht es nicht"
+    },
+    "stop": {
+      "label": "Stoppen",
+      "description": "Die Antwort beenden, die gerade geschrieben wird"
+    },
+    "sendAnyway": {
+      "label": "Trotzdem senden",
+      "description": "Jetzt senden; das beendet die Hintergrundarbeit"
+    }
   },
   "modelLibrary": {
     "effortLevels": "Reasoning-Stufen",

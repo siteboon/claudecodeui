@@ -5,6 +5,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { resolveCodexCommandLine } from '@/modules/providers/index.js';
 import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
@@ -120,6 +121,8 @@ type ShellWebSocketDependencies = {
     provider: string,
   ) => string | null | undefined;
   spawnPty?: typeof pty.spawn;
+  /** Program and arguments that start Codex; tests replace the real resolver. */
+  resolveCodexCommandLine?: () => string[] | null;
 };
 
 /**
@@ -234,13 +237,22 @@ function buildShellCommand(
   }
 
   if (provider === 'codex') {
+    // The install chats run, by path: `npm run` puts CloudCLI's own
+    // node_modules/.bin first on the PATH this shell inherits, where a bare
+    // `codex` is the bundled CLI even when the user's own is newer.
+    const commandLine = (dependencies.resolveCodexCommandLine ?? resolveCodexCommandLine)();
+    let codex = commandLine ? commandLine.map(quoteShellArgument).join(' ') : 'codex';
+    if (os.platform() === 'win32' && commandLine) {
+      // PowerShell runs a quoted program only through the call operator.
+      codex = `& ${codex}`;
+    }
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return otherProgram(`codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`);
+        return otherProgram(`${codex} resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { ${codex} }`);
       }
-      return otherProgram(`codex resume "${resumeSessionId}" || codex`);
+      return otherProgram(`${codex} resume "${resumeSessionId}" || ${codex}`);
     }
-    return otherProgram('codex');
+    return otherProgram(codex);
   }
 
   if (provider === 'opencode') {

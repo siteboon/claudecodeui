@@ -39,6 +39,8 @@
     "clearSelection": "Quitar selección",
     "deleteSelected_one": "Eliminar {{count}} sesión",
     "deleteSelected_other": "Eliminar {{count}} sesiones",
+    "expandForks": "Expandir bifurcaciones de {{session}}",
+    "collapseForks": "Contraer bifurcaciones de {{session}}",
     "deleteSelected_many": "Eliminar {{count}} sesiones"
   },
   "tooltips": {
@@ -196,9 +198,6 @@
     "sessionCount_many": "Este proyecto contiene {{count}} conversaciones.",
     "removeFromSidebar": "Solo quitar de la barra lateral",
     "archiveProject": "Archivar proyecto",
-    "archiveSession": "Archivar sesión",
-    "archiveSessionNotice": "Archivar mantiene la sesión fuera de la lista activa y conserva su historial.",
-    "archivedSessionNotice": "Esta sesión ya está archivada. Puedes mantenerla oculta o eliminarla permanentemente.",
     "deleteSessionPermanently": "Eliminar permanentemente",
     "deleteAllData": "Eliminar todos los datos permanentemente",
     "allConversationsDeleted": "El proyecto se quitará de la barra lateral. Tus archivos, memorias y datos de sesión se conservarán.",
