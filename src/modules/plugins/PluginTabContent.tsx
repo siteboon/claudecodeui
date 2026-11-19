@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '@/shared/context/ThemeContext';
-import { api } from '@/shared/api';
 import { usePlugins } from '@/modules/plugins/context/PluginsContext';
+import { callPluginRpc, importPluginModule } from '@/modules/plugins/utils/pluginAssetLoading';
 import type { Project, ProjectSession } from '@/shared/types';
 
 type PluginTabContentProps = {
@@ -86,21 +86,12 @@ export default function PluginTabContent({
 
     (async () => {
       try {
-        // Fetch the plugin JS with auth headers (Cloudflare Worker requires auth on all routes).
-        // Then import it via a Blob URL so the browser never makes an unauthenticated request.
-        const res = await api.plugins.asset(pluginName, entryFile);
-        if (!res.ok) throw new Error(`Failed to fetch plugin (HTTP ${res.status})`);
-        const jsText = await res.text();
-        const blob = new Blob([jsText], { type: 'application/javascript' });
-        const blobUrl = URL.createObjectURL(blob);
-        // @vite-ignore
-        const mod = await import(/* @vite-ignore */ blobUrl).finally(() => URL.revokeObjectURL(blobUrl));
+        const mod = await importPluginModule(pluginName, entryFile);
         if (!active || !containerRef.current) return;
 
         moduleRef.current = mod;
 
-        // The host surface handed to the plugin module, distinct from the
-        // app's own `api` client that backs `rpc` below.
+        // The host surface handed to the plugin module.
         const pluginHostApi = {
           get context(): PluginContext { return contextRef.current; },
 
@@ -109,11 +100,7 @@ export default function PluginTabContent({
             return () => contextCallbacks.delete(cb);
           },
 
-          async rpc(method: string, path: string, body?: unknown): Promise<unknown> {
-            const res = await api.plugins.rpc(pluginName, method, path, body);
-            if (!res.ok) throw new Error(`RPC error ${res.status}`);
-            return res.json();
-          },
+          rpc: (method: string, path: string, body?: unknown) => callPluginRpc(pluginName, method, path, body),
         };
 
         await mod.mount?.(container, pluginHostApi);
