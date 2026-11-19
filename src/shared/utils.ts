@@ -10,6 +10,10 @@ import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/
  * Read it to hide or gate features that only exist in one of the two deployments.
  */
 export const IS_PLATFORM = import.meta.env?.VITE_IS_PLATFORM === 'true';
+/** Used by AuthContext and ProtectedRoute to skip local setup and onboarding behind a proxy. */
+export const disableAuth = import.meta.env?.VITE_DISABLE_AUTH === 'true';
+/** Used by auth, API, uploads and sockets to omit JWTs only in trusted deployments. */
+export const trustLocalAuthBypass = IS_PLATFORM || disableAuth;
 
 // ---------------------------
 

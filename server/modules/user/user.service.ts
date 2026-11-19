@@ -15,6 +15,7 @@ type DraftRecord = {
 };
 
 type UserDependencies = {
+  disableAuth?: boolean;
   users: {
     getGitConfig(userId: number): GitConfig | undefined;
     updateGitConfig(userId: number, gitName: string | null, gitEmail: string | null): void;
@@ -169,7 +170,7 @@ export function createUserService(dependencies: UserDependencies) {
     getOnboardingStatus(userId: number) {
       return {
         success: true,
-        hasCompletedOnboarding: dependencies.users.hasCompletedOnboarding(userId),
+        hasCompletedOnboarding: Boolean(dependencies.disableAuth) || dependencies.users.hasCompletedOnboarding(userId),
       };
     },
 
