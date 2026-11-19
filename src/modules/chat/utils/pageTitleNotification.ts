@@ -1,4 +1,4 @@
-const COMPLETION_TITLE_INDICATOR = '[Done]';
+import { COMPLETION_TITLE_INDICATOR } from '@/shared/constants';
 const TITLE_INDICATOR_CLEAR_DELAY_MS = 2000;
 
 let clearTimer: number | null = null;

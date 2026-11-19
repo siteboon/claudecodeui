@@ -36,7 +36,12 @@ type ProjectCommandState = Pick<
 
 type ProjectEffectsState = Pick<
   ProjectsState,
-  'openSettings' | 'refreshProjectsSilently' | 'setActiveTab' | 'setSidebarOpen'
+  | 'openSettings'
+  | 'refreshProjectsSilently'
+  | 'selectedProject'
+  | 'selectedSession'
+  | 'setActiveTab'
+  | 'setSidebarOpen'
 >;
 
 type ProjectActiveSessionState = {
@@ -131,12 +136,16 @@ export function ProjectsStateProvider({
     () => ({
       openSettings: state.openSettings,
       refreshProjectsSilently: state.refreshProjectsSilently,
+      selectedProject: state.selectedProject,
+      selectedSession: state.selectedSession,
       setActiveTab: state.setActiveTab,
       setSidebarOpen: state.setSidebarOpen,
     }),
     [
       state.openSettings,
       state.refreshProjectsSilently,
+      state.selectedProject,
+      state.selectedSession,
       state.setActiveTab,
       state.setSidebarOpen,
     ],
