@@ -22,6 +22,7 @@ import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { useSessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { useEscapeToAbortSession } from '@/modules/chat/hooks/useEscapeToAbortSession';
 import {
   useProcessingSessions,
   useSessionProtectionActions,
@@ -254,7 +255,8 @@ function ChatInterface({
     selectFile,
     attachedFiles,
     setAttachedFiles,
-    fileErrors,
+    attachmentRejections,
+    dismissAttachmentRejections,
     getRootProps,
     getInputProps,
     isDragActive,
@@ -378,25 +380,11 @@ function ChatInterface({
 
   usePaletteOpsRegister({ insertComposerText });
 
-  useEffect(() => {
-    if (!canAbortSession) {
-      return;
-    }
-
-    const handleGlobalEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) {
-        return;
-      }
-
-      event.preventDefault();
-      handleAbortSession();
-    };
-
-    document.addEventListener('keydown', handleGlobalEscape, { capture: true });
-    return () => {
-      document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
-    };
-  }, [canAbortSession, handleAbortSession]);
+  useEscapeToAbortSession({
+    canAbortSession,
+    onAbortSession: handleAbortSession,
+    composerRef: textareaRef,
+  });
 
   useEffect(() => {
     return () => {
@@ -636,7 +624,8 @@ function ChatInterface({
               previous.filter((_, currentIndex) => currentIndex !== index),
             )
           }
-          fileErrors={fileErrors}
+          attachmentRejections={attachmentRejections}
+          onDismissAttachmentRejections={dismissAttachmentRejections}
           showFileDropdown={showFileDropdown}
           filteredFiles={filteredFiles}
           selectedFileIndex={selectedFileIndex}
