@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -7,6 +7,7 @@ import test from 'node:test';
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
 import { CodexSessionsProvider, parseCodexExecScript, readCodexMemoryCitations } from '@/modules/providers/list/codex/codex-sessions.provider.js';
+import { buildLookupMap } from '@/shared/utils.js';
 
 const patchHomeDir = (nextHomeDir: string) => {
   const original = os.homedir;
@@ -148,6 +149,88 @@ test('Codex synchronizer leaves indexed sessions untitled when no name is availa
     });
   } finally {
     restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+/** Appends one `session_index.jsonl` row, as Codex does when a thread is named or renamed. */
+const appendThreadName = async (homeDir: string, codexSessionId: string, threadName: string): Promise<void> => {
+  await mkdir(path.join(homeDir, '.codex'), { recursive: true });
+  await appendFile(
+    path.join(homeDir, '.codex', 'session_index.jsonl'),
+    `${JSON.stringify({ id: codexSessionId, thread_name: threadName, updated_at: new Date().toISOString() })}\n`,
+    'utf8',
+  );
+};
+
+test('Codex synchronizer names a session by its latest thread name in session_index', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-rename-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    const transcriptPath = await writeCodexTranscript(tempRoot, 'codex-renamed-1', workspacePath);
+    await appendThreadName(tempRoot, 'codex-renamed-1', 'Name at creation');
+    await appendThreadName(tempRoot, 'codex-renamed-1', 'First rename');
+
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new CodexSessionSynchronizer();
+      await synchronizer.synchronize();
+      assert.equal(sessionsDb.getSessionById('codex-renamed-1')?.custom_name, 'First rename');
+
+      // A rename after the session was indexed replaces the stored name too.
+      await appendThreadName(tempRoot, 'codex-renamed-1', 'Second rename');
+      await synchronizer.synchronizeFile(transcriptPath);
+      assert.equal(sessionsDb.getSessionById('codex-renamed-1')?.custom_name, 'Second rename');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Codex synchronizer keeps the title of an app-created session over its thread name', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-app-name-'));
+  const workspacePath = path.join(tempRoot, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tempRoot);
+
+  try {
+    await writeCodexTranscript(tempRoot, 'codex-app-2', workspacePath);
+    await appendThreadName(tempRoot, 'codex-app-2', 'Name Codex generated');
+    await withIsolatedDatabase(async () => {
+      sessionsDb.createAppSession('app-2', 'codex', workspacePath, 'Fix the login redirect');
+      sessionsDb.assignProviderSessionId('app-2', 'codex-app-2');
+
+      await new CodexSessionSynchronizer().synchronize();
+
+      assert.equal(sessionsDb.getSessionById('app-2')?.custom_name, 'Fix the login redirect');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('buildLookupMap keeps the last non-empty value per key when asked to', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'lookup-map-last-'));
+
+  try {
+    const filePath = path.join(tempRoot, 'index.jsonl');
+    await writeFile(filePath, [
+      JSON.stringify({ id: 'a', name: 'first' }),
+      JSON.stringify({ id: 'b', name: 'only' }),
+      JSON.stringify({ id: 'a', name: 'second' }),
+      JSON.stringify({ id: 'a', name: '   ' }),
+      '',
+    ].join('\n'), 'utf8');
+
+    const latest = await buildLookupMap(filePath, 'id', 'name', { keep: 'last' });
+    assert.equal(latest.get('a'), 'second');
+    assert.equal(latest.get('b'), 'only');
+    assert.equal((await buildLookupMap(filePath, 'id', 'name')).get('a'), 'first');
+  } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
