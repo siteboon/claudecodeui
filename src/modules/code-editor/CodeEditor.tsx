@@ -9,7 +9,7 @@ import { useTheme } from '@/shared/context/ThemeContext';
 import { useCodeEditorDocument } from '@/modules/code-editor/hooks/useCodeEditorDocument';
 import { useCodeEditorSettings } from '@/modules/code-editor/hooks/useCodeEditorSettings';
 import { useEditorKeyboardShortcuts } from '@/modules/code-editor/hooks/useEditorKeyboardShortcuts';
-import type { CodeEditorFile, CodeEditorGotoTarget } from '@/shared/types';
+import type { CodeEditorFile, CodeEditorGotoTarget, MarkdownViewMode } from '@/shared/types';
 import { createMinimapExtension, createScrollToFirstChunkExtension, getLanguageExtensions } from '@/modules/code-editor/utils/editorExtensions';
 import { getEditorStyles } from '@/modules/code-editor/utils/editorStyles';
 import { createEditorToolbarPanelExtension } from '@/modules/code-editor/utils/editorToolbarPanel';
@@ -48,7 +48,10 @@ export default function CodeEditor({
   const paletteOps = usePaletteOps();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDiff, setShowDiff] = useState(Boolean(file.diffInfo));
-  const [markdownPreview, setMarkdownPreview] = useState(false);
+  // Which view a Markdown file is shown in (Code, Preview or Live). Lives here,
+  // above the surface, so switching modes keeps the one shared text buffer;
+  // the header switches it and the surface renders the matching view.
+  const [markdownMode, setMarkdownMode] = useState<MarkdownViewMode>('code');
 
   // The code editor follows the app-wide theme; it has no theme of its own.
   const { isDarkMode } = useTheme();
@@ -306,11 +309,11 @@ export default function CodeEditor({
             isFullscreen={isFullscreen}
             isMarkdownFile={isMarkdownFile}
             isHtmlPreviewFile={isHtmlPreviewFile}
-            markdownPreview={markdownPreview}
+            markdownMode={markdownMode}
             saving={saving}
             saveSuccess={saveSuccess}
             hasUnsavedChanges={hasUnsavedChanges}
-            onToggleMarkdownPreview={() => setMarkdownPreview((previous) => !previous)}
+            onMarkdownModeChange={setMarkdownMode}
             onOpenHtmlPreview={openHtmlPreview}
             onOpenSettings={() => paletteOps.openSettings('appearance')}
             onDownload={handleDownload}
@@ -323,6 +326,7 @@ export default function CodeEditor({
               pathCopied: t('actions.pathCopied', 'File path copied'),
               editMarkdown: t('actions.editMarkdown'),
               previewMarkdown: t('actions.previewMarkdown'),
+              liveMarkdown: t('actions.liveMarkdown', 'Live preview editing'),
               previewHtml: t('actions.previewHtml', 'Open HTML preview in new tab'),
               settings: t('toolbar.settings'),
               download: t('actions.download'),
@@ -346,13 +350,16 @@ export default function CodeEditor({
             <CodeEditorSurface
               content={content}
               onChange={setContent}
-              markdownPreview={markdownPreview}
+              markdownMode={markdownMode}
               isMarkdownFile={isMarkdownFile}
               isDarkMode={isDarkMode}
               fontSize={fontSize}
               showLineNumbers={showLineNumbers}
               extensions={extensions}
+              filePath={file.path}
               gotoTarget={gotoTarget}
+              liveEditorLabel={t('liveEditorLabel', 'Live editor: {{fileName}}', { fileName: file.name })}
+              onLiveEditorError={() => setMarkdownMode('code')}
             />
           </div>
 
