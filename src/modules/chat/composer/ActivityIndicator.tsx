@@ -109,7 +109,7 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
       <div className="flex items-end justify-between gap-2">
         <div className={`${tabSurfaceClassName} min-w-0 max-w-full gap-2`}>
           <span
-            className={`h-1.5 w-1.5 shrink-0 animate-pulse rounded-full ${
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
               isBackground ? 'bg-purple-500 dark:bg-purple-400' : 'bg-primary'
             }`}
             aria-hidden

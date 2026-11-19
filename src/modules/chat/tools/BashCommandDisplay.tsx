@@ -76,7 +76,7 @@ export const BashCommandDisplay: React.FC<BashCommandDisplayProps> = ({
   return (
     <div
       className={cn(
-        'group/cmd overflow-hidden rounded-lg border bg-muted/40 backdrop-blur-sm transition-all duration-200',
+        'group/cmd overflow-hidden rounded-lg border bg-muted/40 transition-all duration-200',
         isError ? 'border-red-500/30' : 'border-border/60',
         hasOutput && !open && 'hover:border-border hover:bg-muted/60',
         open && 'bg-muted/50 shadow-sm',

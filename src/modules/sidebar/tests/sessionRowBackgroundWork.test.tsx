@@ -70,6 +70,9 @@ beforeEach(() => {
 test('background work shows as the purple dot in place of the green one, with nothing spinning', () => {
   const idle = renderRow({ isProcessing: false, hasBackgroundWork: false });
   assert.ok(idle.container.querySelector('[role="status"].bg-green-500'), 'the fixture is a recently touched session');
+  // The dot stays up for ten minutes after any activity; a perpetual pulse
+  // made the whole page recomposite every frame for all that time.
+  assert.equal(idle.container.querySelectorAll('.animate-pulse').length, 0, 'the status dot does not pulse');
   idle.unmount();
 
   const { container } = renderRow({ isProcessing: false, hasBackgroundWork: true });
