@@ -24,6 +24,7 @@ type FileTreeNodeProps = {
   onDownload?: (item: FileTreeNodeType) => void;
   onUpload?: (path: string) => void;
   onRefresh?: () => void;
+  renderDirectoryPage?: (path: string) => ReactNode;
   // Drag-and-drop upload targeting
   dropTarget?: string | null;
   onItemDragOver?: (event: DragEvent<HTMLDivElement>, targetPath: string) => void;
@@ -90,6 +91,7 @@ export default function FileTreeNode({
   onDownload,
   onUpload,
   onRefresh,
+  renderDirectoryPage,
   dropTarget,
   onItemDragOver,
   renamingItem,
@@ -243,6 +245,7 @@ export default function FileTreeNode({
         rowContent
       )}
 
+      {isDirectory && isOpen && renderDirectoryPage?.(item.path)}
       {isDirectory && isOpen && hasChildren && (
         <div className="relative">
           <span
@@ -258,6 +261,7 @@ export default function FileTreeNode({
               viewMode={viewMode}
               expandedDirs={expandedDirs}
               onItemClick={onItemClick}
+              renderDirectoryPage={renderDirectoryPage}
               renderFileIcon={renderFileIcon}
               formatFileSize={formatFileSize}
               formatRelativeTime={formatRelativeTime}

@@ -19,6 +19,7 @@ function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTree
     readTextFile: unexpectedOperation,
     openFile: unexpectedOperation,
     saveTextFile: unexpectedOperation,
+    listProjectDirectory: unexpectedOperation,
     listProjectFiles: unexpectedOperation,
     createEntry: unexpectedOperation,
     renameEntry: unexpectedOperation,
@@ -154,4 +155,16 @@ test('create route rejects invalid entry types without calling the service', asy
   });
 
   assert.equal(createCalled, false);
+});
+
+
+test('directory route parses paging and rejects structured query input', async () => {
+  const inputs: Parameters<FileTreeServices['listProjectDirectory']>[] = [];
+  await withFileTreeServer(createFakeServices({ listProjectDirectory: async (...args) => {
+    inputs.push(args); return { path: '/root', entries: [], nextCursor: null };
+  } }), async base => {
+    assert.equal((await fetch(`${base}/api/file-tree/projects/p/directory?path=sub&cursor=abc&limit=20&respectGitignore=true`)).status, 200);
+    assert.equal((await fetch(`${base}/api/file-tree/projects/p/directory?path=a&path=b`)).status, 400);
+  });
+  assert.deepEqual(inputs, [['p', { path: 'sub', cursor: 'abc', limit: 20, respectGitignore: true }]]);
 });

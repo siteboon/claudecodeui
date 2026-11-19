@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 import ignore from 'ignore';
 
@@ -505,6 +506,120 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
 
       return { success: true, path: resolvedPath, message: 'File saved successfully' };
+    },
+
+    async listProjectDirectory(projectId, options) {
+      const limit = options.limit ?? 200;
+      if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+        throw createFileTreeError('Page size must be between 1 and 200', 400, 'INVALID_PAGE_SIZE');
+      }
+      const projectRoot = await resolveProjectRoot(projectId);
+      const resolveDirectory = async (candidate: string) => {
+        try { return await fileSystem.realpath(candidate); }
+        catch (error) {
+          mapFileSystemError(error, {
+            ENOENT: { message: 'Directory no longer exists. Refresh the file tree.', statusCode: 404 },
+            EACCES: { message: 'Permission denied', statusCode: 403 },
+            ENOTDIR: { message: 'Path is not a directory', statusCode: 400 },
+          });
+        }
+      };
+      const root = await resolveDirectory(projectRoot);
+      const requested = path.resolve(projectRoot, options.path || '.');
+      const within = (base: string, candidate: string) => candidate === base || candidate.startsWith(base + path.sep);
+      if (!within(path.resolve(projectRoot), requested)) {
+        throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+      }
+      const directory = await resolveDirectory(requested);
+      if (!within(root, directory) || FORBIDDEN_WORKSPACE_PATHS.includes(normalizeProjectPath(directory))) {
+        throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+      }
+      let ignoreContent = '';
+      let hasGitignore = false;
+      let includeEntry = includeEntryByFallbackDirectoryNames;
+      if (options.respectGitignore) {
+        try {
+          ignoreContent = await fileSystem.readTextFile(path.join(projectRoot, '.gitignore'));
+          hasGitignore = true;
+          includeEntry = createGitignoreEntryFilter(projectRoot, ignoreContent);
+        } catch (error) {
+          if (readErrorCode(error) !== 'ENOENT') throw error;
+        }
+      }
+      // Direct requests cannot bypass exclusions by entering a hidden ancestor.
+      for (const candidate of [requested, path.join(projectRoot, path.relative(root, directory))]) {
+        let ancestor = candidate;
+        while (ancestor !== path.resolve(projectRoot)) {
+          if (!includeEntry(ancestor, true)) {
+            throw createFileTreeError('Directory is excluded by the current ignore rules', 403, 'DIRECTORY_EXCLUDED');
+          }
+          ancestor = path.dirname(ancestor);
+        }
+      }
+      const stats = await fileSystem.stat(directory);
+      if (!stats.isDirectory()) throw createFileTreeError('Path is not a directory', 400, 'NOT_A_DIRECTORY');
+      const version = createHash('sha256').update(JSON.stringify([
+        projectId, directory, stats.mtime.toISOString(), stats.size, ignoreContent, hasGitignore, options.respectGitignore,
+      ])).digest('hex');
+      let after = '';
+      if (options.cursor) {
+        try {
+          if (options.cursor.length > 4096) throw new Error();
+          const cursor = JSON.parse(Buffer.from(options.cursor, 'base64url').toString());
+          if (typeof cursor.after !== 'string' || !/^[01]:[^/\\\x00]+$/.test(cursor.after) || typeof cursor.version !== 'string') throw new Error();
+          if (cursor.version !== version) throw createFileTreeError('Folder changed. Refresh to restart listing.', 409, 'STALE_DIRECTORY_CURSOR');
+          after = cursor.after;
+        } catch (error) {
+          if (error instanceof AppError) throw error;
+          throw createFileTreeError('Invalid directory cursor', 400, 'INVALID_DIRECTORY_CURSOR');
+        }
+      }
+      // Retain only the smallest page after the cursor, never a whole directory.
+      // Binary ordering is locale-independent, with directories before files.
+      const page: Array<{ key: string; entry: FileTreeDirectoryEntry }> = [];
+      let scanned = 0;
+      await acquire();
+      try {
+        for await (const entry of fileSystem.openDirectory(directory)) {
+          if (++scanned > 1_000_000) throw createFileTreeError('Directory scan limit reached', 413, 'DIRECTORY_TOO_LARGE');
+          if (!includeEntry(path.join(requested, entry.name), entry.isDirectory())) continue;
+          const key = (entry.isDirectory() ? '0:' : '1:') + entry.name;
+          if (key <= after) continue;
+          let low = 0, high = page.length;
+          while (low < high) {
+            const mid = (low + high) >>> 1;
+            if (page[mid].key < key) low = mid + 1; else high = mid;
+          }
+          if (low <= limit) page.splice(low, 0, { key, entry });
+          if (page.length > limit + 1) page.pop();
+        }
+      } finally { release(); }
+      const hasMore = page.length > limit;
+      const selected = page.slice(0, limit);
+      const entries = await Promise.all(selected.map(async ({ entry }): Promise<FileTreeNode> => {
+        const itemPath = path.join(requested, entry.name);
+        const item: FileTreeNode = { name: entry.name, path: itemPath,
+          type: entry.isDirectory() ? 'directory' : 'file', size: 0, modified: null,
+          permissions: '000', permissionsRwx: '---------' };
+        await acquire();
+        try {
+          const metadata = await fileSystem.lstat(itemPath);
+          item.size = metadata.size;
+          item.modified = metadata.mtime.toISOString();
+          const bits = [(metadata.mode >> 6) & 7, (metadata.mode >> 3) & 7, metadata.mode & 7];
+          item.permissions = bits.join('');
+          item.permissionsRwx = bits.map(permissionBitsToRwx).join('');
+          if (metadata.isSymbolicLink()) item.isSymlink = true;
+        } catch { /* Entries may disappear between enumeration and metadata. */ }
+        finally { release(); }
+        return item;
+      }));
+      const endStats = await fileSystem.stat(directory);
+      if (endStats.mtime.toISOString() !== stats.mtime.toISOString() || endStats.size !== stats.size) {
+        throw createFileTreeError('Folder changed. Refresh to restart listing.', 409, 'STALE_DIRECTORY_CURSOR');
+      }
+      return { path: requested, entries, nextCursor: hasMore
+        ? Buffer.from(JSON.stringify({ version, after: selected[selected.length - 1].key })).toString('base64url') : null };
     },
 
     async listProjectFiles(projectId, options) {
