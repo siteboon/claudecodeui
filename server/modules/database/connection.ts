@@ -11,6 +11,7 @@
  */
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -51,11 +52,53 @@ function resolveLegacyDatabasePath(): string {
 // Directory & migration helpers
 // ---------------------------------------------------------------------------
 
+// The database holds password hashes, the JWT secret, API keys and GitHub
+// tokens in plaintext, so only the owning user may read it.
+const PRIVATE_DIRECTORY_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
+
 function ensureDatabaseDirectory(dbPath: string): void {
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
     console.log('Created database directory:', dir);
+  }
+
+  // Only the app's own folder is tightened in place; a custom DATABASE_PATH
+  // directory may be shared with other things and is left as the user set it.
+  if (dir === path.join(os.homedir(), '.cloudcli')) {
+    restrictMode(dir, PRIVATE_DIRECTORY_MODE);
+  }
+}
+
+/**
+ * Creates the database file owner-only before SQLite opens it, and tightens an
+ * existing (or just migrated) one. SQLite creates new sidecar files with the
+ * database file's permissions, but sidecars left over from an earlier run keep
+ * whatever mode they had, so those are tightened too before the open.
+ */
+function ensurePrivateDatabaseFile(dbPath: string): void {
+  if (!fs.existsSync(dbPath)) {
+    fs.closeSync(fs.openSync(dbPath, 'a', PRIVATE_FILE_MODE));
+  }
+  for (const filePath of [dbPath, `${dbPath}-journal`, `${dbPath}-wal`, `${dbPath}-shm`]) {
+    if (fs.existsSync(filePath)) {
+      restrictMode(filePath, PRIVATE_FILE_MODE);
+    }
+  }
+}
+
+function restrictMode(targetPath: string, mode: number): void {
+  if (process.platform === 'win32') return;
+  try {
+    if ((fs.statSync(targetPath).mode & 0o777) !== mode) {
+      fs.chmodSync(targetPath, mode);
+    }
+  } catch (err: any) {
+    console.warn('Could not restrict permissions; other local users may be able to read it', {
+      path: targetPath,
+      error: err.message,
+    });
   }
 }
 
@@ -102,9 +145,9 @@ let instance: Database.Database | null = null;
  *   1. Resolves the target database path
  *   2. Ensures the parent directory exists
  *   3. Migrates from the legacy install-directory path if needed
- *   4. Opens the SQLite connection
- *   5. Eagerly creates the app_config table (auth reads JWT secret at import time)
- *   6. Logs the database location
+ *   4. Makes the database file readable by the owner only
+ *   5. Opens the SQLite connection
+ *   6. Eagerly creates the app_config table (auth reads JWT secret at import time)
  */
 export function getConnection(): Database.Database {
   if (instance) return instance;
@@ -113,6 +156,7 @@ export function getConnection(): Database.Database {
 
   ensureDatabaseDirectory(dbPath);
   migrateLegacyDatabase(dbPath);
+  ensurePrivateDatabaseFile(dbPath);
 
   instance = new Database(dbPath);
 
