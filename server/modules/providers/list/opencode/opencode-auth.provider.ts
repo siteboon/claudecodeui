@@ -25,6 +25,7 @@ const OPENCODE_ENV_CREDENTIAL_KEYS = [
   'GOOGLE_GENERATIVE_AI_API_KEY',
   'GROQ_API_KEY',
   'OPENROUTER_API_KEY',
+  'WALLY_API_KEY',
 ];
 
 /**
@@ -102,7 +103,8 @@ export class OpenCodeProviderAuth implements IProviderAuth {
       }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'ENOENT') {
+      // A Wally environment login is independent of an unreadable auth store.
+      if (code !== 'ENOENT' && !process.env.WALLY_API_KEY?.trim()) {
         return {
           authenticated: false,
           email: null,
