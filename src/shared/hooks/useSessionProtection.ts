@@ -188,10 +188,14 @@ export function useSessionProtection() {
           continue;
         }
 
+        // A turn's entry says nothing about interrupting, so it inherits from
+        // the previous entry only when that was a turn too: a background entry's
+        // `canInterrupt: false` carried over left a running turn unstoppable.
+        const carried = existing && Boolean(existing.background) === Boolean(snapshot.background) ? existing : undefined;
         updated.set(sessionId, {
           statusText:
-            snapshot.statusText !== undefined ? snapshot.statusText : existing?.statusText ?? null,
-          canInterrupt: snapshot.canInterrupt ?? existing?.canInterrupt ?? true,
+            snapshot.statusText !== undefined ? snapshot.statusText : carried?.statusText ?? null,
+          canInterrupt: snapshot.canInterrupt ?? carried?.canInterrupt ?? true,
           startedAt: snapshotStartedAt ?? existing?.startedAt ?? now,
           ...(snapshot.background ? { background: true } : {}),
           ...(snapshot.tasks ? { tasks: snapshot.tasks } : {}),

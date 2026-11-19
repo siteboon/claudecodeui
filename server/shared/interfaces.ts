@@ -57,6 +57,12 @@ export interface IProviderRuntime {
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
   /**
+   * Whether this runtime holds a live process for the session. Such a process
+   * can be working with no chat run on record: a turn the CLI started on its
+   * own after background work reported back.
+   */
+  hasLiveSession?(sessionId: string): boolean;
+  /**
    * Asks a side question on the provider runtime while a session is active.
    *
    * A provider with this method uses its native fork capability; one without it
