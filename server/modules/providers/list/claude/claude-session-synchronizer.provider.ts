@@ -9,6 +9,7 @@ import {
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
   readFileTimestamps,
+  readLastJsonlTimestamp,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
@@ -64,7 +65,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
-      const timestamps = await readFileTimestamps(filePath);
+      const timestamps = await this.readSessionTimestamps(filePath);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
@@ -97,7 +98,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
-    const timestamps = await readFileTimestamps(filePath);
+    const timestamps = await this.readSessionTimestamps(filePath);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
@@ -107,6 +108,27 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
+  }
+
+  /**
+   * Returns the file's creation time and the session's last activity.
+   *
+   * Claude Desktop appends metadata rows (`custom-title`, `last-prompt`,
+   * `cost-state`, ...) to transcripts that have not been used in weeks, for
+   * example when it starts, and timestamped bookkeeping rows too: a
+   * `queue-operation` that queues a notification such as "Stopped watching
+   * Artifact" for the session's next turn, or a `frame-link`. The file's mtime
+   * then moves although the conversation did not, and those sessions jump to
+   * the top of the recent list. The last user or assistant turn is the real
+   * last activity; the mtime remains the fallback.
+   */
+  private async readSessionTimestamps(filePath: string): Promise<{ createdAt?: string; updatedAt?: string }> {
+    const timestamps = await readFileTimestamps(filePath);
+    const lastActivity = await readLastJsonlTimestamp(
+      filePath,
+      (row) => row.type === 'user' || row.type === 'assistant',
+    );
+    return lastActivity ? { ...timestamps, updatedAt: lastActivity } : timestamps;
   }
 
   /**
