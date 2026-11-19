@@ -1,4 +1,6 @@
 // @ts-nocheck -- JWT request augmentation is narrowed by Auth route contracts.
+import crypto from 'crypto';
+
 import jwt from 'jsonwebtoken';
 
 import { IS_PLATFORM, secretsMatch } from '@/shared/utils.js';
@@ -7,6 +9,26 @@ import { userDb, appConfigDb } from '../database/index.js';
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
+
+// Platform mode drops per-request authentication: whoever can reach the port is
+// treated as the single configured user, and platform mode is fixed at start-up.
+// That is fine behind a gateway that authenticates for us, and is the whole auth
+// model when the port is reachable from anywhere else. Allow operators to require
+// a shared secret, without changing behaviour for deployments that don't set it.
+const PLATFORM_SHARED_SECRET = (process.env.PLATFORM_SHARED_SECRET || '').trim();
+
+const platformSecretFromHeaders = (req) => {
+  const raw = req.headers['x-platform-secret'];
+  return Array.isArray(raw) ? raw[0] ?? '' : raw ?? '';
+};
+
+const platformSecretMatches = (presented) => {
+  if (!PLATFORM_SHARED_SECRET) return true;
+  const given = Buffer.from(String(presented ?? ''));
+  const want = Buffer.from(PLATFORM_SHARED_SECRET);
+  if (given.length !== want.length) return false;
+  return crypto.timingSafeEqual(given, want);
+};
 
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
@@ -25,6 +47,13 @@ const validateApiKey = (req, res, next) => {
 const authenticateToken = async (req, res, next) => {
   // Platform mode:  use single database user
   if (IS_PLATFORM) {
+    if (!platformSecretMatches(platformSecretFromHeaders(req))) {
+      res.setHeader('X-Auth-Error', 'invalid-platform-secret');
+      return res.status(401).json({
+        error: 'Access denied. Invalid platform secret.',
+        code: 'PLATFORM_SECRET_INVALID',
+      });
+    }
     try {
       const user = userDb.getFirstUser();
       if (!user) {
@@ -114,9 +143,12 @@ const generateToken = (user) => {
 };
 
 // WebSocket authentication function
-const authenticateWebSocket = (token) => {
+const authenticateWebSocket = (token, platformSecret = null) => {
   // Platform mode: bypass token validation, return first user
   if (IS_PLATFORM) {
+    if (!platformSecretMatches(platformSecret)) {
+      return null;
+    }
     try {
       const user = userDb.getFirstUser();
       if (user) {
