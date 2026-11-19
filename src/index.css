@@ -772,11 +772,12 @@
     }
   }
 
-  /* Text wrapping improvements */
+  /* Text wrapping improvements. No `hyphens: auto`: WebKit hyphenates a long
+     unbroken word (a base64 blob, a hash, minified code) in time that grows
+     without bound, and one such word froze the whole Safari tab. */
   .chat-message {
     word-wrap: break-word;
     overflow-wrap: break-word;
-    hyphens: auto;
   }
 
   /* Force wrap long URLs and code */
