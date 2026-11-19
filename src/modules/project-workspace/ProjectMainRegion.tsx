@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
 
-import { useProjectMainState } from '@/modules/project-workspace/context/ProjectsStateContext';
+import { useProjectCommandState, useProjectMainState } from '@/modules/project-workspace/context/ProjectsStateContext';
 import type { SessionEstablishedContext, SessionNavigationOptions,ProjectWorkspaceShellProps } from '@/shared/types';
 import WorkspaceMain from '@/modules/project-workspace/WorkspaceMain';
 
@@ -26,6 +26,7 @@ function ProjectMainRegion({
     refreshProjectsSilently,
     renameSession,
   } = useProjectMainState();
+  const { handleNewSession } = useProjectCommandState();
 
   const handleOpenSidebar = useCallback(() => {
     setSidebarOpen(true);
@@ -68,6 +69,7 @@ function ProjectMainRegion({
       onProjectSelect={handleProjectSelect}
       onProjectsRefresh={handleProjectsRefresh}
       onRenameSession={renameSession}
+      onNewSession={handleNewSession}
     />
   );
 }

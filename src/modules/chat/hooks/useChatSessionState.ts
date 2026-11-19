@@ -1112,11 +1112,15 @@ export function useChatSessionState({
       return [];
     }
 
-    await sessionStore.fetchFromServer(sessionId, {
+    const slot = await sessionStore.fetchFromServer(sessionId, {
       limit: null,
       offset: 0,
       canRequest: () => activeSessionIdRef.current === sessionId,
     });
+    // A failed or skipped fetch leaves only the cached tail; returning that would pass a later turn off as the start.
+    if (!slot || slot.status === 'error') {
+      throw new Error('Could not load the full transcript');
+    }
 
     // The whole transcript is loaded (`limit: null`), so there is no older
     // page left to protect a pair against: `hasOlder` is false here even
