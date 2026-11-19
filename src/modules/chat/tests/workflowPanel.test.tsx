@@ -94,6 +94,9 @@ const liveAgents: WorkflowAgentProgress[] = [
   { index: 2, state: 'queued', promptPreview: 'You are the synthesis step of a code-quality audit.\nMerge the audits.' },
 ];
 
+/** A minute after audit:sidebar started, so a running agent's elapsed time reads the same on every run. */
+const NOW = 1_700_000_180_000;
+
 afterEach(() => {
   agentActivityByAgentId.clear();
   workflowAgentActivity.mockClear();
@@ -230,6 +233,7 @@ describe('a workflow card', () => {
 
 describe('the agents of a workflow card', () => {
   it('lists what each agent is doing, from the live stream over the journal, while the run is going', () => {
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
     // The journal (last history load) still has audit:chat running and knows
     // nothing of the queued slot; the stream is fresher on both.
     renderPanel({
@@ -248,7 +252,7 @@ describe('the agents of a workflow card', () => {
 
     expect(agentRows().map((row) => row.textContent)).toEqual([
       'audit:chat· AuditdoneThree large hooks carry most of the module.',
-      'audit:sidebar· AuditrunningGrep: useSidebar4k tokens12 tool calls',
+      'audit:sidebar· Auditrunning · 1m 0sGrep: useSidebar4k tokens12 tool calls',
       // Not yet started: named from its prompt, since it has no id or label.
       'You are the synthesis step of a code-quality audit.queued',
     ]);
@@ -315,6 +319,7 @@ describe('the agents of a workflow card', () => {
   });
 
   it('shows an agent\'s phase from the stream when the journal has none for it', () => {
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
     // The stream names the phase on every entry; a journal row read before
     // the agent's phase was written has no word on it.
     renderPanel({
@@ -330,7 +335,7 @@ describe('the agents of a workflow card', () => {
     openCard();
 
     expect(agentRows().map((row) => row.textContent)).toEqual([
-      'audit:sidebar· AuditrunningGrep: useSidebar4k tokens12 tool calls',
+      'audit:sidebar· Auditrunning · 1m 0sGrep: useSidebar4k tokens12 tool calls',
     ]);
   });
 
@@ -466,6 +471,52 @@ describe('the agents of a workflow card', () => {
 
     expect(screen.queryByRole('button', { name: /audit:chat/ })).toBeNull();
     expect(screen.getByText('audit:chat')).toBeTruthy();
+  });
+});
+
+describe('how long each agent of a workflow card took', () => {
+  it('times a finished agent from its transcript on a history load', () => {
+    // History has no live stream: the journal read gives each agent its
+    // transcript's first and last entry, and nothing for one with no transcript.
+    renderPanel({
+      toolResult: { content: '{"audits":[]}', isError: false },
+      workflow: {
+        ...completedWorkflow,
+        agents: [
+          { id: 'aa1e064cf8bd159d6', label: 'audit:chat', phase: 'Audit', status: 'completed', startedAt: NOW - 600_000, lastActivityAt: NOW - 466_000 },
+          { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', phase: 'Audit', status: 'failed', startedAt: NOW - 600_000, lastActivityAt: NOW - 595_000 },
+          { id: 'ab89f2cde612a51b1', label: 'synthesize', phase: 'Synthesize', status: 'running' },
+        ],
+      },
+    });
+    openCard();
+
+    expect(agentRows().map((row) => row.textContent)).toEqual([
+      'audit:chat· Auditdone · 2m 14s',
+      'audit:sidebar· Auditfailed · 5s',
+      // The run is over, so the journal's unsettled agent has no result — and no time.
+      'synthesize· Synthesizeno result',
+    ]);
+  });
+
+  it('keeps counting a running agent up from when it started', async () => {
+    vi.useFakeTimers({ now: NOW });
+    renderPanel({ toolResult: LAUNCH_ACK, taskStatus: { status: 'running', agents: [liveAgents[1]] } });
+    openCard();
+
+    expect(agentRows()[0]?.textContent).toContain('running · 1m 0s');
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(agentRows()[0]?.textContent).toContain('running · 1m 5s');
+  });
+
+  it('prefers the SDK\'s own duration for an agent the live stream saw finish', () => {
+    renderPanel({
+      toolResult: LAUNCH_ACK,
+      taskStatus: { status: 'running', agents: [{ ...liveAgents[0], durationMs: 42_000 }] },
+    });
+    openCard();
+
+    expect(agentRows()[0]?.textContent).toContain('done · 42s');
   });
 });
 
