@@ -364,15 +364,17 @@ function readTaggedValue(content: string, tagName: string): string {
 /**
  * Reads every `<task-notification>` payload one transcript row carries.
  *
- * Claude writes the same completion report in two shapes, and which one you get
- * depends only on when the agent happened to finish:
+ * Claude writes the same completion report in three shapes, and which one you
+ * get depends only on when the agent happened to finish:
  *
  * - as an ordinary user-role turn, when the queued notification is delivered
  *   between turns (the harness also logs a contentless `dequeue` for it);
  * - as a top-level `queue-operation` record whose `content` holds the payload,
  *   when the harness consumes it inline while the parent turn is still running
  *   (`remove`), or when the session ends before it is ever delivered
- *   (`enqueue`).
+ *   (`enqueue`);
+ * - as a `queued_command` attachment whose `prompt` holds the payload, which
+ *   is at times the only record a backgrounded command or agent leaves.
  *
  * The operation names the queue's bookkeeping, not whether the agent finished,
  * so every queue-operation payload counts. Reading only the user-role shape
@@ -385,11 +387,19 @@ function readTaskNotificationTexts(message: AnyRecord): string[] {
     return typeof message.content === 'string' ? [message.content] : [];
   }
 
+  if (message.type === 'attachment') {
+    return message.attachment?.type === 'queued_command' ? readPromptTexts(message.attachment.prompt) : [];
+  }
+
   if (message.message?.role !== 'user') {
     return [];
   }
 
-  const content = message.message.content;
+  return readPromptTexts(message.message.content);
+}
+
+/** The text of a message's content: a plain string, or the text parts of a block list. */
+function readPromptTexts(content: unknown): string[] {
   if (typeof content === 'string') {
     return [content];
   }
