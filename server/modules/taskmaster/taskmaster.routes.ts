@@ -11,6 +11,7 @@
 
 import path from 'path';
 
+import chokidar, { type FSWatcher } from 'chokidar';
 import express from 'express';
 
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
@@ -60,6 +61,38 @@ function broadcastTaskMasterProjectUpdate(projectId, taskMasterData) {
 
 function broadcastTaskMasterTasksUpdate(projectId, tasksData) {
     broadcastTaskMasterUpdate('taskmaster-tasks-updated', projectId, 'tasksData', tasksData);
+}
+
+/**
+ * Agents and the task-master CLI write tasks.json directly, bypassing these
+ * routes, so the board never heard about those edits until a reload. Once a
+ * project's tasks have been read, its tasks.json is watched and every change
+ * is broadcast like a route-made edit.
+ */
+const tasksFileWatchers = new Map<string, FSWatcher>();
+
+function watchTasksFile(projectId: string, tasksFilePath: string) {
+    if (tasksFileWatchers.has(projectId)) return;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const watcher = chokidar.watch(tasksFilePath, {
+        ignoreInitial: true,
+        awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 },
+    });
+    watcher.on('all', () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => broadcastTaskMasterTasksUpdate(projectId), 300);
+    });
+    watcher.on('error', (error) => {
+        console.error(`TaskMaster: watching ${tasksFilePath} failed:`, error);
+    });
+    tasksFileWatchers.set(projectId, watcher);
+}
+
+/** Closes every tasks.json watcher (tests and shutdown). */
+export async function closeTasksFileWatchers() {
+    const watchers = [...tasksFileWatchers.values()];
+    tasksFileWatchers.clear();
+    await Promise.all(watchers.map((watcher) => watcher.close()));
 }
 
 /**
@@ -267,6 +300,7 @@ export function createTaskmasterRouter(dependencies: TaskmasterRouterDependencie
                     message: 'No tasks.json file found'
                 });
             }
+            watchTasksFile(projectId, tasksFilePath);
 
             // Read and parse tasks file
             try {
