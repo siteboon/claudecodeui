@@ -207,3 +207,45 @@ test('ordinal snapshots still reject genuinely truncated and invalid source boun
     await assert.rejects(provider.fetchHistory('invalid-ordinal'), { code: 'CODEX_HISTORY_SOURCE_INVALID' });
   });
 });
+
+for (const firstOrdinal of [3, 7]) {
+  test(`ordinal snapshots reject a child starting at ${firstOrdinal} instead of its declared boundary`, async () => {
+    await withRollouts(async (root) => {
+      const source = await rollout(root, 'source', turn('turn-a', 'first'));
+      await numberRollout(source);
+      const child = await rollout(root, 'child', turn('turn-b', 'second'), await reference('source', source));
+      await numberRollout(child, firstOrdinal);
+      await rollout(root, 'grandchild', [], { history_base: {
+        thread_id: 'child', end_byte_offset: 999999, end_ordinal_exclusive: firstOrdinal + 5,
+      } });
+      const provider = new CodexSessionsProvider();
+      await assert.rejects(provider.fetchHistory('grandchild'), { code: 'CODEX_HISTORY_SOURCE_INVALID' });
+      await assert.rejects(provider.resolveEditAnchor('grandchild', 'turn-b'), { code: 'CODEX_HISTORY_SOURCE_INVALID' });
+    });
+  });
+}
+
+test('ordinal snapshots reject a root whose first ordinal is not zero', async () => {
+  await withRollouts(async (root) => {
+    const source = await rollout(root, 'source', turn('turn-a', 'first'));
+    await numberRollout(source, 2);
+    await rollout(root, 'fork', [], { history_base: {
+      thread_id: 'source', end_byte_offset: 999999, end_ordinal_exclusive: 7,
+    } });
+    await assert.rejects(new CodexSessionsProvider().fetchHistory('fork'), { code: 'CODEX_HISTORY_SOURCE_INVALID' });
+  });
+});
+
+test('ordinal snapshots validate the child boundary independently of a smaller outer cap', async () => {
+  await withRollouts(async (root) => {
+    const source = await rollout(root, 'source', turn('turn-a', 'first'));
+    await numberRollout(source);
+    const child = await rollout(root, 'child', turn('turn-b', 'excluded'), await reference('source', source));
+    await numberRollout(child, 5);
+    await rollout(root, 'grandchild', [], { history_base: {
+      thread_id: 'child', end_byte_offset: 999999, end_ordinal_exclusive: 3,
+    } });
+    const history = await new CodexSessionsProvider().fetchHistory('grandchild');
+    assert.deepEqual(history.messages.map((message) => message.content), ['first']);
+  });
+});

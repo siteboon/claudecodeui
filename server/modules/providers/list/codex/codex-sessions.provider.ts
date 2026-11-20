@@ -231,6 +231,7 @@ async function* readCodexRolloutLines(
   const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
   let readMetadata = false;
   let lastOrdinal: number | undefined;
+  let firstOrdinal = 0;
   try {
     for await (const line of lines) {
       let entry: AnyRecord | undefined;
@@ -252,6 +253,9 @@ async function* readCodexRolloutLines(
               code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
             });
           }
+          // Local rows follow this file's own inherited prefix, even when an
+          // outer fork requests a smaller snapshot from that prefix.
+          firstOrdinal = ordinal ?? 0;
           const sourcePath = await findCodexHistorySource(canonicalPath, threadId);
           if (!sourcePath) {
             throw new AppError('The source transcript referenced by this Codex fork is unavailable.', {
@@ -265,7 +269,7 @@ async function* readCodexRolloutLines(
       if (ordinalLimit !== undefined && entry) {
         const ordinal = entry.ordinal;
         if (!Number.isSafeInteger(ordinal) || ordinal < 0
-          || (lastOrdinal !== undefined && ordinal !== lastOrdinal + 1)) {
+          || ordinal !== (lastOrdinal === undefined ? firstOrdinal : lastOrdinal + 1)) {
           throw new AppError('Codex fork history has invalid or missing source ordinals.', {
             code: 'CODEX_HISTORY_SOURCE_INVALID', statusCode: 502,
           });
