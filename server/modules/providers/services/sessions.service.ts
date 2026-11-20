@@ -277,7 +277,8 @@ async function readCurrentContextHistory(
     // retain a stable row count even when the native file never existed.
     const messages = [...full.messages];
     for (const [index, failure] of failures.entries()) {
-      const alreadyVisible = messages.some((message) => message.kind === 'error'
+      // Synthetic notices must not hide a different failure at the same time.
+      const alreadyVisible = full.messages.some((message) => message.kind === 'error'
         && message.timestamp >= failure.startedAt && message.timestamp <= failure.timestamp);
       if (!alreadyVisible) messages.push(failureNotices[index]);
     }

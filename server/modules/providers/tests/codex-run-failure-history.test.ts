@@ -112,6 +112,33 @@ test('failure survives database reopen and joins history before pagination witho
   });
 });
 
+test('distinct failures sharing a timestamp remain visible before pagination', async () => {
+  await withHistoryDatabase(async (root) => {
+    const sessionId = 'same-time';
+    const nativeId = 'same-time-native';
+    const transcript = path.join(root, 'same-time.jsonl');
+    const timestamp = new Date().toISOString();
+    await writeFile(transcript, [
+      { timestamp, type: 'session_meta', payload: { id: nativeId, cwd: root } },
+      { timestamp, type: 'event_msg', payload: { type: 'user_message', message: 'Question' } },
+    ].map((row) => JSON.stringify(row)).join('\n') + '\n');
+    sessionsDb.createAppSession(sessionId, 'codex', root);
+    sessionsDb.assignProviderSessionId(sessionId, nativeId);
+    sessionsDb.createSession(nativeId, 'codex', root, undefined, undefined, undefined, transcript);
+    const failure = { ...failureFor(sessionId, nativeId), startedAt: timestamp, timestamp };
+    for (const id of ['same-time-a', 'same-time-b']) sessionRuntimeFailuresDb.record({ ...failure, id });
+
+    const history = await sessionsService.fetchHistory(sessionId);
+    assert.deepEqual(history.messages.filter((message) => message.kind === 'error').map((message) => message.id),
+      ['same-time-a', 'same-time-b']);
+    assert.equal(history.total, 3);
+    const page = await sessionsService.fetchHistory(sessionId, { limit: 1, offset: 0 });
+    assert.equal(page.messages[0]?.id, 'same-time-b');
+    assert.equal(page.total, 3);
+    assert.equal(page.hasMore, true);
+  });
+});
+
 for (const keepThroughId of [null, 'kept-turn']) {
   test(`rewind clears pre-transcript failures and hides abandoned bound failures (${keepThroughId})`, async (t) => {
     await withHistoryDatabase(async (root) => {
