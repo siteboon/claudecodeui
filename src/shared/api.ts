@@ -277,6 +277,9 @@ export const api = {
   sessionDetails: (sessionId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}`),
   runningSessions: () => get('/api/providers/sessions/running'),
+  pinnedSessions: (options: ApiRequestOptions = {}) => get('/api/providers/sessions/pinned', options),
+  setSessionPinned: (sessionId: string, isPinned: boolean, options: ApiRequestOptions = {}) =>
+    put(`/api/providers/sessions/${encodeURIComponent(sessionId)}/pin`, { isPinned }, options),
   recentConversations: ({ limit = 40, offset = 0 }: { limit?: number; offset?: number } = {}) =>
     get(`/api/providers/sessions/recent${query({ limit, offset })}`),
   providerSessionId: (sessionId: string) =>
