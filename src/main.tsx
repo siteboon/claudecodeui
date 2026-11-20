@@ -3,11 +3,17 @@ import ReactDOM from 'react-dom/client'
 import { scan } from 'react-scan'
 
 import App from '@/App'
+import { applyStoredColorTheme } from '@/shared/themes'
 import '@/index.css'
 import 'katex/dist/katex.min.css'
 
 // Initialize i18n
 import '@/modules/i18n'
+
+// Before the first paint rather than from a provider effect, which React
+// flushes after it: otherwise a themed install shows one frame of the default
+// palette on every load.
+applyStoredColorTheme()
 
 // React Scan is a render-diagnostics overlay, and an expensive one: measured on
 // this app it roughly halves the dev frame rate, adds ~14 MB of heap and injects
