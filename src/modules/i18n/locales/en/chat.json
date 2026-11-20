@@ -167,6 +167,13 @@
     "placeholderDefault": "Type your message...",
     "disabled": "Input disabled",
     "attachFiles": "Attach files",
+    "attachmentRejected": {
+      "title_one": "Couldn't attach {{count}} file",
+      "title_other": "Couldn't attach {{count}} files",
+      "tooLarge": "is larger than {{maxSize}} MB",
+      "tooMany": "is over the {{maxCount}}-file limit",
+      "dismiss": "Dismiss"
+    },
     "attachImages": "Attach images",
     "send": "Send",
     "stop": "Stop",
@@ -188,6 +195,13 @@
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
       "delete": "Delete queued message"
+    },
+    "steer": {
+      "label": "Steering",
+      "sending": "Sending…",
+      "willRead": "{{provider}} reads it at its next tool call",
+      "attachments_one": "{{count}} file attached",
+      "attachments_other": "{{count}} files attached"
     }
   },
   "composer": {
@@ -267,6 +281,10 @@
       "label": "Queue",
       "descriptionResponding": "Send when this turn ends",
       "descriptionBackground": "Send when the background work ends"
+    },
+    "steer": {
+      "label": "Steer",
+      "description": "Send into this turn; read at the next tool call"
     },
     "sideQuestion": {
       "label": "Side question",
@@ -450,6 +468,12 @@
     "tokensUsed_one": "{{count}} token used",
     "tokensUsed_other": "{{count}} tokens used",
     "compacted": "Compacted",
+    "contextCleared": "Context cleared",
+    "clearContext": "Clear context",
+    "clearContextConfirm": "Clear this session's context? The conversation stays here, but the next message starts fresh.",
+    "clearContextEmpty": "The context is already clear.",
+    "clearContextFailed": "Could not clear the context: {{message}}",
+    "clearContextUnsupported": "Clearing context is not available for this provider.",
     "compactionSummary": "full summary",
     "expandImage": "Expand {{name}}",
     "tokensLabel_one": "token",

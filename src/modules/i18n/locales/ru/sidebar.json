@@ -40,7 +40,9 @@
     "deleteSelected_one": "Удалить {{count}} сеанс",
     "deleteSelected_few": "Удалить {{count}} сеанса",
     "deleteSelected_many": "Удалить {{count}} сеансов",
-    "deleteSelected_other": "Удалить {{count}} сеансов"
+    "deleteSelected_other": "Удалить {{count}} сеансов",
+    "expandForks": "Развернуть ответвления {{session}}",
+    "collapseForks": "Свернуть ответвления {{session}}"
   },
   "tooltips": {
     "viewEnvironments": "Просмотр окружений",

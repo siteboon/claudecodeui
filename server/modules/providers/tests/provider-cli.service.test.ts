@@ -49,7 +49,8 @@ if (command === '--version') {
   }
   process.exit(Number(read('version-exit', '0')));
 }
-if (command === 'update' || command === 'upgrade') {
+// 'install' stands in for npm, which Codex's fallback updater runs.
+if (command === 'update' || command === 'upgrade' || command === 'install') {
   fs.writeFileSync(path.join(dir, 'update-count'), String(Number(read('update-count', '0')) + 1));
   if (read('ignore-sigterm', '')) {
     process.on('SIGTERM', () => {});
@@ -222,7 +223,7 @@ test('each provider reports the version its CLI prints for --version', async () 
     assert.equal(openCodeStatus.installed, true);
     assert.equal(openCodeStatus.installedVersion, '1.18.25');
 
-    // Codex chats run the @openai/codex build CloudCLI depends on, not a `codex` on PATH.
+    // With no Codex of the user's own on PATH, chats run the @openai/codex build CloudCLI depends on.
     const bundledCodex = createRequire(import.meta.url)('@openai/codex/package.json') as { version: string };
     const codexStatus = await new CodexProviderAuth().getStatus();
     assert.equal(codexStatus.installed, true);
@@ -428,7 +429,7 @@ test('getCliStatus does not ask the registry about a CLI that is not installed',
   });
 });
 
-test('Cursor has no npm release to compare with; Codex ships with CloudCLI; platform mode offers no update', async () => {
+test('Cursor has no npm release to compare with; platform mode offers no update', async () => {
   await withIsolatedCliEnv(async (binDir) => {
     const cursor = await createFakeCli(binDir, 'cursor-agent');
     await cursor.set('version', '2026.07.20-8cc9c0b\n');
@@ -438,12 +439,6 @@ test('Cursor has no npm release to compare with; Codex ships with CloudCLI; plat
     assert.equal(cursorStatus.latestVersion, null);
     assert.equal(cursorStatus.updateCommand, 'cursor-agent update');
     assert.equal(cursorStatus.updateUnavailableReason, null);
-
-    const codexStatus = await service.getCliStatus('codex');
-    assert.equal(codexStatus.installed, true);
-    assert.equal(codexStatus.updateCommand, null);
-    assert.equal(codexStatus.updateUnavailableReason, 'bundled');
-    await rejectsWithAppError(service.updateCli('codex'), 'PROVIDER_CLI_UPDATE_UNAVAILABLE', 400);
 
     const platformService = createService({ platformMode: true });
     const platformStatus = await platformService.getCliStatus('cursor');
@@ -461,6 +456,92 @@ test('Cursor has no npm release to compare with; Codex ships with CloudCLI; plat
     assert.equal(platformClaude.installedVersion, '2.1.200');
     assert.equal(platformClaude.latestVersion, null);
     assert.equal(platformClaude.updateAvailable, false);
+
+    const platformCodex = await platformService.getCliStatus('codex');
+    assert.equal(platformCodex.updateCommand, null);
+    assert.equal(platformCodex.updateUnavailableReason, 'platform');
+  });
+});
+
+// ----------------- Codex ------------
+
+const bundledCodexVersion = () =>
+  (createRequire(import.meta.url)('@openai/codex/package.json') as { version: string }).version;
+
+test('with only the bundled Codex, the update installs the user\'s own with npm, and says when PATH cannot find it', async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const registry = createFakeRegistry(async () => jsonResponse({ version: '9999.0.0' }));
+    const service = createService({ fetch: registry.fetch });
+
+    const status = await service.getCliStatus('codex');
+    assert.equal(status.installed, true);
+    assert.equal(status.installedVersion, bundledCodexVersion());
+    assert.equal(status.latestVersion, '9999.0.0');
+    assert.equal(status.updateAvailable, true);
+    assert.equal(status.updateCommand, 'npm install -g @openai/codex@latest');
+    assert.equal(status.updateUnavailableReason, null);
+    assert.deepEqual(registry.calls.map((call) => call.url), ['https://registry.npmjs.org/@openai%2Fcodex/latest']);
+
+    // npm succeeds, but nothing it installed is on this PATH, so the bundled
+    // Codex keeps running and the result says why the version did not move.
+    const npm = await createFakeCli(binDir, 'npm');
+    await npm.set('update-stdout', 'added 2 packages in 3s\n');
+    const result = await service.updateCli('codex');
+    assert.equal(await npm.read('update-count'), '1');
+    assert.equal(result.command, 'npm install -g @openai/codex@latest');
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.failure, null);
+    assert.equal(result.previousVersion, bundledCodexVersion());
+    assert.equal(result.installedVersion, bundledCodexVersion());
+    assert.match(result.output, /^added 2 packages in 3s\n\nnpm finished, but its codex command is not on the PATH/);
+
+    // A failed npm run explains itself.
+    await npm.set('update-exit', '1');
+    await npm.set('update-stderr', 'npm error code E404\n');
+    const failed = await service.updateCli('codex');
+    assert.equal(failed.failure, 'failed');
+    assert.doesNotMatch(failed.output, /npm finished/);
+  });
+});
+
+test('the user\'s own Codex on PATH runs when it is not older than the bundled one, and updates itself', {
+  skip: process.platform === 'win32' ? 'the fake CLI is a .cmd shim, which Codex resolves as an npm package' : false,
+}, async () => {
+  await withIsolatedCliEnv(async (binDir) => {
+    const registry = createFakeRegistry(async () => jsonResponse({ version: '9999.1.0' }));
+    const service = createService({ fetch: registry.fetch });
+    const codex = await createFakeCli(binDir, 'codex');
+    const codexPath = path.join(binDir, 'codex');
+
+    // Older than the bundled CLI: chats keep running the bundled one, but the
+    // update still goes to the user's install, which then overtakes it.
+    await codex.set('version', 'codex-cli 0.0.1\n');
+    const olderStatus = await service.getCliStatus('codex');
+    assert.equal(olderStatus.installedVersion, bundledCodexVersion());
+    assert.equal(olderStatus.updateCommand, `${codexPath} update`);
+    assert.equal((await new CodexProviderAuth().getStatus()).installedVersion, bundledCodexVersion());
+
+    await codex.set('update-new-version', 'codex-cli 9999.0.0\n');
+    const takeover = await service.updateCli('codex');
+    assert.equal(takeover.command, `${codexPath} update`);
+    assert.equal(takeover.previousVersion, bundledCodexVersion());
+    assert.equal(takeover.installedVersion, '9999.0.0');
+    assert.equal(takeover.failure, null);
+    assert.doesNotMatch(takeover.output, /npm finished/);
+
+    // Now the newest: it is what runs, and the next update refreshes its version.
+    const status = await service.getCliStatus('codex');
+    assert.equal(status.installedVersion, '9999.0.0');
+    assert.equal(status.updateAvailable, true);
+    await codex.set('update-stdout', 'Updating Codex via `npm install -g @openai/codex`...\n');
+    await codex.set('update-new-version', 'codex-cli 9999.1.0\n');
+    const result = await service.updateCli('codex');
+    assert.equal(result.previousVersion, '9999.0.0');
+    assert.equal(result.installedVersion, '9999.1.0');
+    assert.equal(await codex.read('update-count'), '2');
+    const after = await service.getCliStatus('codex');
+    assert.equal(after.installedVersion, '9999.1.0');
+    assert.equal(after.updateAvailable, false);
   });
 });
 

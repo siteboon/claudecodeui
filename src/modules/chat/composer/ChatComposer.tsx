@@ -10,12 +10,12 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, PencilIcon } from 'lucide-react';
+import { EraserIcon, PaperclipIcon, MessageSquareIcon, XIcon, Loader2, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
 import { MCP_ELICITATION_TOOL_NAME } from '@/shared/constants';
-import type { BackgroundSendChoice, BackgroundSendPrompt, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import type { AttachmentRejection, BackgroundSendChoice, BackgroundSendPrompt, PendingSteer, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
 import {
   PromptInput,
   PromptInputHeader,
@@ -29,10 +29,12 @@ import {
 import CommandMenu from '@/modules/chat/composer/CommandMenu';
 import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
 import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
+import AttachmentRejectionNotice from '@/modules/chat/composer/AttachmentRejectionNotice';
 import VoiceInputButton from '@/modules/chat/composer/VoiceInputButton';
 import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequestsBanner';
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
+import SteeredMessageCard from '@/modules/chat/composer/SteeredMessageCard';
 import BackgroundSendDialog from '@/modules/chat/composer/BackgroundSendDialog';
 import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessagePopover';
 import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
@@ -44,6 +46,10 @@ type MentionableFile = {
   name: string;
   path: string;
 };
+
+// A stable empty default, so a composer with no steered messages (every
+// caller but the chat tab) does not get a new array each render.
+const NO_PENDING_STEERS: PendingSteer[] = [];
 
 type ChatComposerProps = {
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -70,6 +76,8 @@ type ChatComposerProps = {
   modelsLoading: boolean;
   tokenBudget: Record<string, unknown> | null;
   onShowTokenUsage: () => void;
+  /** Clears the session's context; absent when the session cannot be cleared. */
+  onClearContext?: () => void;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
@@ -88,13 +96,19 @@ type ChatComposerProps = {
   onCancelScheduledMessage: (id: string) => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
-  /** Handle send menu choices (queue, side question, send). */
-  onSendMenuChoice?: (choice: 'queue' | 'sideQuestion' | 'send') => void;
+  /** Handle send menu choices (queue, steer, side question, send). */
+  onSendMenuChoice?: (choice: 'queue' | 'steer' | 'sideQuestion' | 'send') => void;
   /** False until the capability matrix has loaded, or for a provider it does not list; passed through to the send menu and the background-send dialog so neither offers a side question that would be refused. */
   supportsSideQuestions?: boolean;
+  /** Whether the provider can take a message into a running turn; gates the send menu's Steer row the same way `supportsSideQuestions` gates its row. */
+  supportsSteering?: boolean;
+  /** Messages sent into the running turn that the agent has not read yet, each shown as a card above the composer until its echo lands in the transcript. */
+  pendingSteers?: PendingSteer[];
   attachedFiles: File[];
   onRemoveAttachment: (index: number) => void;
-  fileErrors: Map<string, string>;
+  /** Files the latest attach attempt refused (too large, or past the count limit), listed in a notice above the chips. */
+  attachmentRejections: AttachmentRejection[];
+  onDismissAttachmentRejections: () => void;
   showFileDropdown: boolean;
   filteredFiles: MentionableFile[];
   selectedFileIndex: number;
@@ -151,6 +165,7 @@ export default function ChatComposer({
   onSelectModel,
   modelsLoading,
   tokenBudget,
+  onClearContext,
   onShowTokenUsage,
   slashCommandsCount,
   onToggleCommandMenu,
@@ -170,9 +185,12 @@ export default function ChatComposer({
   onDeleteQueuedDraft,
   onSendMenuChoice,
   supportsSideQuestions,
+  supportsSteering = false,
+  pendingSteers = NO_PENDING_STEERS,
   attachedFiles,
   onRemoveAttachment,
-  fileErrors,
+  attachmentRejections,
+  onDismissAttachmentRejections,
   showFileDropdown,
   filteredFiles,
   selectedFileIndex,
@@ -332,6 +350,10 @@ export default function ChatComposer({
         onResolve={onResolveBackgroundSendPrompt}
       />
 
+      {pendingSteers.map((steer) => (
+        <SteeredMessageCard key={steer.messageId} steer={steer} providerLabel={providerLabel} />
+      ))}
+
       {queuedDraft && (
         <QueuedMessageCard
           content={queuedDraft.content}
@@ -341,6 +363,14 @@ export default function ChatComposer({
           onEdit={onEditQueuedDraft}
           onDelete={onDeleteQueuedDraft}
         />
+      )}
+
+      {/* The question panel replaces the input, but how to answer often depends on
+          how much context is left, so the token usage stays reachable below it. */}
+      {hasQuestionPanel && (
+        <div className="mx-auto flex max-w-[54.25rem] justify-end">
+          <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
+        </div>
       )}
 
       {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
@@ -410,20 +440,25 @@ export default function ChatComposer({
             </div>
           )}
 
-          {attachedFiles.length > 0 && (
-            <PromptInputHeader>
-              <div className="rounded-xl bg-muted/40 p-2">
-                <div className="flex flex-wrap gap-2">
-                  {attachedFiles.map((file, index) => (
-                    <ComposerAttachment
-                      key={`${file.name}-${file.lastModified}-${index}`}
-                      file={file}
-                      onRemove={() => onRemoveAttachment(index)}
-                      error={fileErrors.get(file.name)}
-                    />
-                  ))}
+          {(attachmentRejections.length > 0 || attachedFiles.length > 0) && (
+            <PromptInputHeader className="flex flex-col gap-2">
+              <AttachmentRejectionNotice
+                rejections={attachmentRejections}
+                onDismiss={onDismissAttachmentRejections}
+              />
+              {attachedFiles.length > 0 && (
+                <div className="rounded-xl bg-muted/40 p-2">
+                  <div className="flex flex-wrap gap-2">
+                    {attachedFiles.map((file, index) => (
+                      <ComposerAttachment
+                        key={`${file.name}-${file.lastModified}-${index}`}
+                        file={file}
+                        onRemove={() => onRemoveAttachment(index)}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </PromptInputHeader>
           )}
 
@@ -467,6 +502,18 @@ export default function ChatComposer({
             )}
 
             <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
+
+            {onClearContext && (
+              <PromptInputButton
+                tooltip={{ content: t('misc.clearContext') }}
+                onClick={onClearContext}
+                // A running turn is still writing to the context being cleared.
+                disabled={isLoading}
+                aria-label={t('misc.clearContext')}
+              >
+                <EraserIcon />
+              </PromptInputButton>
+            )}
 
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}
@@ -529,6 +576,7 @@ export default function ChatComposer({
                 hasText={Boolean(input.trim())}
                 canAbortSession={canAbortSession}
                 supportsSideQuestions={supportsSideQuestions}
+                supportsSteering={supportsSteering}
                 sendByCtrlEnter={sendByCtrlEnter}
                 onSelect={(choice) => {
                   if (choice === 'stop') {

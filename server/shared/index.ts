@@ -5,7 +5,7 @@ export type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from '.
 // Providers and Database share bounded, prompt-free runtime failure evidence.
 export type { SessionRuntimeFailure } from './types.js';
 // Providers combines normalized native history with durable failure notices.
-export type { BackgroundTaskSummary, FetchHistoryOptions, FetchHistoryResult, LLMProvider, NormalizedMessage, WorkflowAgentActivity } from './types.js';
+export type { BackgroundTaskSummary, ClearedContextSegment, FetchHistoryOptions, FetchHistoryResult, LLMProvider, NormalizedMessage, WorkflowAgentActivity } from './types.js';
 export { AppError, sliceTailPage } from './utils.js';
 
 // Providers uses these contracts to answer Codex side questions outside the main turn.

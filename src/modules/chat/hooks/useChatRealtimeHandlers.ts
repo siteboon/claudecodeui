@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground,SideQuestionEvent } from '@/shared/types';
+import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground,SideQuestionEvent,SteerOutcome } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
@@ -45,6 +45,12 @@ type UseChatRealtimeHandlersArgs = {
   onWebSocketReconnect?: () => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
   sessionStore: SessionStore;
+  /**
+   * Reports what became of a message sent into a running turn, so the
+   * composer can settle its card: the server's acceptance or refusal, and —
+   * for every live user message, steered or not — `delivered` with its id.
+   */
+  onSteerOutcome?: (sessionId: string, messageId: string, outcome: SteerOutcome) => void;
 };
 
 /* ------------------------------------------------------------------ */
@@ -80,6 +86,7 @@ export function useChatRealtimeHandlers({
   onWebSocketReconnect,
   requestLatestMessages,
   sessionStore,
+  onSteerOutcome,
 }: UseChatRealtimeHandlersArgs) {
   // Session switches can send `chat.subscribe` before this effect has a chance
   // to rebind the websocket listener. Read the visible session id from a ref
@@ -170,7 +177,23 @@ export function useChatRealtimeHandlers({
           return;
         }
 
+        case 'chat_steer_accepted': {
+          // Only the tab that sent the message gets this; it is not a
+          // transcript row.
+          if (sid && typeof msg.messageId === 'string') {
+            onSteerOutcome?.(sid, msg.messageId, 'accepted');
+          }
+          return;
+        }
+
         case 'protocol_error': {
+          // A message sent into a turn that had already ended. The run is not
+          // failing — it finished — so nothing is shown or idled here; the
+          // composer sends the message as the next turn instead.
+          if (sid && msg.code === 'STEER_UNAVAILABLE' && typeof msg.messageId === 'string') {
+            onSteerOutcome?.(sid, msg.messageId, 'refused');
+            return;
+          }
           console.error('[Chat] Protocol error:', msg.code, msg.error);
           // The ✕ on a task whose end never reached this client (its process
           // went away, say): settle its card and chip instead of reporting a
@@ -207,10 +230,9 @@ export function useChatRealtimeHandlers({
           if (sid) {
             // Surface the failure in the conversation and stop the spinner —
             // the run never started (or was rejected), so no `complete` follows.
-            // A refused stop request is not about the run: the task had
-            // already settled, and idling here would drop a response in
-            // flight on that session.
-            if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED') {
+            // A refused or failed stop request is not about the run, and
+            // idling here would drop a response in flight on that session.
+            if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED' && msg.code !== 'TASK_STOP_FAILED') {
               onSessionIdle?.(sid);
             }
             sessionStore.appendRealtime(sid, {
@@ -294,6 +316,13 @@ export function useChatRealtimeHandlers({
 
       if (sid && shouldPersist) {
         sessionStore.appendRealtime(sid, msg as unknown as NormalizedMessage);
+      }
+
+      // A user message on the live stream is a steered message the agent just
+      // read (the turn's own prompt is never echoed); the composer drops its
+      // card if it is one of its own.
+      if (sid && msg.kind === 'text' && msg.role === 'user' && typeof msg.id === 'string') {
+        onSteerOutcome?.(sid, msg.id, 'delivered');
       }
 
       // --- UI side effects for specific kinds ---
@@ -462,5 +491,6 @@ export function useChatRealtimeHandlers({
     onWebSocketReconnect,
     requestLatestMessages,
     sessionStore,
+    onSteerOutcome,
   ]);
 }

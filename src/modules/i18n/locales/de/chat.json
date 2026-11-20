@@ -143,6 +143,13 @@
     "queue": {
       "append": "An Nachricht in der Warteschlange anhängen",
       "notCombinable": "Nachricht konnte nicht in die Warteschlange gestellt werden: Ein Slash-Befehl läuft für sich allein und kann daher nicht mit der Nachricht in der Warteschlange kombiniert werden. Sende ihn, nachdem die Nachricht in der Warteschlange gesendet wurde."
+    },
+    "steer": {
+      "label": "Steuern",
+      "sending": "Wird gesendet…",
+      "willRead": "{{provider}} liest es beim nächsten Tool-Aufruf",
+      "attachments_one": "{{count}} Datei angehängt",
+      "attachments_other": "{{count}} Dateien angehängt"
     }
   },
   "providerSelection": {
@@ -320,6 +327,10 @@
       "label": "In Warteschlange stellen",
       "descriptionResponding": "Senden, wenn dieser Durchlauf endet",
       "descriptionBackground": "Senden, wenn die Hintergrundarbeit endet"
+    },
+    "steer": {
+      "label": "Steuern",
+      "description": "In diesen Durchlauf senden; wird beim nächsten Tool-Aufruf gelesen"
     },
     "sideQuestion": {
       "label": "Nebenfrage",

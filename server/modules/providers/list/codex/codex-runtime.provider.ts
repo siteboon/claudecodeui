@@ -35,6 +35,7 @@ import type {
 } from '@/shared/index.js';
 
 import { codexAppServer } from './codex-app-server.client.js';
+import { createCodexProcessEnv, resolveCodexCli } from './codex-cli.js';
 
 type ActiveCodexSession = {
   thread: Thread;
@@ -378,7 +379,12 @@ async function queryCodex(
     resolvedEffort = typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
       ? effort as ModelReasoningEffort
       : undefined;
-    codex = new Codex();
+    // The SDK finds the bundled CLI by itself; the user's own Codex is handed
+    // over with the PATH helpers the SDK would otherwise add for the bundle.
+    const cli = resolveCodexCli();
+    codex = cli?.source === 'user'
+      ? new Codex({ codexPathOverride: cli.executablePath, env: createCodexProcessEnv(cli) })
+      : new Codex();
 
     const threadOptions: ThreadOptions = {
       workingDirectory,

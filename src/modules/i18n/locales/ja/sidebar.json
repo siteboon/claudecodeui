@@ -37,7 +37,9 @@
     "selectAll": "すべて選択",
     "selectAllLoaded": "読み込み済みをすべて選択",
     "clearSelection": "選択を解除",
-    "deleteSelected": "{{count}}件のセッションを削除"
+    "deleteSelected": "{{count}}件のセッションを削除",
+    "expandForks": "{{session}}のフォークを展開",
+    "collapseForks": "{{session}}のフォークを折りたたむ"
   },
   "tooltips": {
     "viewEnvironments": "環境を表示",

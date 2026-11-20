@@ -69,6 +69,8 @@ type ProviderCapabilities = {
   supportsMessageEditing?: boolean;
   supportsSessionForking?: boolean;
   supportsSideQuestions?: boolean;
+  supportsSteering?: boolean;
+  supportsContextClearing?: boolean;
 };
 
 type ProviderCapabilitiesApiResponse = {
@@ -464,6 +466,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const supportsMessageEditing = Boolean(providerCapabilities?.[provider]?.supportsMessageEditing);
   const supportsSessionForking = Boolean(providerCapabilities?.[provider]?.supportsSessionForking);
   const supportsSideQuestions = Boolean(providerCapabilities?.[provider]?.supportsSideQuestions);
+  const supportsSteering = Boolean(providerCapabilities?.[provider]?.supportsSteering);
+  const supportsContextClearing = Boolean(providerCapabilities?.[provider]?.supportsContextClearing);
 
   const resolvePermissionModeForProvider = useCallback((
     targetProvider: LLMProvider,
@@ -843,5 +847,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     supportsMessageEditing,
     supportsSessionForking,
     supportsSideQuestions,
+    supportsSteering,
+    supportsContextClearing,
   };
 }

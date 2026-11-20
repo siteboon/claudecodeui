@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -13,9 +13,13 @@ import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
 
 import { api, ApiRequestError } from '@/shared/api';
-import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
+import {
+  MAX_CHAT_ATTACHMENT_COUNT,
+  MAX_CHAT_ATTACHMENT_SIZE_BYTES,
+  PROVIDER_PERMISSION_PREFERENCE_KEYS,
+} from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
-import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { AttachmentRejection, BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, PendingSteer, QueuedDraft, SessionActivityMap, StatusCommandData, SteerOutcome,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   appendQueuedMessage,
@@ -55,6 +59,8 @@ type UseChatComposerStateArgs = {
   /** Whether the chat socket is currently open; a side-question ask while it is not would send nothing and leave the optimistic entry pending forever. */
   isConnected?: boolean;
   sendByCtrlEnter?: boolean;
+  /** From the capability matrix, like `supportsSideQuestions`: whether the provider can take a message into a running turn (`chat.steer`). Gates the send menu's Steer choice. */
+  supportsSteering?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
    * Invoked with the freshly allocated session id when the user sends the
@@ -66,6 +72,8 @@ type UseChatComposerStateArgs = {
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
+  /** Runs the `/clear` command: clears the open session's context. */
+  onClearContext?: () => void;
   scrollToBottom: () => void;
   addMessage: (msg: ChatMessage) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
@@ -106,14 +114,41 @@ type SubmitOptions = {
    * `submitMessage` runs, so the dialog that would ask it again never opens.
    */
   presetBackgroundChoice?: 'queue' | 'send';
+  /**
+   * The send menu's Steer row: while a turn runs, send the message into it
+   * (read at the agent's next tool call) instead of queueing it for after.
+   * Falls through to the ordinary send when no turn is running any more.
+   */
+  steerIntoTurn?: boolean;
 };
 
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
 
-const MAX_ATTACHMENT_COUNT = 10;
-const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+/**
+ * A v4 UUID for a steered message. The id becomes the message's transcript
+ * uuid, so it must be a real one. `crypto.randomUUID` only exists in secure
+ * contexts, and the app is often opened over plain http on a LAN address
+ * (a phone on the same network), so this falls back to `getRandomValues`.
+ */
+const createSteerMessageId = (): string => {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
+/** Whether a live user message is the echo of the steered message with this id. */
+const isEchoOfSteer = (echoId: string, messageId: string): boolean => (
+  // A text-only message is echoed under its own id; one with images is split
+  // into parts named `<id>_text_<n>` / `<id>_images`.
+  echoId === messageId || echoId.startsWith(`${messageId}_`)
+);
 
 const isImageAttachment = (attachment: ChatAttachment) => {
   if (attachment.mimeType?.startsWith('image/')) return true;
@@ -238,10 +273,12 @@ export function useChatComposerState({
   isConnected = true,
   supportsSideQuestions = false,
   sendByCtrlEnter,
+  supportsSteering = false,
   onSessionProcessing,
   onSessionEstablished,
   onFileOpen,
   onShowSettings,
+  onClearContext,
   scrollToBottom,
   addMessage,
   setIsUserScrolledUp,
@@ -280,7 +317,10 @@ export function useChatComposerState({
   });
   const input = inputState.value;
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
+  // Files the latest attach attempt refused. They never become attachments, so
+  // the composer lists them in their own notice; without it a refused file just
+  // vanishes from a multi-file pick.
+  const [attachmentRejections, setAttachmentRejections] = useState<AttachmentRejection[]>([]);
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
 
@@ -372,6 +412,16 @@ export function useChatComposerState({
   // session while `queuedDraft` still holds the old session's draft.
   const queuedDraftSessionRef = useRef<string | null>(sessionKey);
 
+  // Messages this tab sent into a running turn that the agent has not read
+  // yet. Each is a card above the composer until its echo reaches the
+  // transcript; the run ending without it puts the text back in the composer,
+  // and a refusal (the turn had already ended) queues it as the next turn.
+  const [pendingSteers, setPendingSteers] = useState<PendingSteer[]>([]);
+  // Read by the outcome handler, which the realtime listener calls between
+  // renders: a refusal can follow an acceptance before React re-renders.
+  // Written only through `updatePendingSteers` below, with the state.
+  const pendingSteersRef = useRef(pendingSteers);
+
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
       const { action, data } = result;
@@ -429,11 +479,15 @@ export function useChatComposerState({
           onShowSettings?.();
           break;
 
+        case 'clear':
+          onClearContext?.();
+          break;
+
         default:
           console.warn('Unknown built-in command action:', action);
       }
     },
-    [onFileOpen, onShowSettings, addMessage],
+    [onClearContext, onFileOpen, onShowSettings, addMessage],
   );
 
   const closeCommandModal = useCallback(() => {
@@ -628,49 +682,56 @@ export function useChatComposerState({
     lastAutosizedInputRef.current = target.value;
   }, []);
 
+  // Picker, drag-and-drop and paste all come through here, so the size and count
+  // limits are checked in one place and every refused file is reported. Each
+  // attempt replaces the notice, so it always describes the latest one.
   const handleAttachmentFiles = useCallback((files: File[]) => {
-    const validFiles = files.filter((file) => {
-      try {
-        if (!file || typeof file !== 'object') {
-          console.warn('Invalid file object:', file);
-          return false;
-        }
+    const accepted: File[] = [];
+    const rejections: AttachmentRejection[] = [];
+    let freeSlots = Math.max(0, MAX_CHAT_ATTACHMENT_COUNT - attachedFiles.length);
 
-        if (file.size > MAX_ATTACHMENT_SIZE) {
-          const fileName = file.name || 'Unknown file';
-          setFileErrors((previous) => {
-            const next = new Map(previous);
-            next.set(fileName, 'File too large (max 10MB)');
-            return next;
-          });
-          return false;
-        }
-
-        return true;
-      } catch (error) {
-        console.error('Error validating file:', error, file);
-        return false;
+    files.forEach((file) => {
+      if (!file || typeof file !== 'object') {
+        console.warn('Invalid file object:', file);
+        return;
       }
+      const fileName = file.name || 'Unknown file';
+      if (file.size > MAX_CHAT_ATTACHMENT_SIZE_BYTES) {
+        rejections.push({ fileName, reason: 'too-large' });
+        return;
+      }
+      if (freeSlots === 0) {
+        rejections.push({ fileName, reason: 'too-many' });
+        return;
+      }
+      freeSlots -= 1;
+      accepted.push(file);
     });
 
-    if (validFiles.length > 0) {
-      setAttachedFiles((previous) => [...previous, ...validFiles].slice(0, MAX_ATTACHMENT_COUNT));
+    setAttachmentRejections(rejections);
+    if (accepted.length > 0) {
+      setAttachedFiles((previous) => [...previous, ...accepted]);
     }
+  }, [attachedFiles]);
+
+  const dismissAttachmentRejections = useCallback(() => {
+    setAttachmentRejections([]);
   }, []);
 
   const handlePaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
       const items = Array.from(event.clipboardData.items);
 
-      items.forEach((item) => {
-        if (!item.type.startsWith('image/')) {
-          return;
-        }
-        const file = item.getAsFile();
-        if (file) {
-          handleAttachmentFiles([file]);
-        }
-      });
+      // One call for the whole paste: the free-slot count is read once per call,
+      // so attaching the images one by one would let a paste overfill the composer.
+      const pastedImages = items
+        .filter((item) => item.type.startsWith('image/'))
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+      if (pastedImages.length > 0) {
+        handleAttachmentFiles(pastedImages);
+        return;
+      }
 
       if (items.length === 0 && event.clipboardData.files.length > 0) {
         const files = Array.from(event.clipboardData.files);
@@ -683,10 +744,11 @@ export function useChatComposerState({
     [handleAttachmentFiles],
   );
 
+  // No `maxSize` / `maxFiles` here: react-dropzone would set those files aside
+  // before `onDrop` (and `maxFiles` refuses the whole drop, not just the extra
+  // files), so `handleAttachmentFiles` applies both limits itself and reports them.
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    maxSize: MAX_ATTACHMENT_SIZE,
-    maxFiles: MAX_ATTACHMENT_COUNT,
-    onDrop: handleAttachmentFiles,
+    onDrop: (acceptedFiles) => handleAttachmentFiles(acceptedFiles),
     noClick: true,
     noKeyboard: true,
   });
@@ -771,7 +833,20 @@ export function useChatComposerState({
   // while editing a sent message must not leave `editingAnchorId` set over
   // the now-empty composer, which previously turned the next plain send into
   // a `chat.edit-send` that replaced the edited turn and everything after it.
-  const clearComposerAfterSideQuestion = useCallback(() => {
+  //
+  // `scope` is the chat the question was typed in: a send that waited for an
+  // upload can be answered from the background-work dialog after a chat
+  // switch, and the chat open by then keeps its text. The chat left keeps text edited since, too.
+  const clearComposerAfterSideQuestion = useCallback((text: string, scope: string | null = draftScopeRef.current) => {
+    if (scope !== draftScopeRef.current) {
+      if (scope && readDraftText(scope) === text) {
+        writeDraftText(scope, '');
+      }
+      return;
+    }
+    if (scope) {
+      writeDraftText(scope, '');
+    }
     setInput('');
     inputValueRef.current = '';
     setEditingAnchorId(null);
@@ -779,9 +854,6 @@ export function useChatComposerState({
     setIsTextareaExpanded(false);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-    }
-    if (draftScopeRef.current) {
-      writeDraftText(draftScopeRef.current, '');
     }
   }, [resetCommandMenuState, setInput]);
 
@@ -796,7 +868,7 @@ export function useChatComposerState({
   // here, means every caller gets the same `noSession` message instead of
   // each needing its own copy of the check.
   const askSideQuestionAndClear = useCallback(
-    (sessionId: string | null, text: string) => {
+    (sessionId: string | null, text: string, scope?: string | null) => {
       if (!supportsSideQuestions) {
         addMessage({
           type: 'error',
@@ -814,7 +886,7 @@ export function useChatComposerState({
         return;
       }
       if (askSideQuestion(sessionId, text, { model: currentProviderModel }, isConnected)) {
-        clearComposerAfterSideQuestion();
+        clearComposerAfterSideQuestion(text, scope);
       }
     },
     [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, supportsSideQuestions, t],
@@ -836,14 +908,23 @@ export function useChatComposerState({
   // server refuses the message, it goes back into the composer, in front of
   // anything typed since, and the composer says so, rather than showing a card
   // nothing will send.
+  //
+  // `fromComposer: false` queues a message that already left the composer — a
+  // steered message refused because its turn had ended — so whatever the user
+  // has typed since stays where it is.
   const queueMessage = useCallback(
-    async (durableDraft: QueuedDraft, queuedSessionKey: string | null) => {
-      const queuedFromOpenComposer = !queuedSessionKey || sessionKeyRef.current === queuedSessionKey;
+    async (durableDraft: QueuedDraft, queuedSessionKey: string | null, { fromComposer = true } = {}) => {
+      const queuedFromOpenComposer = fromComposer
+        && (!queuedSessionKey || sessionKeyRef.current === queuedSessionKey);
+      // Attachments are not kept per chat: the queued ones leave even when another chat is
+      // open now, or a send from there would take them along.
+      if (fromComposer) {
+        setAttachedFiles((files) => files.filter((file) => !durableDraft.attachments.includes(file)));
+      }
       if (queuedFromOpenComposer) {
         setInput('');
         inputValueRef.current = '';
-        setAttachedFiles([]);
-        setFileErrors(new Map());
+        setAttachmentRejections([]);
         resetCommandMenuState();
         setIsTextareaExpanded(false);
         if (textareaRef.current) {
@@ -852,7 +933,7 @@ export function useChatComposerState({
         if (draftScopeRef.current) {
           writeDraftText(draftScopeRef.current, '');
         }
-      } else if (queuedSessionKey && readDraftText(queuedSessionKey) === durableDraft.content) {
+      } else if (fromComposer && queuedSessionKey && readDraftText(queuedSessionKey) === durableDraft.content) {
         // The user changed sessions during the upload. The composer they left
         // still holds the text as its draft: clear it, or going back and
         // pressing Enter would queue the same message a second time.
@@ -894,9 +975,9 @@ export function useChatComposerState({
             const restored = withTypedSince(inputValueRef.current);
             setInput(restored);
             inputValueRef.current = restored;
-            if (queuedFromOpenComposer) {
-              setAttachedFiles((current) => [...durableDraft.attachments, ...current]);
-            }
+            // The message's files come back with it, also after a switch away and back
+            // and for a refused steer: all were taken from this composer.
+            setAttachedFiles((current) => [...durableDraft.attachments, ...current]);
             if (draftScopeRef.current) {
               writeDraftText(draftScopeRef.current, restored);
             }
@@ -934,6 +1015,140 @@ export function useChatComposerState({
     [addMessage, recordSentMessage, resetCommandMenuState, setInput, t],
   );
 
+  // Every change to the pending steers goes through here so the ref the
+  // outcome handler reads is never behind the state.
+  const updatePendingSteers = useCallback((update: (current: PendingSteer[]) => PendingSteer[]) => {
+    const next = update(pendingSteersRef.current);
+    pendingSteersRef.current = next;
+    setPendingSteers(next);
+  }, []);
+
+  // Sends a message into the session's running turn (`chat.steer`): the agent
+  // reads it at its next tool call, without the turn stopping. It leaves the
+  // composer at once, as a sent message does, and waits as a card until the
+  // agent reads it. Attachments must already be uploaded.
+  const steerIntoRunningTurn = useCallback(
+    (message: { content: string; attachments: File[]; uploadedAttachments: unknown[] }, steerSessionKey: string) => {
+      const messageId = createSteerMessageId();
+      updatePendingSteers((current) => [...current, {
+        messageId,
+        sessionKey: steerSessionKey,
+        content: message.content,
+        attachments: message.attachments,
+        uploadedAttachments: message.uploadedAttachments,
+        status: 'sending',
+      }]);
+      sendMessage({
+        type: 'chat.steer',
+        sessionId: steerSessionKey,
+        messageId,
+        content: message.content,
+        options: { attachments: message.uploadedAttachments },
+      });
+      recordSentMessage(message.content, steerSessionKey);
+      // Attachments are not kept per chat: the steered ones leave even when another chat is open now.
+      setAttachedFiles((files) => files.filter((file) => !message.attachments.includes(file)));
+
+      if (sessionKeyRef.current === steerSessionKey) {
+        setInput('');
+        inputValueRef.current = '';
+        setAttachmentRejections([]);
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+        if (draftScopeRef.current) {
+          writeDraftText(draftScopeRef.current, '');
+        }
+      } else if (readDraftText(steerSessionKey) === message.content) {
+        // The user changed sessions during the upload; the composer they left
+        // must not still hold the message as its draft.
+        writeDraftText(steerSessionKey, '');
+      }
+    },
+    [recordSentMessage, resetCommandMenuState, sendMessage, setInput, updatePendingSteers],
+  );
+
+  /**
+   * Settles a steered message as the realtime handler reports on it. Used by
+   * ChatInterface, which hands it to the realtime handler.
+   */
+  const handleSteerOutcome = useCallback(
+    (_sessionId: string, messageId: string, outcome: SteerOutcome) => {
+      if (outcome === 'delivered') {
+        if (pendingSteersRef.current.some((steer) => isEchoOfSteer(messageId, steer.messageId))) {
+          updatePendingSteers((current) => current.filter((steer) => !isEchoOfSteer(messageId, steer.messageId)));
+        }
+        return;
+      }
+
+      const steer = pendingSteersRef.current.find((candidate) => candidate.messageId === messageId);
+      if (!steer) {
+        return;
+      }
+      if (outcome === 'accepted') {
+        updatePendingSteers((current) => current.map((candidate) => (
+          candidate.messageId === messageId ? { ...candidate, status: 'accepted' } : candidate
+        )));
+        return;
+      }
+
+      // Refused: the turn had already ended when it arrived. The user meant it
+      // for this conversation now, so it goes out as the next turn — the
+      // queue sends it as soon as the session is idle, which it about is.
+      updatePendingSteers((current) => current.filter((candidate) => candidate.messageId !== messageId));
+      void queueMessage({
+        content: steer.content,
+        attachments: steer.attachments,
+        uploadedAttachments: steer.uploadedAttachments,
+        options: buildSendOptions(steer.content),
+      }, steer.sessionKey, { fromComposer: false });
+    },
+    [buildSendOptions, queueMessage, updatePendingSteers],
+  );
+
+  // The run ended with a steered message the server took but the agent never
+  // read — the user stopped the run, or it failed. Nothing will send it now,
+  // so it goes back into the composer (ahead of anything typed since) rather
+  // than vanishing or being sent behind the user's back after a stop.
+  const wasLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    const wasLoading = wasLoadingRef.current;
+    wasLoadingRef.current = isLoading;
+    if (!wasLoading || isLoading || !sessionKey) {
+      return;
+    }
+    const unread = pendingSteersRef.current.filter(
+      (steer) => steer.sessionKey === sessionKey && steer.status === 'accepted',
+    );
+    if (unread.length === 0) {
+      return;
+    }
+    updatePendingSteers((current) => current.filter((steer) => !unread.includes(steer)));
+    const restored = [...unread.map((steer) => steer.content), inputValueRef.current]
+      .filter((part) => part.trim())
+      .join('\n\n');
+    setInput(restored);
+    inputValueRef.current = restored;
+    setAttachedFiles((current) => [...unread.flatMap((steer) => steer.attachments), ...current]);
+    writeDraftText(sessionKey, restored);
+  }, [isLoading, sessionKey, setInput, updatePendingSteers]);
+
+  // Cards belong to the session they were sent into; switching away drops
+  // them (the messages themselves are already the run's, on the server).
+  useEffect(() => {
+    if (pendingSteersRef.current.some((steer) => steer.sessionKey !== sessionKey)) {
+      updatePendingSteers((current) => current.filter((steer) => steer.sessionKey === sessionKey));
+    }
+  }, [sessionKey, updatePendingSteers]);
+
+  // Only the open session's cards are shown.
+  const visiblePendingSteers = useMemo(
+    () => pendingSteers.filter((steer) => steer.sessionKey === sessionKey),
+    [pendingSteers, sessionKey],
+  );
+
   const submitMessage = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
@@ -954,6 +1169,9 @@ export function useChatComposerState({
       ) {
         return;
       }
+      // The chat this send belongs to: the upload and session allocation below can outlast a
+      // chat switch, and the cleanup at the end must not empty whichever chat is open by then.
+      const submittedScope = draftScopeRef.current;
 
       // `/btw <question>` never becomes a turn: checked before the in-flight
       // queue below, since that branch runs before slash-command
@@ -985,6 +1203,13 @@ export function useChatComposerState({
           return;
         }
 
+        // Steering sends the message into the running turn instead of after
+        // it, when the send menu asked for that and the provider can take it.
+        // A slash command is a turn of its own, so it always waits in the queue.
+        const steersIntoTurn = submitOptions?.steerIntoTurn === true
+          && supportsSteering
+          && Boolean(sessionKey)
+          && !currentInput.trimStart().startsWith('/');
         const queuedOptions = buildSendOptions(currentInput);
         const queuedSessionKey = sessionKey;
         let uploadedAttachments: unknown[] = [];
@@ -998,6 +1223,15 @@ export function useChatComposerState({
             content: `Failed to upload files: ${message}`,
             timestamp: new Date(),
           });
+          return;
+        }
+
+        if (steersIntoTurn && queuedSessionKey) {
+          steerIntoRunningTurn({
+            content: currentInput,
+            attachments: currentAttachments,
+            uploadedAttachments,
+          }, queuedSessionKey);
           return;
         }
 
@@ -1037,7 +1271,7 @@ export function useChatComposerState({
           setInput('');
           inputValueRef.current = '';
           setAttachedFiles([]);
-          setFileErrors(new Map());
+          setAttachmentRejections([]);
           resetCommandMenuState();
           setIsTextareaExpanded(false);
           if (textareaRef.current) {
@@ -1135,7 +1369,7 @@ export function useChatComposerState({
           return;
         }
         if (choice === 'sideQuestion') {
-          askSideQuestionAndClear(targetSessionId, currentInput);
+          askSideQuestionAndClear(targetSessionId, currentInput, submittedScope);
           return;
         }
         if (choice === 'queue') {
@@ -1196,26 +1430,36 @@ export function useChatComposerState({
           attachments: uploadedAttachments,
         },
       });
-      setEditingAnchorId(null);
+      // Only this send's edit: an edit begun in another chat during the upload stays.
+      setEditingAnchorId((current) => (current === editingAnchorId ? null : current));
 
       // Recorded under the (possibly just-allocated) session id, so the first
       // message of a new chat lands in the history of the session the user is
       // navigated to. Queued drafts were recorded when they were queued; the
       // consecutive-duplicate check keeps this second call a no-op.
       recordSentMessage(currentInput, targetSessionId);
+      // Attachments are not kept per chat, so only the ones just sent go.
+      setAttachedFiles((files) => files.filter((file) => !currentAttachments.includes(file)));
+      // A brand-new chat moves from its project scope to its allocated session id meanwhile.
+      const stillOpen = draftScopeRef.current === submittedScope || draftScopeRef.current === targetSessionId;
+      if (!stillOpen) {
+        // The chat left keeps text the user went back and edited during the upload.
+        if (submittedScope && readDraftText(submittedScope) === currentInput) {
+          writeDraftText(submittedScope, '');
+        }
+        return;
+      }
+      if (submittedScope) {
+        writeDraftText(submittedScope, '');
+      }
       setInput('');
       inputValueRef.current = '';
       resetCommandMenuState();
-      setAttachedFiles([]);
-      setFileErrors(new Map());
+      setAttachmentRejections([]);
       setIsTextareaExpanded(false);
 
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
-      }
-
-      if (draftScopeRef.current) {
-        writeDraftText(draftScopeRef.current, '');
       }
     },
     [
@@ -1241,6 +1485,8 @@ export function useChatComposerState({
       addMessage,
       setIsUserScrolledUp,
       slashCommands,
+      steerIntoRunningTurn,
+      supportsSteering,
       t,
     ],
   );
@@ -1276,11 +1522,17 @@ export function useChatComposerState({
 
   // The send menu's entry point: side question never becomes a turn, so it never goes
   // through `submitMessage`; Queue and Send anyway answer the background-work
-  // question the menu already asked, so the dialog never opens for them.
+  // question the menu already asked, so the dialog never opens for them; Steer
+  // goes through the submit like Queue does (same upload and validation) and
+  // only diverges once the message is ready to leave the composer.
   const handleSendMenuChoice = useCallback(
-    async (choice: 'queue' | 'sideQuestion' | 'send'): Promise<void> => {
+    async (choice: 'queue' | 'steer' | 'sideQuestion' | 'send'): Promise<void> => {
       if (choice === 'sideQuestion') {
         askSideQuestionAndClear(sessionKey, inputValueRef.current);
+        return;
+      }
+      if (choice === 'steer') {
+        await handleSubmit(createFakeSubmitEvent(), undefined, { steerIntoTurn: true });
         return;
       }
       await handleSubmit(createFakeSubmitEvent(), undefined, { presetBackgroundChoice: choice });
@@ -1672,7 +1924,8 @@ export function useChatComposerState({
     selectFile,
     attachedFiles,
     setAttachedFiles,
-    fileErrors,
+    attachmentRejections,
+    dismissAttachmentRejections,
     getRootProps,
     getInputProps,
     isDragActive,
@@ -1684,6 +1937,8 @@ export function useChatComposerState({
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
+    pendingSteers: visiblePendingSteers,
+    handleSteerOutcome,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
