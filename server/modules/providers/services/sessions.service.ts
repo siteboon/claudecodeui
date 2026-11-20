@@ -16,8 +16,8 @@ import type {
   LLMProvider,
   NormalizedMessage,
   WorkflowAgentActivity,
-} from '@/shared/types.js';
-import { AppError, createNormalizedMessage, sliceTailPage } from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { AppError, createNormalizedMessage, sliceTailPage } from '@/shared/index.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -69,6 +69,11 @@ type RecentSessionListItem = Pick<
   ArchivedSessionListItem,
   'sessionId' | 'provider' | 'projectId' | 'projectDisplayName' | 'sessionTitle' | 'lastActivity'
 >;
+
+type PinnedSessionListItem = RecentSessionListItem & {
+  forkedFromSessionId: string | null;
+  forkAncestors: ReturnType<typeof sessionsDb.getForkAncestors>;
+};
 
 type RecentSessionsPage = {
   conversations: RecentSessionListItem[];
@@ -379,7 +384,7 @@ export const sessionsService = {
   },
 
   /** The sidebar's Projects and Conversations views use the same per-user pin list. */
-  listPinnedSessions(userId: number): RecentSessionListItem[] {
+  listPinnedSessions(userId: number): PinnedSessionListItem[] {
     return sessionPinsDb.list(userId).map((session) => {
       const timestamp = session.last_activity;
       const normalizedTimestamp = timestamp && /^\d{4}-\d{2}-\d{2} \d{2}:/.test(timestamp)
@@ -392,12 +397,14 @@ export const sessionsService = {
         projectDisplayName: resolveProjectDisplayName(session.project_path, session.custom_project_name),
         sessionTitle: session.custom_name?.trim() || session.session_id,
         lastActivity: normalizedTimestamp,
+        forkedFromSessionId: session.forked_from_session_id,
+        forkAncestors: session.forked_from_session_id ? sessionsDb.getForkAncestors(session.session_id) : [],
       };
     });
   },
 
   /** Pinning is idempotent and never changes session activity or project starring. */
-  setSessionPinned(userId: number, sessionId: string, isPinned: boolean): RecentSessionListItem[] {
+  setSessionPinned(userId: number, sessionId: string, isPinned: boolean): PinnedSessionListItem[] {
     if (isPinned) {
       const session = sessionsDb.getSessionById(sessionId);
       if (!session) {

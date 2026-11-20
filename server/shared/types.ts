@@ -444,6 +444,8 @@ export type SessionForkAncestor = {
  */
 export type SessionPinRecord = {
   session_id: string;
+  /** Canonical app parent id, used with bounded active ancestry in pin summaries. */
+  forked_from_session_id: string | null;
   provider: LLMProvider;
   project_id: string | null;
   project_path: string | null;

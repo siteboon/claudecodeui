@@ -85,3 +85,33 @@ test('migration upgrades the previous schema without changing sessions and prese
     assert.deepEqual(db.pragma('foreign_key_check'), []);
   });
 });
+
+
+for (const replacement of ['assign', 'repoint', 'fork'] as const) {
+  test(`${replacement} preserves duplicate pins, user ownership and pin order`, async () => {
+    await withDatabase((userId, otherUserId) => {
+      sessionsDb.createAppSession('native-duplicate', 'codex', '/workspace/one');
+      sessionPinsDb.setPinned(userId, 'old-session', true);
+      sessionPinsDb.setPinned(userId, 'new-session', true);
+      sessionPinsDb.setPinned(userId, 'native-duplicate', true);
+      sessionPinsDb.setPinned(otherUserId, 'native-duplicate', true);
+      const previousPin = getConnection().prepare('SELECT pin_id FROM session_pins WHERE user_id = ?').get(otherUserId);
+      const target = replacement === 'fork' ? 'fork-target' : 'old-session';
+      if (replacement === 'assign') sessionsDb.assignProviderSessionId(target, 'native-duplicate');
+      else if (replacement === 'repoint') sessionsDb.repointSessionToProviderSession(target, {
+        providerSessionId: 'native-duplicate', jsonlPath: '/transcripts/duplicate.jsonl',
+      });
+      else sessionsDb.createForkedSession({ sessionId: target, provider: 'codex', projectPath: '/workspace/one',
+        customName: 'Fork target', providerSessionId: 'native-duplicate', jsonlPath: '/transcripts/duplicate.jsonl',
+        forkedFromSessionId: 'old-session', model: null, effort: null });
+      assert.equal(sessionsDb.getSessionById('native-duplicate'), null);
+      assert.deepEqual(sessionPinsDb.list(otherUserId).map((pin) => pin.session_id), [target]);
+      assert.deepEqual(getConnection().prepare('SELECT pin_id FROM session_pins WHERE user_id = ?').get(otherUserId), previousPin);
+      assert.deepEqual(sessionPinsDb.list(userId).map((pin) => pin.session_id), replacement === 'fork'
+        ? [target, 'new-session', 'old-session'] : ['new-session', 'old-session']);
+      sessionsDb.deleteSessionById(target);
+      assert.deepEqual(sessionPinsDb.list(otherUserId), [], 'permanent deletion still cascades');
+      assert.deepEqual(getConnection().pragma('foreign_key_check'), []);
+    });
+  });
+}

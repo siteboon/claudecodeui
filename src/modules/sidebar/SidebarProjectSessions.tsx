@@ -16,6 +16,7 @@ const MAX_FORK_INDENT_DEPTH = 4;
 type SidebarProjectSessionsProps = {
   project: Project;
   isExpanded: boolean;
+  includeOffPagePins?: boolean;
   sessions: SessionWithProvider[];
   selectedSession: ProjectSession | null;
   initialSessionsLoaded: boolean;
@@ -70,6 +71,7 @@ function SessionListSkeleton() {
 export default function SidebarProjectSessions({
   project,
   isExpanded,
+  includeOffPagePins = true,
   sessions,
   selectedSession,
   initialSessionsLoaded,
@@ -107,13 +109,15 @@ export default function SidebarProjectSessions({
     const ancestors = new Map(sessions.flatMap((session) => session.forkAncestors ?? []).map((ancestor) => [ancestor.id, ancestor]));
     // Include pins beyond the loaded page without changing page offsets or
     // replacing loaded rows' fork metadata with the smaller pin summaries.
-    const offPagePins: SessionWithProvider[] = projectPins.filter((pin) => !loadedIds.has(pin.sessionId)).map((pin) => ({
+    const offPagePins: SessionWithProvider[] = projectPins.filter((pin) => includeOffPagePins && !loadedIds.has(pin.sessionId)).map((pin) => ({
+      forkedFromSessionId: pin.forkedFromSessionId,
+      forkAncestors: pin.forkAncestors,
       ...ancestors.get(pin.sessionId),
       id: pin.sessionId, summary: pin.sessionTitle, __provider: pin.provider,
       __projectId: project.projectId, lastActivity: pin.lastActivity ?? undefined,
     }));
     return buildProjectSessionTree([...sessions, ...offPagePins], project.projectId, projectPins.map((pin) => pin.sessionId));
-  }, [sessions, project.projectId, pins?.sessions]);
+  }, [sessions, project.projectId, pins?.sessions, includeOffPagePins]);
   const selectedSessionId = selectedSession?.id ?? null;
   const targetAncestors = useMemo(() => {
     const parents = new Map(treeRows.map((row) => [row.session.id, row.parentId]));

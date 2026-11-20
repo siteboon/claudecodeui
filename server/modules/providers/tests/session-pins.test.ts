@@ -102,3 +102,25 @@ test('pins API validates authentication, body, id and archive state without chan
     assert.deepEqual(sessionsService.setSessionPinned(userId, 'already-deleted', false), [], 'unpin remains idempotent after deletion');
   });
 });
+
+
+test('pinned forks include canonical ancestry beyond project pages and stop at archived parents', async () => {
+  await withServer(async (baseUrl, userId) => {
+    sessionsDb.createForkedSession({ sessionId: 'child', provider: 'codex', projectPath: '/workspace/pins',
+      customName: 'Child', providerSessionId: 'native-child', jsonlPath: '/transcripts/child.jsonl',
+      forkedFromSessionId: 'pin-target', model: null, effort: null });
+    const pin = await fetch(`${baseUrl}/child/pin`, {
+      method: 'PUT', headers: { 'content-type': 'application/json', 'x-test-user': String(userId) },
+      body: JSON.stringify({ isPinned: true }),
+    });
+    assert.equal(pin.status, 200);
+    const { data } = await pin.json() as { data: { sessions: Array<Record<string, unknown>> } };
+    assert.equal(data.sessions[0]?.forkedFromSessionId, 'pin-target');
+    const ancestors = data.sessions[0]?.forkAncestors as Array<{ id: string; provider: string }>;
+    assert.deepEqual(ancestors.map(({ id, provider }) => ({ id, provider })), [{ id: 'pin-target', provider: 'codex' }]);
+    sessionsDb.updateSessionIsArchived('pin-target', true);
+    const list = await fetch(`${baseUrl}/pinned`, { headers: { 'x-test-user': String(userId) } });
+    const archived = await list.json() as { data: { sessions: Array<Record<string, unknown>> } };
+    assert.deepEqual(archived.data.sessions[0]?.forkAncestors, []);
+  });
+});

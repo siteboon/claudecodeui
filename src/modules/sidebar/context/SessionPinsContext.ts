@@ -1,9 +1,9 @@
 import { createContext } from 'react';
 
-import type { RecentConversationListItem } from '@/shared/types';
+import type { PinnedConversationListItem } from '@/shared/types';
 
 type SessionPinsState = {
-  sessions: RecentConversationListItem[];
+  sessions: PinnedConversationListItem[];
   pinnedIds: ReadonlySet<string>;
   ready: boolean;
   hasError: boolean;

@@ -111,7 +111,7 @@ test('unpin uses the server response in both views and returns the session to th
   await waitFor(() => assert.ok(screen.queryByTestId('pinned-sessions-section')));
   fireEvent.click(within(screen.getByTestId('pinned-sessions-section')).getByRole('button', { name: 'Unpin session: Title a' }));
   await waitFor(() => assert.equal(Boolean(screen.queryByTestId('pinned-sessions-section')), false));
-  assert.deepEqual(mocks.save.mock.calls, [['a', false]]);
+  assert.deepEqual(mocks.save.mock.calls.map(([id, pinned]) => [id, pinned]), [['a', false]]);
   assert.ok(within(screen.getByTestId('recent-conversations-list')).getByText('Title a'));
   rerender(<SessionPinsProvider projects={PROJECTS}><SidebarContent {...contentProps('projects')} /></SessionPinsProvider>);
   assert.equal(Boolean(screen.queryByTestId('pinned-sessions-section')), false);
@@ -262,7 +262,7 @@ test('mobile project pin is reachable directly and does not select the session',
   assert.deepEqual([...screen.getByTestId('project-session-tree').querySelectorAll('[data-session-id]')].map((row) => row.getAttribute('data-session-id')), ['b', 'a']);
   assert.equal(screen.getAllByText('Title b').length, 1);
   assert.equal(select.mock.calls.length, 0);
-  assert.deepEqual(mocks.save.mock.calls, [['b', true]]);
+  assert.deepEqual(mocks.save.mock.calls.map(([id, pinned]) => [id, pinned]), [['b', true]]);
 });
 
 test('search and archived views do not show unrelated pinned shortcuts', async () => {
@@ -345,4 +345,88 @@ test('standalone recent rows retain their existing controls without a pin provid
     onConversationSelect={noop} onLoadMore={noop} onRetry={noop} t={t} />);
   assert.ok(screen.getByText('Title a'));
   assert.equal(Boolean(screen.queryByRole('button', { name: 'Pin session: Title a' })), false);
+});
+
+
+test('Running does not reinsert ended off-page pins or include them in bulk selection', async () => {
+  mocks.load.mockResolvedValue(response([B]));
+  const runningProjects: Project[] = [{ ...PROJECTS[0], sessions: [PROJECTS[0].sessions![0]],
+    sessionMeta: { total: 1, hasMore: false } }];
+  const select = vi.fn();
+  const props = contentProps('projects');
+  props.searchMode = 'running';
+  props.projectListProps = { ...listProps, filteredProjects: runningProjects,
+    activeSessions: new Set(['a']), backgroundSessionIds: new Set(['a']),
+    sessionSelection: { projectId: 'project-1', sessionIds: new Set() }, onSetSessionSelection: select };
+  function PinReadiness() {
+    return <span>{useSessionPins()?.ready ? 'pins ready' : 'pins loading'}</span>;
+  }
+  render(<SessionPinsProvider projects={PROJECTS}><PinReadiness /><SidebarContent {...props} /></SessionPinsProvider>);
+  await screen.findByText('pins ready');
+  assert.equal(Boolean(screen.queryByText('Title b')), false);
+  assert.deepEqual([...screen.getByTestId('project-session-tree').querySelectorAll('[data-session-id]')]
+    .map((row) => row.getAttribute('data-session-id')), ['a']);
+  fireEvent.click(screen.getByRole('button', { name: 'sessions.selectAll' }));
+  assert.deepEqual([...select.mock.calls[0][0].sessionIds], ['a']);
+});
+
+test('an off-page pinned child supplies ancestry without a loaded descendant and keeps loaded metadata authoritative', async () => {
+  const projects: Project[] = [{ ...PROJECTS[0], sessions: [
+    { id: 'newest', summary: 'Newest', __provider: 'codex' },
+    { id: 'a', summary: 'Current parent title', __provider: 'codex' },
+  ], sessionMeta: { total: 30, hasMore: true } }];
+  const child = { ...B, forkedFromSessionId: 'a', forkAncestors: [
+    { id: 'a', summary: 'Stale parent title', provider: 'codex' as const, forkedFromSessionId: null },
+  ] };
+  mocks.load.mockResolvedValue(response([child]));
+  const props = contentProps('projects');
+  props.projectListProps = { ...listProps, projects, filteredProjects: projects };
+  render(<SessionPinsProvider projects={projects}><SidebarContent {...props} /></SessionPinsProvider>);
+  await waitFor(() => assert.ok(screen.queryByRole('button', { name: 'Unpin session: Title b' })));
+  const tree = screen.getByTestId('project-session-tree');
+  assert.deepEqual([...tree.querySelectorAll('[data-session-id]')].map((row) => [
+    row.getAttribute('data-session-id'), row.getAttribute('data-parent-session-id'), row.getAttribute('data-fork-depth'),
+  ]), [['a', null, '0'], ['b', 'a', '1'], ['newest', null, '0']]);
+  assert.ok(screen.getByText('Current parent title'));
+  assert.equal(Boolean(screen.queryByText('Stale parent title')), false);
+});
+
+
+test('polls coalesce behind a slow initial read instead of starving pin readiness', async () => {
+  vi.useFakeTimers();
+  const read = deferred<ReturnType<typeof response>>();
+  mocks.load.mockReturnValue(read.promise);
+  const { result, unmount } = renderHook(() => useSessionPins(), { wrapper });
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(11_000); });
+    assert.equal(mocks.load.mock.calls.length, 1);
+    await act(async () => { read.resolve(response([A])); });
+    assert.equal(result.current?.ready, true);
+    assert.deepEqual(result.current?.sessions, [A]);
+  } finally { unmount(); vi.useRealTimers(); }
+});
+
+test('a timed-out save clears pending state and permits a subsequent explicit save', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(console, 'error').mockImplementation(noop);
+  mocks.save.mockImplementationOnce((_id, _pinned, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new DOMException('Timed out', 'AbortError')), { once: true });
+  }));
+  const { result, unmount } = renderHook(() => useSessionPins(), { wrapper });
+  try {
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    assert.equal(result.current?.ready, true);
+    let save!: Promise<void>;
+    act(() => { save = result.current!.setPinned('a', false); });
+    assert.equal(result.current?.pendingSessionId, 'a');
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); await save; });
+    assert.equal(result.current?.pendingSessionId, null);
+    assert.equal(result.current?.hasError, true);
+    assert.equal(result.current?.pinnedIds.has('a'), true);
+    await act(async () => { await result.current!.setPinned('a', false); });
+    assert.equal(result.current?.hasError, false);
+    assert.equal(result.current?.pinnedIds.has('a'), false);
+    assert.equal(mocks.save.mock.calls.length, 2);
+  } finally { unmount(); vi.useRealTimers(); }
 });

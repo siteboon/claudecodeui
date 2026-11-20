@@ -433,7 +433,7 @@ export default function SidebarContent({
                   {runningSessionsCount}
                 </span>
               </div>
-              <SidebarProjectList {...projectListProps} />
+              <SidebarProjectList {...projectListProps} includeOffPagePins={false} />
             </div>
           )
         ) : searchMode === 'archived' ? (
@@ -693,7 +693,7 @@ export default function SidebarContent({
             </div>
           )
         ) : (
-          <SidebarProjectList {...projectListProps} />
+          <SidebarProjectList {...projectListProps} includeOffPagePins />
         )}
       </ScrollArea>
 
