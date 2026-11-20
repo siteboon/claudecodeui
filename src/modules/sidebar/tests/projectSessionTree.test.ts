@@ -79,3 +79,35 @@ test('newest fork snapshot wins when siblings carry stale off-page ancestor meta
   assert.equal(rows[0].session.summary, 'Renamed parent');
   assert.equal(rows[0].session.lastActivity, '2026-11-01');
 });
+
+test('pins lift complete families and unpinning restores recency without changing ancestry', () => {
+  const input = [session('newest'), session('child', 'pinned-root'), session('pinned-child', 'root'),
+    session('pinned-root'), session('root')];
+  const pinned = buildProjectSessionTree(input, 'project', ['pinned-child', 'pinned-root']);
+  assert.deepEqual(pinned.map((row) => [row.session.id, row.parentId, row.depth]), [
+    ['root', null, 0], ['pinned-child', 'root', 1], ['pinned-root', null, 0], ['child', 'pinned-root', 1], ['newest', null, 0],
+  ]);
+  assert.deepEqual(shape(input), [
+    ['newest', null, 0, false], ['pinned-root', null, 0, true], ['child', 'pinned-root', 1, false],
+    ['root', null, 0, true], ['pinned-child', 'root', 1, false],
+  ]);
+});
+
+test('a nested pin lifts its whole family, preserving sibling recency and the newest pin across multiple families', () => {
+  const input = [session('unrelated'), session('sibling', 'root'), session('other-child', 'other-root'),
+    session('leaf', 'child'), session('child', 'root'), session('root'), session('other-root')];
+  const ids = (pins: string[]) => buildProjectSessionTree(input, 'project', pins).map((row) => row.session.id);
+  assert.deepEqual(ids(['leaf', 'other-child', 'child']), ['root', 'sibling', 'child', 'leaf', 'other-root', 'other-child', 'unrelated']);
+  assert.deepEqual(ids(['other-child', 'child']), ['other-root', 'other-child', 'root', 'sibling', 'child', 'leaf', 'unrelated']);
+  assert.deepEqual(ids(['child']), ['root', 'sibling', 'child', 'leaf', 'unrelated', 'other-root', 'other-child']);
+  assert.deepEqual(ids([]), ['unrelated', 'root', 'sibling', 'child', 'leaf', 'other-root', 'other-child']);
+  assert.equal(new Set(ids(['root', 'child', 'leaf'])).size, input.length);
+});
+
+test('pins on off-page ancestor context lift the complete family', () => {
+  const child = session('child', 'parent', { forkAncestors: [session('parent', 'root'), session('root')] });
+  const rows = buildProjectSessionTree([session('unrelated'), child], 'project', ['parent']);
+  assert.deepEqual(rows.map((row) => [row.session.id, row.parentId, row.depth]), [
+    ['root', null, 0], ['parent', 'root', 1], ['child', 'parent', 2], ['unrelated', null, 0],
+  ]);
+});

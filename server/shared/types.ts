@@ -433,6 +433,27 @@ export type SessionForkAncestor = {
   forkedFromSessionId: string | null;
 };
 
+//----------------- SESSION PINS ------------
+
+/**
+ * A visible pinned session joined to its owning project by the Database module.
+ * Providers converts it to a sidebar summary without reading transcripts or
+ * depending on project pagination. IDs are stable app IDs. The database returns
+ * these records in newest-pin-first order, independently of session activity.
+ * Nullable project fields support sessions whose project was removed.
+ */
+export type SessionPinRecord = {
+  session_id: string;
+  provider: LLMProvider;
+  project_id: string | null;
+  project_path: string | null;
+  custom_project_name: string | null;
+  custom_name: string | null;
+  last_activity: string | null;
+};
+
+// ---------------------------
+
 /**
  * One earlier part of a conversation whose context was cleared, shared by the
  * database module (which records it) and the providers module (which reads it

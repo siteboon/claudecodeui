@@ -7,6 +7,7 @@ import { cn } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
 import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
+import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
 import { buildProjectSessionTree } from '@/modules/sidebar/utils/projectSessionTree';
 
 const FORK_INDENT_PX = 12;
@@ -99,7 +100,20 @@ export default function SidebarProjectSessions({
   t,
 }: SidebarProjectSessionsProps) {
   const isCompact = useCompactSidebar();
-  const treeRows = useMemo(() => buildProjectSessionTree(sessions, project.projectId), [sessions, project.projectId]);
+  const pins = useSessionPins();
+  const treeRows = useMemo(() => {
+    const projectPins = pins?.sessions.filter((pin) => pin.projectId === project.projectId) ?? [];
+    const loadedIds = new Set(sessions.map((session) => session.id));
+    const ancestors = new Map(sessions.flatMap((session) => session.forkAncestors ?? []).map((ancestor) => [ancestor.id, ancestor]));
+    // Include pins beyond the loaded page without changing page offsets or
+    // replacing loaded rows' fork metadata with the smaller pin summaries.
+    const offPagePins: SessionWithProvider[] = projectPins.filter((pin) => !loadedIds.has(pin.sessionId)).map((pin) => ({
+      ...ancestors.get(pin.sessionId),
+      id: pin.sessionId, summary: pin.sessionTitle, __provider: pin.provider,
+      __projectId: project.projectId, lastActivity: pin.lastActivity ?? undefined,
+    }));
+    return buildProjectSessionTree([...sessions, ...offPagePins], project.projectId, projectPins.map((pin) => pin.sessionId));
+  }, [sessions, project.projectId, pins?.sessions]);
   const selectedSessionId = selectedSession?.id ?? null;
   const targetAncestors = useMemo(() => {
     const parents = new Map(treeRows.map((row) => [row.session.id, row.parentId]));
