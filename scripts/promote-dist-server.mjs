@@ -34,6 +34,11 @@ if (!fs.existsSync(`${NEXT}/${ENTRY}`)) {
   process.exit(1);
 }
 
+// Keep the compiled version with the build when deployment preserves a source
+// checkout whose package.json can still describe a different release.
+const { version } = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+fs.writeFileSync(`${NEXT}/build-version.json`, `${JSON.stringify({ version })}\n`);
+
 fs.rmSync(OLD, { recursive: true, force: true });
 if (fs.existsSync(LIVE)) {
   fs.renameSync(LIVE, OLD);
