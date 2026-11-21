@@ -8,6 +8,7 @@ import CompareFileItem from '@/modules/git-panel/compare/CompareFileItem';
 
 type CompareViewProps = {
   projectId: string;
+  repo?: string;
   currentBranch: string;
   localBranches: string[];
   remoteRefs: string[];
@@ -23,6 +24,7 @@ const NO_EXPANDED_FILES: ReadonlySet<string> = new Set();
 /** Rendered by GitPanel for the Compare tab: everything the working copy changed relative to a chosen base branch's merge base. */
 export default function CompareView({
   projectId,
+  repo,
   currentBranch,
   localBranches,
   remoteRefs,
@@ -44,7 +46,7 @@ export default function CompareView({
     fileDiffErrors,
     loadFileDiff,
     refresh,
-  } = useBranchCompare({ projectId, currentBranch, localBranches, remoteRefs, gitStatus });
+  } = useBranchCompare({ projectId, repo, currentBranch, localBranches, remoteRefs, gitStatus });
   // Rows whose diff is open, tagged with the base they were opened under so a
   // base switch collapses them instead of showing an open row with no diff.
   // Kept here (not in the hook) because it is purely presentational.
