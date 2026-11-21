@@ -22,11 +22,12 @@ const MATRIX = {
   success: true,
   data: {
     providers: [
-      { provider: 'claude', permissionModes: ['default'], defaultPermissionMode: 'default', supportsSideQuestions: true },
+      { provider: 'claude', permissionModes: ['default'], defaultPermissionMode: 'default', supportsSideQuestions: true, supportsSteering: true },
       { provider: 'cursor', permissionModes: ['default'], defaultPermissionMode: 'default', supportsSideQuestions: false },
       { provider: 'codex', permissionModes: ['default'], defaultPermissionMode: 'default', supportsSideQuestions: true },
       // An entry without the field reads as unsupported, not as supported.
       { provider: 'opencode', permissionModes: ['default'], defaultPermissionMode: 'default' },
+      { provider: 'kiro', permissionModes: ['default'], defaultPermissionMode: 'default', supportsSideQuestions: false, supportsSteering: false },
     ],
   },
 };
@@ -56,7 +57,7 @@ vi.mock('@/shared/api', () => ({
   },
 }));
 
-type ProviderState = { supportsSideQuestions?: boolean; setProvider: (provider: string) => void };
+type ProviderState = { supportsSideQuestions?: boolean; supportsSteering?: boolean; setProvider: (provider: string) => void };
 
 const renderProviderState = async () => {
   const { useChatProviderState } = await import('@/modules/chat/hooks/useChatProviderState');
@@ -86,6 +87,11 @@ test('supportsSideQuestions follows the matrix for the active provider once it l
   await act(async () => { releaseCapabilities(); });
 
   await waitFor(() => assert.equal(result.current.supportsSideQuestions, true, 'claude answers side questions'));
+  assert.equal(result.current.supportsSteering, true, 'claude accepts steering');
+
+  act(() => { result.current.setProvider('kiro'); });
+  assert.equal(result.current.supportsSideQuestions, false, 'kiro cannot inherit claude side questions');
+  assert.equal(result.current.supportsSteering, false, 'kiro cannot inherit claude steering');
 
   act(() => { result.current.setProvider('cursor'); });
   assert.equal(result.current.supportsSideQuestions, false, 'cursor does not');

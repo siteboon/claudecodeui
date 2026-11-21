@@ -109,6 +109,27 @@ describe('ProviderCliVersion', () => {
     expect(button.getAttribute('title')).toBe('Runs claude update on the server');
   });
 
+  it('offers the native Kiro updater and reports its result without an npm version', async () => {
+    const status = claudeStatus({
+      provider: 'kiro', installedVersion: '2.7.0', latestVersion: null,
+      updateAvailable: false, updateCommand: 'kiro-cli update --non-interactive',
+    });
+    responses.status = [status, { ...status, installedVersion: '2.8.0' }];
+    responses.update = () => json({ success: true, data: updateResult({
+      provider: 'kiro', command: 'kiro-cli update --non-interactive',
+      previousVersion: '2.7.0', installedVersion: '2.8.0', output: 'Kiro updated',
+    }) });
+    render(
+      <ProviderCliVersion agent="kiro" installedVersion="2.7.0" textClass="" subtextClass="" />,
+    );
+    const button = await screen.findByRole('button', { name: /Run updater/ });
+    expect(button.getAttribute('title')).toBe('Runs kiro-cli update --non-interactive on the server');
+    fireEvent.click(button);
+    expect(await screen.findByText('Updated to v2.8.0.')).toBeTruthy();
+    expect(calls).toContain('status:kiro');
+    expect(calls).toContain('update:kiro');
+  });
+
   it('runs the update and reports the new version with the updater output', async () => {
     responses.status = [claudeStatus(), claudeStatus({ installedVersion: '2.1.300', updateAvailable: false })];
     responses.update = () => json({ success: true, data: updateResult() });

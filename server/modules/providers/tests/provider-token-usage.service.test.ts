@@ -176,6 +176,16 @@ test('Cursor returns an explicit unsupported token usage result', async () => {
   assert.equal(result.total, 0);
 });
 
+test('Kiro reports unsupported token usage without parsing its JSONL as Claude history', async () => {
+  const service = createProviderTokenUsageService({
+    getSessionById: () => createSessionRow({ provider: 'kiro' }),
+  });
+  const result = await service.getSessionTokenUsage('app-session');
+  assert.equal(result.unsupported, true);
+  assert.equal(result.used, 0);
+  assert.match(result.message!, /Kiro/);
+});
+
 test('token usage reports SESSION_NOT_FOUND for an unknown app session id', async () => {
   const service = createProviderTokenUsageService({ getSessionById: () => null });
 

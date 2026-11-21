@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { ClaudeSessionSynchronizer } from '@/modules/providers/list/claude/claude-session-synchronizer.provider.js';
+import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { chatRunRegistry } from '@/modules/websocket/index.js';
@@ -179,14 +180,21 @@ test('clearing context is refused while the session is working', { concurrency: 
 
 test('clearing context is refused for a provider that cannot do it, and for an unknown session', { concurrency: false }, async () => {
   await withIsolatedSessions(async () => {
-    sessionsDb.createAppSession('codex-session', 'codex', PROJECT_PATH);
-    sessionsDb.assignProviderSessionId('codex-session', 'codex-thread');
+    for (const provider of ['codex', 'cursor', 'opencode', 'kiro'] as const) {
+      const sessionId = `${provider}-session`;
+      sessionsDb.createAppSession(sessionId, provider, PROJECT_PATH);
+      sessionsDb.assignProviderSessionId(sessionId, `${provider}-thread`);
+      const before = sessionsDb.getSessionById(sessionId);
 
-    await assert.rejects(
-      sessionsService.clearSessionContext('codex-session'),
-      isAppError('CONTEXT_CLEAR_NOT_SUPPORTED', 409),
-    );
-    assert.equal(sessionsDb.getSessionById('codex-session')?.provider_session_id, 'codex-thread');
+      assert.equal(providerCapabilitiesService.getProviderCapabilities(provider).supportsContextClearing, false);
+      await assert.rejects(
+        sessionsService.clearSessionContext(sessionId),
+        isAppError('CONTEXT_CLEAR_NOT_SUPPORTED', 409),
+      );
+      assert.deepEqual(sessionsDb.getSessionById(sessionId), before, `${provider}: session is unchanged`);
+      assert.deepEqual(sessionsDb.getClearedContextSegments(sessionId), []);
+      assert.equal(sessionsDb.isProviderSessionSuperseded(`${provider}-thread`, provider), false);
+    }
 
     await assert.rejects(sessionsService.clearSessionContext('missing'), isAppError('SESSION_NOT_FOUND', 404));
   });

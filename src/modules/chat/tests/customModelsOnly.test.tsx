@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 
-import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render as renderView, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
 import ProviderSelectionEmptyState from '@/modules/chat/transcript/ProviderSelectionEmptyState';
+import { ThemeProvider } from '@/shared/context/ThemeContext';
+import { writeSelectedProvider } from '@/shared/selectedProvider';
 import { resetUserPreferences } from '@/shared/userSettings';
 import type {
   LLMProvider,
@@ -48,6 +50,15 @@ const CUSTOM_ONLY_CATALOG: ProviderModelsDefinition = {
   CUSTOM_MODELS_ONLY: true,
 };
 
+const KIRO_CATALOG: ProviderModelsDefinition = {
+  ...MERGED_CATALOG,
+  OPTIONS: [{ value: 'auto', label: 'Auto', isCustom: false }, GATEWAY_SONNET, GATEWAY_HAIKU],
+  DEFAULT: 'auto',
+};
+
+// Provider tabs render the Kiro logo, which consumes the app's theme context.
+const render = (ui: Parameters<typeof renderView>[0]) => renderView(ui, { wrapper: ThemeProvider });
+
 const toggleRequests: Array<{ provider: string; enabled: boolean }> = [];
 // Server error messages the next toggle requests answer with, as a non-2xx response.
 const toggleFailures: string[] = [];
@@ -66,7 +77,9 @@ vi.mock('@/shared/api', () => ({
     providers: {
       models: (provider: LLMProvider) => okJson({
         success: true,
-        data: provider === 'claude' ? { models: MERGED_CATALOG } : null,
+        data: provider === 'claude'
+          ? { models: MERGED_CATALOG }
+          : provider === 'kiro' ? { models: KIRO_CATALOG } : null,
       }),
       setCustomModelsOnly: (provider: string, enabled: boolean) => {
         toggleRequests.push({ provider, enabled });
@@ -79,11 +92,17 @@ vi.mock('@/shared/api', () => ({
         }
         return okJson({
           success: true,
-          data: { provider, models: enabled ? CUSTOM_ONLY_CATALOG : MERGED_CATALOG },
+          data: {
+            provider,
+            models: enabled ? CUSTOM_ONLY_CATALOG : provider === 'kiro' ? KIRO_CATALOG : MERGED_CATALOG,
+          },
         });
       },
       capabilities: () => okJson({ success: true, data: null }),
-      sessionActiveModel: () => okJson({ success: true, data: null }),
+      sessionActiveModel: (provider: LLMProvider) => okJson({
+        success: true,
+        data: provider === 'kiro' ? { model: 'auto', source: 'session' } : null,
+      }),
       setSessionActiveModel: () => okJson({ success: true, data: null }),
       setSessionActiveEffort: () => okJson({ success: true, data: null }),
     },
@@ -115,25 +134,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('the model library toggles "use only my models" for the selected provider', async () => {
+test.each(['claude', 'kiro'] as const)('the model library toggles "use only my models" for %s', async (provider) => {
   const calls: Array<{ provider: LLMProvider; enabled: boolean }> = [];
   const actions = createActions(async (provider, enabled) => {
     calls.push({ provider, enabled });
   });
   render(
     <ModelLibraryPanel
-      initialProvider="claude"
-      providerModelCatalog={{ claude: MERGED_CATALOG }}
+      initialProvider={provider}
+      providerModelCatalog={{ [provider]: provider === 'kiro' ? KIRO_CATALOG : MERGED_CATALOG }}
       actions={actions}
     />,
   );
 
   const toggle = screen.getByRole('checkbox', { name: /Use only my models/ });
   assert.equal((toggle as HTMLInputElement).checked, false);
-  screen.getByText(/Hide the built-in Claude models from every model picker/);
+  screen.getByText(new RegExp(`Hide the built-in ${provider === 'kiro' ? 'Kiro' : 'Claude'} models from every model picker`));
 
   fireEvent.click(toggle);
-  await waitFor(() => assert.deepEqual(calls, [{ provider: 'claude', enabled: true }]));
+  await waitFor(() => assert.deepEqual(calls, [{ provider, enabled: true }]));
 });
 
 test('the model library turns "use only my models" off again', async () => {
@@ -274,25 +293,46 @@ test('a successful retry clears the error of a failed toggle', async () => {
   await waitFor(() => assert.equal(isShown('Unable to change this setting.'), false));
 });
 
-test('turning the flag on moves the composer off a built-in that is no longer listed', async () => {
-  localStorage.setItem('claude-model', 'default');
+test.each(['claude', 'kiro'] as const)('turning the flag on moves the %s composer off an unlisted built-in', async (provider) => {
+  const builtIn = provider === 'kiro' ? 'auto' : 'default';
+  writeSelectedProvider(provider);
+  localStorage.setItem(`${provider}-model`, builtIn);
   const { useChatProviderState } = await import('@/modules/chat/hooks/useChatProviderState');
   const { result } = renderHook(() => useChatProviderState({ selectedSession: null, selectedProject: null }));
 
   await waitFor(() => assert.equal(result.current.providerModelsLoading, false));
-  assert.equal(result.current.currentProviderModel, 'default');
+  assert.equal(result.current.currentProviderModel, builtIn);
 
   await act(async () => {
-    await result.current.providerModelActions.setCustomModelsOnly('claude', true);
+    await result.current.providerModelActions.setCustomModelsOnly(provider, true);
   });
 
-  assert.deepEqual(toggleRequests, [{ provider: 'claude', enabled: true }]);
+  assert.deepEqual(toggleRequests, [{ provider, enabled: true }]);
   assert.deepEqual(
     result.current.currentProviderModelOptions.map((option) => option.value),
     ['claude-sonnet-4-6', 'claude-haiku-4-5'],
   );
   await waitFor(() => assert.equal(result.current.currentProviderModel, 'claude-sonnet-4-6'));
-  assert.equal(localStorage.getItem('claude-model'), 'claude-sonnet-4-6');
+  assert.equal(localStorage.getItem(`${provider}-model`), 'claude-sonnet-4-6');
+});
+
+test('turning on custom-only models keeps the open Kiro session on its recorded model', async () => {
+  writeSelectedProvider('kiro');
+  const { useChatProviderState } = await import('@/modules/chat/hooks/useChatProviderState');
+  const { result } = renderHook(() => useChatProviderState({
+    selectedSession: { id: 'kiro-existing', __provider: 'kiro' },
+    selectedProject: null,
+  }));
+  await waitFor(() => assert.equal(result.current.providerModelsLoading, false));
+  await waitFor(() => assert.equal(result.current.currentProviderModel, 'auto'));
+
+  await act(async () => {
+    await result.current.providerModelActions.setCustomModelsOnly('kiro', true);
+  });
+
+  await waitFor(() => assert.equal(result.current.providerModels.kiro, 'claude-sonnet-4-6'));
+  assert.equal(result.current.currentProviderModel, 'auto');
+  assert.deepEqual(toggleRequests, [{ provider: 'kiro', enabled: true }]);
 });
 
 test('a rejected toggle surfaces the server error and leaves the catalog alone', async () => {
@@ -334,7 +374,7 @@ test('the model picker says which providers list only your models', () => {
         provider="claude"
         setProvider={() => {}}
         textareaRef={{ current: null }}
-        providerModels={{ claude: 'default', codex: 'gpt-5.6-sol', cursor: 'auto', opencode: '' }}
+        providerModels={{ claude: 'default', codex: 'gpt-5.6-sol', cursor: 'auto', opencode: '', kiro: 'auto' }}
         setProviderModel={() => {}}
         providerModelCatalog={providerModelCatalog}
         providerModelActions={createActions(async () => {})}

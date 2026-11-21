@@ -3,10 +3,8 @@ import spawn from 'cross-spawn';
 import { findUserCodexCli } from '@/modules/providers/list/codex/codex-cli.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
-import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
-import type { IProvider } from '@/shared/interfaces.js';
-import type { CliVersionProbe, LLMProvider } from '@/shared/types.js';
-import { AppError, IS_PLATFORM, isNewerVersion, isReleaseVersion, stripAnsiSequences } from '@/shared/utils.js';
+import type { CliVersionProbe, IProvider, LLMProvider } from '@/shared/index.js';
+import { AppError, IS_PLATFORM, isNewerVersion, isReleaseVersion, resolveClaudeCodeExecutablePath, stripAnsiSequences } from '@/shared/index.js';
 
 /** How long the registry's answer is reused before it is asked again. */
 const LATEST_VERSION_TTL_MS = 60 * 60 * 1000;
@@ -97,6 +95,13 @@ const CLI_UPDATERS: Partial<Record<LLMProvider, CliUpdater>> = {
   opencode: {
     resolveUpdate: () => ({ command: 'opencode', args: ['upgrade'] }),
     npmPackage: 'opencode-ai',
+  },
+  kiro: {
+    resolveUpdate: () => ({
+      command: process.env.KIRO_PATH ?? 'kiro-cli',
+      args: ['update', '--non-interactive'],
+    }),
+    npmPackage: null,
   },
 };
 
@@ -193,6 +198,7 @@ function getProviderLabel(provider: LLMProvider): string {
     codex: 'Codex',
     cursor: 'Cursor CLI',
     opencode: 'OpenCode',
+    kiro: 'Kiro CLI',
   };
   return labels[provider];
 }
@@ -387,7 +393,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       timeoutMs: dependencies.updateTimeoutMs,
       killGraceMs: dependencies.updateKillGraceMs,
     });
-    const installedVersion = provider.auth.checkInstalled().version;
+    const { version: installedVersion } = await provider.auth.checkInstalled();
     const note = CLI_UPDATERS[provider.id]?.explainRun?.(update, run.exitCode);
 
     return {
@@ -414,7 +420,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       // and cursor-agent), a page that follows the run asks every few seconds,
       // and the updater may be replacing that binary right then.
       const running = updatesInProgress.get(provider.id);
-      let { installed, version: installedVersion } = running?.before ?? provider.auth.checkInstalled();
+      let { installed, version: installedVersion } = running?.before ?? await provider.auth.checkInstalled();
       const update = resolveUpdateCommand(provider.id);
       const updateUnavailableReason: CliUpdateUnavailableReason | null = dependencies.platformMode
         ? 'platform'
@@ -433,8 +439,8 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       // or, when another run has started since, that run's starting version is
       // reported instead (still no probe while a run is going on).
       const runAfterLookup = updatesInProgress.get(provider.id);
-      if (running && runAfterLookup !== running) {
-        ({ installed, version: installedVersion } = runAfterLookup?.before ?? provider.auth.checkInstalled());
+      if (runAfterLookup !== running) {
+        ({ installed, version: installedVersion } = runAfterLookup?.before ?? await provider.auth.checkInstalled());
       }
 
       return {
@@ -492,7 +498,20 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
         );
       }
 
-      const before = provider.auth.checkInstalled();
+      const before = await provider.auth.checkInstalled();
+      // An asynchronous probe can overlap a chat starting or another update
+      // request. Recheck both after it, before registering a new updater.
+      const busyAfterProbe = await dependencies.listBusyProviders();
+      const startedDuringProbe = updatesInProgress.get(provider.id);
+      if (startedDuringProbe) {
+        return startedDuringProbe.result;
+      }
+      if (busyAfterProbe.includes(provider.id)) {
+        throw new AppError(
+          `${getProviderLabel(provider.id)} is busy in at least one session. Wait for it to finish or stop it, then update.`,
+          { code: 'PROVIDER_CLI_BUSY', statusCode: 409 },
+        );
+      }
       if (!before.installed) {
         throw new AppError(`${getProviderLabel(provider.id)} is not installed on the server, so there is nothing to update.`, {
           code: 'PROVIDER_CLI_NOT_INSTALLED',
