@@ -78,8 +78,15 @@ export function createCliApplication(): CliApplication {
         { encoding: 'utf8' },
       ).trim();
     },
-    updateGlobalPackage: () => {
-      execSync('npm update -g @cloudcli-ai/cloudcli', { stdio: 'inherit' });
+    // The system module records and checks the update the same way as the web
+    // updater; load it only for the commands that need it.
+    updateGlobalPackage: async () => {
+      const { createCliUpdateWorkflow } = await import('../system/index.js');
+      return createCliUpdateWorkflow(applicationRoot).runUpdate('npm update -g @cloudcli-ai/cloudcli');
+    },
+    readUpdateHistory: async () => {
+      const { createCliUpdateWorkflow } = await import('../system/index.js');
+      return createCliUpdateWorkflow(applicationRoot).readHistory();
     },
     startServer: async () => {
       // The server executable is an entrypoint rather than a feature module,
