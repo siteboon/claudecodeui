@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { MarkdownBody } from '@/modules/chat/transcript/Markdown';
 import { splitStreamingMarkdown } from '@/modules/chat/utils/streamingMarkdown';
+import { cn } from '@/shared/utils';
 
 type StreamingMarkdownProps = {
   content: string;
@@ -55,7 +56,7 @@ export default function StreamingMarkdown({
   );
 
   return (
-    <div className={className}>
+    <div className={cn('chat-markdown', className)}>
       {settled && <MarkdownBody>{settled}</MarkdownBody>}
       {pending && <MarkdownBody>{pending}</MarkdownBody>}
     </div>

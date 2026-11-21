@@ -207,6 +207,13 @@
       "label": "Tmavý režim",
       "description": "Přepínání mezi světlým a tmavým motivem"
     },
+    "chatContent": {
+      "title": "Obsah chatu",
+      "fontSize": {
+        "label": "Velikost textu zpráv",
+        "description": "Upravte velikost textu, vzorců a obsahu tabulek v chatu"
+      }
+    },
     "projectSorting": {
       "label": "Řazení projektů",
       "description": "Pořadí projektů v postranním panelu",

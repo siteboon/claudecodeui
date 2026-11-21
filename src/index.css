@@ -43,6 +43,7 @@
     --input: 44 14% 87%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+    --chat-body-font-size: 14px;
 
     /* Nav design tokens */
     --nav-glass-bg: 44 22% 96% / 0.7;
@@ -809,6 +810,23 @@
 .prose code::after {
   content: "" !important;
   display: none !important;
+}
+
+/* Reading size is scoped to rendered chat Markdown, including nested tables,
+   code, and KaTeX formulas. UI labels and message metadata stay unchanged. */
+.chat-markdown {
+  font-size: var(--chat-body-font-size) !important;
+}
+
+.chat-markdown table,
+.chat-markdown caption,
+.chat-markdown thead,
+.chat-markdown tbody,
+.chat-markdown tfoot,
+.chat-markdown tr,
+.chat-markdown th,
+.chat-markdown td {
+  font-size: inherit;
 }
 
 /* Custom spinner animation for mobile compatibility */
