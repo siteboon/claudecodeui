@@ -234,6 +234,13 @@
       "dark": "Gelap",
       "system": "Ikuti tampilan sistem"
     },
+    "chatContent": {
+      "title": "Konten Chat",
+      "fontSize": {
+        "label": "Ukuran Teks Pesan",
+        "description": "Sesuaikan ukuran teks, rumus, dan isi tabel dalam chat"
+      }
+    },
     "projectSorting": {
       "label": "Urutan Proyek",
       "description": "Cara proyek diurutkan di sidebar",

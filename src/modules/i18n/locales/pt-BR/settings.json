@@ -234,6 +234,13 @@
       "dark": "Escuro",
       "system": "Seguir a aparência do sistema"
     },
+    "chatContent": {
+      "title": "Conteúdo do chat",
+      "fontSize": {
+        "label": "Tamanho do texto das mensagens",
+        "description": "Ajuste o tamanho do texto, das fórmulas e do conteúdo das tabelas no chat"
+      }
+    },
     "projectSorting": {
       "label": "Ordenação de projetos",
       "description": "Como os projetos são ordenados na barra lateral",
