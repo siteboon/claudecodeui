@@ -38,7 +38,9 @@
     "selectAllLoaded": "Alle geladenen auswählen",
     "clearSelection": "Auswahl aufheben",
     "deleteSelected_one": "{{count}} Sitzung löschen",
-    "deleteSelected_other": "{{count}} Sitzungen löschen"
+    "deleteSelected_other": "{{count}} Sitzungen löschen",
+    "expandForks": "Abzweigungen von {{session}} aufklappen",
+    "collapseForks": "Abzweigungen von {{session}} zuklappen"
   },
   "tooltips": {
     "viewEnvironments": "Umgebungen anzeigen",
@@ -151,9 +153,6 @@
     "sessionCount_other": "Dieses Projekt enthält {{count}} Unterhaltungen.",
     "removeFromSidebar": "Nur aus der Seitenleiste entfernen",
     "archiveProject": "Projekt archivieren",
-    "archiveSession": "Sitzung archivieren",
-    "archiveSessionNotice": "Beim Archivieren verschwindet die Sitzung aus der aktiven Liste, ihr Verlauf bleibt erhalten.",
-    "archivedSessionNotice": "Diese Sitzung ist bereits archiviert. Du kannst sie ausgeblendet lassen oder endgültig löschen.",
     "deleteSessionPermanently": "Endgültig löschen",
     "deleteAllData": "Alle Daten dauerhaft löschen",
     "allConversationsDeleted": "Das Projekt wird aus der Seitenleiste entfernt. Deine Dateien, Erinnerungen und Sitzungsdaten bleiben erhalten.",

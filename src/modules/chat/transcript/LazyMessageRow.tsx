@@ -34,6 +34,8 @@ type LazyMessageRowProps = {
    * placeholder and mounts when scrolled toward.
    */
   initiallyNearViewport: boolean;
+  /** Extra classes on the row's own box, which is what the list spaces. */
+  className?: string;
   children: ReactNode;
 };
 
@@ -41,6 +43,7 @@ export default function LazyMessageRow({
   lazyRows,
   timestamp,
   initiallyNearViewport,
+  className,
   children,
 }: LazyMessageRowProps) {
   const [isNearViewport, setIsNearViewport] = useState(initiallyNearViewport);
@@ -50,10 +53,17 @@ export default function LazyMessageRow({
   const handleNearViewportChange = useCallback((nextIsNearViewport: boolean) => {
     if (!nextIsNearViewport) {
       // Measured now, while the content is still in the DOM, so the
-      // placeholder that replaces it occupies exactly the same space.
-      const height = elementRef.current?.offsetHeight ?? 0;
-      if (height > 0) {
-        setMeasuredHeight(height);
+      // placeholder that replaces it occupies exactly the same space. That
+      // includes 0px (a hidden thinking row renders nothing) and fractions of
+      // a pixel, which offsetHeight would round: a placeholder taller than the
+      // content, on a row just past the band's top edge, reaches back into the
+      // band, remounts the content, drops out again, and repeats forever where
+      // no scroll anchoring absorbs the shift (Safari).
+      const rect = elementRef.current?.getBoundingClientRect();
+      // A 0x0 box means the row is not rendered at all (hidden tab), which
+      // says nothing about its height, so the last measurement is kept.
+      if (rect && (rect.width > 0 || rect.height > 0)) {
+        setMeasuredHeight(rect.height);
       }
     }
     setIsNearViewport(nextIsNearViewport);
@@ -71,6 +81,7 @@ export default function LazyMessageRow({
     <div
       ref={elementRef}
       data-message-timestamp={timestamp || undefined}
+      className={className}
       style={isMounted ? undefined : { height: measuredHeight ?? ESTIMATED_ROW_HEIGHT_PX }}
     >
       {isMounted ? children : null}

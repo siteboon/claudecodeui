@@ -10,7 +10,8 @@ type QueuedMessageCardProps = {
 
 /**
  * Rendered by chat's ChatComposer to show the message queued for a busy
- * session, with edit and delete actions before it is auto-sent.
+ * session (every follow-up queued so far, joined), with edit and delete
+ * actions before it is auto-sent.
  */
 export default function QueuedMessageCard({
   content,
@@ -32,7 +33,16 @@ export default function QueuedMessageCard({
               · {t('input.queue.willSend', { defaultValue: 'Will send when this finishes' })}
             </span>
           </div>
-          <p className="mt-0.5 line-clamp-2 break-words text-sm text-foreground/90">{content}</p>
+          {/* Follow-ups queued while one waits are joined into this message, so
+              it scrolls instead of clamping: everything that will be sent stays
+              readable, with each follow-up on its own lines. Focusable, so it
+              can also be scrolled from the keyboard. */}
+          <p
+            tabIndex={0}
+            className="mt-0.5 max-h-28 overflow-y-auto whitespace-pre-wrap break-words rounded-sm text-sm text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {content}
+          </p>
           {attachmentCount > 0 && (
             <p className="mt-0.5 text-xs text-muted-foreground">
               {attachmentCount} {attachmentCount === 1 ? 'file' : 'files'} attached

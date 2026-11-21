@@ -13,6 +13,7 @@ import {
 
 import type { PermissionMode } from '@/shared/types';
 import { useComposerMenuAnchor } from '@/modules/chat/hooks/useComposerMenuAnchor';
+import { usePermissionNameFit } from '@/modules/chat/hooks/usePermissionNameFit';
 import {
   ComposerMenuHeading,
   ComposerMenuItem,
@@ -21,6 +22,8 @@ import {
 
 type ModeAppearance = {
   icon: LucideIcon;
+  /** English name, the fallback for the `codex.modes.<mode>` translation. */
+  label: string;
   trigger: string;
   item: string;
 };
@@ -32,29 +35,34 @@ type ModeAppearance = {
 const MODE_APPEARANCE: Record<PermissionMode, ModeAppearance> = {
   default: {
     icon: Hand,
+    label: 'Default Mode',
     trigger: 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted',
     item: 'text-foreground',
   },
   auto: {
     icon: Bot,
+    label: 'Auto Mode',
     trigger:
       'border-blue-300/60 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-600/40 dark:bg-blue-900/15 dark:text-blue-300 dark:hover:bg-blue-900/25',
     item: 'text-blue-700 dark:text-blue-300',
   },
   acceptEdits: {
     icon: Smile,
+    label: 'Accept Edits',
     trigger:
       'border-green-300/60 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-600/40 dark:bg-green-900/15 dark:text-green-300 dark:hover:bg-green-900/25',
     item: 'text-green-700 dark:text-green-300',
   },
   bypassPermissions: {
     icon: AlertTriangle,
+    label: 'Bypass Permissions',
     trigger:
       'border-orange-300/60 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-600/40 dark:bg-orange-900/15 dark:text-orange-300 dark:hover:bg-orange-900/25',
     item: 'text-orange-600 dark:text-orange-400',
   },
   plan: {
     icon: ClipboardList,
+    label: 'Plan Mode',
     trigger: 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/10',
     item: 'text-primary',
   },
@@ -62,6 +70,7 @@ const MODE_APPEARANCE: Record<PermissionMode, ModeAppearance> = {
 
 const UNKNOWN_MODE: ModeAppearance = {
   icon: ShieldQuestion,
+  label: '',
   trigger: 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted',
   item: 'text-foreground',
 };
@@ -91,6 +100,18 @@ function ComposerPermissionMenu({
   const [isOpen, setIsOpen] = useState(false);
   const close = useCallback(() => setIsOpen(false), []);
   const { triggerRef, menuRef, anchor, updateAnchor } = useComposerMenuAnchor(isOpen, close, 22 * 16);
+  const modeLabel = (mode: PermissionMode) =>
+    t(`codex.modes.${mode}`, { defaultValue: getAppearance(mode).label || mode });
+  const activeModeLabel = modeLabel(permissionMode);
+  // The name is shown only where the composer has room for it, so it never
+  // pushes the model menu and the send button onto a second row. Plan mode,
+  // the one that changes nothing, keeps its name wherever it fits inside the
+  // composer, even when that gives the controls a row of their own.
+  const isNameShown = usePermissionNameFit(
+    triggerRef,
+    permissionModes.length > 0 ? activeModeLabel : null,
+    permissionMode === 'plan',
+  );
 
   if (permissionModes.length === 0) {
     return null;
@@ -112,13 +133,21 @@ function ComposerPermissionMenu({
           updateAnchor();
           setIsOpen((current) => !current);
         }}
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors ${activeAppearance.trigger}`}
+        className={`flex h-8 min-w-8 max-w-40 shrink-0 items-center justify-center gap-1.5 rounded-lg border text-xs font-medium transition-colors sm:max-w-48 ${isNameShown ? 'px-2' : 'w-8'} ${activeAppearance.trigger}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        aria-label={heading}
+        // The mode name leads the accessible name, so what a screen reader
+        // announces starts with what the button shows.
+        aria-label={t('composer.permissionTriggerLabel', {
+          mode: activeModeLabel,
+          heading,
+          defaultValue: '{{mode}}: {{heading}}',
+        })}
         title={t('input.clickToChangeMode')}
       >
-        <ActiveIcon className="h-4 w-4" />
+        <ActiveIcon className="h-4 w-4 shrink-0" />
+        {/* Named, not just drawn: the mode decides what the next message may change. */}
+        {isNameShown && <span className="truncate">{activeModeLabel}</span>}
       </button>
 
       {isOpen && anchor && createPortal(
@@ -131,7 +160,7 @@ function ComposerPermissionMenu({
               <ComposerMenuItem
                 key={mode}
                 icon={<ModeIcon className="h-4 w-4" />}
-                label={t(`codex.modes.${mode}`, { defaultValue: mode })}
+                label={modeLabel(mode)}
                 description={t(`codex.descriptions.${mode}`, { defaultValue: '' }) || undefined}
                 isSelected={mode === permissionMode}
                 onSelect={() => {
@@ -142,6 +171,9 @@ function ComposerPermissionMenu({
               />
             );
           })}
+          <ComposerMenuHeading>
+            {t('composer.permissionCycleHint', { defaultValue: 'Press Tab in the message box to switch modes' })}
+          </ComposerMenuHeading>
         </ComposerMenuSurface>,
         document.body,
       )}

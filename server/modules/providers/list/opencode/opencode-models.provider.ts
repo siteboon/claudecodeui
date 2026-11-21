@@ -1,10 +1,18 @@
-import { readFile } from 'node:fs/promises';
+import type { ChildProcess } from 'node:child_process';
+import { closeSync, openSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
+import spawn from 'cross-spawn';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import {
+  getOpenCodeDataDir,
+  listConfiguredProviders,
+  readOpenCodeConfigs,
+} from '@/modules/providers/list/opencode/opencode-config.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
@@ -293,9 +301,6 @@ export const OPENCODE_PREDEFINED_MODELS: ProviderModelsDefinition = {
   DEFAULT: 'opencode/gpt-5.6-terra',
 };
 
-/** Global OpenCode config files, in the order the CLI loads them. */
-const OPENCODE_CONFIG_FILES = ['config.json', 'opencode.json', 'opencode.jsonc'];
-
 /** Provider API keys OpenCode reads straight from the environment. */
 const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
   OPENCODE_API_KEY: 'opencode',
@@ -303,12 +308,103 @@ const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
   OPENAI_API_KEY: 'openai',
 };
 
+/**
+ * How long `opencode models` may take before the static catalog stands in.
+ *
+ * Listing is CPU-bound: about 3 s with cores to spare, about 5 s on one core,
+ * and from about 10 s to over 30 s on one core that other work also uses (a
+ * small container or VPS, a loaded host). There every listing is that slow,
+ * not only the first. A 5 s budget kept failing on such hosts, so the picker
+ * stayed on the static catalog, which offers models this OpenCode refuses to
+ * run (instead of the user's own) when the install's providers cannot be
+ * read. When the first listing after a start takes longer than this, the
+ * static catalog still stands in until a later background refresh finishes
+ * in time. Only the
+ * first catalog read after a start waits this long; later ones are served
+ * from the cache.
+ */
+const OPENCODE_MODELS_TIMEOUT_MS = 30_000;
+/** How long a successful `opencode models` listing is served before it is refreshed. */
+const OPENCODE_MODELS_CACHE_TTL_MS = 5 * 60_000;
+/**
+ * Empty listings (CLI missing, failed or timed out) are retried sooner, so a
+ * transient failure does not pin the static fallback, or the previous listing
+ * a failed refresh keeps in place.
+ */
+const OPENCODE_MODELS_EMPTY_CACHE_TTL_MS = 30_000;
+const OPENCODE_MODEL_REFERENCE_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._/:+-]*$/i;
+
+/**
+ * Reads model references from the local OpenCode CLI without invoking a shell.
+ *
+ * Model availability can differ by account and changes independently of
+ * CloudCLI releases, so `opencode models` is the source of truth. The CLI
+ * output is deliberately treated as untrusted: only standalone,
+ * fully-qualified `<provider>/<model>` lines are accepted.
+ *
+ * The CLI writes to a private temp file, read once it has exited, rather than
+ * to a pipe: Node's pipe is a socket that holds only about 170 small writes
+ * until it is read, and OpenCode exits 0 without the rest of its listing once
+ * that is full. On a busy host, where CloudCLI reads late, the piped listing
+ * came through cut short and was cached as complete.
+ */
+const readInstalledOpenCodeModels = async (): Promise<string[]> => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), 'cloudcli-opencode-models-'));
+  try {
+    const outputPath = path.join(outputDir, 'models.txt');
+    const output = openSync(outputPath, 'w');
+    let child: ChildProcess;
+    try {
+      child = spawn('opencode', ['models'], {
+        stdio: ['ignore', output, 'ignore'],
+        shell: false,
+      });
+    } finally {
+      // The child holds its own handle on the file.
+      closeSync(output);
+    }
+
+    const exitCode = await new Promise<number | null>((resolve) => {
+      const timeout = setTimeout(() => {
+        child.kill();
+        resolve(null);
+      }, OPENCODE_MODELS_TIMEOUT_MS);
+      const finish = (code: number | null): void => {
+        clearTimeout(timeout);
+        resolve(code);
+      };
+      child.on('error', () => finish(null));
+      child.on('close', finish);
+    });
+    // A failed or timed-out run may have written part of a listing, which must
+    // not be cached as a complete one; an empty result takes the short retry
+    // path instead.
+    if (exitCode !== 0) {
+      return [];
+    }
+
+    const models = new Set<string>();
+    for (const line of (await readFile(outputPath, 'utf8')).split(/\r?\n/)) {
+      const model = line.trim();
+      if (OPENCODE_MODEL_REFERENCE_PATTERN.test(model)) {
+        models.add(model);
+      }
+    }
+    return [...models];
+  } finally {
+    // Best effort: on Windows a CLI that outlived its kill (behind the .cmd
+    // shim) still holds the file, which then stays in the temp dir.
+    await rm(outputDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+};
+
 const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, unknown> | null> => {
   try {
     return readObjectRecord(JSON.parse(await readFile(filePath, 'utf8')));
   } catch {
-    // Missing, unreadable, or comment-bearing (.jsonc) files simply contribute
-    // nothing; the auth store is the authoritative source below.
+    // The auth store is plain JSON written by OpenCode itself; a missing or
+    // unreadable one simply contributes nothing. Config files are JSONC and
+    // go through the shared config reader instead.
     return null;
   }
 };
@@ -323,28 +419,30 @@ const readOpenCodeJsonFile = async (filePath: string): Promise<Record<string, un
  * catalog spans every provider OpenCode can address, so it has to be narrowed
  * to this machine's providers before it reaches the model picker.
  *
- * Returns null when nothing can be read, so the caller keeps the full catalog
- * rather than leaving the picker empty. Providers declared only in a
- * project-level `opencode.json` are not visible here; the null fallback and the
- * env-key sweep keep those installs on the full list.
+ * Custom config passed through `OPENCODE_CONFIG` (a file path) or
+ * `OPENCODE_CONFIG_CONTENT` (inline JSONC) is read too, so providers declared
+ * there are not filtered out of the CLI listing. Providers count whether they
+ * are declared under v1's `provider` or v2's `providers`, with or without a key,
+ * except that a v2 entry never starts a filter on its own (see below).
+ *
+ * Returns null when nothing can be read. Providers declared only in a
+ * project-level `opencode.json` are not visible here, so callers retain the
+ * unfiltered catalog in that case.
  */
 const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> => {
   const providerIds = new Set<string>();
-  const configDir = path.join(os.homedir(), '.config', 'opencode');
 
-  const auth = await readOpenCodeJsonFile(
-    path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json'),
-  );
+  const auth = await readOpenCodeJsonFile(path.join(getOpenCodeDataDir(), 'auth.json'));
   for (const [providerId, credential] of Object.entries(auth ?? {})) {
     if (readObjectRecord(credential)) {
       providerIds.add(providerId);
     }
   }
 
-  for (const configFile of OPENCODE_CONFIG_FILES) {
-    const config = await readOpenCodeJsonFile(path.join(configDir, configFile));
-    for (const providerId of Object.keys(readObjectRecord(config?.provider) ?? {})) {
-      providerIds.add(providerId);
+  const configuredProviders = listConfiguredProviders(await readOpenCodeConfigs());
+  for (const { id, section } of configuredProviders) {
+    if (section === 'provider') {
+      providerIds.add(id);
     }
   }
 
@@ -354,11 +452,25 @@ const readConnectedOpenCodeProviderIds = async (): Promise<Set<string> | null> =
     }
   }
 
-  return providerIds.size > 0 ? providerIds : null;
+  if (providerIds.size === 0) {
+    return null;
+  }
+
+  // v2 keeps its logins in its own database, which is not read here, so a v2
+  // `providers` entry cannot show what else is connected. It joins a filter
+  // something else started, but never starts one: alone it would hide the
+  // models of every provider logged in through v2.
+  for (const { id, section } of configuredProviders) {
+    if (section === 'providers') {
+      providerIds.add(id);
+    }
+  }
+
+  return providerIds;
 };
 
 /**
- * Narrows the curated catalog to the providers OpenCode can route to.
+ * Narrows a catalog to providers OpenCode can route to.
  *
  * The default has to move with the list: leaving it on an OpenCode Zen model
  * would hand every new session a model the CLI refuses to run.
@@ -374,17 +486,43 @@ const filterOpenCodeModelsByProvider = (
   const options = definition.OPTIONS.filter(
     (option) => connectedProviderIds.has(option.value.split('/')[0]),
   );
-  if (options.length === 0) {
-    return definition;
-  }
-
   return {
     ...definition,
     OPTIONS: options,
     DEFAULT: options.some((option) => option.value === definition.DEFAULT)
       ? definition.DEFAULT
-      : options[0].value,
+      : options[0]?.value ?? '',
   };
+};
+
+/** Curated options by model id, so discovered ids keep their labels and effort levels. */
+const OPENCODE_PREDEFINED_OPTIONS_BY_VALUE = new Map(
+  OPENCODE_PREDEFINED_MODELS.OPTIONS.map((option) => [option.value, option]),
+);
+
+const createDiscoveredOpenCodeModels = (
+  modelReferences: string[],
+  connectedProviderIds: Set<string> | null,
+): ProviderModelsDefinition | null => {
+  const options = modelReferences
+    .filter((model) => !connectedProviderIds || connectedProviderIds.has(model.split('/')[0]))
+    .map((value) => {
+      const predefined = OPENCODE_PREDEFINED_OPTIONS_BY_VALUE.get(value);
+      if (predefined) {
+        return predefined;
+      }
+
+      const [providerId, ...modelIdParts] = value.split('/');
+      return {
+        value,
+        label: modelIdParts.join('/'),
+        description: providerId,
+      };
+    });
+
+  return options.length > 0
+    ? { OPTIONS: options, DEFAULT: options[0].value }
+    : null;
 };
 
 const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
@@ -430,11 +568,70 @@ const parseOpenCodeSessionModelValue = (rawModel: unknown): string | null => {
 
 /** Provider registry model adapter for OpenCode predefined models and session metadata. */
 export class OpenCodeProviderModels implements IProviderModels {
+  /** Last `opencode models` listing and when it stops being fresh. */
+  private cachedModelReferences: { references: string[]; expiresAt: number } | null = null;
+
+  /** In-flight CLI read, shared so concurrent picker loads spawn one process. */
+  private pendingModelReferences: Promise<string[]> | null = null;
+
+  /** Used by the provider registry and focused adapter tests to read local OpenCode models. */
+  constructor(
+    private readonly readModels = readInstalledOpenCodeModels,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  private refreshModelReferences(): Promise<string[]> {
+    this.pendingModelReferences ??= this.readModels()
+      // The picker remains available when a local CLI invocation fails.
+      .catch(() => [] as string[])
+      .then((listed) => {
+        // A failed refresh keeps the last good listing, retried on the short
+        // schedule, instead of putting the static catalog back in the picker.
+        const references = listed.length > 0
+          ? listed
+          : this.cachedModelReferences?.references ?? [];
+        const ttl = listed.length > 0
+          ? OPENCODE_MODELS_CACHE_TTL_MS
+          : OPENCODE_MODELS_EMPTY_CACHE_TTL_MS;
+        this.cachedModelReferences = { references, expiresAt: this.now() + ttl };
+        return references;
+      })
+      .finally(() => {
+        this.pendingModelReferences = null;
+      });
+    return this.pendingModelReferences;
+  }
+
+  /**
+   * Serves the cached CLI listing, refreshing it in the background once stale.
+   *
+   * Spawning `opencode models` takes seconds and every picker load asks for
+   * the catalog, so only the first read after startup waits on the CLI.
+   */
+  private async readModelReferences(): Promise<string[]> {
+    if (!this.cachedModelReferences) {
+      return this.refreshModelReferences();
+    }
+    if (this.now() >= this.cachedModelReferences.expiresAt) {
+      void this.refreshModelReferences();
+    }
+    return this.cachedModelReferences.references;
+  }
+
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    return filterOpenCodeModelsByProvider(
-      OPENCODE_PREDEFINED_MODELS,
-      await readConnectedOpenCodeProviderIds(),
-    );
+    const [connectedProviderIds, modelReferences] = await Promise.all([
+      readConnectedOpenCodeProviderIds(),
+      this.readModelReferences(),
+    ]);
+    const discovered = createDiscoveredOpenCodeModels(modelReferences, connectedProviderIds);
+    if (discovered) {
+      return discovered;
+    }
+
+    // Discovery can fail when the CLI is not installed or is upgraded. Keep
+    // known static options only for connected providers; an unknown provider
+    // gets an empty picker instead of a misleading foreign-provider catalog.
+    return filterOpenCodeModelsByProvider(OPENCODE_PREDEFINED_MODELS, connectedProviderIds);
   }
 
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {

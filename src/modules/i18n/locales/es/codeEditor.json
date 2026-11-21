@@ -24,7 +24,8 @@
     "fullscreen": "Pantalla completa",
     "close": "Cerrar",
     "previewMarkdown": "Vista previa de markdown",
-    "editMarkdown": "Editar markdown"
+    "editMarkdown": "Editar markdown",
+    "previewHtml": "Abrir vista previa HTML en una pestaña nueva"
   },
   "footer": {
     "lines": "Líneas:",

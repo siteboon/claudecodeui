@@ -174,6 +174,11 @@ CREATE TABLE IF NOT EXISTS app_config (
  * controlled in each provider's `-models.provider.ts` adapter so they can be
  * updated without migrating application data. `model_id` is unique only within
  * a provider because different CLIs can accept the same identifier.
+ *
+ * `effort_values` (JSON array of level ids) and `effort_default` hold the
+ * reasoning-effort levels the user declared for the model; both stay NULL when
+ * none were declared. They sit after the timestamps so fresh installs match the
+ * column order that `runMigrations` produces on upgraded databases.
  */
 export const PROVIDER_MODELS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS provider_models (
@@ -184,6 +189,8 @@ CREATE TABLE IF NOT EXISTS provider_models (
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    effort_values TEXT DEFAULT NULL,
+    effort_default TEXT DEFAULT NULL,
     UNIQUE(provider, model_id)
 );
 `;
@@ -235,6 +242,10 @@ CREATE TABLE IF NOT EXISTS session_drafts (
  * on disk untouched — nothing is deleted — but it is no longer the session's,
  * and the indexer would otherwise rediscover it on its next full scan and hand
  * the session back to the version the user edited away from.
+ *
+ * Clearing a session's context leaves a provider session behind the same way,
+ * with one difference recorded in \`reason\`: that transcript is still part of
+ * the conversation the user sees, only no longer part of what the model reads.
  */
 export const SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
@@ -245,6 +256,10 @@ CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
     -- stops pointing at it, and "delete this conversation from disk" has to
     -- reach every file the conversation ever lived in.
     jsonl_path TEXT,
+    -- Why the session left it. 'edit' transcripts are a discarded version of
+    -- the conversation and are never shown again; 'context_cleared' ones are
+    -- earlier parts of the same conversation, still read back as its history.
+    reason TEXT NOT NULL DEFAULT 'edit',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (provider_session_id, provider)
 );

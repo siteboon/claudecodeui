@@ -7,6 +7,8 @@ type CollapsibleDisplayProps = {
   toolName: string;
   toolId?: string;
   title: string;
+  /** Extra classes for the title, e.g. `font-mono` for a file name that cannot be clicked. */
+  titleClassName?: string;
   defaultOpen?: boolean;
   action?: React.ReactNode;
   badge?: React.ReactNode;
@@ -32,11 +34,13 @@ const borderColorMap: Record<string, string> = {
 
 /**
  * Rendered by chat's ToolRenderer for tools configured to show their input and
- * result inside an expandable, category-coloured section.
+ * result inside an expandable, category-coloured section, and by BashEditDiff
+ * for each file a Bash command changed, so those read like the Edit rows.
  */
 export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   toolName,
   title,
+  titleClassName,
   defaultOpen = false,
   action,
   badge,
@@ -53,6 +57,7 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
     <div className={`border-l-2 ${borderColor} my-1 py-0.5 pl-3 ${className}`}>
       <CollapsibleSection
         title={title}
+        titleClassName={titleClassName}
         toolName={toolName}
         open={defaultOpen}
         action={action}

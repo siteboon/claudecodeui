@@ -71,3 +71,36 @@ describe('useProviderAuthStatus subscription override', () => {
     expect('subscriptionOverride' in result.current.providerAuthStatus.claude).toBe(false);
   });
 });
+
+// Issue #1529: the auth status also carries the CLI's installed version, which
+// Settings -> Agents -> Account shows until the CLI status request answers.
+describe('useProviderAuthStatus installed version', () => {
+  it('keeps the version the server reports, including an unknown one', async () => {
+    payloads.claude = {
+      installed: true,
+      provider: 'claude',
+      installedVersion: '2.1.295',
+      authenticated: true,
+      email: 'someone@example.com',
+      method: 'credentials_file',
+    };
+    payloads.cursor = {
+      installed: true,
+      provider: 'cursor',
+      installedVersion: null,
+      authenticated: false,
+      email: null,
+      method: null,
+    };
+
+    const { result } = renderHook(() => useProviderAuthStatus({ initialLoading: false }));
+    await act(async () => {
+      await result.current.checkProviderAuthStatus('claude');
+      await result.current.checkProviderAuthStatus('cursor');
+    });
+
+    expect(result.current.providerAuthStatus.claude.installedVersion).toBe('2.1.295');
+    expect(result.current.providerAuthStatus.cursor.installedVersion).toBeNull();
+    expect('installedVersion' in result.current.providerAuthStatus.cursor).toBe(true);
+  });
+});

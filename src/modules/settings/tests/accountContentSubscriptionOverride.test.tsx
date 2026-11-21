@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 
@@ -11,6 +11,16 @@ import type { ProviderAuthStatus } from '@/shared/types';
 // visible — and only when the server says a valid login really is bypassed.
 
 const NOTICE = 'provider-auth-subscription-override';
+
+// The panel's CLI version row (#1529) asks the server for the CLI status; it
+// is not what these tests are about, so that request just never answers.
+vi.mock('@/shared/api', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    api: { providers: { cliStatus: () => new Promise<Response>(() => {}) } },
+  };
+});
 
 const apiKeyStatus = (overrides: Partial<ProviderAuthStatus> = {}): ProviderAuthStatus => ({
   authenticated: true,

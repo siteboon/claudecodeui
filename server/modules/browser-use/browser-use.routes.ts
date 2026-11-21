@@ -21,6 +21,7 @@ export const BROWSER_USE_ERROR_CODES = {
   SESSIONS_LOAD_FAILED: 'BROWSER_USE_SESSIONS_LOAD_FAILED',
   SESSION_STOP_FAILED: 'BROWSER_USE_SESSION_STOP_FAILED',
   SESSION_DELETE_FAILED: 'BROWSER_USE_SESSION_DELETE_FAILED',
+  SESSION_INPUT_FAILED: 'BROWSER_USE_SESSION_INPUT_FAILED',
 } as const;
 
 function sendError(
@@ -136,6 +137,33 @@ router.post('/sessions/:sessionId/stop', async (req, res) => {
       400,
       BROWSER_USE_ERROR_CODES.SESSION_STOP_FAILED,
       'Failed to stop browser session.',
+      error instanceof Error ? error.message : undefined,
+    );
+  }
+});
+
+router.post('/sessions/:sessionId/input', async (req, res) => {
+  try {
+    const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+    let input: Parameters<typeof browserUseService.userInput>[1];
+    if (body.type === 'click' && Number.isFinite(body.x) && Number.isFinite(body.y)) {
+      input = { type: 'click', x: Number(body.x), y: Number(body.y) };
+    } else if (body.type === 'text' && typeof body.text === 'string' && body.text.length > 0 && body.text.length <= 2000) {
+      input = { type: 'text', text: body.text };
+    } else if (body.type === 'key' && typeof body.key === 'string' && body.key.length > 0 && body.key.length <= 32) {
+      input = { type: 'key', key: body.key };
+    } else {
+      sendError(res, 400, BROWSER_USE_ERROR_CODES.SESSION_INPUT_FAILED, 'Invalid browser input.');
+      return;
+    }
+    const session = await browserUseService.userInput(readParam(req.params.sessionId), input);
+    res.json({ success: true, data: { session } });
+  } catch (error) {
+    sendError(
+      res,
+      400,
+      BROWSER_USE_ERROR_CODES.SESSION_INPUT_FAILED,
+      'Failed to send input to browser session.',
       error instanceof Error ? error.message : undefined,
     );
   }

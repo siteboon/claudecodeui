@@ -41,6 +41,8 @@ import esChat from '@/modules/i18n/locales/es/chat.json';
 import esCodeEditor from '@/modules/i18n/locales/es/codeEditor.json';
 // oxlint-disable-next-line importx/order
 import esTasks from '@/modules/i18n/locales/es/tasks.json';
+// oxlint-disable-next-line importx/order
+import esGit from '@/modules/i18n/locales/es/git.json';
 
 import koCommon from '@/modules/i18n/locales/ko/common.json';
 import koSettings from '@/modules/i18n/locales/ko/settings.json';
@@ -58,6 +60,9 @@ import zhSidebar from '@/modules/i18n/locales/zh-CN/sidebar.json';
 import zhChat from '@/modules/i18n/locales/zh-CN/chat.json';
 import zhCodeEditor from '@/modules/i18n/locales/zh-CN/codeEditor.json';
 import zhTasks from '@/modules/i18n/locales/zh-CN/tasks.json';
+// oxlint-disable-next-line importx/order
+import zhGit from '@/modules/i18n/locales/zh-CN/git.json';
+
 import jaCommon from '@/modules/i18n/locales/ja/common.json';
 import jaSettings from '@/modules/i18n/locales/ja/settings.json';
 import jaAuth from '@/modules/i18n/locales/ja/auth.json';
@@ -92,6 +97,7 @@ import trSidebar from '@/modules/i18n/locales/tr/sidebar.json';
 import trChat from '@/modules/i18n/locales/tr/chat.json';
 import trCodeEditor from '@/modules/i18n/locales/tr/codeEditor.json';
 import trTasks from '@/modules/i18n/locales/tr/tasks.json';
+import trGit from '@/modules/i18n/locales/tr/git.json';
 import itCommon from '@/modules/i18n/locales/it/common.json';
 import itSettings from '@/modules/i18n/locales/it/settings.json';
 import itAuth from '@/modules/i18n/locales/it/auth.json';
@@ -123,6 +129,17 @@ import csTasks from '@/modules/i18n/locales/cs/tasks.json';
 // oxlint-disable-next-line importx/order
 import csGit from '@/modules/i18n/locales/cs/git.json';
 
+import heCommon from '@/modules/i18n/locales/he/common.json';
+import heSettings from '@/modules/i18n/locales/he/settings.json';
+import heAuth from '@/modules/i18n/locales/he/auth.json';
+import heSidebar from '@/modules/i18n/locales/he/sidebar.json';
+import heChat from '@/modules/i18n/locales/he/chat.json';
+import heCodeEditor from '@/modules/i18n/locales/he/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import heTasks from '@/modules/i18n/locales/he/tasks.json';
+// oxlint-disable-next-line importx/order
+import heGit from '@/modules/i18n/locales/he/git.json';
+
 import zhTWCommon from '@/modules/i18n/locales/zh-TW/common.json';
 import zhTWSettings from '@/modules/i18n/locales/zh-TW/settings.json';
 import zhTWAuth from '@/modules/i18n/locales/zh-TW/auth.json';
@@ -131,6 +148,19 @@ import zhTWChat from '@/modules/i18n/locales/zh-TW/chat.json';
 import zhTWCodeEditor from '@/modules/i18n/locales/zh-TW/codeEditor.json';
 // oxlint-disable-next-line importx/order
 import zhTWTasks from '@/modules/i18n/locales/zh-TW/tasks.json';
+// oxlint-disable-next-line importx/order
+import zhTWGit from '@/modules/i18n/locales/zh-TW/git.json';
+
+import ptBRCommon from '@/modules/i18n/locales/pt-BR/common.json';
+import ptBRSettings from '@/modules/i18n/locales/pt-BR/settings.json';
+import ptBRAuth from '@/modules/i18n/locales/pt-BR/auth.json';
+import ptBRSidebar from '@/modules/i18n/locales/pt-BR/sidebar.json';
+import ptBRChat from '@/modules/i18n/locales/pt-BR/chat.json';
+import ptBRCodeEditor from '@/modules/i18n/locales/pt-BR/codeEditor.json';
+// oxlint-disable-next-line importx/order
+import ptBRTasks from '@/modules/i18n/locales/pt-BR/tasks.json';
+// oxlint-disable-next-line importx/order
+import ptBRGit from '@/modules/i18n/locales/pt-BR/git.json';
 
 // Import supported languages configuration
 import { languages } from '@/modules/i18n/languages';
@@ -185,6 +215,7 @@ git: enGit,
         chat: esChat,
         codeEditor: esCodeEditor,
         tasks: esTasks,
+        git: esGit,
       },
       ko: {
         common: koCommon,
@@ -203,6 +234,7 @@ git: enGit,
         chat: zhChat,
         codeEditor: zhCodeEditor,
         tasks: zhTasks,
+        git: zhGit,
       },
       ja: {
         common: jaCommon,
@@ -239,6 +271,7 @@ git: enGit,
         chat: trChat,
         codeEditor: trCodeEditor,
         tasks: trTasks,
+        git: trGit,
       },
       it: {
         common: itCommon,
@@ -269,6 +302,16 @@ git: enGit,
         tasks: csTasks,
         git: csGit,
       },
+      he: {
+        common: heCommon,
+        settings: heSettings,
+        auth: heAuth,
+        sidebar: heSidebar,
+        chat: heChat,
+        codeEditor: heCodeEditor,
+        tasks: heTasks,
+        git: heGit,
+      },
       'zh-TW': {
         common: zhTWCommon,
         settings: zhTWSettings,
@@ -277,6 +320,17 @@ git: enGit,
         chat: zhTWChat,
         codeEditor: zhTWCodeEditor,
         tasks: zhTWTasks,
+        git: zhTWGit,
+      },
+      'pt-BR': {
+        common: ptBRCommon,
+        settings: ptBRSettings,
+        auth: ptBRAuth,
+        sidebar: ptBRSidebar,
+        chat: ptBRChat,
+        codeEditor: ptBRCodeEditor,
+        tasks: ptBRTasks,
+        git: ptBRGit,
       },
     },
 
