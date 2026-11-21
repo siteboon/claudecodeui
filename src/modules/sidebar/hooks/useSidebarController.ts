@@ -486,7 +486,9 @@ export function useSidebarController({
     }
 
     const query = debouncedSearchQuery;
-    if (searchMode !== 'conversations' || query.length < 2) {
+    // The Projects tab runs the same transcript search so a query that matches
+    // no project or session title still finds the chats that mention it.
+    if ((searchMode !== 'conversations' && searchMode !== 'projects') || query.length < 2) {
       searchSeqRef.current += 1;
       setConversationResults(null);
       setSearchProgress(null);
@@ -627,14 +629,6 @@ export function useSidebarController({
       });
     },
     [searchMode, keepProjectsExpanded],
-  );
-
-  const isProjectExpanded = useCallback(
-    (projectId: string) =>
-      searchMode === 'running'
-        ? !collapsedRunningProjects.has(projectId)
-        : expandedProjects.has(projectId),
-    [collapsedRunningProjects, expandedProjects, searchMode],
   );
 
   const handleSessionClick = useCallback(
@@ -811,6 +805,24 @@ export function useSidebarController({
   const filteredProjects = useMemo(
     () => filterProjects(searchMode === 'running' ? runningProjects : sortedProjects, debouncedSearchQuery),
     [debouncedSearchQuery, runningProjects, searchMode, sortedProjects],
+  );
+
+  // Projects kept only because a session title matched the filter.
+  const sessionMatchedProjectIds = useMemo(
+    () => new Set(
+      filteredProjects
+        .filter((project) => project.sessionsMatchedFilter === true)
+        .map((project) => project.projectId),
+    ),
+    [filteredProjects],
+  );
+
+  const isProjectExpanded = useCallback(
+    (projectId: string) =>
+      searchMode === 'running'
+        ? !collapsedRunningProjects.has(projectId)
+        : expandedProjects.has(projectId) || sessionMatchedProjectIds.has(projectId),
+    [collapsedRunningProjects, expandedProjects, searchMode, sessionMatchedProjectIds],
   );
 
   const filteredArchivedSessions = useMemo(() => {

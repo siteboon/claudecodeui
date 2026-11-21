@@ -175,65 +175,30 @@ export default function SidebarContent({
   projectListProps,
   t,
 }: SidebarContentProps) {
-  const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
+  const searchActive = searchFilter.trim().length >= 2;
+  const showConversationSearch = searchMode === 'conversations' && searchActive;
+  const projectsSearchActive = searchMode === 'projects' && searchActive;
   const hasSearchResults = Boolean(
     conversationResults
     && (conversationResults.titleResults.length > 0 || conversationResults.results.length > 0),
+  );
+  // In the Projects tab the list already shows the sessions whose titles
+  // matched, so the title section only lists the ones it does not.
+  const visibleSessionIds = new Set(
+    projectsSearchActive
+      ? projectListProps.filteredProjects.flatMap((project) => (project.sessions ?? []).map((session) => String(session.id)))
+      : [],
+  );
+  const titleResults = (conversationResults?.titleResults ?? []).filter(
+    (session) => !visibleSessionIds.has(String(session.sessionId)),
   );
   const groupedArchivedSessions = groupArchivedSessionsByProject(archivedSessions);
   const visibleArchivedItemsCount = archivedProjects.length + archivedSessions.length;
   const isRenamingOnMobile = isMobile && projectListProps.activeRename !== null;
 
-  return (
-    <div
-      className="flex h-full flex-col bg-background/80 backdrop-blur-sm md:w-full md:select-none"
-      style={{}}
-    >
-      <SidebarHeader
-        isPWA={isPWA}
-        isMobile={isMobile}
-        isLoading={isLoading}
-        projectsCount={projects.length}
-        runningSessionsCount={runningSessionsCount}
-        archivedSessionsCount={archivedSessionsCount}
-        isArchivedSessionsLoading={isArchivedSessionsLoading}
-        searchFilter={searchFilter}
-        onSearchFilterChange={onSearchFilterChange}
-        onClearSearchFilter={onClearSearchFilter}
-        searchMode={searchMode}
-        onSearchModeChange={onSearchModeChange}
-        onRefresh={onRefresh}
-        isRefreshing={isRefreshing}
-        onCreateProject={onCreateProject}
-        onCollapseSidebar={onCollapseSidebar}
-        t={t}
-      />
-
-      <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
-        {showConversationSearch ? (
-          isSearching && !conversationResults ? (
-            <div className="px-4 py-12 text-center md:py-8">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-              </div>
-              <p className="text-sm text-muted-foreground">{t('search.searching')}</p>
-              {searchProgress && (
-                <p className="mt-1 text-xs text-muted-foreground/60">
-                  {t('search.projectsScanned', { count: searchProgress.scannedProjects })}/{searchProgress.totalProjects}
-                </p>
-              )}
-            </div>
-          ) : !isSearching && conversationResults && !hasSearchResults ? (
-            <div className="px-4 py-12 text-center md:py-8">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
-                <Search className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">{t('search.noResults')}</h3>
-              <p className="text-sm text-muted-foreground">{t('search.tryDifferentQuery')}</p>
-            </div>
-          ) : conversationResults && (hasSearchResults || isSearching) ? (
+  const conversationResultsList = conversationResults && (hasSearchResults || isSearching) ? (
             <div className="space-y-4 px-2" aria-live="polite">
-              {conversationResults.titleResults.length > 0 && (
+              {titleResults.length > 0 && (
                 <section className="space-y-1" aria-labelledby="session-title-results-heading">
                   <div className="flex items-center justify-between px-1 py-0.5">
                     <h3
@@ -243,11 +208,11 @@ export default function SidebarContent({
                       {t('search.sessionTitles', 'Session')}
                     </h3>
                     <span className="text-[10px] tabular-nums text-muted-foreground/70">
-                      {conversationResults.titleResults.length}
+                      {titleResults.length}
                     </span>
                   </div>
 
-                  {conversationResults.titleResults.map((session) => {
+                  {titleResults.map((session) => {
                     const age = formatCompactAge(session.lastActivity, projectListProps.currentTime);
 
                     return (
@@ -374,7 +339,58 @@ export default function SidebarContent({
                 </section>
               )}
             </div>
-          ) : null
+  ) : null;
+
+  const conversationSearchBody = isSearching && !conversationResults ? (
+            <div className="px-4 py-12 text-center md:py-8">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+              </div>
+              <p className="text-sm text-muted-foreground">{t('search.searching')}</p>
+              {searchProgress && (
+                <p className="mt-1 text-xs text-muted-foreground/60">
+                  {t('search.projectsScanned', { count: searchProgress.scannedProjects })}/{searchProgress.totalProjects}
+                </p>
+              )}
+            </div>
+  ) : !isSearching && conversationResults && !hasSearchResults ? (
+            <div className="px-4 py-12 text-center md:py-8">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-muted md:mb-3">
+                <Search className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">{t('search.noResults')}</h3>
+              <p className="text-sm text-muted-foreground">{t('search.tryDifferentQuery')}</p>
+            </div>
+  ) : conversationResultsList;
+
+  return (
+    <div
+      className="flex h-full flex-col bg-background/80 backdrop-blur-sm md:w-full md:select-none"
+      style={{}}
+    >
+      <SidebarHeader
+        isPWA={isPWA}
+        isMobile={isMobile}
+        isLoading={isLoading}
+        projectsCount={projects.length}
+        runningSessionsCount={runningSessionsCount}
+        archivedSessionsCount={archivedSessionsCount}
+        isArchivedSessionsLoading={isArchivedSessionsLoading}
+        searchFilter={searchFilter}
+        onSearchFilterChange={onSearchFilterChange}
+        onClearSearchFilter={onClearSearchFilter}
+        searchMode={searchMode}
+        onSearchModeChange={onSearchModeChange}
+        onRefresh={onRefresh}
+        isRefreshing={isRefreshing}
+        onCreateProject={onCreateProject}
+        onCollapseSidebar={onCollapseSidebar}
+        t={t}
+      />
+
+      <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
+        {showConversationSearch ? (
+          conversationSearchBody
         ) : searchMode === 'conversations' ? (
           <SidebarRecentConversations
             conversations={recentConversations}
@@ -679,6 +695,15 @@ export default function SidebarContent({
                 </section>
               ))}
             </div>
+          )
+        ) : projectsSearchActive ? (
+          projectListProps.filteredProjects.length > 0 ? (
+            <>
+              <SidebarProjectList {...projectListProps} />
+              {conversationResultsList}
+            </>
+          ) : (
+            conversationSearchBody
           )
         ) : (
           <SidebarProjectList {...projectListProps} />
