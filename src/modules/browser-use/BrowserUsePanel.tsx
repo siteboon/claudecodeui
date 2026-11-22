@@ -20,6 +20,7 @@ import { cn } from '@/shared/utils';
 import { Badge, Button, Input } from '@/shared/ui';
 import { api, readApiJson, ApiRequestError } from '@/shared/api';
 import type { SettingsMainTab } from '@/shared/types';
+import BrowserControlView from '@/modules/browser-use/BrowserControlView';
 
 type BrowserUseStatus = {
   enabled: boolean;
@@ -33,6 +34,7 @@ type BrowserUseStatus = {
 
 type BrowserUseSession = {
   id: string;
+  userControlled: boolean;
   status: 'ready' | 'stopped' | 'unavailable';
   url: string | null;
   title: string | null;
@@ -154,6 +156,10 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   const sessionOperationLockRef = useRef(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Retain the viewer credential when the overlay closes so it can immediately reopen.
+  const [control, setControl] = useState<{ sessionId: string; controlId: string } | null>(null);
+  // Closing the overlay is separate from returning the browser to the agent.
+  const [showControl, setShowControl] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedSession = useMemo(
@@ -211,6 +217,42 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
     void refresh();
   }, [isVisible, refresh]);
 
+  const closeControlView = useCallback(() => setShowControl(false), []);
+  const forgetControl = useCallback(() => {
+    setShowControl(false);
+    setControl(null);
+    void refresh();
+  }, [refresh]);
+  const lostControl = useCallback(() => {
+    setShowControl(false);
+    setControl(null);
+    setError(t('browserUse.liveControlLost'));
+  }, [t]);
+
+  const takeControl = async () => {
+    if (selectedSession?.status !== 'ready' || isBusy) return;
+    if (control?.sessionId === selectedSession.id && selectedSession.userControlled) {
+      setShowControl(true);
+      return;
+    }
+    setIsBusy(true);
+    setError(null);
+    try {
+      const { data } = await readApiJson<{ data: { controlId: string } }>(
+        await api.browserUse.control(selectedSession.id, 'take'),
+      );
+      setSessions((current) => current.map((session) => session.id === selectedSession.id
+        ? { ...session, userControlled: true, screenshotDataUrl: null, url: null, title: null, cursor: null }
+        : session));
+      setControl({ sessionId: selectedSession.id, controlId: data.controlId });
+      setShowControl(true);
+    } catch {
+      setError(t('browserUse.liveControlFailed'));
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const runAction = useCallback(async (action: () => Promise<void>) => {
     setIsBusy(true);
     setError(null);
@@ -247,7 +289,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   // requests cannot act on a different focus state or apply screenshots out of order.
   // Resolves to true only when every input succeeded.
   const sendInputs = useCallback(async (inputs: BrowserInput[]) => {
-    if (!selectedSession || selectedSession.status !== 'ready' || sessionOperationLockRef.current) return false;
+    if (!selectedSession || selectedSession.status !== 'ready' || selectedSession.userControlled || sessionOperationLockRef.current) return false;
     sessionOperationLockRef.current = true;
     setIsInputPending(true);
     setError(null);
@@ -469,7 +511,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   const renderBrowserSurface = (fullscreen = false) => (
     <div className="flex flex-1 flex-col">
       {renderBrowserScreen(fullscreen)}
-      {selectedSession?.status === 'ready' && (
+      {selectedSession?.status === 'ready' && !selectedSession.userControlled && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border/60 bg-background px-3 py-2">
           <Input
             value={inputText}
@@ -600,6 +642,11 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
                   <div className="hidden text-xs text-muted-foreground md:block">
                     {formatAction(selectedSession?.lastAction || null, t)}
                   </div>
+                  {selectedSession?.status === 'ready' && (
+                    <Button size="sm" onClick={() => void takeControl()} disabled={isBusy || isInputPending}>
+                      {t(selectedSession.userControlled ? 'browserUse.reopenControl' : 'browserUse.takeControl')}
+                    </Button>
+                  )}
                   <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setIsFullscreen(true)} disabled={!selectedSession?.screenshotDataUrl} title={t('browserUse.fullScreen')} aria-label={t('browserUse.fullScreen')}>
                     <Expand className="h-4 w-4" />
                   </Button>
@@ -671,6 +718,17 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
           </div>
         </aside>
       </div>
+
+      {isVisible && showControl && control && (
+        <BrowserControlView
+          key={control.controlId}
+          sessionId={control.sessionId}
+          controlId={control.controlId}
+          onClose={closeControlView}
+          onLost={lostControl}
+          onReturned={forgetControl}
+        />
+      )}
 
       {isFullscreen && selectedSession && (
         <div className="fixed inset-0 z-50 bg-black/90 p-6">

@@ -9,7 +9,7 @@ import spawn from 'cross-spawn';
 
 import { appConfigDb } from '@/modules/database/index.js';
 import { providerMcpService } from '@/modules/providers/index.js';
-import { getModuleDirectory } from '@/shared/utils.js';
+import { AppError, getModuleDirectory } from '@/shared/utils.js';
 
 import { getBrowserUseRuntime } from './browser-use-runtime.js';
 
@@ -19,6 +19,7 @@ const MAX_SESSIONS_PER_OWNER = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_
 const SESSION_TTL_MS = Number.parseInt(process.env.CLOUDCLI_BROWSER_USE_SESSION_TTL_MS || String(30 * 60 * 1000), 10);
 const BROWSER_USE_SETTINGS_KEY = 'browser_use_settings';
 const BROWSER_USE_MCP_TOKEN_KEY = 'browser_use_mcp_token';
+const CONTROL_LEASE_MS = 15_000;
 
 type BrowserUseRuntime = ReturnType<typeof getBrowserUseRuntime>;
 type BrowserUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
@@ -26,6 +27,7 @@ type BrowserUseSessionStatus = 'ready' | 'stopped' | 'unavailable';
 type BrowserUseSession = {
   id: string;
   ownerId: string;
+  control?: { id: string; expiresAt: number; frameAt: number };
   createdBy: 'agent';
   runtime: BrowserUseRuntime;
   status: BrowserUseSessionStatus;
@@ -48,7 +50,12 @@ type BrowserUseSession = {
   } | null;
 };
 
-type PublicBrowserUseSession = Omit<BrowserUseSession, 'ownerId'>;
+type PublicBrowserUseSession = Omit<BrowserUseSession, 'ownerId' | 'control'> & { userControlled: boolean };
+type LiveInput =
+  | { type: 'pointer'; x: number; y: number; to?: { x: number; y: number } }
+  | { type: 'wheel'; x: number; y: number; dx: number; dy: number }
+  | { type: 'text'; text: string }
+  | { type: 'key'; key: string };
 
 type RuntimeHandle = {
   browser?: any;
@@ -401,8 +408,25 @@ function resolveUploadFiles(rawPaths: string[]): string[] {
 }
 
 function publicSession(session: BrowserUseSession): PublicBrowserUseSession {
-  const { ownerId: _ownerId, ...publicFields } = session;
-  return publicFields;
+  const { ownerId: _ownerId, control, ...publicFields } = session;
+  return {
+    ...publicFields,
+    userControlled: Boolean(control),
+    ...(control ? { screenshotDataUrl: null, url: null, title: null, cursor: null } : {}),
+  };
+}
+
+// An expired controller can be replaced, but does not unpause the agent.
+function getControlledPage(sessionId: string, controlId?: string) {
+  const session = sessions.get(sessionId);
+  const page = handles.get(sessionId)?.page;
+  if (!readSettings().enabled || session?.status !== 'ready' || !page) {
+    throw new AppError('Browser session is not available.', { code: 'BROWSER_USE_CONTROL_LOST', statusCode: 409 });
+  }
+  if (controlId !== undefined && (session.control?.id !== controlId || session.control.expiresAt <= Date.now())) {
+    throw new AppError('Browser control expired or was released. Take control again to continue.', { code: 'BROWSER_USE_CONTROL_LOST', statusCode: 409 });
+  }
+  return { session, page };
 }
 
 function ownerSessions(ownerId: string): BrowserUseSession[] {
@@ -416,23 +440,28 @@ async function closeHandle(sessionId: string): Promise<void> {
   await handle?.browser?.close().catch(() => undefined);
 }
 
+async function stopLocked(session: BrowserUseSession) {
+  await closeHandle(session.id);
+  delete session.control;
+  session.status = 'stopped';
+  session.updatedAt = new Date().toISOString();
+  session.lastAction = 'stop';
+  session.message = 'Browser session stopped. Create a new session to continue browsing.';
+  return { stopped: true, session: publicSession(session) };
+}
+
 async function expireStaleSessions(now = Date.now()): Promise<void> {
-  await Promise.all([...sessions.values()].map(async (session) => {
-    if (session.status !== 'ready') {
-      return;
-    }
-
-    const updatedAt = Date.parse(session.updatedAt);
-    if (!Number.isFinite(updatedAt) || now - updatedAt <= SESSION_TTL_MS) {
-      return;
-    }
-
+  const isStale = (session: BrowserUseSession) =>
+    session.status === 'ready' && now - Date.parse(session.updatedAt) > SESSION_TTL_MS;
+  await Promise.all([...sessions.values()].filter(isStale).map((session) => withSessionLock(session.id, async () => {
+    if (!isStale(session)) return;
     await closeHandle(session.id);
+    delete session.control;
     session.status = 'stopped';
     session.updatedAt = new Date(now).toISOString();
     session.lastAction = 'expire';
     session.message = 'Browser session expired after inactivity.';
-  }));
+  })));
 }
 
 /** Caller must hold the session lock for `session.id`. */
@@ -653,13 +682,16 @@ export const browserUseService = {
     if (!session || session.ownerId !== AGENT_OWNER_ID) {
       throw new Error('Browser session not found.');
     }
+    if (session.control) {
+      throw new Error('The user has taken control of this browser. Wait for the user to return control.');
+    }
     return session;
   },
 
   async agentNavigate(sessionId: string, rawUrl: string) {
+    await expireStaleSessions();
     return withSessionLock(sessionId, async () => {
       await this.getAgentSession(sessionId);
-      await expireStaleSessions();
 
       const session = sessions.get(sessionId);
       if (!session || session.ownerId !== AGENT_OWNER_ID) {
@@ -884,7 +916,75 @@ export const browserUseService = {
     });
   },
 
-  /** Lets the signed-in user drive an agent-owned session (e.g. to complete a login the agent must not handle). */
+  /** Used by Browser routes to reserve the existing Chromium page for a single viewer. */
+  async takeControl(sessionId: string) {
+    return withSessionLock(sessionId, async () => {
+      const { session } = getControlledPage(sessionId);
+      const now = Date.now();
+      if (session.control && session.control.expiresAt > now) {
+        throw new Error('Another viewer already controls this browser.');
+      }
+      const id = randomUUID();
+      session.control = { id, expiresAt: now + CONTROL_LEASE_MS, frameAt: 0 };
+      session.updatedAt = new Date(now).toISOString();
+      return { controlId: id };
+    });
+  },
+
+  /** Used only by the authenticated viewer. Its images never enter the agent screenshot cache. */
+  async controlFrame(sessionId: string, controlId: string) {
+    return withSessionLock(sessionId, async () => {
+      const { session, page } = getControlledPage(sessionId, controlId);
+      const control = session.control!;
+      const now = Date.now();
+      if (now - control.frameAt < 200) return null;
+      control.frameAt = now;
+      const screenshot = await page.screenshot({ type: 'jpeg', quality: 55, timeout: 2_000 });
+      control.expiresAt = Date.now() + CONTROL_LEASE_MS;
+      session.updatedAt = new Date().toISOString();
+      return `data:image/jpeg;base64,${Buffer.from(screenshot).toString('base64')}`;
+    });
+  },
+
+  /** Used by Browser routes to forward validated viewer input to the same Chromium page. */
+  async controlInput(sessionId: string, controlId: string, input: LiveInput) {
+    return withSessionLock(sessionId, async () => {
+      const { session, page } = getControlledPage(sessionId, controlId);
+      const viewport = page.viewportSize() || session.viewport;
+      if (input.type === 'text') {
+        await page.keyboard.insertText(input.text);
+      } else if (input.type === 'key') {
+        await page.keyboard.press(input.key);
+      } else if (viewport) {
+        const x = input.x * (viewport.width - 1);
+        const y = input.y * (viewport.height - 1);
+        if (input.type === 'wheel') {
+          await page.mouse.move(x, y);
+          await page.mouse.wheel(input.dx, input.dy);
+        } else if (input.to) {
+          await page.mouse.move(x, y);
+          await page.mouse.down();
+          try {
+            await page.mouse.move(input.to.x * (viewport.width - 1), input.to.y * (viewport.height - 1), { steps: 12 });
+          } finally {
+            await page.mouse.up();
+          }
+        } else {
+          await page.mouse.click(x, y);
+        }
+      }
+    });
+  },
+
+  /** Used by Browser routes to explicitly return control to agent tools. */
+  async releaseControl(sessionId: string, controlId: string) {
+    return withSessionLock(sessionId, async () => {
+      const { session } = getControlledPage(sessionId, controlId);
+      delete session.control;
+    });
+  },
+
+  /** Lets the signed-in user send one-shot input outside a live takeover. */
   async userInput(
     sessionId: string,
     input: { type: 'click'; x: number; y: number } | { type: 'text'; text: string } | { type: 'key'; key: string },
@@ -896,6 +996,9 @@ export const browserUseService = {
       }
       if (session.status !== 'ready') {
         throw new Error(session.message || 'Browser session is not available.');
+      }
+      if (session.control) {
+        throw new Error('Use the live viewer to control this browser.');
       }
       const handle = handles.get(sessionId);
       if (!handle?.page) {
@@ -918,34 +1021,24 @@ export const browserUseService = {
   },
 
   async stopSession(sessionId: string) {
-    const session = sessions.get(sessionId);
-    if (!session || session.ownerId !== AGENT_OWNER_ID) {
-      return { stopped: false };
-    }
-
-    await closeHandle(sessionId);
-
-    session.status = 'stopped';
-    session.updatedAt = new Date().toISOString();
-    session.lastAction = 'stop';
-    session.message = 'Browser session stopped. Create a new session to continue browsing.';
-    return { stopped: true, session: publicSession(session) };
+    return withSessionLock(sessionId, async () => {
+      const session = sessions.get(sessionId);
+      return session?.ownerId === AGENT_OWNER_ID ? stopLocked(session) : { stopped: false };
+    });
   },
 
   async deleteSession(sessionId: string) {
-    const session = sessions.get(sessionId);
-    if (!session || session.ownerId !== AGENT_OWNER_ID) {
-      return { deleted: false };
-    }
-
-    await closeHandle(sessionId);
-    sessions.delete(sessionId);
-    return { deleted: true, sessionId };
+    return withSessionLock(sessionId, async () => {
+      const session = sessions.get(sessionId);
+      if (session?.ownerId !== AGENT_OWNER_ID) return { deleted: false };
+      await closeHandle(sessionId);
+      sessions.delete(sessionId);
+      return { deleted: true, sessionId };
+    });
   },
 
   async agentStopSession(sessionId: string) {
-    await this.getAgentSession(sessionId);
-    return this.stopSession(sessionId);
+    return withSessionLock(sessionId, async () => stopLocked(await this.getAgentSession(sessionId)));
   },
 
   async stopAllSessions() {
@@ -953,6 +1046,7 @@ export const browserUseService = {
       await closeHandle(sessionId);
       const session = sessions.get(sessionId);
       if (session) {
+        delete session.control;
         session.status = 'stopped';
         session.updatedAt = new Date().toISOString();
         session.lastAction = 'shutdown';

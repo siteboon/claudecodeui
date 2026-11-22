@@ -1,5 +1,15 @@
 {
   "title": "设置",
+  "browserUse": {
+    "takeControl": "接管浏览器",
+    "reopenControl": "打开实时操作",
+    "returnControl": "交还给 AI",
+    "liveControlTitle": "正在控制浏览器",
+    "liveControlKeyboard": "聚焦浏览器键盘",
+    "liveControlHint": "点击网页后可直接输入，也可以滚动或拖拽。交还前，AI 无法读取或操作此会话。",
+    "liveControlFailed": "暂时无法进行实时操作。请检查连接，或等待其他查看器断开。",
+    "liveControlLost": "查看器已断开，请重新打开实时操作。如果浏览器仍在运行，AI 仍处于暂停状态。"
+  },
   "tabs": {
     "account": "账户",
     "permissions": "权限",
