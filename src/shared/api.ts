@@ -498,10 +498,10 @@ export const api = {
 
   // Chat attachments, stored globally under ~/.cloudcli/assets
   assets: {
-    uploadFiles: (formData: FormData) =>
+    uploadFiles: (formData: FormData, requestId?: string) =>
       authenticatedFetch('/api/assets/files', {
         method: 'POST',
-        headers: {}, // Let browser set Content-Type for FormData
+        headers: requestId ? { 'X-Upload-Request-ID': requestId } : {},
         body: formData,
       }),
     file: (storedName: string) => get(`/api/assets/files/${encodeURIComponent(storedName)}`),
