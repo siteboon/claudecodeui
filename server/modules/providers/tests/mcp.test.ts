@@ -313,8 +313,12 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
-    assert.equal(globalResult.length, 4);
-    assert.ok(globalResult.every((entry) => entry.created === true));
+    // Every registered provider answers; Antigravity keeps its MCP config in
+    // agy's user-level store, so a project-scoped add reports no write there.
+    assert.equal(globalResult.length, 5);
+    const createdProviders = globalResult.filter((entry) => entry.created).map((entry) => entry.provider);
+    assert.deepEqual([...createdProviders].sort(), ['claude', 'codex', 'cursor', 'opencode']);
+    assert.deepEqual(globalResult.filter((entry) => !entry.created).map((entry) => entry.provider), ['antigravity']);
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
     assert.ok((claudeProject.mcpServers as Record<string, unknown>)['global-http']);
