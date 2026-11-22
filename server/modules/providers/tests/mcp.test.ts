@@ -328,9 +328,9 @@ test('providerMcpService ignores Antigravity MCP entries with empty command or U
 
 /**
  * This test covers the global MCP adder requirement: only http/stdio are allowed and
- * one payload is written to all providers.
+ * one payload is written to writable providers.
  */
-test('providerMcpService global adder writes to all providers and rejects unsupported transports', { concurrency: false }, async () => {
+test('providerMcpService bulk add and remove leave Antigravity configuration untouched', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-global-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   await fs.mkdir(workspacePath, { recursive: true });
@@ -345,7 +345,7 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
       workspacePath,
     });
 
-    assert.equal(globalResult.length, 5);
+    assert.equal(globalResult.length, 4);
     assert.ok(globalResult.every((entry) => entry.created === true));
 
     const claudeProject = await readJson(path.join(workspacePath, '.mcp.json'));
@@ -360,8 +360,18 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
     const cursorProject = await readJson(path.join(workspacePath, '.cursor', 'mcp.json'));
     assert.ok((cursorProject.mcpServers as Record<string, unknown>)['global-http']);
 
-    const antigravityProject = await readJson(path.join(workspacePath, '.agents', 'mcp_config.json'));
-    assert.ok((antigravityProject.mcpServers as Record<string, unknown>)['global-http']);
+    const antigravityPath = path.join(workspacePath, '.agents', 'mcp_config.json');
+    await assert.rejects(fs.access(antigravityPath), { code: 'ENOENT' });
+    await fs.mkdir(path.dirname(antigravityPath), { recursive: true });
+    const nativeConfig = JSON.stringify({ mcpServers: { 'global-http': { serverUrl: 'https://native.example.com/mcp' } } });
+    await fs.writeFile(antigravityPath, nativeConfig);
+
+    const removed = await providerMcpService.removeMcpServerFromAllProviders({
+      name: 'global-http', scope: 'project', workspacePath,
+    });
+    assert.deepEqual(removed.map((entry) => entry.provider).sort(), ['claude', 'codex', 'cursor', 'opencode']);
+    assert.ok(removed.every((entry) => entry.removed));
+    assert.equal(await fs.readFile(antigravityPath, 'utf8'), nativeConfig);
 
     await assert.rejects(
       providerMcpService.addMcpServerToAllProviders({
@@ -382,7 +392,7 @@ test('providerMcpService global adder writes to all providers and rejects unsupp
   }
 });
 
-test('Antigravity MCP reads and writes native scoped serverUrl entries', { concurrency: false }, async () => {
+test('Antigravity MCP lists native scopes and rejects direct edits without changing either file', { concurrency: false }, async () => {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'llm-mcp-agy-scopes-'));
   const workspacePath = path.join(tempRoot, 'workspace');
   const restoreHomeDir = patchHomeDir(tempRoot);
@@ -392,25 +402,21 @@ test('Antigravity MCP reads and writes native scoped serverUrl entries', { concu
         ? path.join(tempRoot, '.gemini', 'config', 'mcp_config.json')
         : path.join(workspacePath, '.agents', 'mcp_config.json');
       await fs.mkdir(path.dirname(configPath), { recursive: true });
-      await fs.writeFile(configPath, JSON.stringify({
+      const config = JSON.stringify({
         preserved: true,
-        mcpServers: { existing: { serverUrl: 'https://example.com/existing' } },
-      }));
-      await providerMcpService.upsertProviderMcpServer('antigravity', {
-        name: 'added', scope, transport: 'http', workspacePath,
-        url: 'https://example.com/new', headers: { 'X-Test': 'retained' },
+        mcpServers: { existing: { [scope === 'user' ? 'serverUrl' : 'url']: 'https://example.com/existing' } },
       });
-      const config = await readJson(configPath);
-      assert.equal(config.preserved, true);
-      const servers = config.mcpServers as Record<string, Record<string, unknown>>;
-      assert.deepEqual(servers.added, {
-        serverUrl: 'https://example.com/new', headers: { 'X-Test': 'retained' },
-      });
+      await fs.writeFile(configPath, config);
+      await assert.rejects(providerMcpService.upsertProviderMcpServer('antigravity', {
+        name: 'existing', scope, transport: 'http', workspacePath, url: 'https://example.com/new',
+      }), { code: 'MCP_NATIVE_CONFIG_READ_ONLY', statusCode: 405 });
+      await assert.rejects(providerMcpService.removeProviderMcpServer('antigravity', {
+        name: 'existing', scope, workspacePath,
+      }), { code: 'MCP_NATIVE_CONFIG_READ_ONLY', statusCode: 405 });
+      assert.equal(await fs.readFile(configPath, 'utf8'), config);
       const grouped = await providerMcpService.listProviderMcpServers('antigravity', { workspacePath });
       assert.equal(grouped[scope].find((server) => server.name === 'existing')?.url,
         'https://example.com/existing');
-      assert.equal(grouped[scope].find((server) => server.name === 'added')?.url,
-        'https://example.com/new');
     }
   } finally {
     restoreHomeDir();

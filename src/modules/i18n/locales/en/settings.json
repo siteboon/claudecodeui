@@ -620,6 +620,7 @@
       "opencode": "Model Context Protocol servers provide additional tools and data sources to OpenCode",
       "antigravity": "Model Context Protocol servers provide additional tools and data sources to Antigravity"
     },
+    "antigravityReadOnly": "View Antigravity MCP servers here. Use /mcp in Antigravity to change them.",
     "addButton": "Add MCP Server",
     "empty": "No MCP servers configured",
     "serverType": "Type",
@@ -913,7 +914,7 @@
     "providerButtonLabel": "Add {{provider}} MCP Server",
     "globalAddDescription": "Add Global MCP Server writes one common stdio or HTTP server to Claude, Cursor, Codex, and OpenCode.",
     "providerAddDescription": "{{button}} only changes {{provider}}.",
-    "globalModalDescription": "Adds this MCP server to every provider: Claude, Cursor, Codex, and OpenCode. Only stdio and HTTP transports are supported because the same config must work across all providers.",
+    "globalModalDescription": "Adds a stdio or HTTP MCP server to Claude, Cursor, Codex, and OpenCode.",
     "refreshingScopes": "Refreshing project scopes...",
     "loadingServers": "Loading MCP servers...",
     "configCwd": "Cwd",

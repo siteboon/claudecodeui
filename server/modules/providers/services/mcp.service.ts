@@ -50,7 +50,7 @@ export const providerMcpService = {
   },
 
   /**
-   * Adds one HTTP/stdio MCP server to every provider.
+   * Adds one HTTP/stdio MCP server to every provider managed by CloudCLI.
    */
   async addMcpServerToAllProviders(
     input: Omit<UpsertProviderMcpServerInput, 'scope'> & { scope?: Exclude<McpScope, 'local'> },
@@ -64,7 +64,7 @@ export const providerMcpService = {
 
     const scope = input.scope ?? 'project';
     const results: Array<{ provider: LLMProvider; created: boolean; error?: string }> = [];
-    const providers = providerRegistry.listProviders();
+    const providers = providerRegistry.listProviders().filter((provider) => provider.mcp.supportsMutations !== false);
     for (const provider of providers) {
       try {
         await provider.mcp.upsertServer({ ...input, scope });
@@ -82,7 +82,7 @@ export const providerMcpService = {
   },
 
   /**
-   * Removes one MCP server from every provider. Mirrors `addMcpServerToAllProviders`
+   * Removes one MCP server from every writable provider. Mirrors `addMcpServerToAllProviders`
    * by iterating the live provider registry, so callers stay in sync with which
    * providers exist instead of maintaining their own provider list.
    */
@@ -90,7 +90,7 @@ export const providerMcpService = {
     input: { name: string; scope?: McpScope; workspacePath?: string },
   ): Promise<Array<{ provider: LLMProvider; removed: boolean; error?: string }>> {
     const results: Array<{ provider: LLMProvider; removed: boolean; error?: string }> = [];
-    const providers = providerRegistry.listProviders();
+    const providers = providerRegistry.listProviders().filter((provider) => provider.mcp.supportsMutations !== false);
     for (const provider of providers) {
       try {
         const result = await provider.mcp.removeServer(input);

@@ -1,8 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 
-import { McpProvider } from '@/modules/providers/shared/mcp/mcp.provider.js';
-import type { McpScope, ProviderMcpServer, UpsertProviderMcpServerInput } from '@/shared/index.js';
+import type { IProviderMcp, McpScope, ProviderMcpServer } from '@/shared/index.js';
 import {
   AppError,
   readJsonConfig,
@@ -10,72 +9,50 @@ import {
   readOptionalString,
   readStringArray,
   readStringRecord,
-  writeJsonConfig,
 } from '@/shared/index.js';
 
-/** Antigravity MCP configuration adapter used by the provider registry. */
-export class AntigravityMcpProvider extends McpProvider {
-  /** Declares the scopes and transports supported by AGY configuration files. */
-  constructor() {
-    super('antigravity', ['user', 'project'], ['stdio', 'http']);
+const nativeMcpEditError = () => new AppError('Manage Antigravity MCP servers in Antigravity using /mcp.', {
+  code: 'MCP_NATIVE_CONFIG_READ_ONLY',
+  statusCode: 405,
+});
+
+/** Lists Antigravity MCP servers for the provider registry. Antigravity owns configuration edits. */
+export class AntigravityMcpProvider implements IProviderMcp {
+  readonly supportsMutations = false;
+
+  async listServers(options?: { workspacePath?: string }): Promise<Record<McpScope, ProviderMcpServer[]>> {
+    const [user, project] = await Promise.all([
+      this.listServersForScope('user', options),
+      this.listServersForScope('project', options),
+    ]);
+    return { user, project, local: [] };
   }
 
-  /** Reads the native MCP server map for one AGY scope. */
-  protected async readScopedServers(scope: McpScope, workspacePath: string): Promise<Record<string, unknown>> {
-    const filePath = scope === 'user'
-      ? path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json')
-      : path.join(workspacePath, '.agents', 'mcp_config.json');
-    const config = await readJsonConfig(filePath);
-    return readObjectRecord(config.mcpServers) ?? {};
-  }
-
-  /** Persists the native MCP server map for one AGY scope. */
-  protected async writeScopedServers(
+  async listServersForScope(
     scope: McpScope,
-    workspacePath: string,
-    servers: Record<string, unknown>,
-  ): Promise<void> {
+    options?: { workspacePath?: string },
+  ): Promise<ProviderMcpServer[]> {
+    if (scope !== 'user' && scope !== 'project') return [];
+
     const filePath = scope === 'user'
       ? path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json')
-      : path.join(workspacePath, '.agents', 'mcp_config.json');
+      : path.resolve(options?.workspacePath ?? process.cwd(), '.agents', 'mcp_config.json');
     const config = await readJsonConfig(filePath);
-    config.mcpServers = servers;
-    await writeJsonConfig(filePath, config);
+    return Object.entries(readObjectRecord(config.mcpServers) ?? {})
+      .map(([name, entry]) => this.normalizeServerConfig(scope, name, entry))
+      .filter((entry): entry is ProviderMcpServer => entry !== null);
   }
 
-  /** Converts a validated shared MCP input into AGY's JSON representation. */
-  protected buildServerConfig(input: UpsertProviderMcpServerInput): Record<string, unknown> {
-    if (input.transport === 'stdio') {
-      if (!input.command?.trim()) {
-        throw new AppError('command is required for stdio MCP servers.', {
-          code: 'MCP_COMMAND_REQUIRED',
-          statusCode: 400,
-        });
-      }
+  async upsertServer(): Promise<never> {
+    throw nativeMcpEditError();
+  }
 
-      return {
-        command: input.command,
-        args: input.args ?? [],
-        env: input.env ?? {},
-        cwd: input.cwd,
-      };
-    }
-
-    if (!input.url?.trim()) {
-      throw new AppError('url is required for http MCP servers.', {
-        code: 'MCP_URL_REQUIRED',
-        statusCode: 400,
-      });
-    }
-
-    return {
-      serverUrl: input.url,
-      headers: input.headers ?? {},
-    };
+  async removeServer(): Promise<never> {
+    throw nativeMcpEditError();
   }
 
   /** Normalizes a valid native AGY MCP entry and rejects empty transports. */
-  protected normalizeServerConfig(
+  private normalizeServerConfig(
     scope: McpScope,
     name: string,
     rawConfig: unknown,
@@ -99,7 +76,7 @@ export class AntigravityMcpProvider extends McpProvider {
       };
     }
 
-    const url = readOptionalString(config.serverUrl);
+    const url = readOptionalString(config.serverUrl) ?? readOptionalString(config.url);
     if (url) {
       return {
         provider: 'antigravity',

@@ -225,6 +225,9 @@ Current MCP formats in this repo are:
 The Antigravity user-level MCP path is confirmed by the official
 [migration directory mapping](https://antigravity.google/docs/cli/gcli-migration/#directory-mapping).
 It intentionally differs from the CLI's conversation/history storage root.
+CloudCLI lists both Antigravity scopes. Manage entries through Antigravity's
+`/mcp` UI. Bulk add/remove skips Antigravity so its native configuration has
+one writer.
 
 5. Implement skills.
 

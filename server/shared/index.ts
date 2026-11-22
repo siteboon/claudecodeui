@@ -4,6 +4,7 @@ export { appendFilesInputTag, appendImagesInputTag, parseImagesInputTag, buildCo
 export type {
   IProviderAuth,
   IProviderFork,
+  IProviderMcp,
   IProviderModels,
   IProviderRuntime,
   IProviderSessions,

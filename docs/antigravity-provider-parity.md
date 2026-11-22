@@ -21,7 +21,7 @@ session, model, MCP, skills, and synchronization interfaces.
 | Side questions and independent cancellation | Supported | Independent read-only snapshot and restricted agent |
 | External CLI activity and busy-session protection | Supported on Linux | Same-user exclusive presence lock plus native busy status |
 | Rename, archive/delete, projects, search, export, notifications | Common services | Common services |
-| Shell, executable override, version/auth status, MCP and skills | Supported | Provider adapters; `AGY_CLI_PATH` applies consistently |
+| Shell, executable override, version/auth status, MCP and skills | Supported | `AGY_CLI_PATH` applies consistently. CloudCLI lists native MCP settings; Antigravity handles edits. |
 | Interactive permission requests | Not exposed | Not exposed by the stream-json transport; permission modes/rules apply |
 | Inject a message into the current turn (Steer) | Not exposed | Not exposed; use Queue or Stop/Send |
 

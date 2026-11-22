@@ -215,6 +215,8 @@ export interface IProviderSkills {
  * `ProviderMcpServer` records used by routes and frontend state.
  */
 export interface IProviderMcp {
+  /** Bulk operations skip adapters whose native configuration is read-only in CloudCLI. */
+  readonly supportsMutations?: boolean;
   listServers(options?: { workspacePath?: string }): Promise<Record<McpScope, ProviderMcpServer[]>>;
   listServersForScope(scope: McpScope, options?: { workspacePath?: string }): Promise<ProviderMcpServer[]>;
   upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer>;
