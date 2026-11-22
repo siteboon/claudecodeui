@@ -14,9 +14,14 @@ import type { NormalizedMessage } from '@/shared/types.js';
  * exactly like the other providers' on-disk artifacts. The file then feeds
  * `fetchHistory`, the sidebar indexer, and session titles.
  *
- * A transcript file holds two record shapes:
+ * A transcript file holds three record shapes:
  *   { type: 'meta', sessionId, projectPath, title, model, createdAt }
  *   { type: 'message', message: NormalizedMessage }
+ *   { type: 'usage', usage: AntigravityTurnUsage, model, timestamp }
+ *
+ * The usage record exists because agy reports tokens per turn on its result
+ * event and keeps no queryable record of them itself; the usage panel
+ * aggregates these lines.
  */
 
 type AntigravityTranscriptMeta = {
@@ -27,9 +32,26 @@ type AntigravityTranscriptMeta = {
   createdAt: string;
 };
 
+/** Token counts agy reports for one turn, normalized to plain numbers. */
+export type AntigravityTurnUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  thinkingTokens: number;
+  cacheReadTokens: number;
+  totalTokens: number;
+};
+
+/** One persisted turn's usage, as the usage panel reads it back. */
+export type AntigravityUsageRecord = {
+  usage: AntigravityTurnUsage;
+  model: string | null;
+  timestamp: string;
+};
+
 type TranscriptRecord =
   | ({ type: 'meta' } & AntigravityTranscriptMeta)
-  | { type: 'message'; message: NormalizedMessage };
+  | { type: 'message'; message: NormalizedMessage }
+  | ({ type: 'usage' } & AntigravityUsageRecord);
 
 /** Root of this provider's own artifacts. Override with ANTIGRAVITY_TRANSCRIPTS_DIR. */
 export function getAntigravityTranscriptsRoot(): string {
@@ -84,7 +106,18 @@ export async function appendTranscriptMessages(
 type ReadTranscriptResult = {
   meta: AntigravityTranscriptMeta | null;
   messages: NormalizedMessage[];
+  usage: AntigravityUsageRecord[];
 };
+
+/** Persists one turn's token usage next to the messages it belongs to. */
+export async function appendTranscriptUsage(
+  sessionId: string,
+  record: AntigravityUsageRecord,
+): Promise<void> {
+  await ensureTranscriptsRoot();
+  const line: TranscriptRecord = { type: 'usage', ...record };
+  await fsp.appendFile(transcriptPathFor(sessionId), `${JSON.stringify(line)}\n`, { encoding: 'utf8' });
+}
 
 /**
  * Reads one transcript. Malformed or partially written lines are skipped so a
@@ -95,11 +128,12 @@ export async function readTranscript(sessionId: string): Promise<ReadTranscriptR
   try {
     text = await fsp.readFile(transcriptPathFor(sessionId), 'utf8');
   } catch {
-    return { meta: null, messages: [] };
+    return { meta: null, messages: [], usage: [] };
   }
 
   let meta: AntigravityTranscriptMeta | null = null;
   const messages: NormalizedMessage[] = [];
+  const usage: AntigravityUsageRecord[] = [];
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) {
@@ -111,13 +145,15 @@ export async function readTranscript(sessionId: string): Promise<ReadTranscriptR
         meta = record;
       } else if (record.type === 'message' && record.message) {
         messages.push(record.message);
+      } else if (record.type === 'usage' && record.usage) {
+        usage.push({ usage: record.usage, model: record.model ?? null, timestamp: record.timestamp });
       }
     } catch {
       // Skip a torn tail line.
     }
   }
 
-  return { meta, messages };
+  return { meta, messages, usage };
 }
 
 /** Lists every transcript file as `{ sessionId, filePath }`. */

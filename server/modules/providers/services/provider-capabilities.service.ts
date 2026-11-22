@@ -161,17 +161,17 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // interactive permission prompt there.
     permissionModes: ['default', 'acceptEdits', 'plan'],
     defaultPermissionMode: 'default',
-    // agy's print mode takes no attachment arguments, so the runtime writes
-    // the uploaded paths into the prompt and adds the upload store to
-    // `--add-dir`; agy's own file tools then read them.
-    supportsImages: true,
-    supportsFiles: true,
+    // agy's print mode takes no attachment arguments, and this runtime does not
+    // forward upload paths into the prompt, so the composer hides attachments
+    // rather than accepting files that would never reach the model.
+    supportsImages: false,
+    supportsFiles: false,
     supportsAbort: true,
     // Print mode has no channel back for a permission prompt.
     supportsPermissionRequests: false,
-    // agy reports usage in its stream, but this provider's history reader is a
-    // local transcript with no usage rows to aggregate.
-    supportsTokenUsage: false,
+    // agy reports per-turn usage on its result event, and the runtime forwards
+    // it as the composer's context-window reading.
+    supportsTokenUsage: true,
     // agy publishes one id per effort tier; the adapter keeps the tiers apart
     // from the family and recombines them, so effort is a real knob here.
     supportsEffort: true,

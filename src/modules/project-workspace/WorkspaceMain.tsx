@@ -15,6 +15,7 @@ import { EditorSidebar, useEditorSidebar } from '@/modules/code-editor';
 import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
 import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
+import UsagePanel from '@/modules/project-workspace/UsagePanel';
 
 type WorkspaceMainProps = {
   selectedProject: Project | null;
@@ -211,6 +212,8 @@ function WorkspaceMain({
               />
             </div>
           )}
+
+          {activeTab === 'usage' && <UsagePanel />}
 
           {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
 

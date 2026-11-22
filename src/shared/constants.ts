@@ -97,7 +97,7 @@ export const MAX_FILE_UPLOAD_SIZE_LABEL = `${MAX_FILE_UPLOAD_SIZE_MB}MB`;
 export const MAX_CHAT_ATTACHMENT_COUNT = 10;
 
 /** Largest single chat attachment, in megabytes. Source of truth for the byte limit below and for the size shown in the rejection notice. */
-export const MAX_CHAT_ATTACHMENT_SIZE_MB = 10;
+export const MAX_CHAT_ATTACHMENT_SIZE_MB = 100;
 
 /** `MAX_CHAT_ATTACHMENT_SIZE_MB` in bytes, for comparing against `File.size` when a file is attached. */
 export const MAX_CHAT_ATTACHMENT_SIZE_BYTES = MAX_CHAT_ATTACHMENT_SIZE_MB * 1024 * 1024;

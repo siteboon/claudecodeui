@@ -44,7 +44,9 @@ const upload = multer({
 const attachmentUpload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    // Video and audio clips are ordinary chat attachments now, and they are
+    // routinely larger than 10 MB; the panel advertises 100 MB per file.
+    fileSize: 100 * 1024 * 1024,
     files: 10,
   },
 });

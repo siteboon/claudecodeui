@@ -160,7 +160,7 @@ test('the notice names each refused file with its reason and can be dismissed', 
 
   const notice = screen.getByRole('alert');
   assert.match(notice.textContent ?? '', /Couldn't attach 2 files/);
-  assert.match(notice.textContent ?? '', /large\.pdf\s*is larger than 10 MB/);
+  assert.match(notice.textContent ?? '', /large\.pdf\s*is larger than 100 MB/);
   assert.match(notice.textContent ?? '', /note11\.txt\s*is over the 10-file limit/);
 
   fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));

@@ -19,6 +19,7 @@
   },
   "tabs": {
     "chat": "Chat",
+    "usage": "Usage",
     "shell": "Terminal",
     "files": "Dateien",
     "git": "Quellcodeverwaltung",

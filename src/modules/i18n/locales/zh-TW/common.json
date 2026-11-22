@@ -19,6 +19,7 @@
   },
   "tabs": {
     "chat": "聊天",
+    "usage": "Usage",
     "shell": "終端機",
     "files": "檔案",
     "git": "版本控制",

@@ -428,6 +428,7 @@ export const api = {
     updateCli: (provider: string) =>
       post(`/api/providers/${encodeURIComponent(provider)}/cli/update`),
     claudeSettingsPermissions: () => get('/api/providers/claude/settings-permissions'),
+    antigravityUsage: () => get('/api/providers/antigravity/usage'),
 
     models: (provider: string) => get(`/api/providers/${provider}/models`),
     createModel: (provider: string, input: unknown) =>

@@ -14,13 +14,21 @@ import {
 } from '@/shared/image-attachments.js';
 import {
   appendTranscriptMessages,
+  appendTranscriptUsage,
   writeTranscriptMeta,
 } from '@/modules/providers/list/antigravity/antigravity-store.js';
+import type { AntigravityUsageRecord } from '@/modules/providers/list/antigravity/antigravity-store.js';
 import type { IProviderRuntime } from '@/shared/interfaces.js';
 import type { NormalizedMessage, ProviderRuntimeContext, ProviderRuntimeWriter } from '@/shared/types.js';
 import { createCompleteMessage, createNormalizedMessage } from '@/shared/utils.js';
 
 const PROVIDER = 'antigravity';
+
+/** agy reports numbers as JSON numbers; anything else counts as zero. */
+function readUsageNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
 
 /**
  * Live execution adapter for Google's Antigravity CLI (`agy`).
@@ -149,8 +157,16 @@ export const antigravityRuntime: IProviderRuntime = {
     let sawError = false;
 
     const steps = new Map<number, StepState>();
-    const emittedText = new Set<number>();
     const persisted: NormalizedMessage[] = [];
+    // agy narrates one turn as several consecutive `agent_response` steps, and
+    // emitting a message per step chopped a single reply into fragments in the
+    // transcript. Consecutive text steps therefore accumulate into one segment,
+    // and only a tool call or the end of the run closes it.
+    let textSegment: { startIndex: number; text: string } | null = null;
+    // Held in an object rather than a bare `let`: the assignment happens inside
+    // the stream callback, and a plain variable would stay narrowed to `null`
+    // at every later read site.
+    const turnState: { usage: Record<string, unknown> | null } = { usage: null };
 
     const userMessage = createNormalizedMessage({
       kind: 'text',
@@ -163,6 +179,27 @@ export const antigravityRuntime: IProviderRuntime = {
     const stepId = (index: number) => `${conversationId ?? appSessionId}:step:${index}`;
 
     const emit = (message: NormalizedMessage) => writer.send(message);
+
+    /** Closes the open text segment as one assistant message. */
+    const flushTextSegment = () => {
+      if (!textSegment || !textSegment.text.trim()) {
+        textSegment = null;
+        return;
+      }
+      const final = createNormalizedMessage({
+        id: `${conversationId ?? appSessionId}:text:${textSegment.startIndex}`,
+        kind: 'text',
+        role: 'assistant',
+        content: textSegment.text,
+        model,
+        sessionId: appSessionId,
+        provider: PROVIDER,
+      });
+      textSegment = null;
+      emit(final);
+      persisted.push(final);
+      emit(createNormalizedMessage({ kind: 'stream_end', sessionId: appSessionId, provider: PROVIDER }));
+    };
 
     const onInit = (event: Record<string, unknown>) => {
       const id = typeof event.conversation_id === 'string' ? event.conversation_id : '';
@@ -196,6 +233,10 @@ export const antigravityRuntime: IProviderRuntime = {
       if (stepType === 'agent_response') {
         const delta = typeof update.text_delta === 'string' ? update.text_delta : '';
         if (delta) {
+          if (!textSegment) {
+            textSegment = { startIndex: index, text: '' };
+          }
+          textSegment.text += delta;
           existing.text += delta;
           emit(createNormalizedMessage({
             kind: 'stream_delta',
@@ -204,22 +245,9 @@ export const antigravityRuntime: IProviderRuntime = {
             provider: PROVIDER,
           }));
         }
-        if (state === 'DONE' && existing.text.trim() && !emittedText.has(index)) {
-          emittedText.add(index);
-          const final = createNormalizedMessage({
-            id: stepId(index),
-            kind: 'text',
-            role: 'assistant',
-            content: existing.text,
-            model,
-            sessionId: appSessionId,
-            provider: PROVIDER,
-          });
-          emit(final);
-          persisted.push(final);
-          emit(createNormalizedMessage({ kind: 'stream_end', sessionId: appSessionId, provider: PROVIDER }));
-        }
       } else if (stepType === 'tool') {
+        // Anything the model said before calling a tool stands on its own.
+        flushTextSegment();
         const toolName = String(update.tool_name ?? existing.toolName ?? 'Tool');
         const info = (update.tool_info ?? {}) as Record<string, unknown>;
         const parameters = (info.parameters ?? existing.toolInput ?? {}) as Record<string, unknown>;
@@ -292,6 +320,9 @@ export const antigravityRuntime: IProviderRuntime = {
         if (typeof result.conversation_id === 'string' && result.conversation_id) {
           conversationId = result.conversation_id;
         }
+        if (result.usage && typeof result.usage === 'object') {
+          turnState.usage = result.usage as Record<string, unknown>;
+        }
       } else if (event === 'error') {
         sawError = true;
         emit(createNormalizedMessage({
@@ -341,11 +372,57 @@ export const antigravityRuntime: IProviderRuntime = {
     } finally {
       activeRuns.delete(appSessionId);
 
+      // The turn's closing text arrives as its own agent_response step; flush
+      // it before the terminal frame so the reply is not lost.
+      flushTextSegment();
+
       const failed = sawError || (resultStatus !== null && resultStatus !== 'SUCCESS');
       if (failed && stderr.trim()) {
         emit(createNormalizedMessage({
           kind: 'error',
           content: stderr.trim().slice(-4000),
+          sessionId: appSessionId,
+          provider: PROVIDER,
+        }));
+      }
+
+      // agy reports tokens only on its result event. Forward them as the
+      // context-window reading the composer shows, and keep a copy in the
+      // transcript so the usage panel can aggregate them later.
+      let usageRecord: AntigravityUsageRecord | null = null;
+      const turnUsage = turnState.usage;
+      if (turnUsage) {
+        const inputTokens = readUsageNumber(turnUsage.input_tokens);
+        const outputTokens = readUsageNumber(turnUsage.output_tokens);
+        const thinkingTokens = readUsageNumber(turnUsage.thinking_tokens);
+        const cacheReadTokens = readUsageNumber(turnUsage.cache_read_tokens);
+        usageRecord = {
+          usage: {
+            inputTokens,
+            outputTokens,
+            thinkingTokens,
+            cacheReadTokens,
+            totalTokens: readUsageNumber(turnUsage.total_tokens) || inputTokens + outputTokens + thinkingTokens,
+          },
+          model,
+          timestamp: new Date().toISOString(),
+        };
+
+        emit(createNormalizedMessage({
+          kind: 'status',
+          text: 'token_budget',
+          tokenBudget: {
+            used: inputTokens + outputTokens,
+            // agy publishes no context-window size; the composer only reads
+            // `used`, so this stays 0 rather than inventing a denominator.
+            total: 0,
+            inputTokens,
+            outputTokens,
+            cacheReadTokens,
+            cacheCreationTokens: 0,
+            cacheTokens: cacheReadTokens,
+            breakdown: { input: inputTokens, output: outputTokens },
+          },
           sessionId: appSessionId,
           provider: PROVIDER,
         }));
@@ -362,6 +439,9 @@ export const antigravityRuntime: IProviderRuntime = {
             createdAt: new Date().toISOString(),
           });
           await appendTranscriptMessages(conversationId, [userMessage, ...persisted]);
+          if (usageRecord) {
+            await appendTranscriptUsage(conversationId, usageRecord);
+          }
         } catch {
           // A failed transcript write must not turn a finished run into an error.
         }

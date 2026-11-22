@@ -1,4 +1,4 @@
-import { MessageSquare, Terminal, Folder, GitBranch, ClipboardCheck, MonitorPlay, type LucideIcon } from 'lucide-react';
+import { MessageSquare, Terminal, Folder, GitBranch, ClipboardCheck, MonitorPlay, Activity, type LucideIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { Dispatch, KeyboardEvent, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -45,6 +45,13 @@ const BROWSER_TAB: BuiltInTab = {
   icon: MonitorPlay,
 };
 
+const USAGE_TAB: BuiltInTab = {
+  kind: 'builtin',
+  id: 'usage',
+  labelKey: 'tabs.usage',
+  icon: Activity,
+};
+
 const TASKS_TAB: BuiltInTab = {
   kind: 'builtin',
   id: 'tasks',
@@ -64,6 +71,7 @@ export default function WorkspaceTabs({
 
   const builtInTabs: BuiltInTab[] = [
     ...BASE_TABS,
+    USAGE_TAB,
     ...(shouldShowBrowserTab ? [BROWSER_TAB] : []),
     ...(shouldShowTasksTab ? [TASKS_TAB] : []),
   ];
