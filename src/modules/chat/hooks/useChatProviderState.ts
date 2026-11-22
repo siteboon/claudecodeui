@@ -10,7 +10,7 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelOption,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
-import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
+import { primeAuthenticatedProviders, readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
   // Superset used only before the model catalog loads; `ultracode` belongs to the
@@ -22,6 +22,7 @@ const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly stri
   // valid Max/Ultra selection from being reset during catalog hydration.
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
   opencode: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+  antigravity: ['low', 'medium', 'high', 'xhigh'],
 };
 
 const toProviderEffortOptions = (
@@ -36,9 +37,10 @@ const FALLBACK_DEFAULT_MODEL: Record<LLMProvider, string> = {
   // any other model runs on the CLI's fallback metadata.
   codex: 'gpt-5.6-sol',
   opencode: 'anthropic/claude-sonnet-4-5',
+  antigravity: 'gemini-4-hydrogen',
 };
 
-const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode', 'antigravity'];
 
 /** localStorage key holding the user's default model for one provider. */
 const providerModelStorageKey = (provider: LLMProvider): string => `${provider}-model`;
@@ -54,6 +56,7 @@ const FALLBACK_PERMISSION_MODES: Record<LLMProvider, PermissionMode[]> = {
   cursor: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
   codex: ['default', 'acceptEdits', 'bypassPermissions'],
   opencode: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
+  antigravity: ['default', 'acceptEdits', 'plan'],
 };
 
 type ProviderCapabilities = {
@@ -416,13 +419,104 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setPermissionMode(savedMode ?? getDefaultPermissionModeForProvider(provider));
   }, [selectedSession?.id, provider, getDefaultPermissionModeForProvider, getPermissionModesForProvider]);
 
+  // A brand-new chat must open on a CLI this machine can actually run. The
+  // stored choice may name a provider that was never installed, and then the
+  // first turn fails with "CLI is not installed" before the user picked
+  // anything. Probe every provider once per page load, remember who is logged
+  // in, and move a new chat onto the first ready one. A session that is already
+  // open is never overridden — its own provider is synced by the effect below.
+  // Mirrors of the live selection and session, read by the probe callback:
+  // the probe finishes after the user may already have navigated or picked a
+  // provider, and it must not act on the values it captured when it started.
+  const providerRef = useRef(provider);
+  const selectedSessionRef = useRef(selectedSession);
+  // Which providers reported a login in this page load; null until the probe
+  // answers. Kept in a ref because the default is applied once, outside render.
+  const authenticatedProvidersRef = useRef<LLMProvider[] | null>(null);
+  // Guards the probe against running twice: the effect fires again if the
+  // selection changes, and a second round of five auth requests is noise.
+  const authProbeStartedRef = useRef(false);
+
+  useEffect(() => {
+    providerRef.current = provider;
+  }, [provider]);
+
+  useEffect(() => {
+    selectedSessionRef.current = selectedSession;
+  }, [selectedSession]);
+
+  const applyAuthenticatedDefault = useCallback(() => {
+    const ready = authenticatedProvidersRef.current;
+    if (!ready || ready.length === 0) {
+      return;
+    }
+    if (selectedSessionRef.current) {
+      return;
+    }
+    if (ready.includes(providerRef.current)) {
+      return;
+    }
+    setProvider(ready[0]);
+    writeSelectedProvider(ready[0]);
+  }, []);
+
+  useEffect(() => {
+    if (authProbeStartedRef.current) {
+      return;
+    }
+    authProbeStartedRef.current = true;
+
+    let cancelled = false;
+    void (async () => {
+      const results = await Promise.all(PROVIDERS.map(async (targetProvider) => {
+        try {
+          const response = await api.providers.authStatus(targetProvider);
+          if (!response.ok) {
+            return [targetProvider, false] as const;
+          }
+          const body = (await response.json()) as { data?: { authenticated?: boolean } };
+          return [targetProvider, Boolean(body.data?.authenticated)] as const;
+        } catch {
+          return [targetProvider, false] as const;
+        }
+      }));
+      if (cancelled) {
+        return;
+      }
+
+      const ready = results
+        .filter(([, authenticated]) => authenticated)
+        .map(([targetProvider]) => targetProvider);
+      authenticatedProvidersRef.current = ready;
+      // Also published for session creation, which reads the provider outside
+      // React state (a brand-new session is allocated before the composer runs).
+      primeAuthenticatedProviders(ready);
+      applyAuthenticatedDefault();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyAuthenticatedDefault]);
+
+  // Starting a new chat after the probe still has to land on a ready provider,
+  // even when the page opened on a session belonging to an uninstalled CLI.
+  useEffect(() => {
+    if (selectedSession) {
+      return;
+    }
+    applyAuthenticatedDefault();
+  }, [selectedSession, applyAuthenticatedDefault]);
+
   useEffect(() => {
     if (!selectedSession?.__provider || selectedSession.__provider === provider) {
       return;
     }
 
     setProvider(selectedSession.__provider);
-    writeSelectedProvider(selectedSession.__provider);
+    // Mirrored, not chosen: navigating to a session must not outrank the
+    // readiness probe for the sessions started afterwards.
+    writeSelectedProvider(selectedSession.__provider, { explicit: false });
   }, [provider, selectedSession]);
 
   // Permission prompts belong to a session, not to the transient provider

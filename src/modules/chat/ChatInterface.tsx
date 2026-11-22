@@ -478,7 +478,9 @@ function ChatInterface({
         ? t('messageTypes.codex')
         : provider === 'opencode'
             ? t('messageTypes.opencode', { defaultValue: 'OpenCode' })
-          : t('messageTypes.claude');
+            : provider === 'antigravity'
+              ? t('messageTypes.antigravity', { defaultValue: 'Antigravity' })
+              : t('messageTypes.claude');
 
   if (!selectedProject) {
     return (

@@ -37,6 +37,13 @@ const providerCards = [
     iconContainerClassName: 'bg-zinc-100 dark:bg-zinc-800',
     loginButtonClassName: 'bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600',
   },
+  {
+    provider: 'antigravity' as const,
+    title: 'Antigravity',
+    connectedClassName: 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800',
+    iconContainerClassName: 'bg-teal-100 dark:bg-teal-900/30',
+    loginButtonClassName: 'bg-teal-600 hover:bg-teal-700',
+  },
 ];
 
 /** Rendered by Onboarding as its second step, listing every CLI provider the user can log into. */
@@ -54,7 +61,7 @@ export default function AgentConnectionsStep({
         </p>
       </div>
 
-      <div className="-mr-1 max-h-[38vh] space-y-2 overflow-y-auto pr-1">
+      <div className="-mr-1 max-h-[46vh] space-y-2 overflow-y-auto pr-1">
         {providerCards.map((providerCard) => (
           <AgentConnectionCard
             key={providerCard.provider}
