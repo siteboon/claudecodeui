@@ -158,6 +158,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Retain the viewer credential when the overlay closes so it can immediately reopen.
   const [control, setControl] = useState<{ sessionId: string; controlId: string } | null>(null);
+  const activeControlId = useRef<string | null>(null);
   // Closing the overlay is separate from returning the browser to the agent.
   const [showControl, setShowControl] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -218,23 +219,27 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   }, [isVisible, refresh]);
 
   const closeControlView = useCallback(() => setShowControl(false), []);
-  const forgetControl = useCallback(() => {
+  const clearControl = useCallback((controlId: string) => {
+    if (activeControlId.current !== controlId) return false;
+    activeControlId.current = null;
     setShowControl(false);
     setControl(null);
-    void refresh();
-  }, [refresh]);
-  const lostControl = useCallback(() => {
-    setShowControl(false);
-    setControl(null);
-    setError(t('browserUse.liveControlLost'));
-  }, [t]);
+    return true;
+  }, []);
+  const forgetControl = useCallback((controlId: string) => {
+    if (clearControl(controlId)) void refresh();
+  }, [clearControl, refresh]);
+  const lostControl = useCallback((controlId: string) => {
+    if (clearControl(controlId)) setError(t('browserUse.liveControlLost'));
+  }, [clearControl, t]);
 
   const takeControl = async () => {
-    if (selectedSession?.status !== 'ready' || isBusy) return;
+    if (selectedSession?.status !== 'ready' || isBusy || sessionOperationLockRef.current) return;
     if (control?.sessionId === selectedSession.id && selectedSession.userControlled) {
       setShowControl(true);
       return;
     }
+    sessionOperationLockRef.current = true;
     setIsBusy(true);
     setError(null);
     try {
@@ -244,11 +249,13 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       setSessions((current) => current.map((session) => session.id === selectedSession.id
         ? { ...session, userControlled: true, screenshotDataUrl: null, url: null, title: null, cursor: null }
         : session));
+      activeControlId.current = data.controlId;
       setControl({ sessionId: selectedSession.id, controlId: data.controlId });
       setShowControl(true);
     } catch {
       setError(t('browserUse.liveControlFailed'));
     } finally {
+      sessionOperationLockRef.current = false;
       setIsBusy(false);
     }
   };
@@ -643,7 +650,7 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
                     {formatAction(selectedSession?.lastAction || null, t)}
                   </div>
                   {selectedSession?.status === 'ready' && (
-                    <Button size="sm" onClick={() => void takeControl()} disabled={isBusy || isInputPending}>
+                    <Button size="sm" onClick={() => void takeControl()} disabled={isBusy || isInputPending || isRefreshing}>
                       {t(selectedSession.userControlled ? 'browserUse.reopenControl' : 'browserUse.takeControl')}
                     </Button>
                   )}

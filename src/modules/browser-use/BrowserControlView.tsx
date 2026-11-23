@@ -16,8 +16,8 @@ type BrowserControlViewProps = {
   sessionId: string;
   controlId: string;
   onClose: () => void;
-  onLost: () => void;
-  onReturned: () => void;
+  onLost: (controlId: string) => void;
+  onReturned: (controlId: string) => void;
 };
 
 const REMOTE_KEYS = new Set([
@@ -38,6 +38,8 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
   const [frame, setFrame] = useState<string | null>(null);
   // Keep transient input or preview errors visible while the viewer remains open.
   const [failed, setFailed] = useState(false);
+  // Report backpressure rather than partially delivering a large paste.
+  const [queueFull, setQueueFull] = useState(false);
   // Prevent duplicate hand-back requests while the server drains pending input.
   const [returning, setReturning] = useState(false);
   const image = useRef<HTMLImageElement>(null);
@@ -46,6 +48,7 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
   const composing = useRef(false);
   const inputTail = useRef<Promise<void>>(Promise.resolve());
   const queued = useRef(0);
+  const returningRef = useRef(false);
   const lifetime = useRef<AbortController | null>(null);
   const hasFrame = frame !== null;
 
@@ -63,7 +66,7 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
       } catch (error) {
         if (controller.signal.aborted) return;
         if (error instanceof ApiRequestError && error.code === 'BROWSER_USE_CONTROL_LOST') {
-          onLost();
+          onLost(controlId);
           return;
         }
         setFailed(true);
@@ -77,18 +80,25 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
     };
   }, [sessionId, controlId, onLost]);
 
-  const send = useCallback((input: LiveInput) => {
+  const send = useCallback((...inputs: LiveInput[]) => {
     const signal = lifetime.current?.signal;
-    if (!signal || signal.aborted || queued.current >= 32) return;
-    queued.current++;
+    if (!signal || signal.aborted || returningRef.current) return;
+    if (queued.current + inputs.length > 32) {
+      setQueueFull(true);
+      return;
+    }
+    setQueueFull(false);
+    queued.current += inputs.length;
     inputTail.current = inputTail.current.then(async () => {
-      if (signal.aborted) return;
-      await readApiJson(await api.browserUse.control(sessionId, 'input', { controlId, ...input }, { signal }));
+      for (const input of inputs) {
+        if (signal.aborted) return;
+        await readApiJson(await api.browserUse.control(sessionId, 'input', { controlId, ...input }, { signal }));
+      }
       if (!signal.aborted) setFailed(false);
     }).catch(() => {
       if (!signal.aborted) setFailed(true);
     }).finally(() => {
-      queued.current--;
+      queued.current -= inputs.length;
     });
   }, [sessionId, controlId]);
 
@@ -141,8 +151,14 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
   const sendText = (element: HTMLTextAreaElement) => {
     if (!element.value) return;
     const characters = Array.from(element.value);
-    for (let i = 0; i < characters.length; i += 1000) {
-      send({ type: 'text', text: characters.slice(i, i + 1000).join('') });
+    if (characters.length > 32_000) {
+      setQueueFull(true);
+    } else {
+      const chunks: LiveInput[] = [];
+      for (let i = 0; i < characters.length; i += 1000) {
+        chunks.push({ type: 'text', text: characters.slice(i, i + 1000).join('') });
+      }
+      send(...chunks);
     }
     element.value = '';
   };
@@ -161,14 +177,17 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
   };
 
   const returnControl = async () => {
+    if (returningRef.current) return;
+    returningRef.current = true;
     setReturning(true);
     try {
       await inputTail.current;
       await readApiJson(await api.browserUse.control(sessionId, 'release', { controlId }));
-      onReturned();
+      onReturned(controlId);
     } catch {
       setFailed(true);
     } finally {
+      returningRef.current = false;
       setReturning(false);
     }
   };
@@ -186,6 +205,7 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
         </div>
         <p id="browser-control-hint" className="text-sm text-muted-foreground">{t('browserUse.liveControlHint')}</p>
         {failed && <p role="alert" className="text-sm text-destructive">{t('browserUse.liveControlFailed')}</p>}
+        {queueFull && <p role="alert" className="text-sm text-destructive">{t('browserUse.liveControlQueueFull')}</p>}
         <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-neutral-950">
           {frame && (
             <img
