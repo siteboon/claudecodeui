@@ -50,6 +50,7 @@ import {
 } from './modules/scheduled-messages/index.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
+import { imageGenerationRoutes } from './modules/image-generation/index.js';
 import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
@@ -174,6 +175,7 @@ app.use('/api/projects', authenticateToken, parseAuthenticatedBody, projectModul
 
 // Chat attachment upload/serving (global ~/.cloudcli/assets store, protected)
 app.use('/api/assets', authenticateToken, parseAuthenticatedBody, assetsRoutes);
+app.use('/api/image-generation', authenticateToken, imageGenerationRoutes);
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, parseAuthenticatedBody, gitRoutes);

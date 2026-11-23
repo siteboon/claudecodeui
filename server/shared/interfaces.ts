@@ -23,6 +23,7 @@ import type {
   SideQuestionSink,
   UpsertProviderMcpServerInput,
   WorkflowAgentActivity,
+  ImageGenerationInput,
 } from '@/shared/types.js';
 
 //----------------- PROVIDER CONTRACT INTERFACES ------------
@@ -302,4 +303,18 @@ export interface IProviderSessionSynchronizer {
    * Parses and upserts one provider artifact file without running a full scan.
    */
   synchronizeFile(filePath: string): Promise<string | null>;
+}
+
+// ---------------------------
+//----------------- OPTIONAL IMAGE PROVIDER ------------
+
+/**
+ * Implemented by image-provider adapters and consumed by the project-scoped
+ * image job service. identity must change when endpoint/model semantics change,
+ * must exclude secrets, and is hashed before persistence. generate performs one
+ * request only; it must not automatically retry uncertain paid operations.
+ */
+export interface ImageGenerationProvider {
+  readonly identity: string;
+  generate(input: ImageGenerationInput, signal?: AbortSignal): Promise<Uint8Array>;
 }

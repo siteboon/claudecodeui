@@ -310,6 +310,7 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
 /**
  * Resolves a path that is readable because it lives under a read-only root,
  * or `null` when it does not.
+ * Used by File Tree and Image Generation for authenticated read access.
  */
 export function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
   return resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
@@ -379,6 +380,7 @@ export function normalizeProjectPath(inputPath: string): string {
  * Call this before any filesystem mutation that creates or registers projects.
  * The function resolves symlinks, enforces `WORKSPACES_ROOT` containment, and
  * blocks known system directories.
+ * Used by project/file workflows and Image Generation's saved-job access policy.
  */
 export async function validateWorkspacePath(requestedPath: string): Promise<WorkspacePathValidationResult> {
   try {

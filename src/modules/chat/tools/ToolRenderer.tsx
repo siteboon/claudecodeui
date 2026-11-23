@@ -17,6 +17,8 @@ import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
+import { readGeneratedImageResult } from '@/shared/utils';
+import { GeneratedImageResult } from '@/modules/chat/tools/GeneratedImageResult';
 
 type ToolRendererProps = {
   toolName: string;
@@ -100,6 +102,11 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     [mode, toolInput, toolResult],
   );
 
+  const generatedImage = useMemo(
+    () => mode === 'result' ? readGeneratedImageResult(parsedData) : null,
+    [mode, parsedData],
+  );
+
   // Only derive and show status badge on input renders
   const toolStatus = useMemo(
     () => mode === 'input' ? deriveToolStatus(toolResult, reportedStatus) : undefined,
@@ -113,6 +120,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     }
   }, [displayConfig, parsedData, onFileOpen]);
 
+  if (generatedImage) return <GeneratedImageResult job={generatedImage} />;
   if (!displayConfig) return null;
 
   // Bash renders as a Codex-style command row: the command on a single line with

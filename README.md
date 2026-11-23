@@ -60,6 +60,7 @@
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches 
 - **Browser Use** - Open browser sessions for web research, testing, and agent-driven browser tasks
+- **Optional Image Generation** - [MCP-based generation](docs/image-generation-mcp.md) with saved project images, inline previews, and restart-safe job lookup
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
 - **Plugin System** - Extend CloudCLI with custom plugins — add new tabs, backend services, and integrations. [Build your own →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation

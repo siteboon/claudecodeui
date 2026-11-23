@@ -2017,3 +2017,15 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+// ---------------------------
+//----------------- GENERATED IMAGE TOOL PRESENTATION ------------
+
+/** Validated display-only projection of an image MCP job; paths stay within generated-images. */
+export type GeneratedImageToolView = {
+  jobId: string;
+  status: 'running' | 'succeeded' | 'failed' | 'uncertain' | 'missing_asset';
+  promptPreview: string;
+  assetPath?: string;
+  errorMessage?: string;
+};

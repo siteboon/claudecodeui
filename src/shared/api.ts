@@ -509,6 +509,12 @@ export const api = {
       get(`/api/assets/images/${encodeURIComponent(filename)}`, options),
   },
 
+  // Saved image jobs are read-only here. Generation is exposed only through MCP.
+  imageGeneration: {
+    job: (projectId: string, jobId: string, options: ApiRequestOptions = {}) =>
+      get('/api/image-generation/projects/' + encodeURIComponent(projectId) + '/jobs/' + encodeURIComponent(jobId), options),
+  },
+
   // TaskMaster endpoints — all addressed by DB projectId post-migration.
   taskmaster: {
     // Update a task

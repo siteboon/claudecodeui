@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
+import type { GeneratedImageToolView, Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -270,3 +270,57 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
+
+// ---------------------------
+//----------------- GENERATED IMAGE TOOL CONTRACT ------------
+
+/**
+ * Used by chat's ToolRenderer and GeneratedImageResult to recognize the v1
+ * image-job contract in provider MCP envelopes. Bounds traversal depth/node
+ * count and text size, and accepts only UUID raster paths in generated-images.
+ * Returns display data only; it never fetches files or performs tool actions.
+ */
+export function readGeneratedImageResult(result: unknown): GeneratedImageToolView | null {
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: result, depth: 0 }];
+  const seen = new WeakSet<object>();
+  for (let visited = 0; queue.length > 0 && visited < 64; visited++) {
+    const item = queue.shift()!;
+    if (item.depth > 6) continue;
+    const { value, depth } = item;
+    if (typeof value === 'string') {
+      if (value.length > 128 * 1024) continue;
+      try { queue.push({ value: JSON.parse(value), depth: depth + 1 }); } catch { /* Ordinary tool text. */ }
+      continue;
+    }
+    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      value.slice(0, 20).forEach((entry) => queue.push({ value: entry, depth: depth + 1 }));
+      continue;
+    }
+    const record = value as Record<string, unknown>;
+    if (record.kind === 'cloudcli.image_generation' && record.version === 1
+      && typeof record.jobId === 'string' && /^[a-f0-9]{64}$/.test(record.jobId)
+      && typeof record.status === 'string'
+      && ['running', 'succeeded', 'failed', 'uncertain', 'missing_asset'].includes(record.status)) {
+      const job: GeneratedImageToolView = {
+        jobId: record.jobId, status: record.status as GeneratedImageToolView['status'],
+        promptPreview: typeof record.promptPreview === 'string' ? Array.from(record.promptPreview).slice(0, 200).join('') : '',
+      };
+      if (record.error && typeof record.error === 'object' && 'message' in record.error
+        && typeof record.error.message === 'string') job.errorMessage = record.error.message.slice(0, 1000);
+      if (job.status === 'succeeded') {
+        const asset = record.asset as Record<string, unknown> | undefined;
+        if (!asset || typeof asset.path !== 'string' || typeof asset.id !== 'string') continue;
+        const match = /^generated-images\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\.(png|jpg|webp)$/.exec(asset.path);
+        if (!match || match[1] !== asset.id) continue;
+        job.assetPath = asset.path;
+      }
+      return job;
+    }
+    for (const key of ['structuredContent', 'content', 'text', 'result', 'output']) {
+      if (record[key] !== undefined) queue.push({ value: record[key], depth: depth + 1 });
+    }
+  }
+  return null;
+}
