@@ -144,24 +144,32 @@ function stripDiffHeaders(diff) {
 
   const lines = diff.split('\n');
   const filteredLines = [];
-  let startIncluding = false;
+  // Header lines are the ones above a file's first `@@` hunk header. Only those
+  // are dropped: a hunk line is prefixed with the change marker and then holds
+  // the file's own text, so a deleted `-- comment` arrives as `--- comment` and
+  // an added `++i;` as `+++i;`. Matching those by prefix inside a hunk deleted
+  // the user's changed lines along with the headers.
+  let inHunks = false;
 
   for (const line of lines) {
-    // Skip all header lines including diff --git, index, file mode, and --- / +++ file paths
-    if (line.startsWith('diff --git') ||
-        line.startsWith('index ') ||
-        line.startsWith('new file mode') ||
-        line.startsWith('deleted file mode') ||
-        line.startsWith('---') ||
-        line.startsWith('+++')) {
+    if (line.startsWith('diff --git')) {
+      // A new file section starts its own header block.
+      inHunks = false;
       continue;
     }
 
-    // Start including lines from @@ hunk headers onwards
-    if (line.startsWith('@@') || startIncluding) {
-      startIncluding = true;
-      filteredLines.push(line);
+    if (line.startsWith('@@')) {
+      inHunks = true;
     }
+
+    if (!inHunks) {
+      // Everything above the first hunk belongs to the file header: `diff
+      // --git`, `index`, file mode, rename/similarity lines, and the `--- a/`
+      // / `+++ b/` file paths.
+      continue;
+    }
+
+    filteredLines.push(line);
   }
 
   return filteredLines.join('\n');
