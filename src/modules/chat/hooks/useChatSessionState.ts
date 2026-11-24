@@ -108,6 +108,10 @@ type UseChatSessionStateArgs = {
   /** Highest live seq observed per session; sent as `lastSeq` on subscribe. */
   lastSeqRef: MutableRefObject<Map<string, number>>;
   sessionStore: SessionStore;
+  /** Measured floating composer height in compact mode (0 when docked in normal flow). */
+  floatingComposerHeight?: number;
+  /** Whether pending permissions hide the floating activity tab above the composer. */
+  hasPendingPermissions?: boolean;
 };
 
 type ScrollRestoreState = {
@@ -206,6 +210,8 @@ export function useChatSessionState({
   statusCheckSentAtRef,
   lastSeqRef,
   sessionStore,
+  floatingComposerHeight = 0,
+  hasPendingPermissions = false,
 }: UseChatSessionStateArgs) {
   const { t } = useTranslation('chat');
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
@@ -245,6 +251,7 @@ export function useChatSessionState({
   const topLoadLockRef = useRef(false);
   const pendingScrollRestoreRef = useRef<ScrollRestoreState | null>(null);
   const pendingInitialScrollRef = useRef(true);
+  const prevFloatingInsetKeyRef = useRef<string | null>(null);
   const messagesOffsetRef = useRef(0);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1026,6 +1033,25 @@ export function useChatSessionState({
       }, 50);
     }
   }, [chatMessages.length, isActive, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
+
+  const hasActivityForInset = Boolean(sessionActivity && !hasPendingPermissions);
+  const floatingInsetKey = floatingComposerHeight > 0
+    ? `${floatingComposerHeight}:${hasActivityForInset ? 1 : 0}`
+    : '0';
+
+  // Keep the latest message above the floating composer when its height changes,
+  // but never pull the viewport away while the user is scrolled up reading history.
+  useLayoutEffect(() => {
+    const prevKey = prevFloatingInsetKeyRef.current;
+    prevFloatingInsetKeyRef.current = floatingInsetKey;
+    if (prevKey === null || prevKey === floatingInsetKey) return;
+    if (!isActive || !scrollContainerRef.current) return;
+    if (isLoadingMoreRef.current || isLoadingMoreMessages || pendingScrollRestoreRef.current) return;
+    if (searchScrollActiveRef.current || pendingInitialScrollRef.current) return;
+    if (!isUserScrolledUp && !isUserScrolledUpRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  }, [floatingInsetKey, isActive, isLoadingMoreMessages, isUserScrolledUp]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;

@@ -36,6 +36,10 @@ type ChatMessagesPaneProps = {
   isProcessing?: boolean;
   /** True while ChatComposer's floating activity/stop tab is rendered above the input. */
   hasActivityIndicator?: boolean;
+  /** True when the compact composer floats over the pane instead of sitting below it. */
+  isCompactFloating?: boolean;
+  /** Measured bottom inset (px) reserved so the last message clears the floating composer. */
+  floatingBottomInset?: number;
   chatMessages: ChatMessage[];
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -105,6 +109,8 @@ function ChatMessagesPane({
   isLoadingSessionMessages,
   isProcessing = false,
   hasActivityIndicator = false,
+  isCompactFloating = false,
+  floatingBottomInset = 0,
   chatMessages,
   selectedSession,
   currentSessionId,
@@ -185,14 +191,23 @@ function ChatMessagesPane({
     [messageKeyMap],
   );
 
+  const bottomPaddingClass = isCompactFloating
+    ? floatingBottomInset > 0
+      ? ''
+      : hasActivityIndicator
+        ? 'pb-32'
+        : 'pb-24'
+    : hasActivityIndicator
+      ? 'pb-12 sm:pb-14'
+      : 'pb-3 sm:pb-4';
+
   return (
     <div
       ref={scrollContainerRef}
       onWheel={onWheel}
       onTouchMove={onTouchMove}
-      className={`chat-messages-pane relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-3 sm:pt-4 ${
-        hasActivityIndicator ? 'pb-12 sm:pb-14' : 'pb-3 sm:pb-4'
-      }`}
+      style={isCompactFloating && floatingBottomInset > 0 ? { paddingBottom: `${floatingBottomInset}px` } : undefined}
+      className={`chat-messages-pane relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-3 sm:pt-4 ${bottomPaddingClass}`}
     >
       {chatMessages.length > 0 && (
         <div className="pointer-events-none sticky right-4 top-3 z-10 mb-2 flex items-start justify-between gap-2 sm:px-4">

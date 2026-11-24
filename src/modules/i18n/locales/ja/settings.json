@@ -197,6 +197,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "チャットレイアウト",
+      "label": "コンパクトモード",
+      "description": "チャットヘッダーを非表示にし、コンパクトなフローティング入力欄のみを表示します。"
+    },
     "darkMode": {
       "label": "ダークモード",
       "description": "ライトテーマとダークテーマを切り替えます"

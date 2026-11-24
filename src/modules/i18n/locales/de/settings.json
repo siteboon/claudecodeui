@@ -197,6 +197,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Chat-Layout",
+      "label": "Kompaktmodus",
+      "description": "Chat-Kopfzeile ausblenden und nur ein kleines schwebendes Eingabefeld behalten."
+    },
     "darkMode": {
       "label": "Darkmode",
       "description": "Zwischen hellem und dunklem Design wechseln"

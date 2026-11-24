@@ -265,6 +265,9 @@
     "answeredBy": "Ответил {{model}}"
   },
   "composer": {
+    "compactMode": "Включить компактный режим",
+    "exitCompactMode": "Выйти из компактного режима",
+    "moreTools": "Другие инструменты чата",
     "permissionHeading": "Как подтверждать действия {{provider}}?",
     "permissionCycleHint": "Нажмите Tab в поле ввода, чтобы переключить режим",
     "permissionTriggerLabel": "{{mode}}: {{heading}}",

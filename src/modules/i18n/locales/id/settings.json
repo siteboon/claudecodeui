@@ -223,6 +223,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Tata letak obrolan",
+      "label": "Mode ringkas",
+      "description": "Sembunyikan header obrolan dan tampilkan kotak input mengambang yang ringkas."
+    },
     "darkMode": {
       "label": "Mode Gelap",
       "description": "Beralih antara tema terang dan gelap"

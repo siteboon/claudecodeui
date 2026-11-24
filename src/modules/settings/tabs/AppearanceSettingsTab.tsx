@@ -95,6 +95,18 @@ export default function AppearanceSettingsTab({
         </SettingsCard>
       </SettingsSection>
 
+      <SettingsSection title={t('appearanceSettings.compactChat.section')}>
+        <SettingsCard>
+          <SettingsRow label={t('appearanceSettings.compactChat.label')} description={t('appearanceSettings.compactChat.description')}>
+            <SettingsToggle
+              checked={preferences.compactChat}
+              onChange={(value) => setPreference('compactChat', value)}
+              ariaLabel={t('appearanceSettings.compactChat.label')}
+            />
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSection>
+
       <SettingsSection title={t('appearanceSettings.codeEditor.title')}>
         <SettingsCard divided>
           <SettingsRow

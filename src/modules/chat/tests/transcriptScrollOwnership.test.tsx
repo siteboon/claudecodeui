@@ -96,11 +96,12 @@ function createStore(messagesBySession: Map<string, NormalizedMessage[]>) {
 async function renderChatSessionState(options: {
   session: ProjectSession;
   store: ReturnType<typeof createStore>;
+  floatingComposerHeight?: number;
 }) {
   const { useChatSessionState } = await import('@/modules/chat/hooks/useChatSessionState');
 
   return renderHook(
-    ({ session }: { session: ProjectSession }) =>
+    ({ session, floatingComposerHeight }: { session: ProjectSession; floatingComposerHeight?: number }) =>
       useChatSessionState({
         isActive: true,
         selectedProject: project,
@@ -111,8 +112,9 @@ async function renderChatSessionState(options: {
         statusCheckSentAtRef: { current: new Map() },
         lastSeqRef: { current: new Map() },
         sessionStore: options.store as never,
+        floatingComposerHeight,
       }),
-    { initialProps: { session: options.session } },
+    { initialProps: { session: options.session, floatingComposerHeight: options.floatingComposerHeight } as { session: ProjectSession; floatingComposerHeight?: number } },
   );
 }
 
@@ -255,5 +257,60 @@ describe('search jump ownership', () => {
       0,
       'and must not flash the search highlight on one of its rows',
     );
+  });
+});
+
+describe('floating composer inset scroll sync', () => {
+  it('follows the bottom when anchored, and leaves scrollTop untouched when reading history', async () => {
+    let rafCallback: (() => void) | null = null;
+    vi.stubGlobal('requestAnimationFrame', (cb: () => void) => {
+      rafCallback = cb;
+      return 1;
+    });
+
+    const messages = new Map<string, NormalizedMessage[]>([
+      [SESSION_A, [buildMessage(0, '2026-01-01T00:00:00.000Z')]],
+    ]);
+    const store = createStore(messages);
+    const { result, rerender } = await renderChatSessionState({
+      session: { id: SESSION_A } as ProjectSession,
+      store,
+      floatingComposerHeight: 80,
+    });
+
+    const container = createContainer(5000, 500);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+
+    // Trigger the initial-scroll effect after the ref is attached, then settle its rAF loop.
+    messages.set(SESSION_A, [
+      ...messages.get(SESSION_A)!,
+      buildMessage(1, '2026-01-01T00:00:01.000Z'),
+    ]);
+    act(() => {
+      rerender({ session: { id: SESSION_A } as ProjectSession, floatingComposerHeight: 80 });
+    });
+    for (let i = 0; i < 4; i++) {
+      act(() => {
+        rafCallback?.();
+      });
+    }
+    container.writes.length = 0;
+
+    // Expanding the floating composer while parked at bottom keeps the tail above it.
+    act(() => {
+      rerender({ session: { id: SESSION_A } as ProjectSession, floatingComposerHeight: 220 });
+    });
+    expect(container.writes).toContain(container.scrollHeight);
+
+    // Scrolling up to read history stops inset growth from pulling the view down.
+    act(() => {
+      result.current.setIsUserScrolledUp(true);
+    });
+    container.writes.length = 0;
+
+    act(() => {
+      rerender({ session: { id: SESSION_A } as ProjectSession, floatingComposerHeight: 300 });
+    });
+    assert.deepEqual(container.writes, []);
   });
 });

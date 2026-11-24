@@ -223,6 +223,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "聊天布局",
+      "label": "简洁模式",
+      "description": "隐藏聊天顶部栏，只保留小悬浮输入框。"
+    },
     "darkMode": {
       "label": "深色模式",
       "description": "切换浅色和深色主题"

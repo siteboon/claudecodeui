@@ -188,6 +188,9 @@
     }
   },
   "composer": {
+    "compactMode": "Přepnout do kompaktního režimu",
+    "exitCompactMode": "Ukončit kompaktní režim",
+    "moreTools": "Další nástroje chatu",
     "reasoning": "Uvažování",
     "model": "Model",
     "effortDefault": "Výchozí",

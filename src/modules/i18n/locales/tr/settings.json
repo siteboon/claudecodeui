@@ -224,6 +224,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Sohbet düzeni",
+      "label": "Kompakt mod",
+      "description": "Sohbet üst bilgisini gizle ve küçük bir kayan giriş kutusu göster."
+    },
     "darkMode": {
       "label": "Koyu Mod",
       "description": "Açık ve koyu temalar arasında geçiş yap"

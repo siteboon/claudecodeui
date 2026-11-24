@@ -179,6 +179,9 @@
     }
   },
   "composer": {
+    "compactMode": "Activar modo compacto",
+    "exitCompactMode": "Salir del modo compacto",
+    "moreTools": "Más herramientas de chat",
     "reasoning": "Razonamiento",
     "model": "Modelo",
     "effortDefault": "Por defecto",

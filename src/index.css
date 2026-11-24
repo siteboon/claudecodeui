@@ -778,6 +778,116 @@
     max-width: 80%;
   }
 
+  /* Compact mode renders as a bottom floating overlay whose outer shell passes pointer events through while active cards stay opaque and interactive. */
+  .chat-composer-shell[data-compact="true"] {
+    pointer-events: none;
+    padding: 0 8px max(12px, env(safe-area-inset-bottom));
+  }
+
+  @media (min-width: 640px) {
+    .chat-composer-shell[data-compact="true"] {
+      padding: 0 16px max(14px, env(safe-area-inset-bottom));
+    }
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-compact-width {
+    max-width: 40rem;
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-floating-surface,
+  .chat-composer-shell[data-compact="true"] .composer-floating-card {
+    pointer-events: auto;
+  }
+
+  .chat-composer-shell[data-compact="true"] [data-slot="prompt-input"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 4px;
+    padding: 6px;
+    border-color: hsl(var(--border) / 0.85);
+    background-color: hsl(var(--card));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 10px 30px -6px hsl(var(--foreground) / 0.14), 0 2px 8px hsl(var(--foreground) / 0.06);
+  }
+
+  .dark .chat-composer-shell[data-compact="true"] [data-slot="prompt-input"] {
+    box-shadow: 0 12px 32px -4px rgb(0 0 0 / 0.55), 0 0 0 1px hsl(var(--border) / 0.6);
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-floating-card {
+    background-color: hsl(var(--card));
+    background-image: linear-gradient(var(--floating-tint, transparent), var(--floating-tint, transparent));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 6px 20px -4px hsl(var(--foreground) / 0.12);
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-floating-card-primary {
+    --floating-tint: hsl(var(--primary) / 0.06);
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-floating-card-amber {
+    --floating-tint: rgb(245 158 11 / 0.12);
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-floating-card-danger {
+    --floating-tint: rgb(239 68 68 / 0.12);
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-floating-card-muted {
+    --floating-tint: hsl(var(--muted) / 0.45);
+  }
+
+  .dark .chat-composer-shell[data-compact="true"] .composer-floating-surface .dark\:bg-gray-800\/90 {
+    background-color: rgb(31 41 55);
+  }
+
+  .chat-composer-shell[data-compact="true"] [data-slot="prompt-input-header"],
+  .chat-composer-shell[data-compact="true"] .composer-options {
+    order: 0;
+    flex-basis: 100%;
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-options {
+    max-height: min(40vh, 20rem);
+    overflow-y: auto;
+    padding: 4px;
+  }
+
+  .chat-composer-shell[data-compact="true"] [data-slot="prompt-input-body"] {
+    order: 1;
+    min-width: 0;
+    flex: 1 0 100%;
+  }
+
+  .chat-composer-shell[data-compact="true"] [data-slot="prompt-input-footer"] {
+    display: contents;
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-compact-quick-actions,
+  .chat-composer-shell[data-compact="true"] .composer-send-actions {
+    order: 2;
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-send-actions > button[aria-haspopup="menu"] {
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-send-actions > :not([aria-haspopup="menu"]) {
+    flex-shrink: 0;
+  }
+
+  .chat-composer-shell[data-compact="true"] .chat-input-placeholder {
+    padding: 6px 8px;
+    min-height: 36px;
+  }
+
+  .chat-composer-shell[data-compact="true"] .composer-shortcuts {
+    display: none;
+  }
   /* Text wrapping improvements */
   .chat-message {
     word-wrap: break-word;

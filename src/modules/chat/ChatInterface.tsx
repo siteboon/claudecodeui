@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
@@ -48,6 +49,10 @@ type ChatInterfaceProps = {
   newSessionTrigger?: number;
   onTaskClick?: (...args: unknown[]) => void;
   onShowAllTasks?: (() => void) | null;
+  compactMode?: boolean;
+  onToggleCompactMode?: () => void;
+  compactLeadingAction?: ReactNode;
+  compactNavigation?: ReactNode;
 };
 
 /**
@@ -71,6 +76,10 @@ function ChatInterface({
   externalMessageUpdate,
   newSessionTrigger,
   onShowAllTasks,
+  compactMode = false,
+  onToggleCompactMode,
+  compactLeadingAction,
+  compactNavigation,
 }: ChatInterfaceProps) {
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe, isConnected } = useWebSocket();
@@ -133,6 +142,37 @@ function ChatInterface({
     selectedProject,
   });
 
+  const isCompactFloating = compactMode && isActive;
+  const hasSelectedProject = Boolean(selectedProject);
+  const composerOverlayRef = useRef<HTMLDivElement>(null);
+  // Measured height of the bottom floating composer in compact mode, used to pad the transcript bottom inset.
+  const [floatingComposerHeight, setFloatingComposerHeight] = useState(0);
+  const effectiveFloatingHeight = isCompactFloating ? floatingComposerHeight : 0;
+
+  useLayoutEffect(() => {
+    const overlay = composerOverlayRef.current;
+    if (!isCompactFloating || !hasSelectedProject || !overlay) {
+      setFloatingComposerHeight(0);
+      return;
+    }
+
+    const updateHeight = () => {
+      const measured = Math.ceil(overlay.getBoundingClientRect().height);
+      if (measured > 0) {
+        setFloatingComposerHeight((current) => (current === measured ? current : measured));
+      }
+    };
+
+    updateHeight();
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(overlay);
+    return () => observer.disconnect();
+  }, [isCompactFloating, hasSelectedProject]);
+
   const {
     chatMessages,
     addMessage,
@@ -179,6 +219,8 @@ function ChatInterface({
     statusCheckSentAtRef,
     lastSeqRef,
     sessionStore,
+    floatingComposerHeight: effectiveFloatingHeight,
+    hasPendingPermissions: pendingPermissionRequests.length > 0,
   });
 
   // Brand-new conversation: the composer allocated a stable session id via
@@ -470,6 +512,9 @@ function ChatInterface({
   // reserve enough bottom space to keep the floating status tab from
   // overlapping the last message.
   const hasActivityIndicator = Boolean(sessionActivity && pendingPermissionRequests.length === 0);
+  const floatingBottomInset = effectiveFloatingHeight > 0
+    ? effectiveFloatingHeight + (hasActivityIndicator ? 44 : 12)
+    : 0;
 
   const selectedProviderLabel =
     provider === 'cursor'
@@ -498,7 +543,7 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="relative flex h-full min-h-0 flex-col">
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>
             <ChatMessagesPane
@@ -513,6 +558,8 @@ function ChatInterface({
               isLoadingSessionMessages={isLoadingSessionMessages}
               isProcessing={isProcessing}
               hasActivityIndicator={hasActivityIndicator}
+              isCompactFloating={isCompactFloating}
+              floatingBottomInset={floatingBottomInset}
               chatMessages={chatMessages}
               selectedSession={selectedSession}
               currentSessionId={currentSessionId}
@@ -560,14 +607,23 @@ function ChatInterface({
           </TranscriptSessionContext.Provider>
         </MarkdownWorkspaceContext.Provider>
 
-        <div className="relative flex-shrink-0">
+        <div
+          ref={composerOverlayRef}
+          className={
+            isCompactFloating
+              ? 'pointer-events-none absolute inset-x-0 bottom-0 z-20'
+              : 'relative flex-shrink-0'
+          }
+        >
           {isUserScrolledUp && chatMessages.length > 0 && (
             <div className="pointer-events-none absolute -top-11 left-0 right-0 z-20 flex justify-center">
               <button
                 type="button"
                 onClick={scrollToBottomAndReset}
                 aria-label={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
-                className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground shadow-sm transition-all duration-200 hover:bg-accent hover:text-foreground"
+                className={`pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full border border-border/50 bg-card text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground ${
+                  isCompactFloating ? 'shadow-md' : 'shadow-sm'
+                }`}
                 title={t('input.scrollToBottom', { defaultValue: 'Scroll to bottom' })}
               >
                 <ArrowDownIcon className="h-4 w-4" aria-hidden />
@@ -576,6 +632,10 @@ function ChatInterface({
           )}
 
           <ChatComposer
+          compactMode={isCompactFloating}
+          onToggleCompactMode={onToggleCompactMode}
+          compactLeadingAction={compactLeadingAction}
+          compactNavigation={compactNavigation}
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}

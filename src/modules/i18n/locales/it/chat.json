@@ -253,6 +253,9 @@
     "answeredBy": "Risposto da {{model}}"
   },
   "composer": {
+    "compactMode": "Attiva modalità compatta",
+    "exitCompactMode": "Esci dalla modalità compatta",
+    "moreTools": "Altri strumenti di chat",
     "permissionHeading": "Come approvare le azioni di {{provider}}?",
     "permissionCycleHint": "Premi Tab nel campo di testo per cambiare modalità",
     "permissionTriggerLabel": "{{mode}}: {{heading}}",

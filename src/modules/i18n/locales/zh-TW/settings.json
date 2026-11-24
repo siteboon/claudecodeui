@@ -198,6 +198,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "聊天版面",
+      "label": "精簡模式",
+      "description": "隱藏聊天頂部列，僅保留小巧的懸浮輸入框。"
+    },
     "darkMode": {
       "label": "深色模式",
       "description": "切換淺色和深色佈景主題"
