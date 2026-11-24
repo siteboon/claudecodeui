@@ -5,3 +5,17 @@ export { AUTH_MODE, DISABLE_AUTH, TRUST_LOCAL_AUTH_BYPASS } from './utils.js';
 export type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from './types.js';
 // Auth middleware uses the shared constant-time API key comparison.
 export { secretsMatch } from './utils.js';
+
+// Database and Providers share the persisted session-pin summary contract.
+export type { SessionPinRecord } from './types.js';
+// Providers uses these shared request payloads, validators and response helpers.
+export type { CustomProviderModelEffort, CustomProviderModelInput, LLMProvider, McpScope, McpTransport, ProviderSkillCreateFile, ProviderSkillCreateInput, UpsertProviderMcpServerInput } from './types.js';
+export { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from './utils.js';
+
+// Providers uses the shared history and runtime summary contracts through this barrel.
+export type { BackgroundTaskSummary, ClearedContextSegment, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, WorkflowAgentActivity } from './types.js';
+export { sliceTailPage } from './utils.js';
+
+// Session persistence uses canonical path normalization and fork/history metadata.
+export { normalizeProjectPath } from './utils.js';
+export type { SessionForkAncestor } from './types.js';
