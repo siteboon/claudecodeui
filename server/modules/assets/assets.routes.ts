@@ -27,6 +27,7 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({
+  defParamCharset: 'utf8',
   storage,
   fileFilter: (req, file, cb) => {
     if (isAllowedImageMimeType(file.mimetype)) {
@@ -42,6 +43,7 @@ const upload = multer({
 });
 
 const attachmentUpload = multer({
+  defParamCharset: 'utf8',
   storage,
   limits: {
     fileSize: 10 * 1024 * 1024,

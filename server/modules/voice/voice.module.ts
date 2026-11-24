@@ -36,6 +36,7 @@ const voiceService = createVoiceService({
 });
 
 const audioUpload = multer({
+  defParamCharset: 'utf8',
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
 });
