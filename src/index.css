@@ -772,6 +772,12 @@
     }
   }
 
+  /* Let transcript, composer, and status banners fill the available pane width instead of leaving fixed margins around sidebars. */
+  .chat-content-width {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   /* Text wrapping improvements */
   .chat-message {
     word-wrap: break-word;
