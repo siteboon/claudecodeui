@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/shared/context/ThemeContext';
 import { UiPreferencesProvider } from '@/shared/context/UiPreferencesContext';
 import { AuthProvider, ProtectedRoute } from '@/modules/auth';
 import { TaskMasterProvider,TasksSettingsProvider } from '@/modules/task-master';
+import { PermissionAttentionProvider } from '@/shared/context/PermissionAttentionContext';
 import { WebSocketProvider } from '@/shared/context/WebSocketContext';
 import { PluginsProvider } from '@/modules/plugins';
 import { ProjectWorkspaceRoute } from '@/modules/project-workspace';
@@ -115,6 +116,7 @@ export default function App() {
         <UiPreferencesProvider>
         <AuthProvider>
           <WebSocketProvider>
+            <PermissionAttentionProvider>
             <PluginsProvider>
               <TasksSettingsProvider>
                 <TaskMasterProvider>
@@ -129,6 +131,7 @@ export default function App() {
                 </TaskMasterProvider>
               </TasksSettingsProvider>
             </PluginsProvider>
+            </PermissionAttentionProvider>
           </WebSocketProvider>
         </AuthProvider>
         </UiPreferencesProvider>

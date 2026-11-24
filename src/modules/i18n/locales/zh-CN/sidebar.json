@@ -58,7 +58,8 @@
     "cancel": "取消",
     "clearSearch": "清除搜索",
     "openCommandPalette": "打开命令面板",
-    "attentionRequiredIndicator": "会话需要处理"
+    "attentionRequiredIndicator": "会话需要处理",
+    "awaitingInputIndicator": "等待你的选择"
   },
   "navigation": {
     "chat": "聊天",
