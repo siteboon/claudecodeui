@@ -112,6 +112,7 @@ function Sidebar({
     reloadRecentConversations,
     loadMoreRecentConversations,
     toggleProject,
+    ensureProjectExpanded,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,
@@ -192,20 +193,17 @@ function Sidebar({
 
       setSearchMode('projects');
       setSearchFilter('');
-      if (!isProjectExpanded(existingProject.projectId)) {
-        toggleProject(existingProject.projectId);
-      }
+      ensureProjectExpanded(existingProject.projectId);
       handleProjectSelect(existingProject);
     },
     [
+      ensureProjectExpanded,
       handleProjectSelect,
-      isProjectExpanded,
       paletteOps,
       projects,
       setSearchFilter,
       setSearchMode,
       setShowNewProject,
-      toggleProject,
     ],
   );
 
