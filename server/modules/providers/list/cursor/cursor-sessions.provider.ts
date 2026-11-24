@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-import os from 'node:os';
 import path from 'node:path';
 
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
@@ -9,7 +7,7 @@ import {
   createNormalizedMessage,
   generateMessageId,
   readObjectRecord,
-  sanitizeLeafDirectoryName,
+  resolveCursorChatDirectory,
   sliceTailPage,
 } from '@/shared/utils.js';
 
@@ -233,18 +231,10 @@ export class CursorSessionsProvider implements IProviderSessions {
     // Lazy-import better-sqlite3 so the module doesn't fail if it's unavailable
     const { default: Database } = await import('better-sqlite3');
 
-    const cwdId = crypto.createHash('md5').update(projectPath || process.cwd()).digest('hex');
-    const safeSessionId = sanitizeLeafDirectoryName(sessionId, 'cursor session id');
-    const baseChatsPath = path.join(os.homedir(), '.cursor', 'chats', cwdId);
-    const storeDbPath = path.join(baseChatsPath, safeSessionId, 'store.db');
-    const resolvedBaseChatsPath = path.resolve(baseChatsPath);
-    const resolvedStoreDbPath = path.resolve(storeDbPath);
-    const relativeStorePath = path.relative(resolvedBaseChatsPath, resolvedStoreDbPath);
-    if (relativeStorePath.startsWith('..') || path.isAbsolute(relativeStorePath)) {
-      throw new Error(`Invalid cursor session path for "${sessionId}".`);
-    }
+    // Rejects ids that are not a single directory name, so the path stays under the chats root.
+    const storeDbPath = path.join(resolveCursorChatDirectory(projectPath, sessionId), 'store.db');
 
-    const db = new Database(resolvedStoreDbPath, { readonly: true, fileMustExist: true });
+    const db = new Database(storeDbPath, { readonly: true, fileMustExist: true });
 
     try {
       const allBlobs = db.prepare<[], CursorDbBlob>('SELECT rowid, id, data FROM blobs').all();
