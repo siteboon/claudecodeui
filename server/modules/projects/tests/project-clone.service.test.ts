@@ -557,3 +557,38 @@ test('startCloneProject offers the GitHub token to no host but github.com', asyn
   }
 });
 
+test('startCloneProject clones into resolvedPath returned by validatePath', async () => {
+  const gitProcess = createMockGitProcess();
+  let spawnedClonePath = '';
+  let registeredProjectPath = '';
+
+  const operation = await startCloneProject(
+    {
+      workspacePath: 'F:\\Workspaces',
+      githubUrl: 'https://github.com/example/repo.git',
+      userId: 1,
+    },
+    {
+      onProgress: () => undefined,
+      onComplete: () => undefined,
+    },
+    buildDependencies({
+      validatePath: async () => ({ valid: true, resolvedPath: '/mnt/f/Workspaces' }),
+      spawnGitClone: (_cloneUrl, clonePath) => {
+        spawnedClonePath = clonePath;
+        return gitProcess as any;
+      },
+      registerProject: async (projectPath) => {
+        registeredProjectPath = projectPath;
+        return { project: { projectId: 'project-1', path: projectPath } };
+      },
+    }),
+  );
+
+  gitProcess.emit('close', 0);
+  await operation.waitForCompletion;
+
+  assert.equal(spawnedClonePath, path.join('/mnt/f/Workspaces', 'repo'));
+  assert.equal(registeredProjectPath, path.join('/mnt/f/Workspaces', 'repo'));
+});
+

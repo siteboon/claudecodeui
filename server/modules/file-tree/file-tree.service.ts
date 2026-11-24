@@ -14,6 +14,7 @@ import {
   FORBIDDEN_WORKSPACE_PATHS,
   normalizeProjectPath,
   resolvePathUnderRoots,
+  resolveWorkspacePathForHost,
 } from '@/shared/utils.js';
 
 const HARD_EXCLUDED_DIRECTORY_NAMES = new Set([
@@ -356,19 +357,25 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
    * the project can be changed.
    */
   async function resolveReadablePath(projectRoot: string, targetPath: string): Promise<string> {
-    if (path.isAbsolute(targetPath)) {
-      const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
+    const hostResolution = resolveWorkspacePathForHost(targetPath);
+    if (hostResolution.error) {
+      throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+    }
+
+    const candidateTarget = hostResolution.path;
+    if (path.isAbsolute(candidateTarget)) {
+      const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(candidateTarget);
       if (readOnlyPath) {
         return readOnlyPath;
       }
 
-      const workspacePath = await resolvePathUnderRoots(targetPath, [dependencies.workspace.rootPath]);
+      const workspacePath = await resolvePathUnderRoots(candidateTarget, [dependencies.workspace.rootPath]);
       if (workspacePath) {
         return workspacePath;
       }
     }
 
-    return resolvePathInsideProject(projectRoot, targetPath);
+    return resolvePathInsideProject(projectRoot, candidateTarget);
   }
 
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
@@ -386,7 +393,12 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       const requestedPath = inputPath
         ? expandWorkspacePath(dependencies.workspace.rootPath, inputPath)
         : dependencies.workspace.rootPath;
-      const targetPath = path.resolve(requestedPath);
+      const hostResolution = resolveWorkspacePathForHost(requestedPath);
+      if (hostResolution.error) {
+        throw createFileTreeError(hostResolution.error, 403, 'INVALID_WORKSPACE_PATH');
+      }
+
+      const targetPath = path.resolve(hostResolution.path);
       const resolvedPath = await resolveBrowsablePath(targetPath);
 
       try {
@@ -431,7 +443,12 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async createWorkspaceFolder(folderPath) {
       const expandedPath = expandWorkspacePath(dependencies.workspace.rootPath, folderPath);
-      const resolvedInput = path.resolve(expandedPath);
+      const hostResolution = resolveWorkspacePathForHost(expandedPath);
+      if (hostResolution.error) {
+        throw createFileTreeError(hostResolution.error, 403, 'INVALID_WORKSPACE_PATH');
+      }
+
+      const resolvedInput = path.resolve(hostResolution.path);
       const validation = await dependencies.workspace.validatePath(resolvedInput);
       if (!validation.valid) {
         throw createFileTreeError(validation.error ?? 'Path is outside the workspace root', 403, 'INVALID_WORKSPACE_PATH');

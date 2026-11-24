@@ -575,3 +575,26 @@ test('a file in another folder of the workspace can be read, but never written t
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
   }
 });
+
+test('non-Windows hosts reject unmounted Windows paths instead of resolving them relative to cwd', { skip: process.platform === 'win32' }, async () => {
+  const workspaceRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-winpath-'));
+  const projectRoot = path.join(workspaceRoot, 'project');
+
+  try {
+    await fsPromises.mkdir(projectRoot, { recursive: true });
+    const service = createRealFileSystemService(projectRoot, workspaceRoot);
+
+    for (const badWindowsPath of ['Z:\\unmounted\\project', 'F:relative', '\\\\server\\share\\repo']) {
+      await assert.rejects(
+        service.browseWorkspace(badWindowsPath),
+        (error: unknown) => (error as AppError).code === 'INVALID_WORKSPACE_PATH',
+      );
+      await assert.rejects(
+        service.createWorkspaceFolder(badWindowsPath),
+        (error: unknown) => (error as AppError).code === 'INVALID_WORKSPACE_PATH',
+      );
+    }
+  } finally {
+    await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
