@@ -170,9 +170,12 @@ export type CustomProviderModelInput = {
  * `model` must always be populated. Provider adapters should use the
  * provider-specific lookup method requested by the caller, and only fall back
  * to the provider catalog `DEFAULT` value when the active model cannot be read.
+ * `isFallback` marks that case, so a session really running on the catalog
+ * default can be told apart from a lookup that found nothing.
  */
 export type ProviderCurrentActiveModel = {
   model: string;
+  isFallback?: boolean;
 };
 
 /**
