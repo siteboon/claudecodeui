@@ -200,3 +200,84 @@ test('names with dot runs are stored in a form the download route accepts', asyn
   assert.equal(download.status, 200);
   await download.arrayBuffer();
 });
+
+// Exercise the real multipart routes and filesystem for each script, including
+// display names whose safe stored form differs (normalization, spaces, joiners).
+const MULTILINGUAL_FILENAMES = [
+  ['accented Latin', 'réunion été', 'réunion_été'],
+  ['Vietnamese', 'biên bản họp', 'biên_bản_họp'],
+  ['Greek', 'σημειώσεις', 'σημειώσεις'],
+  ['Ukrainian Cyrillic', 'нотатки зустрічі', 'нотатки_зустрічі'],
+  ['Arabic', 'ملاحظات الاجتماع', 'ملاحظات_الاجتماع'],
+  ['Hebrew', 'סיכום פגישה', 'סיכום_פגישה'],
+  ['Persian with a joiner', 'گزارش\u200cسالانه', 'گزارش_سالانه'],
+  ['Hindi Devanagari', 'बैठक विवरण', 'बैठक_विवरण'],
+  ['Bengali', 'সভার নোট', 'সভার_নোট'],
+  ['Tamil', 'கூட்டக் குறிப்புகள்', 'கூட்டக்_குறிப்புகள்'],
+  ['Thai', 'บันทึกการประชุม', 'บันทึกการประชุม'],
+  ['Georgian', 'შეხვედრის ჩანაწერი', 'შეხვედრის_ჩანაწერი'],
+  ['Japanese', '打ち合わせメモ', '打ち合わせメモ'],
+  ['Korean', '회의 메모', '회의_메모'],
+  ['Chinese', '会议记录', '会议记录'],
+  ['Turkish', 'İstanbul görüşmesi', 'İstanbul_görüşmesi'],
+  ['mixed Latin and Greek', 'Éλ', 'Éλ'],
+  ['mixed scripts', 'résumé_日本語_العربية', 'résumé_日本語_العربية'],
+  ['decomposed Latin accents', 're\u0301sume\u0301', 'résumé'],
+  ['supplementary-plane emoji', 'release 🚀', 'release__'],
+] as const;
+
+// A synthetic valid 1x1 RGB PNG keeps these transport tests independent of
+// private images and of any image-generation provider.
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgSPkPAAHLAWRRDtICAAAAAElFTkSuQmCC',
+  'base64',
+);
+
+for (const [label, originalStem, storedStem] of MULTILINGUAL_FILENAMES) {
+  test(`${label} browser filenames round-trip through file and image uploads`, async () => {
+    for (const field of ['files', 'images'] as const) {
+      const extension = field === 'images' ? 'png' : 'bin';
+      const mimeType = field === 'images' ? 'image/png' : 'application/octet-stream';
+      const bytes = field === 'images' ? PNG_BYTES : Buffer.from([0, 1, 127, 128, 255]);
+      const originalName = `${originalStem}.${extension}`;
+      const record = await readSingleRecord(
+        await uploadLikeBrowser(field, originalName, bytes, mimeType),
+        field === 'images' ? 'images' : 'attachments',
+      );
+      const storedName = path.basename(record.path);
+
+      assert.equal(record.name, originalName, `${field}: original filename`);
+      assert.equal(record.size, bytes.length);
+      assert.equal(record.mimeType, mimeType);
+      assert.match(storedName, /^\d+-\d+-/);
+      assert.ok(storedName.endsWith(`-${storedStem}.${extension}`), `${field}: ${storedName}`);
+      assert.equal(path.dirname(record.path), assetsDir.replace(/\\/g, '/'));
+      assert.deepEqual(await readFile(path.join(assetsDir, storedName)), bytes);
+
+      const download = await send(`${baseUrl}/${field}/${encodeURIComponent(storedName)}`);
+      assert.equal(download.status, 200);
+      assert.equal(download.headers.get('content-type'), mimeType);
+      assert.equal(download.headers.get('x-content-type-options'), 'nosniff');
+      if (field === 'files') {
+        const disposition = download.headers.get('content-disposition');
+        const downloadName = readExtendedFilename(disposition)
+          ?? /filename="([^"]+)"/.exec(disposition ?? '')?.[1];
+        assert.equal(downloadName, storedName);
+      }
+      assert.deepEqual(Buffer.from(await download.arrayBuffer()), bytes);
+    }
+  });
+
+  test(`${label} RFC 5987 filenames are not decoded twice`, async () => {
+    const originalName = `${originalStem}.bin`;
+    const bytes = Buffer.from([255, 128, 127, 1, 0]);
+    const record = await readSingleRecord(
+      await uploadWithDisposition('files', `filename*=UTF-8''${encodeURIComponent(originalName)}`, bytes),
+      'attachments',
+    );
+
+    assert.equal(record.name, originalName);
+    assert.ok(path.basename(record.path).endsWith(`-${storedStem}.bin`));
+    assert.deepEqual(await readFile(record.path), bytes);
+  });
+}
