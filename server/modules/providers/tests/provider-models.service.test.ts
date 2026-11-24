@@ -9,14 +9,12 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
 
 const createModels = (value: string): ProviderModelsDefinition => ({
   OPTIONS: [{ value, label: value }],
   DEFAULT: value,
 });
-
-const createCurrentActiveModel = (model: string): ProviderCurrentActiveModel => ({ model });
 
 /** In-memory stand-in for the `sessions` table rows the service reads and writes. */
 const createSessionStore = (
@@ -126,7 +124,8 @@ const createTestService = (options: {
   catalog?: ReturnType<typeof createCatalogStore>;
   sessions?: ReturnType<typeof createSessionStore>;
   settings?: ReturnType<typeof createSettingsStore>;
-  activeModel?: (provider: LLMProvider, sessionId?: string) => string;
+  // Returning undefined models an adapter that found nothing for the session.
+  activeModel?: (provider: LLMProvider, sessionId?: string) => string | undefined;
   onCatalogRead?: (provider: LLMProvider) => void;
 } = {}) => {
   const catalog = options.catalog ?? createCatalogStore();
@@ -142,9 +141,10 @@ const createTestService = (options: {
           options.onCatalogRead?.(provider);
           return createModels(`${provider}-default`);
         },
-        getCurrentActiveModel: async (sessionId) => createCurrentActiveModel(
-          options.activeModel?.(provider, sessionId) ?? `${provider}-default`,
-        ),
+        getCurrentActiveModel: async (sessionId): Promise<ProviderCurrentActiveModel> => {
+          const model = options.activeModel?.(provider, sessionId);
+          return model ? { model } : buildDefaultProviderCurrentActiveModel(createModels(`${provider}-default`));
+        },
       },
     }),
   });
@@ -283,6 +283,28 @@ test('custom-models-only makes the first custom model the session fallback', asy
     await service.resolveResumeModel('claude', 'session-on-built-in', 'gateway-model'),
     'claude-default',
   );
+});
+
+test('custom-models-only keeps a provider-reported model that equals the built-in default', async () => {
+  const { service } = createTestService({
+    sessions: createSessionStore({ 'external': null, 'recorded': 'cursor-default' }),
+    activeModel: () => 'cursor-default',
+  });
+  await service.createCustomModel('cursor', { model: 'Gateway', id: 'gateway/custom' });
+  await service.setCustomModelsOnly('cursor', true);
+
+  const external = await service.resolveSessionModel('cursor', { sessionId: 'external' });
+  assert.equal(external.model, 'cursor-default');
+  assert.equal(external.source, 'provider');
+
+  const recorded = await service.resolveSessionModel('cursor', { sessionId: 'recorded' });
+  assert.equal(recorded.model, 'cursor-default');
+  assert.equal(recorded.source, 'session');
+
+  await service.setCustomModelsOnly('cursor', false);
+  const withoutCustomOnly = await service.resolveSessionModel('cursor', { sessionId: 'external' });
+  assert.equal(withoutCustomOnly.model, 'cursor-default');
+  assert.equal(withoutCustomOnly.source, 'provider');
 });
 
 test('custom models can be created, edited, and deleted', async () => {

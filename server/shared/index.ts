@@ -2,9 +2,23 @@ export { appendFilesInputTag, buildCodexInputItems, normalizeImageDescriptors } 
 export { createCompleteMessage, createNormalizedMessage } from './utils.js';
 export type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from './types.js';
 
+// Database and Providers share the persisted session-pin summary contract.
+export type { SessionPinRecord } from './types.js';
+// Providers uses these shared request payloads, validators and response helpers.
+export type { CustomProviderModelEffort, CustomProviderModelInput, LLMProvider, McpScope, McpTransport, ProviderSkillCreateFile, ProviderSkillCreateInput, UpsertProviderMcpServerInput } from './types.js';
+export { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from './utils.js';
+
+// Providers uses the shared history and runtime summary contracts through this barrel.
+export type { BackgroundTaskSummary, ClearedContextSegment, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, WorkflowAgentActivity } from './types.js';
+export { sliceTailPage } from './utils.js';
+
+// Session persistence uses canonical path normalization and fork/history metadata.
+export { normalizeProjectPath } from './utils.js';
+export type { SessionForkAncestor } from './types.js';
+
 // Providers reads native Codex rollout metadata and normalizes transcript rows.
 export { parseFilesInputTag, toImageAttachments } from './image-attachments.js';
 export { prepareTranscriptMessages } from './message-unification.js';
-export { AppError, extractFirstValidJsonlData, generateMessageId, readObjectRecord, sliceTailPage, truncateSubagentActivity } from './utils.js';
+export { extractFirstValidJsonlData, generateMessageId, readObjectRecord, truncateSubagentActivity } from './utils.js';
 export type { IProviderSessions } from './interfaces.js';
-export type { FetchHistoryOptions, FetchHistoryResult, MemoryCitation, NormalizedMessage, SubagentActivity, SubagentInfo } from './types.js';
+export type { MemoryCitation, SubagentActivity, SubagentInfo } from './types.js';

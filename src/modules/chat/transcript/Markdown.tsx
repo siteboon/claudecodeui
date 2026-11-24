@@ -1,5 +1,6 @@
 import React, { memo, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import type { Nodes, Root } from 'mdast';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -91,6 +92,23 @@ const childrenToText = (children: React.ReactNode): string => {
 const MATH_DELIMITER = /\$\$/;
 
 const EMPTY_PLUGINS: never[] = [];
+
+// Only parser-recognized, attribute-free HTML breaks inside table cells are safe
+// to promote. Text, escaped tags and code nodes keep react-markdown's defaults.
+const remarkTableBreaks = () => (tree: Root) => {
+  const visit = (node: Nodes, inTableCell = false) => {
+    if (!('children' in node)) return;
+    const insideCell = inTableCell || node.type === 'tableCell';
+    node.children.forEach((child, index) => {
+      if (insideCell && child.type === 'html' && /^<br\s*\/?>$/i.test(child.value)) {
+        node.children[index] = { type: 'break' };
+      } else {
+        visit(child, insideCell);
+      }
+    });
+  };
+  visit(tree);
+};
 
 type CodeBlockProps = {
   node?: any;
@@ -223,6 +241,12 @@ if (!document.getElementById(SYNTAX_THEME_STYLE_ELEMENT_ID)) {
   document.head.appendChild(styleElement);
 }
 
+type MarkdownTableCellProps = {
+  children?: React.ReactNode;
+  align?: 'left' | 'center' | 'right';
+  style?: React.CSSProperties;
+};
+
 const markdownComponents = {
   code: CodeBlock,
   // Workspace image paths are fetched through the authenticated files route;
@@ -254,20 +278,20 @@ const markdownComponents = {
   ),
   li: ({ children }: { children?: React.ReactNode }) => <li className="[&>div:last-child]:mb-0 [&>div]:mb-1">{children}</li>,
   table: ({ children }: { children?: React.ReactNode }) => (
-    <div className="my-3 overflow-x-auto rounded-lg border border-border">
-      {/* my-0 cancels Tailwind Typography's table margin, which would show as blank bands inside the border */}
-      <table className="my-0 min-w-full border-collapse text-sm">{children}</table>
+    <div className="my-3 min-w-0 max-w-full overflow-x-auto rounded-lg border border-border">
+      {/* Keep content-based column sizing; readable cell minimums overflow only this wrapper. */}
+      <table className="my-0 w-full table-auto border-collapse text-sm [&_code]:[overflow-wrap:anywhere]">{children}</table>
     </div>
   ),
   thead: ({ children }: { children?: React.ReactNode }) => <thead className="bg-muted/60">{children}</thead>,
   tr: ({ children }: { children?: React.ReactNode }) => (
     <tr className="[&:last-child>td]:border-b-0">{children}</tr>
   ),
-  th: ({ children }: { children?: React.ReactNode }) => (
-    <th className="border-b border-border px-3 py-2 text-left font-semibold text-foreground">{children}</th>
+  th: ({ children, align, style }: MarkdownTableCellProps) => (
+    <th style={{ ...style, textAlign: align || style?.textAlign }} className="min-w-32 border-b border-border px-3 py-2 text-left font-semibold text-foreground [overflow-wrap:anywhere]">{children}</th>
   ),
-  td: ({ children }: { children?: React.ReactNode }) => (
-    <td className="border-b border-border/60 px-3 py-2 align-top">{children}</td>
+  td: ({ children, align, style }: MarkdownTableCellProps) => (
+    <td style={{ ...style, textAlign: align || style?.textAlign }} className="min-w-32 border-b border-border/60 px-3 py-2 align-top [overflow-wrap:anywhere]">{children}</td>
   ),
 };
 
@@ -289,7 +313,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
   const hasMath = useMemo(() => MATH_DELIMITER.test(content), [content]);
   const remarkPlugins = useMemo(
     () => {
-      const plugins: unknown[] = [remarkGfm];
+      const plugins: unknown[] = [remarkGfm, remarkTableBreaks];
       if (hasMath) {
         plugins.push([remarkMath, { singleDollarTextMath: false }]);
       }

@@ -304,13 +304,13 @@ export default function ChatComposer({
   return (
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
       {!hasPendingPermissions && (
-        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] max-w-[54.25rem] -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
+        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] chat-content-width -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
           <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
         </div>
       )}
 
       {pendingPermissionRequests.length > 0 && (
-        <div className="mx-auto mb-3 max-w-[54.25rem]">
+        <div className="mx-auto mb-3 chat-content-width">
           <PermissionRequestsBanner
             pendingPermissionRequests={pendingPermissionRequests}
             providerLabel={providerLabel}
@@ -326,7 +326,7 @@ export default function ChatComposer({
       />
 
       {isEditingSentMessage && (
-        <div className="mx-auto mb-2 flex max-w-[54.25rem] items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+        <div className="mx-auto mb-2 flex chat-content-width items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
           <PencilIcon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
           <span className="min-w-0 flex-1">
             {t('composer.editing.title')}
@@ -368,12 +368,12 @@ export default function ChatComposer({
       {/* The question panel replaces the input, but how to answer often depends on
           how much context is left, so the token usage stays reachable below it. */}
       {hasQuestionPanel && (
-        <div className="mx-auto flex max-w-[54.25rem] justify-end">
+        <div className="mx-auto flex chat-content-width justify-end">
           <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
         </div>
       )}
 
-      {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
+      {!hasQuestionPanel && <div className="relative mx-auto chat-content-width">
         {showFileDropdown && filteredFiles.length > 0 && (
           <div
             ref={fileDropdownRef}
