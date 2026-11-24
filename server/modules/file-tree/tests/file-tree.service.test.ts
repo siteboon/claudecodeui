@@ -598,3 +598,40 @@ test('non-Windows hosts reject unmounted Windows paths instead of resolving them
     await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
   }
 });
+
+test('readTextFile and openFile preserve whitespace in native file names', async () => {
+  const workspaceRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-whitespace-'));
+  const projectRoot = path.join(workspaceRoot, 'project');
+
+  try {
+    await fsPromises.mkdir(projectRoot, { recursive: true });
+    const service = createRealFileSystemService(projectRoot, workspaceRoot);
+
+    await fsPromises.writeFile(path.join(projectRoot, 'notes.txt'), 'plain', 'utf8');
+    await fsPromises.writeFile(path.join(projectRoot, ' notes.txt'), 'leading space', 'utf8');
+
+    const leadingRead = await service.readTextFile('project-1', ' notes.txt');
+    assert.equal(leadingRead.content, 'leading space');
+    const leadingStream = await service.openFile('project-1', ' notes.txt');
+    leadingStream.stream.destroy();
+
+    await service.saveTextFile('project-1', ' notes.txt', 'updated leading');
+    assert.equal((await service.readTextFile('project-1', ' notes.txt')).content, 'updated leading');
+    assert.equal((await service.readTextFile('project-1', 'notes.txt')).content, 'plain');
+
+    if (process.platform !== 'win32') {
+      await fsPromises.writeFile(path.join(projectRoot, 'notes.txt '), 'trailing space', 'utf8');
+      assert.equal((await service.readTextFile('project-1', 'notes.txt ')).content, 'trailing space');
+      assert.equal((await service.readTextFile('project-1', path.join(projectRoot, 'notes.txt '))).content, 'trailing space');
+      const trailingStream = await service.openFile('project-1', 'notes.txt ');
+      trailingStream.stream.destroy();
+
+      await assert.rejects(
+        service.readTextFile('project-1', 'Z:\\unmounted\\secret.txt'),
+        (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+      );
+    }
+  } finally {
+    await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});

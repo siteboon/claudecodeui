@@ -12,6 +12,7 @@ import type {
 import {
   AppError,
   FORBIDDEN_WORKSPACE_PATHS,
+  isWindowsStylePath,
   normalizeProjectPath,
   resolvePathUnderRoots,
   resolveWorkspacePathForHost,
@@ -357,12 +358,15 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
    * the project can be changed.
    */
   async function resolveReadablePath(projectRoot: string, targetPath: string): Promise<string> {
-    const hostResolution = resolveWorkspacePathForHost(targetPath);
-    if (hostResolution.error) {
-      throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+    let candidateTarget = targetPath;
+    if (isWindowsStylePath(targetPath)) {
+      const hostResolution = resolveWorkspacePathForHost(targetPath);
+      if (hostResolution.error) {
+        throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+      }
+      candidateTarget = hostResolution.path;
     }
 
-    const candidateTarget = hostResolution.path;
     if (path.isAbsolute(candidateTarget)) {
       const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(candidateTarget);
       if (readOnlyPath) {
