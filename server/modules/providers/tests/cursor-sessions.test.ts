@@ -12,6 +12,7 @@ import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/datab
 import { spawnCursor } from '@/modules/providers/list/cursor/cursor-runtime.provider.js';
 import { CursorSessionSynchronizer } from '@/modules/providers/list/cursor/cursor-session-synchronizer.provider.js';
 import { CursorSessionsProvider } from '@/modules/providers/list/cursor/cursor-sessions.provider.js';
+import { deleteSessionJsonlFilesForProjectPath } from '@/modules/projects/index.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { prependCursorContinuedChatTag, toCursorProjectSlug } from '@/shared/utils.js';
 
@@ -235,15 +236,20 @@ test('Cursor synchronizer keeps transcript rows when a chats directory is unread
     const workspaceDir = path.dirname(chatDir);
     await chmod(workspaceDir, 0o000);
     try {
-      await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+      await withCursorUserDirectoryUnderHome(() => withIsolatedDatabase(async () => {
         sessionsDb.createSession('ide-chat-kept', 'cursor', workspacePath, 'IDE chat', undefined, undefined, ideTranscript);
 
         await new CursorSessionSynchronizer().synchronize();
 
         // The scan couldn't see every chat, so cleanup must not run, and the
-        // CLI chat's transcript must not be taken for an IDE chat.
+        // CLI chat's transcript must not be taken for an IDE chat, neither by
+        // the scan nor when the watcher reports the transcript.
         assert.equal(sessionsDb.getSessionById('ide-chat-kept')?.jsonl_path, ideTranscript);
         assert.equal(sessionsDb.getSessionById('cli-chat-hidden'), null);
+        const cliTranscript = path.join(
+          homeDir, '.cursor', 'projects', toCursorProjectSlug(workspacePath), 'agent-transcripts', 'cli-chat-hidden', 'cli-chat-hidden.jsonl'
+        );
+        assert.equal(await new CursorSessionSynchronizer().synchronizeFile(cliTranscript), null);
       }));
     } finally {
       await chmod(workspaceDir, 0o755);
@@ -328,9 +334,14 @@ test('Cursor runtime resumes a session that has a CLI chat store', { concurrency
 
 // Where the IDE keeps `workspaceStorage`, mirroring the synchronizer's lookup
 // under the patched home directory.
+// Where the Cursor IDE keeps `workspaceStorage` under a temp home, once
+// `withCursorUserDirectoryUnderHome` has cleared the variables that move it.
 function cursorWorkspaceStorageDir(homeDir: string): string {
   if (process.platform === 'darwin') {
     return path.join(homeDir, 'Library', 'Application Support', 'Cursor', 'User', 'workspaceStorage');
+  }
+  if (process.platform === 'win32') {
+    return path.join(homeDir, 'AppData', 'Roaming', 'Cursor', 'User', 'workspaceStorage');
   }
   return path.join(homeDir, '.config', 'Cursor', 'User', 'workspaceStorage');
 }
@@ -360,16 +371,19 @@ async function writeIdeTranscript(homeDir: string, workspacePath: string, sessio
   return transcriptPath;
 }
 
-// Runs a test with XDG_CONFIG_HOME unset, so Linux resolves the IDE's data
-// directory under the patched home directory.
-async function withoutXdgConfigHome(runTest: () => Promise<void>): Promise<void> {
-  const previous = process.env.XDG_CONFIG_HOME;
+// Runs a test with XDG_CONFIG_HOME (Linux) and APPDATA (Windows) unset, so the
+// IDE's data directory resolves under the patched home directory.
+async function withCursorUserDirectoryUnderHome(runTest: () => Promise<void>): Promise<void> {
+  const previous = { XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME, APPDATA: process.env.APPDATA };
   delete process.env.XDG_CONFIG_HOME;
+  delete process.env.APPDATA;
   try {
     await runTest();
   } finally {
-    if (previous !== undefined) {
-      process.env.XDG_CONFIG_HOME = previous;
+    for (const [name, value] of Object.entries(previous)) {
+      if (value !== undefined) {
+        process.env[name] = value;
+      }
     }
   }
 }
@@ -379,7 +393,7 @@ test('Cursor synchronizer lists IDE chats read-only under the folder the IDE ope
     await writeIdeWorkspace(homeDir, 'storage-1', workspacePath);
     const transcriptPath = await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-1', 'Refactor the VPC stack');
 
-    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+    await withCursorUserDirectoryUnderHome(() => withIsolatedDatabase(async () => {
       const processed = await new CursorSessionSynchronizer().synchronize();
 
       assert.equal(processed, 1);
@@ -414,7 +428,7 @@ test('Cursor synchronizer skips IDE transcripts it cannot place or that belong t
     // A folder that is not named like a Cursor chat id.
     await writeIdeTranscript(homeDir, workspacePath, 'odd id!', 'Not a chat');
 
-    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+    await withCursorUserDirectoryUnderHome(() => withIsolatedDatabase(async () => {
       await new CursorSessionSynchronizer().synchronize();
 
       assert.equal(sessionsDb.getSessionById('ambiguous-chat'), null);
@@ -426,6 +440,32 @@ test('Cursor synchronizer skips IDE transcripts it cannot place or that belong t
   });
 });
 
+test('Cursor synchronizer places no IDE chat while a workspace.json is unreadable', { concurrency: false, skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+  await withCursorHome('cursor-ide-unreadable-storage-', async (homeDir) => {
+    // Both folders encode to one slug, but only one workspace.json can be read:
+    // the readable one must not be taken as the slug's only folder.
+    const dashed = path.join(homeDir, 'my-app');
+    const underscored = path.join(homeDir, 'my_app');
+    await mkdir(dashed);
+    await mkdir(underscored);
+    await writeIdeWorkspace(homeDir, 'storage-dashed', dashed);
+    await writeIdeWorkspace(homeDir, 'storage-underscored', underscored);
+    await writeIdeTranscript(homeDir, dashed, 'unplaceable-chat', 'Which folder?');
+    const unreadable = path.join(cursorWorkspaceStorageDir(homeDir), 'storage-underscored', 'workspace.json');
+    await chmod(unreadable, 0o000);
+
+    try {
+      await withCursorUserDirectoryUnderHome(() => withIsolatedDatabase(async () => {
+        await new CursorSessionSynchronizer().synchronize();
+
+        assert.equal(sessionsDb.getSessionById('unplaceable-chat'), null);
+      }));
+    } finally {
+      await chmod(unreadable, 0o644);
+    }
+  });
+});
+
 test('Cursor synchronizer indexes an IDE chat from its watched transcript', { concurrency: false }, async () => {
   await withCursorHome('cursor-ide-watch-', async (homeDir, workspacePath) => {
     await writeIdeWorkspace(homeDir, 'storage-1', workspacePath);
@@ -434,7 +474,7 @@ test('Cursor synchronizer indexes an IDE chat from its watched transcript', { co
     await mkdir(path.dirname(subagentPath), { recursive: true });
     await writeFile(subagentPath, '{}\n', 'utf8');
 
-    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+    await withCursorUserDirectoryUnderHome(() => withIsolatedDatabase(async () => {
       const synchronizer = new CursorSessionSynchronizer();
 
       assert.equal(await synchronizer.synchronizeFile(subagentPath), null);
@@ -446,7 +486,9 @@ test('Cursor synchronizer indexes an IDE chat from its watched transcript', { co
 
 test('Cursor history for an IDE chat is read from its transcript', { concurrency: false }, async () => {
   await withCursorHome('cursor-ide-history-', async (homeDir, workspacePath) => {
-    await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-history', 'Show the history');
+    const transcriptPath = await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-history', 'Show the history');
+    // A line that is valid JSON but not an entry must not hide the others.
+    await writeFile(transcriptPath, 'null\n', { encoding: 'utf8', flag: 'a' });
 
     const history = await new CursorSessionsProvider().fetchHistory('ide-chat-history', { projectPath: workspacePath });
 
@@ -482,7 +524,7 @@ test('Continuing a read-only session starts a linked chat that points at its tra
     await writeIdeWorkspace(homeDir, 'storage-1', workspacePath);
     const transcriptPath = await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-continue', 'Original question');
 
-    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+    await withCursorUserDirectoryUnderHome(() => withIsolatedDatabase(async () => {
       await new CursorSessionSynchronizer().synchronize();
 
       const continued = await sessionsService.continueReadOnlySession('ide-chat-continue');
@@ -513,13 +555,17 @@ test('A read-only session is archived instead of deleted, and its transcript is 
     await writeIdeWorkspace(homeDir, 'storage-1', workspacePath);
     const transcriptPath = await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-delete', 'Keep my transcript');
 
-    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+    await withCursorUserDirectoryUnderHome(() => withIsolatedDatabase(async () => {
       await new CursorSessionSynchronizer().synchronize();
 
       const result = await sessionsService.deleteOrArchiveSessionById('ide-chat-delete', { force: true, deletedFromDisk: true });
 
       assert.deepEqual(result, { sessionId: 'ide-chat-delete', action: 'archived', deletedFromDisk: false });
       assert.equal(sessionsDb.getSessionById('ide-chat-delete')?.isArchived, 1);
+      assert.equal((await readFile(transcriptPath, 'utf8')).length > 0, true);
+
+      // Deleting the whole project removes its transcripts, but not the IDE's.
+      await deleteSessionJsonlFilesForProjectPath(workspacePath);
       assert.equal((await readFile(transcriptPath, 'utf8')).length > 0, true);
     }));
   });
@@ -530,7 +576,7 @@ test('A read-only session whose transcript is gone cannot be continued', { concu
     await writeIdeWorkspace(homeDir, 'storage-1', workspacePath);
     const transcriptPath = await writeIdeTranscript(homeDir, workspacePath, 'ide-chat-gone', 'Soon deleted');
 
-    await withoutXdgConfigHome(() => withIsolatedDatabase(async () => {
+    await withCursorUserDirectoryUnderHome(() => withIsolatedDatabase(async () => {
       await new CursorSessionSynchronizer().synchronize();
       await rm(transcriptPath);
 

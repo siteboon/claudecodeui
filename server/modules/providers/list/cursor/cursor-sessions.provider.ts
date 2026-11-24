@@ -387,7 +387,12 @@ export class CursorSessionsProvider implements IProviderSessions {
         continue;
       }
 
-      if ((entry.role !== 'user' && entry.role !== 'assistant') || !Array.isArray(entry.message?.content)) {
+      if (
+        !entry
+        || typeof entry !== 'object'
+        || (entry.role !== 'user' && entry.role !== 'assistant')
+        || !Array.isArray(entry.message?.content)
+      ) {
         continue;
       }
 

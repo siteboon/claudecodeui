@@ -300,8 +300,12 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
         if ((await fsp.stat(path.join(chatsRoot, workspaceEntry.name, sessionId))).isDirectory()) {
           return true;
         }
-      } catch {
-        // Not in this workspace.
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+          // Can't tell whether this workspace holds the chat.
+          return true;
+        }
       }
     }
 
@@ -316,7 +320,9 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
    * cannot be placed. Multi-root (`.code-workspace`) and remote windows are
    * left out: they have no single local folder to list the chats under.
    *
-   * Returns `null` when `workspaceStorage` exists but can't be read; that
+   * Returns `null` when `workspaceStorage` or one of its `workspace.json`
+   * files exists but can't be read: an unseen folder could share a slug with
+   * one that was read, so no chat is placed from an incomplete list. That
    * result is not cached.
    */
   private async readIdeWorkspaceFolders(refresh: boolean): Promise<Map<string, string | null> | null> {
@@ -337,14 +343,29 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
         continue;
       }
 
+      const workspaceJsonPath = path.join(storageDir, entry.name, 'workspace.json');
+      let rawWorkspace: string;
+      try {
+        rawWorkspace = await fsp.readFile(workspaceJsonPath, 'utf8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          // A window with no folder open has no workspace.json.
+          continue;
+        }
+        console.error('Failed to read Cursor workspace.json', { workspaceJsonPath });
+        return null;
+      }
+
       let folderPath: string;
       try {
-        const workspace = JSON.parse(await fsp.readFile(path.join(storageDir, entry.name, 'workspace.json'), 'utf8'));
+        const workspace = JSON.parse(rawWorkspace);
         if (typeof workspace?.folder !== 'string' || !workspace.folder.startsWith('file:')) {
+          // A multi-root or remote window: there is no single local folder.
           continue;
         }
         folderPath = fileURLToPath(workspace.folder);
       } catch {
+        // Malformed: the IDE rewrites it in full, so treat it as unsupported.
         continue;
       }
 
