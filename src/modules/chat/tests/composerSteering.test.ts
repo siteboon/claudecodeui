@@ -209,12 +209,43 @@ test('a message the agent read before the run ended is not restored', async () =
   assert.equal(view.result.current.input, '');
 });
 
-test('Enter during a turn still queues, as before', async () => {
+test('Enter during a turn steers by default', async () => {
   const { view, sent } = render();
   await submit(view, 'after this');
 
+  const frames = steerFrames(sent);
+  assert.equal(frames.length, 1, 'Enter goes into the running turn');
+  assert.equal(frames[0].content, 'after this');
+  assert.equal(queued.size, 0, 'nothing is queued');
+});
+
+test('Queue chosen from the send menu still queues instead of steering', async () => {
+  const { view, sent } = render();
+  await act(async () => { view.result.current.setInput('after this'); });
+  await act(async () => {
+    await view.result.current.handleSendMenuChoice('queue');
+  });
+
   assert.equal(steerFrames(sent).length, 0);
   assert.equal(queued.get('session-1')?.content, 'after this');
+});
+
+test('Enter carries an attachment into the running turn too', async () => {
+  const { view, sent } = render();
+  await act(async () => {
+    view.result.current.setInput('see attached');
+    view.result.current.setAttachedFiles([new File(['x'], 'notes.txt', { type: 'text/plain' })]);
+  });
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+
+  const frames = steerFrames(sent);
+  assert.equal(frames.length, 1);
+  assert.deepEqual((frames[0].options as Record<string, unknown>).attachments, [
+    { name: 'notes.txt', path: '/uploads/notes.txt' },
+  ]);
+  assert.equal(queued.size, 0);
 });
 
 test('a provider that cannot steer queues even when Steer is asked for', async () => {

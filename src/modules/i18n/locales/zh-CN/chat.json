@@ -138,6 +138,7 @@
       "ctrlEnter": "Ctrl+Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令",
       "enter": "Enter 发送 • Shift+Enter 换行 • Tab 切换模式 • / 斜杠命令",
       "queue": "Enter 排队发送下一条消息",
+      "steer": "Enter 引导当前运行中的回合",
       "appendQueued": "Enter 添加到排队消息"
     },
     "clickToChangeMode": "点击更改权限模式（或在输入框中按 Tab）",

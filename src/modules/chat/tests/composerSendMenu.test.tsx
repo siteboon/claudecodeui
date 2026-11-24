@@ -52,7 +52,7 @@ const open = () => {
 const items = (menu: HTMLElement) => Array.from(menu.querySelectorAll<HTMLElement>('[role^="menuitem"]'));
 const labelOf = (item: HTMLElement) => {
   const text = item.textContent ?? '';
-  for (const label of ['Queue', 'Side question', 'Stop', 'Send anyway']) {
+  for (const label of ['Queue', 'Steer', 'Side question', 'Stop', 'Send anyway']) {
     if (text.startsWith(label)) return label;
   }
   return text;
@@ -239,27 +239,42 @@ test('without the supportsSideQuestions prop, the menu has no side-question row'
 });
 
 // The hint names the key that actually performs the row's action in that
-// state: Enter queues or stops while a turn runs, but during background
-// work Enter only opens a confirm dialog, so Queue and Send anyway get none.
+// state: Enter steers while a turn runs (or queues, for a provider that cannot
+// steer), but during background work Enter only opens a confirm dialog, so
+// Queue and Send anyway get none.
 const hintOf = (row: HTMLElement) => row.querySelector('kbd')?.textContent ?? null;
 const hintClass = (row: HTMLElement) => row.querySelector('kbd')?.className ?? '';
 
-test('while a turn is written, Queue hints Enter and Stop hints esc', () => {
-  renderMenu('responding', true);
-  const menu = open();
-
-  assert.equal(hintOf(item(menu, 'Queue')), '↵');
-  assert.equal(hintOf(item(menu, 'Stop')), 'esc');
-});
-
-test('with "send with Ctrl+Enter" on, Queue hints the Ctrl/⌘ form instead', () => {
+test('while a turn is written, Steer hints Enter and Stop hints esc', () => {
   const onSelect = vi.fn<(choice: SendMenuChoice) => void>();
   render(
-    <ComposerSendMenu state="responding" hasInput supportsSideQuestions sendByCtrlEnter onSelect={onSelect} />,
+    <ComposerSendMenu state="responding" hasInput supportsSideQuestions supportsSteering onSelect={onSelect} />,
   );
   const menu = open();
 
-  assert.match(hintOf(item(menu, 'Queue')) ?? '', /^(Ctrl\+↵|⌘↵)$/);
+  assert.equal(hintOf(item(menu, 'Steer')), '↵');
+  assert.equal(hintOf(item(menu, 'Queue')), null);
+  assert.equal(hintOf(item(menu, 'Stop')), 'esc');
+});
+
+test('a provider that cannot steer puts Enter back on Queue', () => {
+  const onSelect = vi.fn<(choice: SendMenuChoice) => void>();
+  render(
+    <ComposerSendMenu state="responding" hasInput supportsSideQuestions onSelect={onSelect} />,
+  );
+  const menu = open();
+
+  assert.equal(hintOf(item(menu, 'Queue')), '↵');
+});
+
+test('with "send with Ctrl+Enter" on, Steer hints the Ctrl/⌘ form instead', () => {
+  const onSelect = vi.fn<(choice: SendMenuChoice) => void>();
+  render(
+    <ComposerSendMenu state="responding" hasInput supportsSideQuestions supportsSteering sendByCtrlEnter onSelect={onSelect} />,
+  );
+  const menu = open();
+
+  assert.match(hintOf(item(menu, 'Steer')) ?? '', /^(Ctrl\+↵|⌘↵)$/);
 });
 
 test('while only background work runs, Queue and Send anyway carry no key hint', () => {
@@ -273,10 +288,13 @@ test('while only background work runs, Queue and Send anyway carry no key hint',
 });
 
 test('every hint, wherever it appears, gates on hover and a fine pointer', () => {
-  renderMenu('responding', true);
+  const onSelect = vi.fn<(choice: SendMenuChoice) => void>();
+  render(
+    <ComposerSendMenu state="responding" hasInput supportsSideQuestions supportsSteering onSelect={onSelect} />,
+  );
   const menu = open();
 
-  for (const label of ['Queue', 'Side question', 'Stop']) {
+  for (const label of ['Steer', 'Side question', 'Stop']) {
     const hint = hintClass(item(menu, label));
     assert.ok(hint.includes('[@media(hover:hover)_and_(pointer:fine)]:inline-block'), `${label}'s hint carries the gate, got: ${hint}`);
   }

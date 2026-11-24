@@ -289,10 +289,20 @@ export default function ChatComposer({
   const hasQueuedDraft = Boolean(queuedDraft);
   const hasAnyInput = Boolean(input.trim() || attachedFiles.length > 0);
   const canQueueDraft = isLoading && hasAnyInput;
+  // Enter steers while a turn is written (the default for a provider that can
+  // take it); a slash command still queues, since it is a turn of its own, so
+  // the hint names whichever one Enter will actually do.
+  const enterSteers = Boolean(
+    canQueueDraft
+    && supportsSteering
+    && !input.trimStart().startsWith('/'),
+  );
   const submitHint = canQueueDraft
     ? hasQueuedDraft
       ? t('input.hintText.appendQueued', { defaultValue: 'Enter to add to the queued message' })
-      : t('input.hintText.queue', { defaultValue: 'Enter to queue your next message' })
+      : enterSteers
+        ? t('input.hintText.steer', { defaultValue: 'Enter to steer the running turn' })
+        : t('input.hintText.queue', { defaultValue: 'Enter to queue your next message' })
     : sendByCtrlEnter
       ? t('input.hintText.ctrlEnter')
       : t('input.hintText.enter');

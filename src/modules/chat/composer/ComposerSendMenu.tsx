@@ -80,12 +80,13 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
   const queueDescription = state === 'responding'
     ? t('sendMenu.queue.descriptionResponding', { defaultValue: 'Send when this turn ends' })
     : t('sendMenu.queue.descriptionBackground', { defaultValue: 'Send when the background work ends' });
-  // Enter only queues while a turn is written; during background work it
-  // opens the "send anyway?" confirm dialog instead, so Queue gets no hint
-  // there, matching that row's own description above.
-  const queueShortcut = state === 'responding'
-    ? (sendByCtrlEnter ? (isApplePlatform ? '⌘↵' : 'Ctrl+↵') : '↵')
-    : null;
+  // Enter steers into the running turn, the default while a turn is written;
+  // Queue is the explicit opt-out, so the hint sits on whichever row Enter
+  // takes (Queue when the provider cannot steer). Background work has no key
+  // for either: Enter opens the "send anyway?" confirm dialog instead.
+  const enterHint = sendByCtrlEnter ? (isApplePlatform ? '⌘↵' : 'Ctrl+↵') : '↵';
+  const steerShortcut = state === 'responding' && supportsSteering ? enterHint : null;
+  const queueShortcut = state === 'responding' && !supportsSteering ? enterHint : null;
   // Esc stops a running turn; background work has no key for Send anyway,
   // so the last row's hint follows the same gate as Queue's.
   const lastShortcut = state === 'responding' ? 'esc' : null;
@@ -123,14 +124,16 @@ export default function ComposerSendMenu({ state, hasInput, hasText = hasInput, 
           />
           {state === 'responding' && supportsSteering && (
             // Right under Queue: both send the message to this session, and
-            // differ only in when it is read. The first row stays Queue, so a
-            // tap that lands early still does the safe thing.
+            // differ only in when it is read. Enter takes this row (see the
+            // hint), so steering is the default; Queue stays first as the
+            // explicit opt-out a tap that lands early reaches instead.
             <ComposerMenuItem
               disabled={!hasInput}
               isSelected={false}
               role="menuitem"
               label={t('sendMenu.steer.label', { defaultValue: 'Steer' })}
               description={t('sendMenu.steer.description', { defaultValue: 'Send into this turn; read at the next tool call' })}
+              trailing={steerShortcut ? <ShortcutHint>{steerShortcut}</ShortcutHint> : undefined}
               onSelect={() => select('steer')}
             />
           )}

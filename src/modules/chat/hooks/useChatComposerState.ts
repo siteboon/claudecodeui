@@ -1180,12 +1180,14 @@ export function useChatComposerState({
         }
 
         // Steering sends the message into the running turn instead of after
-        // it, when the send menu asked for that and the provider can take it.
-        // A slash command is a turn of its own, so it always waits in the queue.
-        const steersIntoTurn = submitOptions?.steerIntoTurn === true
-          && supportsSteering
+        // it, and is the default for this app's Claude sessions. Choosing
+        // Queue in the send menu still queues; a slash command always queues,
+        // since it is a turn of its own.
+        const steersIntoTurn = supportsSteering
           && Boolean(sessionKey)
-          && !currentInput.trimStart().startsWith('/');
+          && !currentInput.trimStart().startsWith('/')
+          && (submitOptions?.steerIntoTurn === true
+            || submitOptions?.presetBackgroundChoice !== 'queue');
         const queuedOptions = buildSendOptions(currentInput);
         const queuedSessionKey = sessionKey;
         let uploadedAttachments: unknown[] = [];
