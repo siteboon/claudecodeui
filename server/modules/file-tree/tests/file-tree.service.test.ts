@@ -568,6 +568,32 @@ test('an extra workspace root permits previews without granting writes or link e
   }
 });
 
+test('a drive or filesystem root in workspace rootPaths permits previews without granting writes', async () => {
+  const fixtureRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-drive-root-'));
+  const primaryRoot = path.join(fixtureRoot, 'primary');
+  const extraRoot = path.join(fixtureRoot, 'extra');
+  const projectRoot = path.join(primaryRoot, 'project');
+  const reportPath = path.join(extraRoot, 'report.md');
+  const filesystemRoot = path.parse(fixtureRoot).root;
+
+  try {
+    await Promise.all([projectRoot, extraRoot]
+      .map((directory) => fsPromises.mkdir(directory, { recursive: true })));
+    await fsPromises.writeFile(reportPath, 'drive root report', 'utf8');
+    const service = createRealFileSystemService(projectRoot, primaryRoot, [primaryRoot, filesystemRoot]);
+
+    assert.equal((await service.readTextFile('project-1', reportPath)).content, 'drive root report');
+    const opened = await service.openFile('project-1', reportPath);
+    opened.stream.destroy();
+    await assert.rejects(service.saveTextFile('project-1', reportPath, 'overwritten'),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT');
+    await assert.rejects(service.deleteEntry({ projectId: 'project-1', targetPath: reportPath }),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT');
+  } finally {
+    await fsPromises.rm(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
 test('a file in another folder of the workspace can be read, but never written to', async () => {
   // Both sit beside this file, outside every read-only root, for the reason
   // given in the symlink test above.

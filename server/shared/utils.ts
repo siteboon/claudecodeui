@@ -198,7 +198,7 @@ export function errorMessage(error: unknown): string {
 /**
  * Default directory used by File Tree and `~` expansion, preserving single-root behavior.
  * Project paths may also live under additional roots configured via `WORKSPACES_EXTRA_ROOTS`.
- * Consumed by `file-tree` and `projects` modules.
+ * Consumed by `file-tree` (default browsing root and `~` expansion) and `WORKSPACE_ROOTS`.
  */
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
@@ -212,7 +212,8 @@ function isAbsoluteWorkspaceRoot(root: string): boolean {
 
 /**
  * Combined list of allowed workspace roots (`WORKSPACES_ROOT` plus valid `WORKSPACES_EXTRA_ROOTS` entries).
- * Consumed by `projects` for path validation and by `file-tree` for cross-root read-only previews.
+ * Consumed by `validateWorkspacePath` (shared validation for `projects` and `file-tree`) and by
+ * `file-tree` for cross-root read-only previews.
  */
 export const WORKSPACE_ROOTS = [...new Set([
   WORKSPACES_ROOT,
@@ -227,6 +228,7 @@ export const WORKSPACE_ROOTS = [...new Set([
  *
  * The validation helper blocks these values directly and also blocks paths
  * nested under them (with explicit allow-list exceptions where necessary).
+ * Consumed by `file-tree` (tree recursion guard) and `validateWorkspacePath`.
  */
 export const FORBIDDEN_WORKSPACE_PATHS = [
   // Unix
@@ -285,9 +287,23 @@ const READ_ONLY_ROOTS = [...new Set([
   path.join(os.homedir(), '.claude', 'projects'),
 ])];
 
+function isWithinWorkspaceRoot(targetPath: string, root: string): boolean {
+  // `path.relative` handles platform case/drive rules and avoids prefix collisions such as `projects-other` matching `projects`,
+  // as well as double-separator mismatches on drive roots (`D:\`) and UNC share roots (`\\server\share\`).
+  const relativePath = path.relative(root, targetPath);
+  return relativePath === '' || (
+    !path.isAbsolute(relativePath)
+    && relativePath !== '..'
+    && !relativePath.startsWith(`..${path.sep}`)
+  );
+}
+
 /**
  * Resolves `targetPath` when it lives under one of `roots`, or `null` when it
  * does not.
+ *
+ * Consumed by `file-tree` (workspace-root preview resolution) and
+ * `resolveReadOnlyRootPath`.
  *
  * Symlinks are resolved before the comparison, so a link planted under a root
  * cannot be used to read somewhere else through it. Each root is resolved on
@@ -316,7 +332,7 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
       continue;
     }
 
-    if (resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+    if (isWithinWorkspaceRoot(resolvedPath, resolvedRoot)) {
       return resolvedPath;
     }
   }
@@ -327,6 +343,7 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
 /**
  * Resolves a path that is readable because it lives under a read-only root,
  * or `null` when it does not.
+ * Consumed by `file-tree` for read-only transcript and log previews.
  */
 export function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
   return resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
@@ -390,31 +407,67 @@ export function normalizeProjectPath(inputPath: string): string {
   return normalized.replace(/[\\/]+$/, '');
 }
 
-function isWithinWorkspaceRoot(targetPath: string, root: string): boolean {
-  // `path.relative` handles platform case/drive rules and avoids prefix collisions such as `projects-other` matching `projects`.
-  const relativePath = path.relative(root, targetPath);
-  return relativePath === '' || (
-    !path.isAbsolute(relativePath)
-    && relativePath !== '..'
-    && !relativePath.startsWith(`..${path.sep}`)
-  );
+type ForbiddenWorkspaceRule = {
+  label: string;
+  candidatePaths: string[];
+  allowedSubpaths: string[];
+};
+
+async function expandPolicyPathVariants(policyPath: string): Promise<string[]> {
+  const normalizedPolicyPath = normalizeProjectPath(policyPath);
+  if (!normalizedPolicyPath) {
+    return [];
+  }
+
+  try {
+    const canonicalPolicyPath = normalizeProjectPath(await realpath(normalizedPolicyPath));
+    return canonicalPolicyPath && canonicalPolicyPath !== normalizedPolicyPath
+      ? [normalizedPolicyPath, canonicalPolicyPath]
+      : [normalizedPolicyPath];
+  } catch {
+    return [normalizedPolicyPath];
+  }
 }
 
-function workspaceSystemDirectoryError(targetPath: string): string | undefined {
+async function resolveForbiddenWorkspaceRules(): Promise<ForbiddenWorkspaceRule[]> {
+  const activePolicyPaths = FORBIDDEN_WORKSPACE_PATHS.filter((forbiddenPath) => {
+    if (forbiddenPath === '/') return false;
+    // Do not map Unix system paths onto the active Windows drive letter, or Windows drive paths onto POSIX cwd.
+    if (process.platform === 'win32') return !forbiddenPath.startsWith('/');
+    return !/^[a-zA-Z]:([\\/]|$)/.test(forbiddenPath);
+  });
+
+  const varAllowedSubpaths = activePolicyPaths.includes('/var')
+    ? [...new Set((await Promise.all(['/var/tmp', '/var/folders'].map(expandPolicyPathVariants))).flat())]
+    : [];
+
+  return Promise.all(activePolicyPaths.map(async (forbiddenPath) => {
+    const normalizedPath = normalizeProjectPath(forbiddenPath);
+    const candidatePaths = await expandPolicyPathVariants(forbiddenPath);
+    return {
+      label: forbiddenPath,
+      candidatePaths,
+      allowedSubpaths: normalizedPath === '/var' ? varAllowedSubpaths : [],
+    };
+  }));
+}
+
+function workspaceSystemDirectoryError(
+  targetPath: string,
+  forbiddenRules: ForbiddenWorkspaceRule[],
+): string | undefined {
   if (targetPath === '/') {
     return 'Cannot use system-critical directories as workspace locations';
   }
 
-  for (const forbiddenPath of FORBIDDEN_WORKSPACE_PATHS) {
-    // Do not map Unix system paths onto the active Windows drive letter.
-    if (forbiddenPath === '/' || (process.platform === 'win32' && forbiddenPath.startsWith('/'))) continue;
-    const normalizedForbiddenPath = normalizeProjectPath(forbiddenPath);
-    if (!isWithinWorkspaceRoot(targetPath, normalizedForbiddenPath)) continue;
-    if (normalizedForbiddenPath === '/var' && (
-      isWithinWorkspaceRoot(targetPath, '/var/tmp')
-      || isWithinWorkspaceRoot(targetPath, '/var/folders')
-    )) continue;
-    return `Cannot create workspace in system directory: ${forbiddenPath}`;
+  for (const rule of forbiddenRules) {
+    if (!rule.candidatePaths.some((candidate) => isWithinWorkspaceRoot(targetPath, candidate))) {
+      continue;
+    }
+    if (rule.allowedSubpaths.some((allowedPath) => isWithinWorkspaceRoot(targetPath, allowedPath))) {
+      continue;
+    }
+    return `Cannot create workspace in system directory: ${rule.label}`;
   }
 
   return undefined;
@@ -456,12 +509,13 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       return { valid: false, error: 'Workspace path is required' };
     }
 
+    const forbiddenRules = await resolveForbiddenWorkspaceRules();
     const absolutePath = path.resolve(normalizedRequestedPath);
-    const inputError = workspaceSystemDirectoryError(normalizeProjectPath(absolutePath));
+    const inputError = workspaceSystemDirectoryError(normalizeProjectPath(absolutePath), forbiddenRules);
     if (inputError) return { valid: false, error: inputError };
 
     const resolvedPath = await resolveWorkspacePath(absolutePath);
-    const resolvedError = workspaceSystemDirectoryError(resolvedPath);
+    const resolvedError = workspaceSystemDirectoryError(resolvedPath, forbiddenRules);
     if (resolvedError) return { valid: false, error: resolvedError };
 
     for (const root of WORKSPACE_ROOTS) {

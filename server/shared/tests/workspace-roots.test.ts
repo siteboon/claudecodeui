@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test, { after } from 'node:test';
@@ -25,7 +25,7 @@ process.env.WORKSPACES_EXTRA_ROOTS = [
   '', missingRoot, ` ${firstExtraRoot} `, secondExtraRoot, firstExtraRoot, 'relative-root', '',
 ].join(path.delimiter);
 
-const { validateWorkspacePath, WORKSPACES_ROOT } = await import('@/shared/utils.js');
+const { resolvePathUnderRoots, validateWorkspacePath, WORKSPACES_ROOT } = await import('@/shared/utils.js');
 
 after(async () => {
   for (const key of environmentKeys) {
@@ -104,12 +104,43 @@ test('allows symlinks pointing to another authorized root and returns the resolv
 
 test('still rejects system directories and symlinks pointing to system directories', async () => {
   const systemRoot = process.platform === 'win32' ? (process.env.SystemRoot || 'C:\\Windows') : '/etc';
+  const canonicalSystemRoot = await realpath(systemRoot);
   const systemLink = path.join(homeRoot, 'system-link');
   await symlink(systemRoot, systemLink, process.platform === 'win32' ? 'junction' : 'dir');
-  for (const target of [systemRoot, systemLink]) {
+  for (const target of [systemRoot, canonicalSystemRoot, systemLink]) {
     const validation = await validateWorkspacePath(target);
     assert.equal(validation.valid, false);
     assert.match(validation.error || '', /system directory|system-critical/);
+  }
+});
+
+test('enforces canonical system directories and /var exceptions when parent roots are configured', { skip: process.platform === 'win32' }, async () => {
+  const canonicalEtc = await realpath('/etc');
+  const canonicalVarTmp = await realpath('/var/tmp');
+  const canonicalVarFolders = process.platform === 'darwin' ? await realpath('/var/folders') : null;
+  const extraRoots = [path.dirname(canonicalEtc), canonicalVarTmp, ...(canonicalVarFolders ? [canonicalVarFolders] : [])];
+  const script = `
+    const { validateWorkspacePath } = await import(${JSON.stringify(new URL('../utils.ts', import.meta.url).href)});
+    console.log(JSON.stringify({
+      etc: await validateWorkspacePath(${JSON.stringify(canonicalEtc)}),
+      varTmp: await validateWorkspacePath(${JSON.stringify(path.join(canonicalVarTmp, 'safe-workspace'))}),
+      varFolders: ${canonicalVarFolders ? `await validateWorkspacePath(${JSON.stringify(path.join(canonicalVarFolders, 'safe-workspace'))})` : 'null'},
+    }));
+  `;
+  const result = spawnSync(process.execPath, [...process.execArgv, '--input-type=module', '-e', script], {
+    env: { ...process.env, WORKSPACES_EXTRA_ROOTS: extraRoots.join(path.delimiter) }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout) as {
+    etc: { valid: boolean; error?: string };
+    varTmp: { valid: boolean };
+    varFolders: { valid: boolean } | null;
+  };
+  assert.equal(parsed.etc.valid, false);
+  assert.match(parsed.etc.error || '', /system directory|system-critical/);
+  assert.equal(parsed.varTmp.valid, true);
+  if (parsed.varFolders) {
+    assert.equal(parsed.varFolders.valid, true);
   }
 });
 
@@ -119,10 +150,12 @@ test('tolerates drive-letter and directory casing differences on Windows', { ski
 });
 
 test('requires explicit drive letters or full UNC roots on Windows instead of drive-relative paths', { skip: process.platform !== 'win32' }, () => {
+  const driveRoot = 'D:\\';
+  const uncShareRoot = '\\\\server\\share\\';
   const uncRoot = '\\\\server\\share\\projects';
   const roots = [
     firstExtraRoot.slice(2), firstExtraRoot.slice(2).replaceAll('\\', '/'),
-    'C:relative', '\\\\server', firstExtraRoot, uncRoot,
+    'C:relative', '\\\\server', driveRoot, firstExtraRoot, uncShareRoot, uncRoot,
   ];
   const script = `
     const { WORKSPACE_ROOTS } = await import(${JSON.stringify(new URL('../utils.ts', import.meta.url).href)});
@@ -132,7 +165,33 @@ test('requires explicit drive letters or full UNC roots on Windows instead of dr
     env: { ...process.env, WORKSPACES_EXTRA_ROOTS: roots.join(path.delimiter) }, encoding: 'utf8',
   });
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), [homeRoot, firstExtraRoot, uncRoot]);
+  assert.deepEqual(JSON.parse(result.stdout), [homeRoot, driveRoot, firstExtraRoot, uncShareRoot, uncRoot]);
+});
+
+test('resolvePathUnderRoots accepts filesystem roots and Windows drive casing while rejecting prefix siblings', async () => {
+  const reportPath = path.join(firstExtraRoot, 'report.md');
+  const siblingDirectory = path.join(fixtureRoot, 'projects-other');
+  const siblingReportPath = path.join(siblingDirectory, 'report.md');
+  await mkdir(siblingDirectory, { recursive: true });
+  await Promise.all([
+    writeFile(reportPath, 'ok', 'utf8'),
+    writeFile(siblingReportPath, 'no', 'utf8'),
+  ]);
+
+  const filesystemRoot = path.parse(fixtureRoot).root;
+  assert.equal(await resolvePathUnderRoots(reportPath, [filesystemRoot]), reportPath);
+  assert.equal(await resolvePathUnderRoots(siblingReportPath, [firstExtraRoot]), null);
+
+  if (process.platform === 'win32') {
+    assert.equal(
+      await resolvePathUnderRoots(reportPath.toUpperCase(), [filesystemRoot.toLowerCase()]),
+      reportPath,
+    );
+    assert.equal(
+      await resolvePathUnderRoots(reportPath.toUpperCase(), [firstExtraRoot.toLowerCase()]),
+      reportPath,
+    );
+  }
 });
 
 test('allows only the default user home directory when no extra roots are configured', () => {
