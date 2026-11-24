@@ -15,12 +15,15 @@ type SessionSummary = {
   lastActivity: string;
   forkedFromSessionId: string | null;
   forkAncestors: SessionForkAncestor[];
+  /** The session can be read but not continued (a Cursor IDE chat). */
+  readOnly: boolean;
 };
 
 type SessionRepositoryRow = {
   provider: string;
   session_id: string;
   custom_name?: string | null;
+  read_only?: number | null;
   updated_at?: string | null;
   created_at?: string | null;
   forked_from_session_id?: string | null;
@@ -129,6 +132,7 @@ function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
     lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
     forkedFromSessionId: row.forked_from_session_id ?? null,
     forkAncestors: row.forked_from_session_id ? sessionsDb.getForkAncestors(row.session_id) : [],
+    readOnly: Boolean(row.read_only),
   };
 }
 

@@ -58,7 +58,9 @@ function deriveToolStatus(toolResult: any, reportedStatus?: string): ToolStatus 
   // while its output is still streaming in rather than only once it finishes.
   if (reportedStatus === 'in_progress') return 'running';
   if (reportedStatus === 'failed') return 'error';
-  if (!toolResult) return 'running';
+  // A provider that records no results (a Cursor IDE transcript) reports the
+  // call as completed instead.
+  if (!toolResult) return reportedStatus === 'completed' ? 'completed' : 'running';
   if (toolResult.isError) {
     const content = String(toolResult.content || '').toLowerCase().trim();
     if (CLAUDE_DENIAL_MESSAGES.some((msg) => content.includes(msg))) {

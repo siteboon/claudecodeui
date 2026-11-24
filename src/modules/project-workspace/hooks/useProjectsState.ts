@@ -66,6 +66,7 @@ type SessionDetailsApiPayload = {
     summary?: string;
     createdAt?: string | null;
     lastActivity?: string | null;
+    readOnly?: boolean;
     project?: {
       projectId?: string;
       path?: string;
@@ -616,6 +617,7 @@ export function useProjectsState({
       created_at: now,
       updated_at: now,
       lastActivity: now,
+      readOnly: false,
       __provider: provider,
       __projectId: project.projectId,
     };
@@ -919,7 +921,9 @@ export function useProjectsState({
         const normalizedSession = normalizeSessionProvider(match);
         const shouldUpdateProject = selectedProject?.projectId !== project.projectId;
         const shouldUpdateSession =
-          selectedSession?.id !== sessionId || selectedSession.__provider !== normalizedSession.__provider;
+          selectedSession?.id !== sessionId
+          || selectedSession.__provider !== normalizedSession.__provider
+          || selectedSession.readOnly !== normalizedSession.readOnly;
 
         if (shouldUpdateProject) {
           setSelectedProject(project);
@@ -931,7 +935,10 @@ export function useProjectsState({
       }
     }
 
-    if (selectedSession?.id === sessionId) {
+    // A session opened from a list that doesn't say whether it is read-only
+    // (archived, recent, pinned or search results) still needs the lookup,
+    // or a read-only chat would get a composer.
+    if (selectedSession?.id === sessionId && selectedSession.readOnly !== undefined) {
       return;
     }
 
@@ -1022,6 +1029,7 @@ export function useProjectsState({
         summary: details.summary ?? '',
         createdAt: details.createdAt ?? undefined,
         lastActivity: details.lastActivity ?? undefined,
+        readOnly: Boolean(details.readOnly),
         __provider:
           typeof details.provider === 'string' && details.provider.trim()
             ? (details.provider as LLMProvider)
@@ -1035,7 +1043,7 @@ export function useProjectsState({
           : resolvedSession,
       );
     })();
-  }, [navigate, sessionId, projects, selectedProject, selectedSession?.id, selectedSession?.__provider]);
+  }, [navigate, sessionId, projects, selectedProject, selectedSession?.id, selectedSession?.__provider, selectedSession?.readOnly]);
 
   const handleProjectSelect = useCallback(
     (project: Project) => {

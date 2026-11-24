@@ -1,3 +1,4 @@
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { parseFilesInputTag, parseImagesInputTag } from '@/shared/image-attachments.js';
@@ -6,9 +7,12 @@ import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMess
 import {
   createNormalizedMessage,
   generateMessageId,
+  hasCursorChatStore,
   readObjectRecord,
   resolveCursorChatDirectory,
+  resolveCursorTranscriptPath,
   sliceTailPage,
+  stripCursorContinuedChatTag,
 } from '@/shared/utils.js';
 
 const PROVIDER = 'cursor';
@@ -93,7 +97,9 @@ function extractUserTextAndImages(
     return { text: unwrapped };
   }
 
-  const parsedImages = parseImagesInputTag(unwrapped);
+  // A CLI chat continuing an IDE chat starts with a pointer to its transcript;
+  // only what the user typed is shown.
+  const parsedImages = parseImagesInputTag(stripCursorContinuedChatTag(unwrapped));
   const parsedFiles = parseFilesInputTag(parsedImages.text);
   return {
     text: parsedFiles.text,
@@ -358,6 +364,46 @@ export class CursorSessionsProvider implements IProviderSessions {
   }
 
   /**
+   * Reads a Cursor IDE chat's transcript as message blobs in conversation
+   * order. IDE chats have no CLI `store.db`; their transcript lines carry the
+   * same `{ role, content }` parts (with `tool_use` calls but no results), so
+   * they go through the same normalization as store blobs.
+   */
+  private async loadIdeTranscriptBlobs(sessionId: string, projectPath: string): Promise<CursorMessageBlob[]> {
+    const transcriptPath = resolveCursorTranscriptPath(projectPath, sessionId);
+    const lines = (await fsp.readFile(transcriptPath, 'utf8')).split('\n');
+    const blobs: CursorMessageBlob[] = [];
+
+    for (const line of lines) {
+      if (!line.trim()) {
+        continue;
+      }
+
+      let entry: AnyRecord;
+      try {
+        entry = JSON.parse(line) as AnyRecord;
+      } catch {
+        // A line still being written by the IDE.
+        continue;
+      }
+
+      if ((entry.role !== 'user' && entry.role !== 'assistant') || !Array.isArray(entry.message?.content)) {
+        continue;
+      }
+
+      const sequence = blobs.length;
+      blobs.push({
+        id: `${sessionId}_${sequence}`,
+        sequence,
+        rowid: sequence,
+        content: { role: entry.role, content: entry.message.content },
+      });
+    }
+
+    return blobs;
+  }
+
+  /**
    * Normalizes live Cursor CLI NDJSON events. Persisted Cursor history is
    * normalized from SQLite blobs in fetchHistory().
    */
@@ -385,7 +431,8 @@ export class CursorSessionsProvider implements IProviderSessions {
   }
 
   /**
-   * Fetches and paginates Cursor session history from its project-scoped store.db.
+   * Fetches and paginates Cursor session history from its project-scoped
+   * store.db, or, for a Cursor IDE chat that has none, from its transcript.
    *
    * Pagination follows the shared tail contract (`sliceTailPage`): offset 0 is
    * the most recent page, matching every other provider.
@@ -400,8 +447,20 @@ export class CursorSessionsProvider implements IProviderSessions {
     const providerSessionId = options.providerSessionId ?? sessionId;
 
     try {
-      const blobs = await this.loadCursorBlobs(providerSessionId, projectPath);
+      const fromTranscript = !hasCursorChatStore(projectPath, providerSessionId);
+      const blobs = fromTranscript
+        ? await this.loadIdeTranscriptBlobs(providerSessionId, projectPath)
+        : await this.loadCursorBlobs(providerSessionId, projectPath);
       const allNormalized = this.normalizeCursorBlobs(blobs, sessionId);
+      if (fromTranscript) {
+        // An IDE transcript records tool calls but never their results. The
+        // calls are finished, so they must not render as still running.
+        for (const msg of allNormalized) {
+          if (msg.kind === 'tool_use') {
+            msg.status = 'completed';
+          }
+        }
+      }
       const renderableMessages = allNormalized.filter((msg) => msg.kind !== 'tool_result');
       const total = renderableMessages.length;
       const { page, hasMore } = sliceTailPage(renderableMessages, limit, offset);

@@ -101,6 +101,8 @@ export type ProjectSession = {
   /** Ancestor context for Projects only; excluded from pagination and the Conversations feed. */
   forkAncestors?: ProjectSession[];
   provider?: LLMProvider;
+  /** The session can be read but not continued (a Cursor IDE chat). */
+  readOnly?: boolean;
   __provider?: LLMProvider;
   // Tags the session with the owning project's DB `projectId` so UI handlers
   // (session switching, sidebar focus, etc.) can match against selectedProject.

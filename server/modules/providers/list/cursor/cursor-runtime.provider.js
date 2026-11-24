@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import crossSpawn from 'cross-spawn';
 
 import {
@@ -13,7 +10,8 @@ import {
   createCompleteMessage,
   createNormalizedMessage,
   flattenPromptForWindowsShell,
-  resolveCursorChatDirectory,
+  hasCursorChatStore,
+  prependCursorContinuedChatTag,
   stripAnsiSequences
 } from '@/shared/utils.js';
 
@@ -30,18 +28,6 @@ const WORKSPACE_TRUST_PATTERNS = [
   /pass --trust,\s*--yolo,\s*or -f/i
 ];
 
-/**
- * Returns whether cursor-agent has a CLI chat store for this session id in
- * this workspace, i.e. whether `--resume` would continue a real chat.
- */
-function hasCursorChatStore(workingDir, providerSessionId) {
-  try {
-    return fs.existsSync(path.join(resolveCursorChatDirectory(workingDir, providerSessionId), 'store.db'));
-  } catch {
-    return false;
-  }
-}
-
 function isWorkspaceTrustPrompt(text = '') {
   if (!text || typeof text !== 'string') {
     return false;
@@ -56,6 +42,11 @@ async function spawnCursor(command, options = {}, ws, context) {
   // promise is created: inside an async executor a rejected `resolveResumeModel`
   // would be swallowed and leave the returned promise pending forever.
   const providerSessionId = context.resolveProviderSessionId(options.sessionId);
+  // A chat started to continue a Cursor IDE chat: its first turn points
+  // cursor-agent at the IDE transcript, which it reads for itself.
+  const continuedTranscriptPath = providerSessionId
+    ? null
+    : context.resolveContinuedTranscriptPath?.(options.sessionId) ?? null;
   const resolvedModel = await context.resolveResumeModel(options.sessionId, options.model);
 
   return new Promise((resolve, reject) => {
@@ -103,7 +94,10 @@ async function spawnCursor(command, options = {}, ws, context) {
       // cursor-agent is a .cmd shim on Windows, so the whole argument must be
       // newline-free or cmd.exe silently truncates it at the first newline.
       const promptWithAttachments = appendFilesInputTag(
-        appendImagesInputTag(command || '', images),
+        appendImagesInputTag(
+          continuedTranscriptPath ? prependCursorContinuedChatTag(command || '', continuedTranscriptPath) : command || '',
+          images
+        ),
         files
       );
       baseArgs.push('-p', flattenPromptForWindowsShell(promptWithAttachments));
