@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
-import { sessionsDb } from '@/modules/database/index.js';
+import { sessionsDb, userPreferencesDb } from '@/modules/database/index.js';
 import {
   MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION,
   providerCapabilitiesService,
@@ -95,7 +95,63 @@ export type ProviderRuntimeGateway = SideQuestionRuntime & {
 type ChatWebSocketDependencies = {
   /** Central dispatcher for every provider SDK/CLI runtime. */
   runtime: ProviderRuntimeGateway;
+  /**
+   * Reads the tool-permission settings the user saved in the settings page.
+   * Defaults to the auth.db copy; tests inject their own reader.
+   */
+  readPermissionSettings?: (userId: number, provider: LLMProvider) => unknown;
 };
+
+/**
+ * Where each provider's saved tool permissions live in auth.db. Claude is the
+ * only runtime that consumes `toolsSettings` today, so it is the only entry.
+ */
+const STORED_PERMISSION_PREFERENCE_KEYS: Partial<Record<LLMProvider, string>> = {
+  claude: 'claudePermissions',
+};
+
+function readStoredPermissionSettings(userId: number, provider: LLMProvider): unknown {
+  const key = STORED_PERMISSION_PREFERENCE_KEYS[provider];
+  if (!key) {
+    return null;
+  }
+  return userPreferencesDb.getPreferences(userId)[key] ?? null;
+}
+
+/**
+ * The settings page is the user's standing answer for how tools get approved.
+ * The web app sends it on every turn, but scripts and other clients send only
+ * what the turn needs — without this fallback those turns would run under the
+ * defaults and ask before every tool. An explicit `toolsSettings` from the
+ * client always wins.
+ */
+function resolvePermissionSettings(
+  provider: LLMProvider,
+  userId: string | number | null,
+  clientOptions: AnyRecord,
+  dependencies: ChatWebSocketDependencies,
+): AnyRecord | null {
+  if (clientOptions.toolsSettings !== undefined && clientOptions.toolsSettings !== null) {
+    return null;
+  }
+
+  const numericUserId = typeof userId === 'number' ? userId : Number(userId);
+  if (!Number.isInteger(numericUserId) || numericUserId <= 0) {
+    return null;
+  }
+
+  const read = dependencies.readPermissionSettings ?? readStoredPermissionSettings;
+  try {
+    const stored = read(numericUserId, provider);
+    return stored !== null && typeof stored === 'object' && !Array.isArray(stored)
+      ? (stored as AnyRecord)
+      : null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[Chat] Could not read stored permission settings: ${message}`);
+    return null;
+  }
+}
 
 /**
  * Extracts the authenticated request user id in the formats currently produced
@@ -291,8 +347,11 @@ async function dispatchRun(
   // Brand-new sessions have no provider id yet, so the runtime starts fresh
   // and announces one, which the gateway writer captures and maps back to the
   // app session id.
+  const storedPermissionSettings = resolvePermissionSettings(provider, userId, clientOptions, dependencies);
+
   const runtimeOptions: AnyRecord = {
     ...clientOptions,
+    ...(storedPermissionSettings ? { toolsSettings: storedPermissionSettings } : {}),
     ...extraRuntimeOptions,
     // Attachments are re-validated server-side: only direct children of the
     // global upload store may reach provider runtimes or their file tools.
