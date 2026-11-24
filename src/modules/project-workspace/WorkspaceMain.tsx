@@ -149,7 +149,7 @@ function WorkspaceMain({
 
   return (
     <div className="flex h-full min-w-0 flex-col">
-      <div className="flex-shrink-0" hidden={compactChat && activeTab === 'chat'}>
+      <div className="flex-shrink-0" hidden={compactChat && activeTab === 'chat' && !editorExpanded}>
       <WorkspaceHeader
         activeTab={activeTab}
         setActiveTab={setActiveTab}

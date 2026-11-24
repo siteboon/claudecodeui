@@ -196,10 +196,23 @@ test('compact mode keeps permission actions operable and exit button reachable',
   assert.equal(exit.mock.calls.length, 1);
 });
 
-test('exit compact mode button stays available when a question panel replaces the input', () => {
+test('exit compact mode and navigation controls stay available when a question panel replaces the input', () => {
   const exit = vi.fn();
+  const openDrawer = vi.fn();
+  const openFiles = vi.fn();
   render(view(props({
-    compactMode: true, onToggleCompactMode: exit,
+    compactMode: true,
+    onToggleCompactMode: exit,
+    compactLeadingAction: (
+      <button type="button" onClick={openDrawer} aria-label="Open menu">
+        Menu
+      </button>
+    ),
+    compactNavigation: (
+      <button type="button" onClick={openFiles}>
+        Files tab
+      </button>
+    ),
     pendingPermissionRequests: [{ requestId: 'question-1', toolName: 'AskUserQuestion', input: {
       questions: [{ question: 'Continue?', header: 'Choice', options: [
         { label: 'Proceed', description: 'Continue task' }, { label: 'Pause', description: 'Pause task' },
@@ -207,6 +220,10 @@ test('exit compact mode button stays available when a question panel replaces th
     } }],
   })));
   assert.equal(screen.queryByPlaceholderText('Message'), null);
+  fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+  assert.equal(openDrawer.mock.calls.length, 1);
+  fireEvent.click(screen.getByRole('button', { name: 'Files tab' }));
+  assert.equal(openFiles.mock.calls.length, 1);
   fireEvent.click(screen.getByRole('button', { name: 'Exit compact mode' }));
   assert.equal(exit.mock.calls.length, 1);
 });
