@@ -20,6 +20,7 @@ type SidebarProjectItemProps = {
   /** Resolved for this row: only the project being renamed re-renders on a keystroke. */
   isEditing: boolean;
   renameDraft: string;
+  includeOffPagePins?: boolean;
   sessions: SessionWithProvider[];
   initialSessionsLoaded: boolean;
   isLoadingMoreSessions: boolean;
@@ -73,6 +74,7 @@ function SidebarProjectItem({
   isStarred,
   isEditing,
   renameDraft,
+  includeOffPagePins = true,
   sessions,
   initialSessionsLoaded,
   isLoadingMoreSessions,
@@ -444,6 +446,7 @@ function SidebarProjectItem({
       <SidebarProjectSessions
         project={project}
         isExpanded={isExpanded}
+        includeOffPagePins={includeOffPagePins}
         sessions={sessions}
         selectedSession={selectedSession}
         initialSessionsLoaded={initialSessionsLoaded}

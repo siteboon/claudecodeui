@@ -5,6 +5,7 @@ type TreeNode = {
   parentId: string | null;
   children: TreeNode[];
   rank: number;
+  pinRank: number;
 };
 
 /**
@@ -13,12 +14,14 @@ type TreeNode = {
  * The input is newest first; a family's newest descendant determines its
  * position, and parents always precede children. Ancestor hints fill page gaps,
  * while actual page rows take precedence over their older context snapshots.
+ * A pin lifts its entire family; only root ordering changes, never ancestry.
  */
-export function buildProjectSessionTree(sessions: SessionWithProvider[], projectId: string) {
+export function buildProjectSessionTree(sessions: SessionWithProvider[], projectId: string, pinnedIds: readonly string[] = []) {
+  const pinRanks = new Map(pinnedIds.map((id, rank) => [id, rank]));
   const nodes = new Map<string, TreeNode>();
   sessions.forEach((session, rank) => {
     if (!nodes.has(session.id)) {
-      nodes.set(session.id, { session, parentId: null, children: [], rank });
+      nodes.set(session.id, { session, parentId: null, children: [], rank, pinRank: pinRanks.get(session.id) ?? Infinity });
     }
   });
 
@@ -47,7 +50,7 @@ export function buildProjectSessionTree(sessions: SessionWithProvider[], project
         __projectId: projectId,
       } : null;
       if (!parent || parent.__provider !== session.__provider) break;
-      nodes.set(parentId, { session: parent, parentId: null, children: [], rank: Infinity });
+      nodes.set(parentId, { session: parent, parentId: null, children: [], rank: Infinity, pinRank: pinRanks.get(parentId) ?? Infinity });
       child = parent;
     }
   }
@@ -82,7 +85,7 @@ export function buildProjectSessionTree(sessions: SessionWithProvider[], project
     else roots.push(node);
   }
 
-  // Post-order gives each family the rank of its newest paginated member.
+  // Post-order gives each family its newest member and newest pin ranks.
   const pending = [...roots];
   const traversal: TreeNode[] = [];
   while (pending.length) {
@@ -95,10 +98,14 @@ export function buildProjectSessionTree(sessions: SessionWithProvider[], project
     if (node.parentId) {
       const parent = nodes.get(node.parentId)!;
       parent.rank = Math.min(parent.rank, node.rank);
+      parent.pinRank = Math.min(parent.pinRank, node.pinRank);
     }
     node.children.sort((a, b) => a.rank - b.rank);
   }
-  roots.sort((a, b) => a.rank - b.rank);
+  roots.sort((a, b) => {
+    if (a.pinRank !== b.pinRank) return a.pinRank - b.pinRank;
+    return a.rank - b.rank;
+  });
 
   const rows: { session: SessionWithProvider; parentId: string | null; depth: number; hasChildren: boolean; isLastSibling: boolean }[] = [];
   const stack = roots.map((node, index) => ({ node, depth: 0, isLastSibling: index === roots.length - 1 })).reverse();

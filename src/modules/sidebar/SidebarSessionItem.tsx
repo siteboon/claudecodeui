@@ -11,6 +11,8 @@ import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/mod
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
+import SessionPinButton from '@/modules/sidebar/SessionPinButton';
+import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -72,6 +74,7 @@ function SidebarSessionItem({
   t,
 }: SidebarSessionItemProps) {
   const isCompact = useCompactSidebar();
+  const pins = useSessionPins();
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
   const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
@@ -242,6 +245,8 @@ function SidebarSessionItem({
             </div>
 
             {!isSelecting && (
+              <>
+              <SessionPinButton sessionId={session.id} sessionName={sessionView.sessionName} t={t} />
               <button
                 type="button"
                 aria-label={`Session options for ${sessionView.sessionName}`}
@@ -258,6 +263,7 @@ function SidebarSessionItem({
               >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
+              </>
             )}
           </div>
         </div>
@@ -438,7 +444,7 @@ function SidebarSessionItem({
             treeRow
               ? 'h-auto w-full justify-start rounded-md border border-transparent bg-transparent px-1.5 py-1 text-left font-normal transition-colors duration-150'
               : 'h-auto w-full justify-start rounded-md border bg-card p-2 text-left font-normal transition-all duration-150',
-            isSelecting ? 'pr-2' : 'pr-11',
+            isSelecting ? 'pr-2' : pins ? 'pr-[4.5rem]' : 'pr-11',
             isSelected ? 'border-primary/20 bg-primary/5' : 'border-border/30',
             !treeRow && (!isSelected && isProcessing
               ? 'border-border/60 bg-muted/20 hover:bg-muted/25'
