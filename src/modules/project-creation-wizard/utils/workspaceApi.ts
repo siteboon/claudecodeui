@@ -1,5 +1,11 @@
-import { api } from '@/shared/api';
-import type { FolderSuggestion, GithubTokenCredential, TokenMode } from '@/shared/types';
+import { ApiRequestError, api } from '@/shared/api';
+import type {
+  ExistingProjectConflict,
+  FolderSuggestion,
+  GithubTokenCredential,
+  Project,
+  TokenMode,
+} from '@/shared/types';
 
 type CredentialsResponse = {
   credentials?: GithubTokenCredential[];
@@ -138,10 +144,125 @@ export const createProjectRequest = async (payload: CreateProjectPayload) => {
   const data = await parseJson<CreateProjectResponse>(response);
 
   if (!response.ok) {
-    throw new Error(resolveCreateProjectErrorMessage(data) || 'Failed to create project');
+    const errorObject = data.error && typeof data.error === 'object' ? data.error : null;
+    throw new ApiRequestError(
+      resolveCreateProjectErrorMessage(data) || 'Failed to create project',
+      {
+        code: typeof errorObject?.code === 'string' ? errorObject.code : undefined,
+        details: errorObject?.details ?? data.details,
+        status: response.status,
+      },
+    );
   }
 
   return data.project;
+};
+
+const normalizeComparablePath = (rawPath: string): string => {
+  const trimmed = rawPath.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const unified = trimmed.replace(/\\/g, '/');
+  const withoutTrailing = unified === '/' || /^[a-zA-Z]:\/$/.test(unified)
+    ? unified
+    : unified.replace(/\/+$/, '');
+
+  return /^[a-zA-Z]:/.test(withoutTrailing) ? withoutTrailing.toLowerCase() : withoutTrailing;
+};
+
+const extractPathFromConflictText = (rawText: string): string | null => {
+  const prefix = 'Project path already exists:';
+  if (!rawText.startsWith(prefix)) {
+    return null;
+  }
+
+  const extracted = rawText.slice(prefix.length).trim();
+  return extracted || null;
+};
+
+const resolvePathBasename = (rawPath: string | undefined): string => {
+  if (!rawPath) {
+    return '';
+  }
+
+  const normalized = rawPath.trim().replace(/[\\/]+$/, '');
+  const parts = normalized.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || normalized;
+};
+
+/**
+ * Extracts structured metadata for an active-project conflict from a failed
+ * create-project request, falling back to matching `existingProjects` by path
+ * when talking to an older server that only returns a path string.
+ */
+export const resolveExistingProjectConflict = (
+  error: unknown,
+  existingProjects: Project[],
+  attemptedPath: string,
+): ExistingProjectConflict | null => {
+  if (!(error instanceof ApiRequestError)) {
+    return null;
+  }
+
+  if (error.code !== 'PROJECT_ALREADY_EXISTS' && error.status !== 409) {
+    return null;
+  }
+
+  const detailsRecord =
+    error.details && typeof error.details === 'object'
+      ? (error.details as { projectId?: unknown; displayName?: unknown; projectPath?: unknown })
+      : null;
+
+  const projectIdFromDetails =
+    typeof detailsRecord?.projectId === 'string' && detailsRecord.projectId.trim().length > 0
+      ? detailsRecord.projectId.trim()
+      : null;
+  const projectPathFromDetails =
+    typeof detailsRecord?.projectPath === 'string' && detailsRecord.projectPath.trim().length > 0
+      ? detailsRecord.projectPath.trim()
+      : typeof error.details === 'string'
+        ? extractPathFromConflictText(error.details)
+        : extractPathFromConflictText(error.message);
+
+  if (projectIdFromDetails) {
+    const matchedById = existingProjects.find((project) => project.projectId === projectIdFromDetails);
+    const displayNameFromDetails =
+      typeof detailsRecord?.displayName === 'string' && detailsRecord.displayName.trim().length > 0
+        ? detailsRecord.displayName.trim()
+        : '';
+
+    return {
+      projectId: projectIdFromDetails,
+      displayName:
+        displayNameFromDetails
+        || matchedById?.displayName
+        || resolvePathBasename(projectPathFromDetails ?? undefined)
+        || projectIdFromDetails,
+      projectPath: projectPathFromDetails ?? matchedById?.fullPath ?? matchedById?.path,
+    };
+  }
+
+  const comparableCandidate = normalizeComparablePath(projectPathFromDetails || attemptedPath);
+  if (!comparableCandidate) {
+    return null;
+  }
+
+  const matchedByPath = existingProjects.find((project) => {
+    const candidate = normalizeComparablePath(project.fullPath || project.path || '');
+    return candidate.length > 0 && candidate === comparableCandidate;
+  });
+
+  if (!matchedByPath) {
+    return null;
+  }
+
+  return {
+    projectId: matchedByPath.projectId,
+    displayName: matchedByPath.displayName,
+    projectPath: matchedByPath.fullPath || matchedByPath.path,
+  };
 };
 
 type StartCloneResponse = {

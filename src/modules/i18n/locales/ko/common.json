@@ -201,13 +201,16 @@
       "next": "다음",
       "createProject": "프로젝트 생성",
       "creating": "생성 중...",
-      "cloning": "Clone 중..."
+      "cloning": "Clone 중...",
+      "openExistingProject": "프로젝트 열기"
     },
     "errors": {
       "selectType": "기존 워크스페이스를 사용할지 새로 생성할지 선택해주세요",
       "providePath": "워크스페이스 경로를 입력해주세요",
       "failedToCreate": "워크스페이스 생성 실패",
-      "failedToCreateFolder": "폴더 생성 실패"
+      "failedToCreateFolder": "폴더 생성 실패",
+      "alreadyExistsNamed": "이 워크스페이스는 이미 \"{{name}}\"(으)로 존재합니다.",
+      "alreadyExists": "이 워크스페이스는 이미 프로젝트 목록에 있습니다."
     }
   },
   "notifications": {

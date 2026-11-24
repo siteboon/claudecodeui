@@ -8,13 +8,19 @@ import StepReview from '@/modules/project-creation-wizard/StepReview';
 import WizardFooter from '@/modules/project-creation-wizard/WizardFooter';
 import WizardProgress from '@/modules/project-creation-wizard/WizardProgress';
 import { useGithubTokens } from '@/modules/project-creation-wizard/hooks/useGithubTokens';
-import { cloneWorkspaceWithProgress, createProjectRequest } from '@/modules/project-creation-wizard/utils/workspaceApi';
+import {
+  cloneWorkspaceWithProgress,
+  createProjectRequest,
+  resolveExistingProjectConflict,
+} from '@/modules/project-creation-wizard/utils/workspaceApi';
 import { isCloneWorkflow, shouldShowGithubAuthentication } from '@/modules/project-creation-wizard/utils/pathUtils';
-import type { TokenMode, WizardFormState, WizardStep } from '@/shared/types';
+import type { ExistingProjectConflict, Project, TokenMode, WizardFormState, WizardStep } from '@/shared/types';
 
 type ProjectCreationWizardProps = {
   onClose: () => void;
   onProjectCreated?: (project?: Record<string, unknown>) => void;
+  existingProjects?: Project[];
+  onOpenExistingProject?: (projectId: string) => void;
 };
 
 const initialFormState: WizardFormState = {
@@ -29,12 +35,16 @@ const initialFormState: WizardFormState = {
 export default function ProjectCreationWizard({
   onClose,
   onProjectCreated,
+  existingProjects = [],
+  onOpenExistingProject,
 }: ProjectCreationWizardProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<WizardStep>(1);
   const [formState, setFormState] = useState<WizardFormState>(initialFormState);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Holds matched active-project metadata after a duplicate-path conflict so the banner can name it and jump straight to it.
+  const [existingProjectConflict, setExistingProjectConflict] = useState<ExistingProjectConflict | null>(null);
   const [cloneProgress, setCloneProgress] = useState('');
 
   const shouldLoadTokens =
@@ -57,6 +67,9 @@ export default function ProjectCreationWizard({
 
   // Keep cross-step values in this component; local UI state lives in child components.
   const updateField = useCallback(<K extends keyof WizardFormState>(key: K, value: WizardFormState[K]) => {
+    if (key === 'workspacePath') {
+      setExistingProjectConflict(null);
+    }
     setFormState((previous) => ({ ...previous, [key]: value }));
   }, []);
 
@@ -67,6 +80,7 @@ export default function ProjectCreationWizard({
 
   const handleNext = useCallback(() => {
     setError(null);
+    setExistingProjectConflict(null);
 
     if (step === 1) {
       if (!formState.workspacePath.trim()) {
@@ -79,12 +93,14 @@ export default function ProjectCreationWizard({
 
   const handleBack = useCallback(() => {
     setError(null);
+    setExistingProjectConflict(null);
     setStep((previousStep) => (previousStep > 1 ? ((previousStep - 1) as WizardStep) : previousStep));
   }, []);
 
   const handleCreate = useCallback(async () => {
     setIsCreating(true);
     setError(null);
+    setExistingProjectConflict(null);
     setCloneProgress('');
 
     try {
@@ -116,6 +132,26 @@ export default function ProjectCreationWizard({
       onProjectCreated?.(project);
       onClose();
     } catch (createError) {
+      const conflict = resolveExistingProjectConflict(
+        createError,
+        existingProjects,
+        formState.workspacePath,
+      );
+      if (conflict) {
+        setExistingProjectConflict(conflict);
+        setError(
+          conflict.displayName
+            ? t('projectWizard.errors.alreadyExistsNamed', {
+                name: conflict.displayName,
+                defaultValue: `This workspace already exists as "${conflict.displayName}".`,
+              })
+            : t('projectWizard.errors.alreadyExists', {
+                defaultValue: 'This workspace already exists in your project list.',
+              }),
+        );
+        return;
+      }
+
       const errorMessage =
         createError instanceof Error
           ? createError.message
@@ -124,7 +160,16 @@ export default function ProjectCreationWizard({
     } finally {
       setIsCreating(false);
     }
-  }, [formState, onClose, onProjectCreated, t]);
+  }, [existingProjects, formState, onClose, onProjectCreated, t]);
+
+  const handleOpenExistingProject = useCallback(() => {
+    if (!existingProjectConflict || !onOpenExistingProject) {
+      return;
+    }
+
+    onOpenExistingProject(existingProjectConflict.projectId);
+    onClose();
+  }, [existingProjectConflict, onClose, onOpenExistingProject]);
 
   const shouldCloneRepository = useMemo(
     () => isCloneWorkflow(formState.githubUrl),
@@ -155,7 +200,17 @@ export default function ProjectCreationWizard({
         <WizardProgress step={step} />
 
         <div className="min-h-[300px] space-y-6 p-6">
-          {error && <ErrorBanner message={error} />}
+          {error && (
+            <ErrorBanner
+              message={error}
+              actionLabel={
+                existingProjectConflict && onOpenExistingProject
+                  ? t('projectWizard.buttons.openExistingProject', { defaultValue: 'Open Project' })
+                  : undefined
+              }
+              onAction={existingProjectConflict && onOpenExistingProject ? handleOpenExistingProject : undefined}
+            />
+          )}
 
           {step === 1 && (
             <StepConfiguration

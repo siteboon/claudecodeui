@@ -204,13 +204,16 @@
       "next": "İleri",
       "createProject": "Projeyi Oluştur",
       "creating": "Oluşturuluyor...",
-      "cloning": "Klonlanıyor..."
+      "cloning": "Klonlanıyor...",
+      "openExistingProject": "Projeyi Aç"
     },
     "errors": {
       "selectType": "Lütfen mevcut çalışma alanın olduğunu mu yoksa yeni oluşturmak mı istediğini seç",
       "providePath": "Lütfen bir çalışma alanı yolu gir",
       "failedToCreate": "Çalışma alanı oluşturulamadı",
-      "failedToCreateFolder": "Klasör oluşturulamadı"
+      "failedToCreateFolder": "Klasör oluşturulamadı",
+      "alreadyExistsNamed": "Bu çalışma alanı zaten \"{{name}}\" adıyla mevcut.",
+      "alreadyExists": "Bu çalışma alanı proje listenizde zaten mevcut."
     }
   },
   "notifications": {

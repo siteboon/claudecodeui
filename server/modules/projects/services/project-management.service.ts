@@ -113,10 +113,19 @@ export async function createProject(
   const persistedProject = dependencies.persistProjectPath(resolvedProjectPath, normalizedCustomName);
 
   if (persistedProject.outcome === 'active_conflict') {
+    const existingProject = persistedProject.project ?? dependencies.getProjectByPath(resolvedProjectPath);
     throw new AppError('Project path already exists and is active', {
       code: 'PROJECT_ALREADY_EXISTS',
       statusCode: 409,
-      details: `Project path already exists: ${resolvedProjectPath}`,
+      details: existingProject
+        ? {
+            projectId: existingProject.project_id,
+            displayName: resolveDisplayName(existingProject.custom_project_name, existingProject.project_path),
+            projectPath: existingProject.project_path,
+          }
+        : {
+            projectPath: resolvedProjectPath,
+          },
     });
   }
 

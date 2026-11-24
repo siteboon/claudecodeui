@@ -202,13 +202,16 @@
       "next": "Berikutnya",
       "createProject": "Buat Proyek",
       "creating": "Membuat...",
-      "cloning": "Melakukan clone..."
+      "cloning": "Melakukan clone...",
+      "openExistingProject": "Buka Proyek"
     },
     "errors": {
       "selectType": "Pilih apakah menggunakan workspace yang ada atau ingin membuat yang baru",
       "providePath": "Masukkan path workspace",
       "failedToCreate": "Gagal membuat workspace",
-      "failedToCreateFolder": "Gagal membuat folder"
+      "failedToCreateFolder": "Gagal membuat folder",
+      "alreadyExistsNamed": "Workspace ini sudah ada dengan nama \"{{name}}\".",
+      "alreadyExists": "Workspace ini sudah ada di daftar proyek Anda."
     }
   },
   "notifications": {

@@ -201,13 +201,16 @@
       "next": "Weiter",
       "createProject": "Projekt erstellen",
       "creating": "Wird erstellt...",
-      "cloning": "Wird geklont..."
+      "cloning": "Wird geklont...",
+      "openExistingProject": "Projekt öffnen"
     },
     "errors": {
       "selectType": "Bitte wähl aus, ob du einen vorhandenen Arbeitsbereich hast oder einen neuen erstellen möchtest",
       "providePath": "Bitte gib einen Arbeitsbereichspfad an",
       "failedToCreate": "Arbeitsbereich konnte nicht erstellt werden",
-      "failedToCreateFolder": "Ordner konnte nicht erstellt werden"
+      "failedToCreateFolder": "Ordner konnte nicht erstellt werden",
+      "alreadyExistsNamed": "Dieser Arbeitsbereich existiert bereits unter dem Namen „{{name}}“.",
+      "alreadyExists": "Dieser Arbeitsbereich existiert bereits in deiner Projektliste."
     }
   },
   "versionUpdate": {

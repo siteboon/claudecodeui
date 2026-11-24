@@ -18,6 +18,7 @@ type SidebarModalsProps = {
   showNewProject: boolean;
   onCloseNewProject: () => void;
   onProjectCreated: () => void;
+  onOpenExistingProject: (projectId: string) => void;
   pendingDeletion: PendingSidebarDeletion | null;
   onCancelDeletion: () => void;
   onConfirmDeleteProject: (deleteData?: boolean) => void;
@@ -56,6 +57,7 @@ export default function SidebarModals({
   showNewProject,
   onCloseNewProject,
   onProjectCreated,
+  onOpenExistingProject,
   pendingDeletion,
   onCancelDeletion,
   onConfirmDeleteProject,
@@ -82,6 +84,8 @@ export default function SidebarModals({
           <ProjectCreationWizard
             onClose={onCloseNewProject}
             onProjectCreated={onProjectCreated}
+            existingProjects={projects}
+            onOpenExistingProject={onOpenExistingProject}
           />,
           document.body,
         )}

@@ -201,13 +201,16 @@
       "next": "Suivant",
       "createProject": "Créer le projet",
       "creating": "Création...",
-      "cloning": "Clonage..."
+      "cloning": "Clonage...",
+      "openExistingProject": "Ouvrir le projet"
     },
     "errors": {
       "selectType": "Veuillez indiquer si vous avez un espace de travail existant ou si vous souhaitez en créer un nouveau",
       "providePath": "Veuillez fournir un chemin d'espace de travail",
       "failedToCreate": "Échec de la création de l'espace de travail",
-      "failedToCreateFolder": "Échec de la création du dossier"
+      "failedToCreateFolder": "Échec de la création du dossier",
+      "alreadyExistsNamed": "Cet espace de travail existe déjà sous le nom « {{name}} ».",
+      "alreadyExists": "Cet espace de travail existe déjà dans votre liste de projets."
     }
   },
   "notifications": {

@@ -181,6 +181,34 @@ function Sidebar({
     void paletteOps.refreshProjects();
   };
 
+  const handleOpenExistingProject = useCallback(
+    (projectId: string) => {
+      const existingProject = projects.find((project) => project.projectId === projectId);
+      setShowNewProject(false);
+      if (!existingProject) {
+        void paletteOps.refreshProjects();
+        return;
+      }
+
+      setSearchMode('projects');
+      setSearchFilter('');
+      if (!isProjectExpanded(existingProject.projectId)) {
+        toggleProject(existingProject.projectId);
+      }
+      handleProjectSelect(existingProject);
+    },
+    [
+      handleProjectSelect,
+      isProjectExpanded,
+      paletteOps,
+      projects,
+      setSearchFilter,
+      setSearchMode,
+      setShowNewProject,
+      toggleProject,
+    ],
+  );
+
   // Stable so memo() on the row components can bail out; an inline arrow here
   // would give every row a new callback on each sidebar render.
   const handleSaveProjectName = useCallback((projectId: string, nextName: string) => {
@@ -249,6 +277,7 @@ function Sidebar({
         showNewProject={showNewProject}
         onCloseNewProject={() => setShowNewProject(false)}
         onProjectCreated={handleProjectCreated}
+        onOpenExistingProject={handleOpenExistingProject}
         pendingDeletion={pendingDeletion}
         onCancelDeletion={() => setPendingDeletion(null)}
         onConfirmDeleteProject={confirmDeleteProject}
