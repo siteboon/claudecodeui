@@ -1826,3 +1826,43 @@ export type CliApplication = {
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
 };
+
+// ---------------------------
+//----------------- OPTIONAL IMAGE GENERATION ------------
+
+/** Parameters for one user-requested image. Reuse requestId only to recover that same request. */
+export type ImageGenerationInput = {
+  requestId: string;
+  prompt: string;
+  size?: string;
+  quality?: string;
+};
+
+/** A saved, project-relative raster image; bytes and provider credentials never enter chat history. */
+export type GeneratedImageAsset = {
+  id: string;
+  path: string;
+  mimeType: 'image/png' | 'image/jpeg' | 'image/webp';
+  bytes: number;
+  sha256: string;
+};
+
+/** Safe job metadata returned by image MCP tools and the read-only job API, including restart and missing-file states. */
+export type ImageGenerationJob = {
+  kind: 'cloudcli.image_generation';
+  version: 1;
+  jobId: string;
+  status: 'running' | 'succeeded' | 'failed' | 'uncertain' | 'missing_asset';
+  createdAt: string;
+  updatedAt: string;
+  promptPreview: string;
+  asset?: GeneratedImageAsset;
+  error?: { code: string; message: string };
+};
+
+/** Bounded, job-ID ordered lookup page; unreadable entries do not hide other saved images. */
+export type ImageGenerationJobPage = {
+  jobs: ImageGenerationJob[];
+  nextCursor?: string;
+  unreadableJobs: number;
+};

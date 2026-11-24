@@ -100,7 +100,7 @@ function useMarkdownImageSrc(src: string, projectId: string | null): { src: stri
  * `img` renderer for chat markdown. Shows images the model references by
  * workspace path (screenshots it took, files it generated) inline, with the
  * same click-to-expand lightbox as user attachments. Used by the shared
- * Markdown component overrides.
+ * Markdown component overrides and the GeneratedImageResult tool card.
  */
 export function MarkdownImage({ node: _node, src, alt, title }: MarkdownImageProps) {
   const { t } = useTranslation();

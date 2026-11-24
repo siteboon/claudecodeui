@@ -27,7 +27,7 @@ type ToolStatusBadgeProps = {
 };
 
 /**
- * Used by chat's ToolRenderer, BashCommandDisplay and OneLineDisplay to label a
+ * Used by chat's ToolRenderer, GeneratedImageResult, BashCommandDisplay and OneLineDisplay to label a
  * tool call's pending, running, error or denied state.
  */
 export function ToolStatusBadge({ status, className }: ToolStatusBadgeProps) {
