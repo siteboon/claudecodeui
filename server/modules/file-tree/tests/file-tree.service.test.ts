@@ -403,7 +403,11 @@ test('createEntry performs filesystem mutation only through the injected adapter
  * which is the only way to exercise the read-only roots: the whole guarantee
  * rests on `realpath` resolving symlinks before the comparison.
  */
-function createRealFileSystemService(projectRoot: string, workspaceRoot = projectRoot): FileTreeServices {
+function createRealFileSystemService(
+  projectRoot: string,
+  workspaceRoot = projectRoot,
+  workspaceRoots?: string[],
+): FileTreeServices {
   return createFileTreeService({
     fileSystem: {
       access: (candidatePath) => fsPromises.access(candidatePath),
@@ -429,6 +433,7 @@ function createRealFileSystemService(projectRoot: string, workspaceRoot = projec
     projects: { getProjectPathById: async () => projectRoot },
     workspace: {
       rootPath: workspaceRoot,
+      rootPaths: workspaceRoots,
       validatePath: (candidatePath) => validateWorkspacePath(candidatePath),
       resolveReadOnlyRootPath: (candidatePath) => resolveReadOnlyRootPath(candidatePath),
     },
@@ -529,6 +534,37 @@ test('reading through a symlink out of the temp directory is still refused', asy
     await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
     await fsPromises.rm(projectRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('an extra workspace root permits previews without granting writes or link escapes', async () => {
+  const fixtureRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-workspace-'));
+  const primaryRoot = path.join(fixtureRoot, 'primary');
+  const extraRoot = path.join(fixtureRoot, 'extra');
+  const outsideRoot = path.join(fixtureRoot, 'outside');
+  const projectRoot = path.join(primaryRoot, 'project');
+  const reportPath = path.join(extraRoot, 'report.md');
+
+  try {
+    await Promise.all([projectRoot, extraRoot, outsideRoot]
+      .map((directory) => fsPromises.mkdir(directory, { recursive: true })));
+    await fsPromises.writeFile(reportPath, 'extra root report', 'utf8');
+    await fsPromises.writeFile(path.join(outsideRoot, 'secret.txt'), 'secret', 'utf8');
+    await fsPromises.symlink(outsideRoot, path.join(extraRoot, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+    const service = createRealFileSystemService(projectRoot, primaryRoot, [primaryRoot, extraRoot]);
+
+    assert.equal((await service.readTextFile('project-1', reportPath)).content, 'extra root report');
+    const opened = await service.openFile('project-1', reportPath);
+    opened.stream.destroy();
+    await assert.rejects(service.saveTextFile('project-1', reportPath, 'overwritten'),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT');
+    await assert.rejects(service.deleteEntry({ projectId: 'project-1', targetPath: reportPath }),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT');
+    await assert.rejects(service.readTextFile('project-1', path.join(extraRoot, 'escape', 'secret.txt')),
+      (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT');
+    assert.equal(await fsPromises.readFile(reportPath, 'utf8'), 'extra root report');
+  } finally {
+    await fsPromises.rm(fixtureRoot, { recursive: true, force: true });
   }
 });
 
