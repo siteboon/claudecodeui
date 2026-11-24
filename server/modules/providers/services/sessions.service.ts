@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import { projectsDb, sessionsDb } from '@/modules/database/index.js';
+import { projectsDb, sessionPinsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
@@ -16,8 +16,8 @@ import type {
   LLMProvider,
   NormalizedMessage,
   WorkflowAgentActivity,
-} from '@/shared/types.js';
-import { AppError, createNormalizedMessage, sliceTailPage } from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { AppError, createNormalizedMessage, sliceTailPage } from '@/shared/index.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -69,6 +69,11 @@ type RecentSessionListItem = Pick<
   ArchivedSessionListItem,
   'sessionId' | 'provider' | 'projectId' | 'projectDisplayName' | 'sessionTitle' | 'lastActivity'
 >;
+
+type PinnedSessionListItem = RecentSessionListItem & {
+  forkedFromSessionId: string | null;
+  forkAncestors: ReturnType<typeof sessionsDb.getForkAncestors>;
+};
 
 type RecentSessionsPage = {
   conversations: RecentSessionListItem[];
@@ -376,6 +381,44 @@ export const sessionsService = {
       total: page.total,
       hasMore: offset + conversations.length < page.total,
     };
+  },
+
+  /** The sidebar's Projects and Conversations views use the same per-user pin list. */
+  listPinnedSessions(userId: number): PinnedSessionListItem[] {
+    return sessionPinsDb.list(userId).map((session) => {
+      const timestamp = session.last_activity;
+      const normalizedTimestamp = timestamp && /^\d{4}-\d{2}-\d{2} \d{2}:/.test(timestamp)
+        ? `${timestamp.replace(' ', 'T')}Z`
+        : timestamp;
+      return {
+        sessionId: session.session_id,
+        provider: session.provider,
+        projectId: session.project_id,
+        projectDisplayName: resolveProjectDisplayName(session.project_path, session.custom_project_name),
+        sessionTitle: session.custom_name?.trim() || session.session_id,
+        lastActivity: normalizedTimestamp,
+        forkedFromSessionId: session.forked_from_session_id,
+        forkAncestors: session.forked_from_session_id ? sessionsDb.getForkAncestors(session.session_id) : [],
+      };
+    });
+  },
+
+  /** Pinning is idempotent and never changes session activity or project starring. */
+  setSessionPinned(userId: number, sessionId: string, isPinned: boolean): PinnedSessionListItem[] {
+    if (isPinned) {
+      const session = sessionsDb.getSessionById(sessionId);
+      if (!session) {
+        throw new AppError('Session was not found.', { code: 'SESSION_NOT_FOUND', statusCode: 404 });
+      }
+      const project = session.project_path ? projectsDb.getProjectPath(session.project_path) : null;
+      if (session.isArchived || project?.isArchived) {
+        throw new AppError('Restore the archived session or project before pinning.', {
+          code: 'SESSION_ARCHIVED', statusCode: 409,
+        });
+      }
+    }
+    sessionPinsDb.setPinned(userId, sessionId, isPinned);
+    return this.listPinnedSessions(userId);
   },
 
   /**
