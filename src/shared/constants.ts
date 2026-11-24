@@ -97,7 +97,7 @@ export const MAX_FILE_UPLOAD_SIZE_LABEL = `${MAX_FILE_UPLOAD_SIZE_MB}MB`;
 export const MAX_CHAT_ATTACHMENT_COUNT = 10;
 
 /** Largest single chat attachment, in megabytes. Source of truth for the byte limit below and for the size shown in the rejection notice. */
-export const MAX_CHAT_ATTACHMENT_SIZE_MB = 10;
+export const MAX_CHAT_ATTACHMENT_SIZE_MB = 100;
 
 /** `MAX_CHAT_ATTACHMENT_SIZE_MB` in bytes, for comparing against `File.size` when a file is attached. */
 export const MAX_CHAT_ATTACHMENT_SIZE_BYTES = MAX_CHAT_ATTACHMENT_SIZE_MB * 1024 * 1024;
@@ -133,6 +133,7 @@ export const MCP_PROVIDER_NAMES: Record<McpProvider, string> = {
   cursor: 'Cursor',
   codex: 'Codex',
   opencode: 'OpenCode',
+  antigravity: 'Antigravity',
 };
 
 /** Scopes each provider can install an MCP server into; drives the scope selector and validation. */
@@ -141,6 +142,7 @@ export const MCP_SUPPORTED_SCOPES: Record<McpProvider, McpScope[]> = {
   cursor: ['user', 'project'],
   codex: ['user', 'project'],
   opencode: ['user', 'project'],
+  antigravity: ['user'],
 };
 
 /** Transports each provider can talk to an MCP server over; drives the transport selector and validation. */
@@ -149,6 +151,7 @@ export const MCP_SUPPORTED_TRANSPORTS: Record<McpProvider, McpTransport[]> = {
   cursor: ['stdio', 'http'],
   codex: ['stdio', 'http'],
   opencode: ['stdio', 'http'],
+  antigravity: ['stdio', 'http'],
 };
 
 /** Transports offered when configuring a global (provider-agnostic) MCP server. */
@@ -167,6 +170,7 @@ export const MCP_SUPPORTS_WORKING_DIRECTORY: Record<McpProvider, boolean> = {
   cursor: false,
   codex: true,
   opencode: false,
+  antigravity: false,
 };
 
 // ---------------------------
@@ -237,6 +241,7 @@ export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPrefer
   cursor: 'cursorPermissions',
   codex: 'codexPermissions',
   opencode: 'opencodePermissions',
+  antigravity: 'antigravityPermissions',
 };
 
 // ---------------------------

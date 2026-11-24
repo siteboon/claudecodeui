@@ -50,6 +50,22 @@ export async function ensureImageAssetsDir(): Promise<string> {
 }
 
 /**
+ * Restores a non-ASCII upload filename.
+ *
+ * Multer reads the multipart `filename` parameter as latin1, so a UTF-8 name
+ * arrives as mojibake (`è¯¾ä»¶`). Re-interpreting those bytes as UTF-8 puts the
+ * original back; plain ASCII names round-trip unchanged, and a name whose bytes
+ * are not valid UTF-8 is kept as received rather than replaced by U+FFFD.
+ */
+function decodeUploadFilename(name: string): string {
+  if (!/[^\x00-\x7F]/.test(name)) {
+    return name;
+  }
+  const decoded = Buffer.from(name, 'latin1').toString('utf8');
+  return decoded.includes('�') ? name : decoded;
+}
+
+/**
  * Maps multer-stored upload files to the attachment records returned to the
  * chat composer. The absolute path is what providers receive and what session
  * history carries back to the UI.
@@ -57,7 +73,7 @@ export async function ensureImageAssetsDir(): Promise<string> {
 export function buildStoredImageRecords(files: UploadedImageFile[]): StoredImageAsset[] {
   const assetsDir = getGlobalImageAssetsDir();
   return files.map((file) => ({
-    name: file.originalname,
+    name: decodeUploadFilename(file.originalname),
     path: toPosixPath(path.join(assetsDir, file.filename)),
     size: file.size,
     mimeType: file.mimetype,

@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 
+import { readAntigravityUsage } from '@/modules/providers/list/antigravity/antigravity-usage.js';
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
@@ -332,6 +333,7 @@ const parseProvider = (value: unknown): LLMProvider => {
     || normalized === 'codex'
     || normalized === 'cursor'
     || normalized === 'opencode'
+    || normalized === 'antigravity'
   ) {
     return normalized;
   }
@@ -664,9 +666,22 @@ router.post(
   }),
 );
 
+/**
+ * Antigravity's account limits and locally recorded token totals.
+ *
+ * agy exposes its quota only through the `/usage` slash command it expands
+ * itself, and keeps no queryable per-turn record, so the provider computes both
+ * halves and this route only forwards them.
+ */
 router.get(
-  '/:provider/models',
-  asyncHandler(async (req: Request, res: Response) => {
+  '/antigravity/usage',
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.json(createApiSuccessResponse(await readAntigravityUsage()));
+  }),
+);
+
+router.get(
+  '/:provider/models',  asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     const models = await providerModelsService.getProviderModels(provider);
     res.json(createApiSuccessResponse({ provider, models }));

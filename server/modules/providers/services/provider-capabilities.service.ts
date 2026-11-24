@@ -154,6 +154,34 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsSteering: false,
     supportsContextClearing: false,
   },
+  antigravity: {
+    provider: 'antigravity',
+    // agy accepts `--mode plan` for read-only runs; every other mode is the
+    // unrestricted profile print mode needs, since nobody can answer an
+    // interactive permission prompt there.
+    permissionModes: ['default', 'acceptEdits', 'plan'],
+    defaultPermissionMode: 'default',
+    // agy's print mode takes no attachment arguments, and this runtime does not
+    // forward upload paths into the prompt, so the composer hides attachments
+    // rather than accepting files that would never reach the model.
+    supportsImages: false,
+    supportsFiles: false,
+    supportsAbort: true,
+    // Print mode has no channel back for a permission prompt.
+    supportsPermissionRequests: false,
+    // agy reports per-turn usage on its result event, and the runtime forwards
+    // it as the composer's context-window reading.
+    supportsTokenUsage: true,
+    // agy publishes one id per effort tier; the adapter keeps the tiers apart
+    // from the family and recombines them, so effort is a real knob here.
+    supportsEffort: true,
+    effortLevels: ['low', 'medium', 'high', 'xhigh'],
+    supportsMessageEditing: false,
+    supportsSessionForking: false,
+    supportsSideQuestions: false,
+    supportsSteering: false,
+    supportsContextClearing: false,
+  },
 };
 
 /**

@@ -4,6 +4,7 @@ import { promises as fsPromises } from 'node:fs';
 
 import chokidar, { type FSWatcher } from 'chokidar';
 
+import { getAntigravityTranscriptsRoot } from '@/modules/providers/list/antigravity/antigravity-store.js';
 import { sessionSynchronizerService } from '@/modules/providers/services/session-synchronizer.service.js';
 import { broadcastSessionUpsertedBatch } from '@/modules/websocket/index.js';
 import type { LLMProvider } from '@/shared/types.js';
@@ -26,6 +27,12 @@ const PROVIDER_WATCH_PATHS: Array<{ provider: LLMProvider; rootPath: string }> =
   {
     provider: 'opencode',
     rootPath: path.join(os.homedir(), '.local', 'share', 'opencode'),
+  },
+  {
+    // Antigravity's own history is a protobuf SQLite file this app cannot
+    // decode; the transcript its runtime writes is the indexed artifact.
+    provider: 'antigravity',
+    rootPath: getAntigravityTranscriptsRoot(),
   },
 ];
 

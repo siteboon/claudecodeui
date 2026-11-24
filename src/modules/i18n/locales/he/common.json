@@ -19,6 +19,7 @@
   },
   "tabs": {
     "chat": "צ'אט",
+    "usage": "Usage",
     "shell": "Shell",
     "files": "קבצים",
     "git": "ניהול גרסאות",

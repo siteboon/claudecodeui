@@ -193,6 +193,7 @@ function getProviderLabel(provider: LLMProvider): string {
     codex: 'Codex',
     cursor: 'Cursor CLI',
     opencode: 'OpenCode',
+    antigravity: 'Antigravity CLI',
   };
   return labels[provider];
 }

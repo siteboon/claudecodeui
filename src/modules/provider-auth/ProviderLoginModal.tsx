@@ -59,6 +59,12 @@ const getProviderCommand = ({
     return 'opencode auth login';
   }
 
+  // agy has no login subcommand: running it with no arguments opens the
+  // Google OAuth flow in the embedded shell.
+  if (provider === 'antigravity') {
+    return 'agy';
+  }
+
   return 'claude --dangerously-skip-permissions /login';
 };
 
@@ -67,6 +73,7 @@ const getProviderTitle = (provider: LLMProvider) => {
   if (provider === 'cursor') return 'Cursor CLI Login';
   if (provider === 'codex') return 'Codex CLI Login';
   if (provider === 'opencode') return 'OpenCode CLI Login';
+  if (provider === 'antigravity') return 'Antigravity CLI Login';
   return 'Claude CLI Login';
 };
 
