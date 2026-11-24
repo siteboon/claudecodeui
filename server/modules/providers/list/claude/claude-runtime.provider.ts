@@ -70,6 +70,13 @@ type ActiveSession = {
   status: 'active' | 'aborted';
   writer: ClaudeRuntimeWriter | null;
   releaseInput: (() => void) | null;
+  /**
+   * Set while the process runs: whether the CLI is running a turn of its own
+   * after this run's turn ended (relaying a finished background task). Such a
+   * turn runs tools like any other, so Ctrl+B and new messages must reach it.
+   */
+  relayTurnRunning: (() => boolean) | null;
+
   // Set the moment `releaseInput` actually runs (idle ceiling, or the turn
   // ending with no background work left). A native side question writes
   // into that same stdin, and the SDK drops a write after it has been
@@ -90,6 +97,15 @@ type ActiveSession = {
    * it; the caller then falls back to an ordinary next turn.
    */
   steerInput: SteerInput | null;
+  /** Set once this run's turn has sent its terminal `complete` (held only for background work). */
+  turnCompleted: boolean;
+  /**
+   * Set while the process runs: hands a new user turn to this same process once
+   * its turn is over and it is only held open for background work (see
+   * `continueHeldSession`). Returns null when it cannot take one.
+   */
+  continueWith: ((records: unknown[], writer: ClaudeRuntimeWriter, settings: HandoverSettings) => Promise<void> | null) | null;
+
 };
 
 /** What a steered message carries: its text, attachments, and the id it is tracked by. */
@@ -103,6 +119,9 @@ type SteerRequest = {
 type SteerInput = (request: SteerRequest) => Promise<boolean>;
 
 type ToolApprovalDecision = AnyRecord | null;
+
+/** What a handed-over turn changes on the running process's permission check. */
+type HandoverSettings = { permissionMode: unknown; allowedTools: unknown; disallowedTools: unknown };
 
 /** A pending approval's resolver, carrying the lookup fields getPendingApprovalsForSession reads. */
 type ToolApprovalResolver = ((decision: ToolApprovalDecision) => void) & AnyRecord;
@@ -527,6 +546,11 @@ function addSession(
     // Re-registered mid-run once the provider session id lands; keep the
     // steer entry point like the closer below.
     steerInput: steerInput || carried?.steerInput || null,
+    // Whether this run's turn has already sent its terminal `complete`; the
+    // hand-over below only takes a turn once it has (see continueHeldSession).
+    turnCompleted: carried?.turnCompleted || false,
+    continueWith: carried?.continueWith || null,
+    relayTurnRunning: carried?.relayTurnRunning || null,
   };
   // Re-registered mid-run once the provider session id lands; keep the closer.
   const effectiveReleaseInput = releaseInput || carried?.releaseInput || null;
@@ -537,6 +561,7 @@ function addSession(
     }
     : null;
   activeSessions.set(sessionId, sessionEntry);
+
   // The history reader reports a background agent as running or stopped by
   // whether this entry exists, and the cached history does not see this map.
   sessionHistoryCache.invalidate(sessionId);
@@ -1152,10 +1177,13 @@ async function loadMcpConfig(cwd: string | undefined): Promise<AnyRecord | null>
 async function queryClaudeSDK(
   command: string,
   options: AnyRecord = {},
-  ws: ClaudeRuntimeWriter,
+  initialWriter: ClaudeRuntimeWriter,
   context: ProviderRuntimeContext,
 ): Promise<void> {
   const { sessionId, sessionSummary } = options;
+  // Swapped when a later user turn is handed to this run's held process (see
+  // `continueHeldSession`): that turn streams to its own run's writer.
+  let ws = initialWriter;
   // Callers pass the stable app session id; the SDK only understands the
   // provider-native id recorded on the session row.
   const providerSessionId = context.resolveProviderSessionId(sessionId);
@@ -1215,6 +1243,14 @@ async function queryClaudeSDK(
   let reportedContextWindow: number | null = getReportedClaudeContextWindow(providerSessionId) ?? null;
   let mainThreadModel: string | null = null;
   let lastSentTokenBudget: TokenBudget | null = null;
+
+  // A session whose last turn is over but whose process is still held open for
+  // background work (agents, commands, monitors) takes this turn in that same
+  // process, as the CLI does when you type while background agents run.
+  // Starting a new process instead would stop that work.
+  if (sessionKey() && await continueHeldSession(sessionKey()!, command, options, ws)) {
+    return;
+  }
 
   // A new turn supersedes any earlier one still holding this session's process
   // open, so held runs cannot stack up across a conversation.
@@ -1286,6 +1322,140 @@ async function queryClaudeSDK(
   // Hoisted above the try so the catch's cleanup can tell whether this run
   // still owns the activeSessions entry (or was superseded by a newer run).
   let queryInstance: ClaudeQuery | null = null;
+  // This run's SDK options, once built: the permission check reads them on
+  // every tool call, so a handed-over turn rewrites the fields it changes.
+  let liveSdkOptions: AnyRecord | null = null;
+  // Resolves the run that handed a turn to this process, once that turn ends.
+  let finishContinuation: (() => void) | null = null;
+  // A handed-over turn waiting for the CLI's own turn (relaying a finished
+  // background task) to end first, so the next `result` is surely its own.
+  let pendingHandover: { records: unknown[]; writer: ClaudeRuntimeWriter; settings: HandoverSettings } | null = null;
+  // Since the last `result`: the CLI streamed a turn of its own, or a task
+  // settled and the CLI is about to start one to relay it.
+  let cliTurnActive = false;
+  let relayExpected = false;
+  // Takes the waiting hand-over, if any (a function, so the run loop's own
+  // reads of `pendingHandover` are not narrowed by this write).
+  const takePendingHandover = () => {
+    const handover = pendingHandover;
+    pendingHandover = null;
+    return handover;
+  };
+  const settleContinuation = () => {
+    pendingHandover = null;
+    const finish = finishContinuation;
+    finishContinuation = null;
+    finish?.();
+  };
+
+  // Points this process at the handed-over turn: its prompt goes on stdin, and
+  // what the CLI streams from now on goes to that turn's writer. False when
+  // stdin has already closed.
+  const startHandover = (records: unknown[], writer: ClaudeRuntimeWriter, settings: HandoverSettings): boolean => {
+    const key = sessionKey();
+    const owned = key ? getSession(key) : undefined;
+    if (!owned || owned.instance !== queryInstance || owned.status !== 'active') {
+      return false;
+    }
+    if (liveSdkOptions) {
+      liveSdkOptions.permissionMode = settings.permissionMode;
+      liveSdkOptions.allowedTools = settings.allowedTools;
+      liveSdkOptions.disallowedTools = settings.disallowedTools;
+    }
+    for (const record of records) {
+      if (!pushPromptMessage(record)) {
+        return false;
+      }
+    }
+    ws = writer;
+    owned.writer = writer;
+    owned.turnCompleted = false;
+    if (capturedSessionId && typeof writer.setSessionId === 'function') {
+      writer.setSessionId(capturedSessionId);
+    }
+    turnCompleteSent = false;
+    assistantBudgetSent = false;
+    // The turn runs like any other: no hold, no idle countdown, until its own
+    // `result` decides again whether the process stays open.
+    heldForBackgroundWork = false;
+    if (idleReleaseTimer) {
+      clearTimeout(idleReleaseTimer);
+      idleReleaseTimer = null;
+    }
+    return true;
+  };
+
+  // Hands a user turn to this process while the CLI's own relay turn is
+  // running: the records go on stdin with priority `next`, so the CLI reads
+  // them at the relay's next tool call, or runs them as a turn of its own when
+  // the relay ends first.
+  const handOverIntoRelay = (records: unknown[], writer: ClaudeRuntimeWriter, settings: HandoverSettings): boolean => {
+    const key = sessionKey();
+    const owned = key ? getSession(key) : undefined;
+    if (!owned || owned.instance !== queryInstance || owned.status !== 'active') {
+      return false;
+    }
+    // Tracked like a steer (pendingSteerIds): the CLI folds it at the relay
+    // turn's next tool call and echoes it, or runs it as a follow-up turn of
+    // its own; either way the relay's own `result` does not end this turn
+    // (see awaitSteerFollowUp). Not in steeredMessageIds: the page already
+    // shows this message, so its echo must not render a second bubble.
+    const stamped = records.map((record) => {
+      const uuid = crypto.randomUUID();
+      pendingSteerIds.add(uuid);
+      return { ...(record as AnyRecord), priority: 'next', uuid };
+    });
+    if (!startHandover(stamped, writer, settings)) {
+      for (const record of stamped) {
+        pendingSteerIds.delete(record.uuid);
+      }
+      return false;
+    }
+    return true;
+  };
+
+  // Takes a new user turn into this run's held process: only while this run's
+  // own turn is over and no other handed-over turn is still going. Returns
+  // null otherwise, and the caller starts a process of its own as before.
+  const continueWith = (records: unknown[], writer: ClaudeRuntimeWriter, settings: HandoverSettings): Promise<void> | null => {
+    const key = sessionKey();
+    const owned = key ? getSession(key) : undefined;
+    if (
+      !turnCompleteSent
+      || finishContinuation
+      || !owned
+      || owned.instance !== queryInstance
+      || owned.status !== 'active'
+      || (key && abortedSessionIds.has(key))
+    ) {
+      return null;
+    }
+    const finished = new Promise<void>((resolve) => { finishContinuation = resolve; });
+    if (cliTurnActive) {
+      // The CLI is running a turn of its own (relaying a finished task), which
+      // can take minutes of tool calls. The message goes in now and is folded
+      // in at that turn's next tool call, like a steer (see handOverIntoRelay).
+      if (!handOverIntoRelay(records, writer, settings)) {
+        finishContinuation = null;
+        return null;
+      }
+      return finished;
+    }
+    if (relayExpected) {
+      // A task settled and the CLI is about to start the turn that relays it,
+      // but has not yet: a record written now could be taken as that turn's
+      // own prompt instead of a user message folded into it. Wait for the
+      // relay to start (handed over at its first message, below) or for its
+      // `result`, whichever comes first.
+      pendingHandover = { records, writer, settings };
+      return finished;
+    }
+    if (!startHandover(records, writer, settings)) {
+      finishContinuation = null;
+      return null;
+    }
+    return finished;
+  };
 
   // Delivers a message into this run while its turn is going. Priority `next`
   // makes the CLI read it at the next tool-call boundary, without stopping the
@@ -1326,6 +1496,7 @@ async function queryClaudeSDK(
       model: resolvedModel || options.model,
       effortModels,
     });
+    liveSdkOptions = sdkOptions;
 
     const mcpServers = await loadMcpConfig(options.cwd);
     if (mcpServers) {
@@ -1540,6 +1711,12 @@ async function queryClaudeSDK(
     // Track the query instance for abort capability
     if (sessionKey()) {
       addSession(sessionKey()!, queryInstance, ws, releasePromptStream, steerIntoTurn);
+      const owned = getSession(sessionKey()!);
+      if (owned && owned.instance === queryInstance) {
+        owned.continueWith = continueWith;
+        owned.relayTurnRunning = () => turnCompleteSent && cliTurnActive;
+      }
+
     }
 
     // Settles a turn whose `result` has arrived: tells the client the turn is
@@ -1558,6 +1735,16 @@ async function queryClaudeSDK(
           sessionName: sessionSummary,
           stopReason: 'completed'
         });
+        // Record on the live session entry that this turn is done, even though
+        // the process may stay held open for background work below: only then
+        // can a new message be handed to it (continueHeldSession). Guarded: a
+        // superseding run may already own this session key.
+        const owned = sessionKey() ? getSession(sessionKey()!) : undefined;
+        if (owned && owned.instance === queryInstance) {
+          owned.turnCompleted = true;
+        }
+        // A turn handed to this process is over: its run can finish.
+        settleContinuation();
       } else if (heldForBackgroundWork && !abortPending && !stillOutstanding) {
         // A result after the turn already reported complete means the work we
         // held the process open for has finished and pushed a follow-up turn
@@ -1588,7 +1775,18 @@ async function queryClaudeSDK(
       const holdForTurn = sawTaskEventThisTurn ? stillOutstanding : backgroundWorkPending || stillOutstanding;
       backgroundWorkPending = false;
       sawTaskEventThisTurn = false;
-      if (holdForTurn) {
+      cliTurnActive = false;
+      relayExpected = false;
+      if (pendingHandover) {
+        // The CLI's own turn (relaying a finished task) is over: the user turn
+        // waiting for it goes in now, on this same process.
+        const handover = pendingHandover;
+        pendingHandover = null;
+        if (!startHandover(handover.records, handover.writer, handover.settings)) {
+          handover.writer.send(createNormalizedMessage({ kind: 'error', content: 'The message could not be delivered: Claude had already stopped. Send it again.', sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          settleContinuation();
+        }
+      } else if (holdForTurn) {
         heldForBackgroundWork = true;
         scheduleRelease();
       } else {
@@ -1738,6 +1936,28 @@ async function queryClaudeSDK(
       }
       backgroundWork.apply(sessionKey()!, message);
 
+      // After this run's turn has ended, anything but task bookkeeping means
+      // the CLI is running a turn of its own (relaying a finished task), and a
+      // task that settled other than by a stop is about to get one.
+      if (turnCompleteSent && message.type !== 'result') {
+        if (message.type === 'system' && message.subtype === 'task_notification') {
+          if (message.status !== 'stopped') {
+            relayExpected = true;
+          }
+        } else if (!(message.type === 'system' && message.subtype === 'task_started')) {
+          cliTurnActive = true;
+          const handover = takePendingHandover();
+          if (handover) {
+            // The relay turn has started: the user turn that waited for it goes
+            // in now and is folded at its next tool call, not after it ends.
+            if (!handOverIntoRelay(handover.records, handover.writer, handover.settings)) {
+              handover.writer.send(createNormalizedMessage({ kind: 'error', content: 'The message could not be delivered: Claude had already stopped. Send it again.', sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+              settleContinuation();
+            }
+          }
+        }
+      }
+
       // A task the user stopped gets no follow-up turn from the CLI — only its
       // `stopped` notification — so when that was the last outstanding task
       // nothing will ever push the `result` the release below waits for, and
@@ -1746,6 +1966,7 @@ async function queryClaudeSDK(
       // its own, which closing stdin now would cut short.
       if (
         heldForBackgroundWork
+        && !finishContinuation
         && message.type === 'system'
         && message.subtype === 'task_notification'
         && message.status === 'stopped'
@@ -1763,6 +1984,7 @@ async function queryClaudeSDK(
           // runs them as a follow-up turn on this same process. The run is not
           // over for the client yet, and stdin must stay open for that turn.
           awaitSteerFollowUp();
+
         } else {
           settleTurnResult();
         }
@@ -1856,6 +2078,8 @@ async function queryClaudeSDK(
       error
     });
   } finally {
+    // A turn handed to this process ends with it, however it ends.
+    settleContinuation();
     // Always close stdin — otherwise an aborted or failed run leaves the CLI
     // process (and its MCP servers) alive until the server exits.
     if (idleReleaseTimer) {
@@ -1871,6 +2095,72 @@ async function queryClaudeSDK(
 }
 
 /**
+ * Hands a new user turn to the process a session's last run is holding open
+ * for background work, instead of replacing that process (which would stop
+ * the work). Resolves true once that turn has ended there; false when there is
+ * no such process, and the caller starts a new one as usual.
+ *
+ * Not for an edit (it rewinds, which needs a fresh process): that starts a new
+ * process, and the background work is stopped as before. The turn's model and
+ * permission mode are applied to the running process through the SDK's
+ * controls, and its tool allow/deny lists replace the process's own.
+ */
+async function continueHeldSession(
+  sessionKey: string,
+  command: string,
+  options: AnyRecord,
+  writer: ClaudeRuntimeWriter,
+): Promise<boolean> {
+  // An edit rewinds the conversation, which only a fresh process can do.
+  if (options.resumeAnchorId || options.resumeFromScratch) {
+    return false;
+  }
+  const held = getSession(sessionKey);
+  if (!held || held.status !== 'active' || !held.turnCompleted || !held.continueWith) {
+    return false;
+  }
+  const records = await buildPromptMessages(command, options.images, options.files, options.cwd ?? process.cwd());
+  // Re-read: the hold may have ended while the prompt was being built.
+  const live = getSession(sessionKey);
+  if (!live || live.instance !== held.instance || live.status !== 'active' || !live.turnCompleted || !live.continueWith) {
+    return false;
+  }
+  // The turn's own permission settings, as a fresh process would get them.
+  const mapped = mapCliOptionsToSDK(options);
+  const settings: HandoverSettings = {
+    permissionMode: mapped.permissionMode,
+    allowedTools: mapped.allowedTools,
+    disallowedTools: mapped.disallowedTools,
+  };
+  const instance = live.instance as unknown as AnyRecord;
+  // Each setting separately, and a refusal never replaces the process: that
+  // would stop the work it holds. A process launched without
+  // --dangerously-skip-permissions refuses bypassPermissions; it then keeps
+  // asking, and the permission check (which reads the turn's own mode) answers
+  // those asks as that mode says.
+  const applyLive = async (label: string, apply: () => unknown) => {
+    try {
+      await apply();
+    } catch (error) {
+      console.warn(`[Claude SDK] Held process kept its own ${label} for the next turn:`, (error as Error)?.message || error);
+    }
+  };
+  if (typeof instance.setPermissionMode === 'function') {
+    await applyLive('permission mode', () => instance.setPermissionMode(mapped.permissionMode ?? 'default'));
+  }
+  if (typeof options.model === 'string' && options.model.trim() && typeof instance.setModel === 'function') {
+    await applyLive('model', () => instance.setModel(options.model));
+  }
+  const turn = live.continueWith(records, writer, settings);
+  if (!turn) {
+    return false;
+  }
+  await turn;
+  return true;
+}
+
+/**
+
  * Aborts an active SDK session
  * @param {string} sessionId - Session identifier
  * @returns {boolean} True if session was aborted, false if not found
@@ -2004,6 +2294,42 @@ async function runClaudeSDKTaskStop(sessionId: string, taskId: string, confirmMs
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   return true;
+}
+
+/**
+ * The terminal's Ctrl+B: asks the CLI to move the running turn's foreground
+ * tasks (Bash commands, subagents) to the background, or only the one that
+ * `toolUseId` started. Each returns a "running in the background" result at
+ * once, the turn carries on, and the task reports when it settles.
+ * @returns {Promise<boolean>} False when no live turn can be asked
+ */
+async function backgroundClaudeSDKTasks(sessionId: string, toolUseId?: string) {
+  const session = getSession(sessionId);
+  const instance = session?.instance as unknown as AnyRecord | undefined;
+  // A turn the CLI runs on its own after ours ended (relaying a finished
+  // task) runs tools too, and Ctrl+B must reach them.
+  const turnRunning = session && (!session.turnCompleted || Boolean(session.relayTurnRunning?.()));
+  if (!session || session.status !== 'active' || !turnRunning || typeof instance?.backgroundTasks !== 'function') {
+    return false;
+  }
+  try {
+    return Boolean(await instance.backgroundTasks(toolUseId));
+  } catch (error) {
+    console.error(`Error moving tasks to the background for session ${sessionId}:`, (error as Error)?.message || error);
+    return false;
+  }
+}
+
+/** Whether the CLI is running a turn of its own for the session (relaying a finished task) after its turn ended. */
+function isClaudeSDKRelayTurnRunning(sessionId: string) {
+  const session = getSession(sessionId);
+  return Boolean(session && session.status === 'active' && session.relayTurnRunning?.());
+}
+
+/** Whether a new message for the session would go to its held process (see `continueHeldSession`). */
+function canContinueClaudeSDKSession(sessionId: string) {
+  const session = getSession(sessionId);
+  return Boolean(session && session.status === 'active' && session.turnCompleted && session.continueWith);
 }
 
 /**
@@ -2215,6 +2541,11 @@ export const claudeRuntime = {
   stopBackgroundTask: stopClaudeSDKTask,
   askSideQuestion,
   steer: steerClaudeSDKSession,
+  backgroundTasks: backgroundClaudeSDKTasks,
+  canContinueOverBackgroundWork: canContinueClaudeSDKSession,
+  isRelayTurnRunning: isClaudeSDKRelayTurnRunning,
+
+
 };
 
 // Export public API
@@ -2224,6 +2555,9 @@ export {
   steerClaudeSDKSession,
   listClaudeSDKBackgroundWork,
   stopClaudeSDKTask,
+  backgroundClaudeSDKTasks,
+  canContinueClaudeSDKSession,
+  isClaudeSDKRelayTurnRunning,
   isClaudeSDKSessionActive,
   getClaudeSDKSessionStartTime,
   getActiveClaudeSDKSessions,

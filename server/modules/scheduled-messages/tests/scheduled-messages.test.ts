@@ -852,3 +852,34 @@ test('a session\'s next due message stays pending while its earlier send is goin
     assert.equal(await dispatchDueScheduledMessages(runtime), 0);
   });
 });
+
+test('a queued message that could not be sent stays queued instead of vanishing', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'do not lose me', attachments: [] });
+    const runs: RunCall[] = [];
+    // The session's provider is briefly unavailable (e.g. still starting up).
+    const runtime = { ...(createRuntime(runs) as Record<string, unknown>), hasRuntime: () => false } as never;
+
+    await dispatchQueuedMessages(runtime);
+
+    assert.equal(runs.length, 0);
+    assert.equal((sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage as { content?: string } | null)?.content, 'do not lose me');
+    // It goes once the provider is back.
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    assert.deepEqual(runs.map((run) => run.command), ['do not lose me']);
+  });
+});
+
+test('a queued message does not wait for background work when the runtime hands the turn to that work\'s process', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'how is the agent doing?', attachments: [] });
+    const runs: RunCall[] = [];
+    const runtime = {
+      ...(createRuntime(runs, 'ok', [], () => true) as Record<string, unknown>),
+      canContinueOverBackgroundWork: () => true,
+    } as never;
+
+    assert.equal(await dispatchQueuedMessages(runtime), 1);
+    assert.deepEqual(runs.map((run) => run.command), ['how is the agent doing?']);
+  });
+});

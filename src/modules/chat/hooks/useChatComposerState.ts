@@ -1360,8 +1360,10 @@ export function useChatComposerState({
       // stopped, or finish where nothing is listening. Sending is the user's
       // call, but not one to make for them — and queueing behind the work,
       // which the server holds until it finishes, is the safe alternative.
+      // A provider that can steer (Claude) hands a new turn to the process the
+      // background work runs in, so sending stops nothing and needs no question.
       const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
-      if (backgroundActivity?.background) {
+      if (backgroundActivity?.background && !supportsSteering) {
         const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
           .map((task) => describeBackgroundTask(task, t));
         const choice = submitOptions?.presetBackgroundChoice ?? await askBeforeSendingOverBackgroundWork(work);
@@ -1836,6 +1838,19 @@ export function useChatComposerState({
     });
   }, [canAbortSession, currentSessionId, selectedSession?.id, sendMessage]);
 
+  // The terminal's Ctrl+B: moves the running turn's foreground commands and
+  // subagents to the background, so the turn carries on and the main agent is
+  // free to answer while they keep running. Claude only.
+  const handleBackgroundTasks = useCallback(() => {
+    const targetSessionId = selectedSession?.id || currentSessionId || null;
+    const relaying = Boolean(targetSessionId && processingSessionsRef.current?.get(targetSessionId)?.canBackground);
+    if (!supportsSteering || !(isLoading || relaying) || !targetSessionId) {
+
+      return;
+    }
+    sendMessage({ type: 'chat.background-tasks', sessionId: targetSessionId });
+  }, [supportsSteering, currentSessionId, isLoading, selectedSession?.id, sendMessage]);
+
   const handleGrantToolPermission = useCallback(
     (suggestion: { entry: string; toolName: string }) => {
       if (!suggestion || provider !== 'claude') {
@@ -1948,6 +1963,7 @@ export function useChatComposerState({
     syncInputOverlayScroll,
     handleClearInput,
     handleAbortSession,
+    handleBackgroundTasks,
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,

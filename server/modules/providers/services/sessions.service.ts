@@ -41,6 +41,8 @@ type RunningSessionEntry = {
   lastSeq: number;
   background?: true;
   canInterrupt?: false;
+  /** The CLI is running a turn of its own (relaying a finished task): its tools can be moved to the background. */
+  canBackground?: true;
   statusText?: string;
   tasks?: BackgroundTaskSummary[];
 };
@@ -304,7 +306,7 @@ export const sessionsService = {
           running.tasks = tasks;
           continue;
         }
-        entries.push({
+        const backgroundEntry: RunningSessionEntry = {
           sessionId,
           provider: provider.id,
           startedAt: Math.min(...tasks.map((task) => task.startedAt)),
@@ -314,7 +316,16 @@ export const sessionsService = {
           background: true,
           canInterrupt: false,
           tasks,
-        });
+        };
+        if (provider.runtime.isRelayTurnRunning?.(sessionId)) {
+          backgroundEntry.canBackground = true;
+        }
+        entries.push(backgroundEntry);
+        // The process holding this work is CloudCLI's own, and it reports
+        // itself busy in the CLI registry while a subagent or command runs:
+        // the CLI check below must not list the session a second time as a
+        // turn "Running in the Claude CLI", which the page would show instead.
+        runningById.set(sessionId, backgroundEntry);
       }
     }
 
@@ -325,6 +336,24 @@ export const sessionsService = {
     for (const live of await listBusyClaudeCliSessions()) {
       const session = sessionsDb.getSessionByProviderSessionId(live.providerSessionId);
       if (!session || runningById.has(session.session_id)) {
+        continue;
+      }
+
+      // CloudCLI's own held process running a turn of its own (relaying a
+      // finished task with nothing else outstanding): not a CLI elsewhere, and
+      // its tools can be moved to the background.
+      const relaying = providerRegistry.listProviders()
+        .some((provider) => provider.runtime.isRelayTurnRunning?.(session.session_id));
+      if (relaying) {
+        entries.push({
+          sessionId: session.session_id,
+          provider: session.provider as LLMProvider,
+          startedAt: live.startedAt,
+          lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0,
+          canInterrupt: false,
+          canBackground: true,
+        });
+        runningById.set(session.session_id, entries[entries.length - 1]);
         continue;
       }
 

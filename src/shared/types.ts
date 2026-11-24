@@ -212,6 +212,8 @@ export type SessionActivity = {
   background?: boolean;
   /** The background tasks the session still has running, with or without a response in flight. */
   tasks?: BackgroundTaskSummary[];
+  /** Claude is running a turn of its own after the user's ended (relaying a finished task): Ctrl+B / Background reach its tools. */
+  canBackground?: boolean;
 };
 
 /** Every busy session, keyed by session id. Read it to tell whether a session is busy; check `background` to tell how. */
@@ -255,6 +257,8 @@ export type SessionActivitySnapshot = {
   /** True when the server lists the session for its background tasks alone, with no chat run. */
   background?: boolean;
   tasks?: BackgroundTaskSummary[];
+  /** See SessionActivity.canBackground. */
+  canBackground?: boolean;
 };
 
 // ---------------------------

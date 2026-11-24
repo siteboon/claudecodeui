@@ -279,6 +279,7 @@ function ChatInterface({
     syncInputOverlayScroll,
     handleClearInput,
     handleAbortSession,
+    handleBackgroundTasks,
     handlePermissionDecision,
     handleGrantToolPermission,
     handleInputFocusChange,
@@ -385,6 +386,43 @@ function ChatInterface({
     onAbortSession: handleAbortSession,
     composerRef: textareaRef,
   });
+
+  // Ctrl+B, as in the terminal: move the running commands and subagents to the
+  // background so the main agent can be talked to while they keep running.
+  useEffect(() => {
+    // Only for the chat on screen: hidden tabs stay mounted.
+    // Also while Claude runs a turn of its own after ours ended (relaying a
+    // finished task): that turn runs tools too.
+    if (!isActive || !(isProcessing || sessionActivity?.canBackground) || !supportsSteering) {
+
+      return;
+    }
+    const handleBackgroundKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.defaultPrevented || !event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) {
+        return;
+      }
+      if (event.key.toLowerCase() !== 'b') {
+        return;
+      }
+      // Ctrl+B means something else in a terminal (tmux, readline) or another
+      // editor; leave it alone anywhere but this chat's own composer.
+      const target = event.target as HTMLElement | null;
+      const editable = target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+      if (target?.closest?.('.xterm, .cm-editor, .monaco-editor')) {
+        return;
+      }
+      if (editable && target !== textareaRef.current) {
+        return;
+      }
+      event.preventDefault();
+      handleBackgroundTasks();
+    };
+    document.addEventListener('keydown', handleBackgroundKey, { capture: true });
+    return () => {
+      document.removeEventListener('keydown', handleBackgroundKey, { capture: true });
+    };
+  }, [supportsSteering, handleBackgroundTasks, isActive, isProcessing, sessionActivity?.canBackground, textareaRef]);
+
 
   useEffect(() => {
     return () => {
@@ -583,6 +621,8 @@ function ChatInterface({
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
           canAbortSession={canAbortSession}
+          onBackgroundTasks={supportsSteering ? handleBackgroundTasks : undefined}
+
           permissionMode={permissionMode}
           availablePermissionModes={availablePermissionModes}
           onSelectPermissionMode={selectPermissionMode}

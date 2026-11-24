@@ -60,10 +60,16 @@ async function sendClaimedQueuedMessage(
     { runtime },
   );
 
-  // The registry check and run reservation are separate operations. If a run
-  // wins that tiny race, put the turn back so the next poll tries again.
-  if (!result.started && result.error === 'A run was already in progress for this session.') {
-    sessionDraftsDb.restoreQueuedMessage(candidate);
+  // Never sent: another run won the race between the busy check and the
+  // reservation, or the provider is unavailable right now. Put it back so the
+  // card stays and a later pass tries again. Only a deleted session drops it,
+  // as there is nothing left to send it to. (Upstream restores only the race.)
+  if (!result.started) {
+    if (result.reason === 'session-missing') {
+      sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
+    } else {
+      sessionDraftsDb.restoreQueuedMessage(candidate);
+    }
     return;
   }
   sessionDraftsDb.deleteEmptyDraft(candidate.userId, candidate.sessionId);
@@ -81,7 +87,13 @@ async function sendClaimedQueuedMessage(
 function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
   // sessionsSending too: a scheduled turn can complete before its send settles,
   // and the session's next due row would then interrupt this queued turn.
-  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId) || sessionsSending.has(sessionId);
+  if (chatRunRegistry.isProcessing(sessionId) || sessionsSending.has(sessionId)) {
+    return true;
+  }
+  // Background work only blocks a queued turn when sending would replace the
+  // process it runs in. A runtime that hands the turn to that process (Claude)
+  // keeps the work going, so the turn need not wait for it.
+  return runtime.hasBackgroundWork(sessionId) && !runtime.canContinueOverBackgroundWork?.(sessionId);
 }
 
 /**

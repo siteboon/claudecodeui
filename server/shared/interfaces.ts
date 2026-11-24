@@ -57,6 +57,12 @@ export interface IProviderRuntime {
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
   /**
+   * Whether the CLI is running a turn of its own for the session after its
+   * last turn ended (relaying a finished background task). That turn runs
+   * tools, so the page offers Ctrl+B / Background for it.
+   */
+  isRelayTurnRunning?(sessionId: string): boolean;
+  /**
    * Asks a side question on the provider runtime while a session is active.
    *
    * A provider with this method uses its native fork capability; one without it
@@ -79,6 +85,19 @@ export interface IProviderRuntime {
    * a runtime that keeps its CLI's input open during a turn implements this.
    */
   steer?(sessionId: string, command: string, options: AnyRecord): Promise<boolean>;
+  /**
+   * Moves the running turn's foreground tasks (commands, subagents) to the
+   * background, like Ctrl+B in the terminal: each returns at once and the turn
+   * carries on. With `toolUseId`, only the task that tool call started.
+   * Resolves false when there is no live process to ask.
+   */
+  backgroundTasks?(sessionId: string, toolUseId?: string): Promise<boolean>;
+  /**
+   * Whether a new message for the session would be taken by the process its
+   * last turn left running for background work, so sending it stops nothing.
+   */
+  canContinueOverBackgroundWork?(sessionId: string): boolean;
+
 }
 
 /**
