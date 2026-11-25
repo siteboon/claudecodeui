@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import {
   access,
@@ -42,6 +42,25 @@ import type {
  * Environment variables must be loaded before this module is evaluated.
  */
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
+
+// ---------------------------
+//----------------- SECRET COMPARISON UTILITIES ------------
+/**
+ * Compares a caller-supplied credential against the expected secret in
+ * constant time. Both values are hashed first so neither the content nor the
+ * length of the secret leaks through response timing. A non-string candidate
+ * (a missing header, or a repeated query parameter parsed as an array) never
+ * matches. The Auth module uses it for the global `API_KEY`, and Browser Use
+ * for its MCP bridge token.
+ */
+export function secretsMatch(candidate: unknown, expected: string): boolean {
+  if (typeof candidate !== 'string') {
+    return false;
+  }
+  const candidateDigest = createHash('sha256').update(candidate).digest();
+  const expectedDigest = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(candidateDigest, expectedDigest);
+}
 
 // ---------------------------
 //----------------- NORMALIZED MESSAGE HELPER INPUT TYPES ------------
@@ -702,6 +721,7 @@ export function buildDefaultProviderCurrentActiveModel(
 ): ProviderCurrentActiveModel {
   return {
     model: models.DEFAULT,
+    isFallback: true,
   };
 }
 
@@ -1507,6 +1527,44 @@ export function probeCliVersion(command: string, args: string[] = ['--version'])
     exitCode: result.status,
     version: result.status === 0 ? parseCliVersion(String(result.stdout ?? '')) : null,
   };
+}
+
+const RELEASE_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/**
+ * Whether `version` is a whole `major.minor.patch` release, with an optional
+ * `-prerelease` and `+build`. Used by the providers module's CLI update
+ * service to drop a registry answer it could not compare.
+ */
+export function isReleaseVersion(version: string): boolean {
+  return RELEASE_VERSION_PATTERN.test(version);
+}
+
+/**
+ * Whether `candidate` is a later release than `current`. Both are
+ * `major.minor.patch` with an optional prerelease; a release outranks its own
+ * prereleases. Anything else (a date-based or unparsable version) compares as
+ * not newer, so callers never act on a guess.
+ *
+ * Used by the providers module's CLI update service (whether npm has a newer
+ * release) and its Codex CLI resolver (whether CloudCLI's bundled Codex is
+ * newer than the user's own install).
+ */
+export function isNewerVersion(candidate: string, current: string): boolean {
+  const next = RELEASE_VERSION_PATTERN.exec(candidate);
+  const installed = RELEASE_VERSION_PATTERN.exec(current);
+  if (!next || !installed) {
+    return false;
+  }
+
+  for (let index = 1; index <= 3; index += 1) {
+    const difference = Number(next[index]) - Number(installed[index]);
+    if (difference !== 0) {
+      return difference > 0;
+    }
+  }
+
+  return !next[4] && Boolean(installed[4]);
 }
 
 // ---------------------------

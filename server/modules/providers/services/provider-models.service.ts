@@ -464,10 +464,10 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       const providerCatalog = readMergedCatalog(provider, predefined);
       const providerModel = await getCurrentActiveModel(provider, normalizedSessionId);
       const resolvedProviderModel = providerModel.model?.trim();
-      // Adapters answer with their own built-in default when they know nothing
-      // about the session. That value, not the merged default (a custom model
-      // while only custom models are listed), is what means "no answer".
-      if (resolvedProviderModel && resolvedProviderModel !== predefined.DEFAULT) {
+      // Adapters flag the built-in default they answer with when they know
+      // nothing about the session; a session that really runs on that model
+      // (e.g. Cursor's `auto`) is still a provider answer.
+      if (resolvedProviderModel && !providerModel.isFallback) {
         return {
           provider,
           sessionId: normalizedSessionId,

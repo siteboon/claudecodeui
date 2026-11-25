@@ -277,6 +277,9 @@ export const api = {
   sessionDetails: (sessionId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}`),
   runningSessions: () => get('/api/providers/sessions/running'),
+  pinnedSessions: (options: ApiRequestOptions = {}) => get('/api/providers/sessions/pinned', options),
+  setSessionPinned: (sessionId: string, isPinned: boolean, options: ApiRequestOptions = {}) =>
+    put(`/api/providers/sessions/${encodeURIComponent(sessionId)}/pin`, { isPinned }, options),
   recentConversations: ({ limit = 40, offset = 0 }: { limit?: number; offset?: number } = {}) =>
     get(`/api/providers/sessions/recent${query({ limit, offset })}`),
   providerSessionId: (sessionId: string) =>
@@ -503,10 +506,10 @@ export const api = {
 
   // Chat attachments, stored globally under ~/.cloudcli/assets
   assets: {
-    uploadFiles: (formData: FormData) =>
+    uploadFiles: (formData: FormData, requestId?: string) =>
       authenticatedFetch('/api/assets/files', {
         method: 'POST',
-        headers: {}, // Let browser set Content-Type for FormData
+        headers: requestId ? { 'X-Upload-Request-ID': requestId } : {},
         body: formData,
       }),
     file: (storedName: string) => get(`/api/assets/files/${encodeURIComponent(storedName)}`),

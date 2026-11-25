@@ -268,6 +268,17 @@ CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
 );
 `;
 
+/** Database initialization and migrations create the per-user session bookmarks. */
+export const SESSION_PINS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS session_pins (
+    pin_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    UNIQUE(user_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_session_pins_user_order ON session_pins(user_id, pin_id DESC);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;

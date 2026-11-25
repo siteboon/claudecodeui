@@ -95,6 +95,16 @@ export const useEditorSidebar = ({
         return;
       }
 
+      // Until the first drag, a fill-space tab (Files) lays the editor out with
+      // flex and never writes `editorWidth`, which still holds `initialWidth`.
+      // Seed it with the width on screen so switching to the fixed-width layout
+      // doesn't snap the editor to the default before the pointer moves. Both
+      // updates land in the same render, so the stale width is never painted.
+      const editorPane = resizeHandleRef.current?.nextElementSibling;
+      if (editorPane instanceof HTMLElement) {
+        setEditorWidth(editorPane.getBoundingClientRect().width);
+      }
+
       // After first drag interaction, the editor width is user-controlled.
       setHasManualWidth(true);
       setIsResizing(true);

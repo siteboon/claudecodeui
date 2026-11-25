@@ -27,7 +27,7 @@ export function ScheduledMessageList({ scheduledMessages, onCancel }: ScheduledM
   }
 
   return (
-    <div className="mx-auto mb-2 flex max-w-[54.25rem] flex-col gap-1.5">
+    <div className="mx-auto mb-2 flex chat-content-width flex-col gap-1.5">
       {visible.map((message) => {
         const isFailed = message.status === 'failed';
 

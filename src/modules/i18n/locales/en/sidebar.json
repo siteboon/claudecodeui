@@ -1,4 +1,10 @@
 {
+  "pinned": {
+    "title": "Pinned sessions",
+    "pin": "Pin session",
+    "unpin": "Unpin session",
+    "error": "Could not load or save session pins. Please try again."
+  },
   "projects": {
     "title": "Projects",
     "newProject": "New Project",
