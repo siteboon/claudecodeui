@@ -1,4 +1,4 @@
-import { mkdir, rename, rm } from 'node:fs/promises';
+import { access, mkdir, rename, rm } from 'node:fs/promises';
 import os from 'node:os';
 
 import spawn from 'cross-spawn';
@@ -58,6 +58,7 @@ export function createSystemModule(options: SystemModuleOptions): Router {
     createDirectory: async (directory) => { await mkdir(directory, { recursive: true }); },
     moveDirectory: (from, to) => rename(from, to),
     removeDirectory: (directory) => rm(directory, { recursive: true, force: true }),
+    pathExists: (target) => access(target).then(() => true, () => false),
     logInfo: (message, detail) => console.log(message, detail ?? ''),
     logError: (message, detail) => console.error(message, detail ?? ''),
   });

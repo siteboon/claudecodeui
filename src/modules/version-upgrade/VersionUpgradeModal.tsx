@@ -74,7 +74,15 @@ export function VersionUpgradeModal({
 
         try {
             // Call the backend API to run the update command
-            let response = await api.system.update();
+            let response: Response;
+            try {
+                response = await api.system.update();
+            } catch (error) {
+                // The POST may have reached the server before the connection dropped; ask before reporting a failure.
+                const status = await api.system.updateStatus().catch(() => null);
+                if (!status || status.status === 404) throw error;
+                response = status;
+            }
 
             // The server answers 202 and keeps installing in the background so
             // a slow install cannot run into a proxy timeout; poll until done.

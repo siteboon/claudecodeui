@@ -20,6 +20,7 @@ test('update responds immediately and exposes the result once the background run
     createDirectory: async () => undefined,
     moveDirectory: async () => undefined,
     removeDirectory: async () => undefined,
+    pathExists: async () => true,
     logInfo: () => undefined,
     logError: () => undefined,
   });

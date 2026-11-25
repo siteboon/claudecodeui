@@ -18,6 +18,7 @@ function createDependencies(
     createDirectory: async () => undefined,
     moveDirectory: async () => undefined,
     removeDirectory: async () => undefined,
+    pathExists: async () => true,
     logInfo: () => undefined,
     logError: () => undefined,
     ...overrides,
@@ -134,6 +135,21 @@ test('a failed or killed npm install leaves the running installation untouched',
 
   assert.equal(result.success, false);
   assert.equal(calls.some(([operation]) => operation === 'move'), false);
+});
+
+test('an update after a failed restore puts the backup back before replacing it', async () => {
+  const calls: unknown[][] = [];
+  const service = createSystemUpdateService(createNpmDependencies(calls, {
+    // The earlier swap lost the app directory; only the backup holds the working version.
+    pathExists: async (target) => target !== NPM_APP_ROOT,
+  }));
+
+  await service.updateSystem();
+
+  assert.deepEqual(calls.slice(3, 5), [
+    ['move', NPM_PREVIOUS_APP, NPM_APP_ROOT],
+    ['remove', NPM_PREVIOUS_APP],
+  ]);
 });
 
 test('a failed swap restores the previous installation', async () => {

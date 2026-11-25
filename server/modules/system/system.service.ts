@@ -26,6 +26,7 @@ type SystemUpdateDependencies = {
   createDirectory(directory: string): Promise<void>;
   moveDirectory(from: string, to: string): Promise<void>;
   removeDirectory(directory: string): Promise<void>;
+  pathExists(target: string): Promise<boolean>;
   logInfo(message: string, detail?: string): void;
   logError(message: string, detail?: string): void;
 };
@@ -98,6 +99,10 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
     }
 
     // shortcut: the global bin symlink is reused as is, so a release that renames its bin entry needs a manual `npm install -g`.
+    // A swap that could not put the old version back left it only in the backup: restore it before replacing the backup.
+    if (!(await dependencies.pathExists(dependencies.appRoot))) {
+      await dependencies.moveDirectory(previousApp, dependencies.appRoot);
+    }
     await dependencies.removeDirectory(previousApp);
     await dependencies.moveDirectory(dependencies.appRoot, previousApp);
     try {
