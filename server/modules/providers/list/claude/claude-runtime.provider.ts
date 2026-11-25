@@ -1234,8 +1234,12 @@ export function scheduleUsageLimitContinue({ userId, sessionId, runOptions, cont
     },
     scheduledFor: continueAt,
   });
-  scheduledMessagesDb.cancelPendingAutoContinue(sessionId, id);
-  announceScheduledChange(sessionId);
+  try {
+    scheduledMessagesDb.cancelPendingAutoContinue(sessionId, id);
+  } finally {
+    // The new continue exists either way; clients must see it.
+    announceScheduledChange(sessionId);
+  }
   return true;
 }
 
@@ -1727,7 +1731,9 @@ async function queryClaudeSDK(
       // fired the waiting continue. Later inits (follow-up turns of held-open
       // background work) are not the user. A turn still refused by the limit
       // schedules a fresh continue below.
-      if (!autoContinueDropped && message.type === 'system' && message.subtype === 'init' && sessionId) {
+      // A run another run replaced must neither drop nor schedule the newer one's continue.
+      const supersededRun = supersededInstances.has(queryInstance);
+      if (!autoContinueDropped && !supersededRun && message.type === 'system' && message.subtype === 'init' && sessionId) {
         try {
           if (scheduledMessagesDb.cancelPendingAutoContinue(sessionId) > 0) {
             announceScheduledChange(sessionId);
@@ -1738,9 +1744,6 @@ async function queryClaudeSDK(
         }
       }
       const continueAt = watchUsageLimit(message);
-      // A run another run replaced must not schedule into the newer one's conversation.
-      const liveInstance = sessionId ? getSession(sessionId)?.instance : undefined;
-      const supersededRun = liveInstance !== undefined && liveInstance !== queryInstance;
       if (continueAt && sessionId && ws?.userId != null && !supersededRun) {
         try {
           const scheduled = scheduleUsageLimitContinue({

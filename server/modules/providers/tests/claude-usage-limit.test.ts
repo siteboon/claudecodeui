@@ -199,7 +199,9 @@ test('a new turn drops the waiting automatic "continue" only', async () => {
   await withDatabase(async (userId, at) => {
     scheduledMessagesDb.create({ userId, sessionId: 'limited-session', content: 'mine', options: {}, scheduledFor: at });
     scheduleUsageLimitContinue({ userId, sessionId: 'limited-session', runOptions: {}, continueAt: at });
-    scheduledMessagesDb.cancelPendingAutoContinue('limited-session');
+    // The count tells the caller whether there is a change to announce.
+    assert.equal(scheduledMessagesDb.cancelPendingAutoContinue('limited-session'), 1);
+    assert.equal(scheduledMessagesDb.cancelPendingAutoContinue('limited-session'), 0);
     const rows = scheduledMessagesDb.listForSession(userId, 'limited-session');
     assert.deepEqual(rows.map((row) => [row.content, row.status]).sort(), [['continue', 'cancelled'], ['mine', 'pending']]);
   });

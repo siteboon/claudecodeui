@@ -148,8 +148,10 @@ export const scheduledMessagesDb = {
       .run(id);
   },
 
-  /** Drops the session's waiting automatic "continue" after a usage limit, except `keepId`. */
-  /** Returns how many waiting continues were cancelled. */
+  /**
+   * Drops the session's waiting automatic "continue" after a usage limit, except `keepId`.
+   * Returns how many were cancelled.
+   */
   cancelPendingAutoContinue(sessionId: string, keepId = ''): number {
     return getConnection()
       .prepare(
