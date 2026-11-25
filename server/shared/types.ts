@@ -389,6 +389,8 @@ export type SessionUpsertedProject = {
   fullPath: string;
   displayName: string;
   isStarred: boolean;
+  /** Main repository path when the project is a linked git worktree. */
+  worktreeOf: string | null;
 };
 
 /**

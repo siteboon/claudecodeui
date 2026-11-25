@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { generateDisplayName } from '@/modules/projects/index.js';
+import { generateDisplayName, resolveWorktreeParent } from '@/modules/projects/index.js';
 import { broadcastToConnectedClients } from '@/modules/websocket/services/websocket-state.service.js';
 import type { SessionUpsertedEvent } from '@/shared/types.js';
 
@@ -59,6 +59,10 @@ async function buildSessionUpsertedEvent(
         fullPath: project.project_path,
         displayName,
         isStarred: Boolean(project.isStarred),
+        worktreeOf: resolveWorktreeParent(
+          project.project_path,
+          new Set(projectsDb.getProjectPaths().map((candidate) => candidate.project_path)),
+        ),
       }
       : null,
     timestamp: new Date().toISOString(),

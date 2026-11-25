@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
-import type { SidebarProjectListProps } from '@/shared/types';
+import type { Project, SidebarProjectListProps } from '@/shared/types';
 import { getPageTitle } from '@/shared/utils';
 import SidebarProjectItem from '@/modules/sidebar/SidebarProjectItem';
 import SidebarProjectsState from '@/modules/sidebar/SidebarProjectsState';
+import { groupWorktreeProjects } from '@/modules/sidebar/utils/projectWorktreeGroups';
 
 
 /** Rendered by SidebarContent to list the filtered projects, delegating each row to SidebarProjectItem. */
@@ -69,80 +70,101 @@ export default function SidebarProjectList({
   }, [pageTitle]);
 
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
+  const groups = useMemo(() => groupWorktreeProjects(filteredProjects), [filteredProjects]);
+
+  const renderProject = (project: Project) => {
+    // Both renames are resolved here rather than inside the row, so
+    // every other row is handed the same scalars on each keystroke and
+    // its memo boundary holds.
+    const renamingProject =
+      activeRename?.target === 'project' && activeRename.id === project.projectId
+        ? activeRename
+        : null;
+    const renamingSession =
+      activeRename?.target === 'session' && activeRename.projectId === project.projectId
+        ? activeRename
+        : null;
+    // Resolved here for the same reason as the renames: only the
+    // project in selection mode sees a set, every other row keeps
+    // being handed the same `null` and its memo holds.
+    const selectedSessionIds =
+      sessionSelection?.projectId === project.projectId ? sessionSelection.sessionIds : null;
+
+    // React key + per-project state lookups all use the DB `projectId`
+    // so they remain stable across renames and session changes.
+    return (
+      <SidebarProjectItem
+        key={project.projectId}
+        project={project}
+        selectedProject={selectedProject}
+        selectedSession={selectedSession}
+        isExpanded={isProjectExpanded(project.projectId)}
+        isDeleting={deletingProjects.has(project.projectId)}
+        isStarred={isProjectStarred(project.projectId)}
+        isEditing={renamingProject !== null}
+        renameDraft={renamingProject?.draft ?? ''}
+      includeOffPagePins={includeOffPagePins}
+        sessions={getProjectSessions(project)}
+        initialSessionsLoaded={initialSessionsLoaded.has(project.projectId)}
+        isLoadingMoreSessions={loadingMoreProjects.has(project.projectId)}
+        currentTime={currentTime}
+        sessionRenameId={renamingSession?.id ?? null}
+        sessionRenameDraft={renamingSession?.draft ?? ''}
+        tasksEnabled={tasksEnabled}
+        mcpServerStatus={mcpServerStatus}
+        onRenameDraftChange={onRenameDraftChange}
+        onToggleProject={onToggleProject}
+        onProjectSelect={onProjectSelect}
+        onToggleStarProject={onToggleStarProject}
+        onStartEditingProject={onStartEditingProject}
+        onCancelEditingProject={onCancelEditingProject}
+        onSaveProjectName={onSaveProjectName}
+        onDeleteProject={onDeleteProject}
+        onSessionSelect={onSessionSelect}
+        onArchiveSession={onArchiveSession}
+        onDeleteSession={onDeleteSession}
+        onForkSession={onForkSession}
+        onLoadMoreSessions={onLoadMoreSessions}
+        activeSessions={activeSessions}
+        backgroundSessionIds={backgroundSessionIds}
+        attentionSessionIds={attentionSessionIds}
+        onNewSession={onNewSession}
+        onStartEditingSession={onStartEditingSession}
+        onCancelEditingSession={onCancelEditingSession}
+        onSaveEditingSession={onSaveEditingSession}
+        selectedSessionIds={selectedSessionIds}
+        onSetSessionSelection={onSetSessionSelection}
+        onToggleSessionSelected={onToggleSessionSelected}
+        onCancelSessionSelection={onCancelSessionSelection}
+        onDeleteSelectedSessions={onDeleteSelectedSessions}
+        t={t}
+      />
+    );
+  };
 
   return (
       <div className="pb-safe-area-inset-bottom md:space-y-1">
         {!showProjects
           ? state
-          : filteredProjects.map((project) => {
-              // Both renames are resolved here rather than inside the row, so
-              // every other row is handed the same scalars on each keystroke and
-              // its memo boundary holds.
-              const renamingProject =
-                activeRename?.target === 'project' && activeRename.id === project.projectId
-                  ? activeRename
-                  : null;
-              const renamingSession =
-                activeRename?.target === 'session' && activeRename.projectId === project.projectId
-                  ? activeRename
-                  : null;
-              // Resolved here for the same reason as the renames: only the
-              // project in selection mode sees a set, every other row keeps
-              // being handed the same `null` and its memo holds.
-              const selectedSessionIds =
-                sessionSelection?.projectId === project.projectId ? sessionSelection.sessionIds : null;
-
-              // React key + per-project state lookups all use the DB `projectId`
-              // so they remain stable across renames and session changes.
+          : groups.map(({ project, worktrees }) => {
+              // Worktree projects (CloudCLI or agent worktrees of this repository) sit under their
+              // repository instead of crowding the top level. They show while the repository is
+              // expanded, or whenever one of them is the selected project so the selection never hides.
+              const showWorktrees = worktrees.length > 0 && (
+                isProjectExpanded(project.projectId)
+                || worktrees.some((worktree) => worktree.projectId === selectedProject?.projectId)
+              );
               return (
-              <SidebarProjectItem
-                key={project.projectId}
-                project={project}
-                selectedProject={selectedProject}
-                selectedSession={selectedSession}
-                isExpanded={isProjectExpanded(project.projectId)}
-                isDeleting={deletingProjects.has(project.projectId)}
-                isStarred={isProjectStarred(project.projectId)}
-                isEditing={renamingProject !== null}
-                renameDraft={renamingProject?.draft ?? ''}
-                includeOffPagePins={includeOffPagePins}
-                sessions={getProjectSessions(project)}
-                initialSessionsLoaded={initialSessionsLoaded.has(project.projectId)}
-                isLoadingMoreSessions={loadingMoreProjects.has(project.projectId)}
-                currentTime={currentTime}
-                sessionRenameId={renamingSession?.id ?? null}
-                sessionRenameDraft={renamingSession?.draft ?? ''}
-                tasksEnabled={tasksEnabled}
-                mcpServerStatus={mcpServerStatus}
-                onRenameDraftChange={onRenameDraftChange}
-                onToggleProject={onToggleProject}
-                onProjectSelect={onProjectSelect}
-                onToggleStarProject={onToggleStarProject}
-                onStartEditingProject={onStartEditingProject}
-                onCancelEditingProject={onCancelEditingProject}
-                onSaveProjectName={onSaveProjectName}
-                onDeleteProject={onDeleteProject}
-                onSessionSelect={onSessionSelect}
-                onArchiveSession={onArchiveSession}
-                onDeleteSession={onDeleteSession}
-                onForkSession={onForkSession}
-                onLoadMoreSessions={onLoadMoreSessions}
-                activeSessions={activeSessions}
-                backgroundSessionIds={backgroundSessionIds}
-                attentionSessionIds={attentionSessionIds}
-                onNewSession={onNewSession}
-                onStartEditingSession={onStartEditingSession}
-                onCancelEditingSession={onCancelEditingSession}
-                onSaveEditingSession={onSaveEditingSession}
-                selectedSessionIds={selectedSessionIds}
-                onSetSessionSelection={onSetSessionSelection}
-                onToggleSessionSelected={onToggleSessionSelected}
-                onCancelSessionSelection={onCancelSessionSelection}
-                onDeleteSelectedSessions={onDeleteSelectedSessions}
-                t={t}
-              />
-            );
-          })}
+                <div key={project.projectId}>
+                  {renderProject(project)}
+                  {showWorktrees && (
+                    <div className="ml-3 border-l border-border/60 pl-1 md:space-y-1" data-testid="sidebar-worktree-projects">
+                      {worktrees.map(renderProject)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
     </div>
   );
 }

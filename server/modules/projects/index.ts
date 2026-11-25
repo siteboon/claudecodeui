@@ -9,3 +9,5 @@ export { createProject } from './services/project-management.service.js';
 export { deleteOrArchiveProject, deleteSessionJsonlFilesForProjectPath } from './services/project-delete.service.js';
 // restoreArchivedProject: used by the worktrees module to re-activate an archived project when its worktree is reopened.
 export { restoreArchivedProject } from './services/project-delete.service.js';
+// resolveWorktreeParent: used by the session upsert broadcast so a worktree project announced live nests under its repository.
+export { resolveWorktreeParent } from './services/project-worktree-parent.service.js';
