@@ -145,3 +145,18 @@ test('a session page answered after an upsert keeps the upsert', async () => {
   });
   assert.equal(summaryOf(result.current.projects), 'Renamed');
 });
+
+test('a session deleted after its upsert is not put back by the late list', async () => {
+  const { result } = await renderLoaded(buildProject('Original'));
+  const slow = deferred<unknown>();
+  projectsResponse.mockReturnValueOnce(slow.promise);
+
+  act(() => emit({ kind: 'websocket_reconnected' }));
+  act(() => emit(renamedUpsert));
+  act(() => result.current.handleSessionDelete('session-1'));
+
+  await act(async () => {
+    slow.resolve(respond([{ ...buildProject('Original'), sessions: [], sessionMeta: { hasMore: false, total: 0 } }]));
+  });
+  assert.equal(summaryOf(result.current.projects), undefined);
+});
