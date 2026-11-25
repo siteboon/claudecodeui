@@ -796,6 +796,13 @@ router.post(
       });
     }
     const stored = providerModelsService.setSessionPermissionMode(provider, sessionId, permissionMode);
+    // A row that refused the mode belongs to a provider without it (the URL can name another one).
+    if (!stored && providerModelsService.hasSession(sessionId)) {
+      throw new AppError(`This session's provider does not support permission mode "${permissionMode}".`, {
+        code: 'INVALID_PERMISSION_MODE',
+        statusCode: 400,
+      });
+    }
     // Mirror active-model behavior for a composer that picked a mode just
     // before the session gateway created its row.
     res.json(createApiSuccessResponse(

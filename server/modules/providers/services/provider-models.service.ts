@@ -486,6 +486,9 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     }
   };
 
+  /** Whether the session has a row the selection setters can write to. */
+  const hasSession = (sessionId: string): boolean => Boolean(sessions.getSessionById(sessionId.trim()));
+
   /** The permission mode recorded on one session row, or null when none was. */
   const readSessionPermissionMode = (sessionId: string): string | null => (
     sessions.getSessionById(sessionId.trim())?.permission_mode?.trim() || null
@@ -618,6 +621,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     setSessionPermissionMode,
     recordSessionSelection,
     readSessionPermissionMode,
+    hasSession,
     resolveProjectSelection,
     resolveSessionModel,
     resolveResumeModel,

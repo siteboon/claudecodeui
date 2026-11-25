@@ -216,6 +216,13 @@ test('permission mode is persisted per session and seeds the project selection',
     assert.equal((await postMode('plan')).status, 400);
     assert.equal((await postMode('acceptEdits')).status, 200);
     assert.equal(sessionsDb.getSessionById('mode-session')?.permission_mode, 'acceptEdits');
+    // A Claude URL cannot store Claude's plan mode on this Codex session.
+    const crossProvider = await fetch(
+      `${baseUrl}/api/providers/claude/sessions/mode-session/active-permission-mode`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ permissionMode: 'plan' }) },
+    );
+    assert.equal(crossProvider.status, 400);
+    assert.equal(sessionsDb.getSessionById('mode-session')?.permission_mode, 'acceptEdits');
 
     const readResponse = await fetch(
       `${baseUrl}/api/providers/codex/sessions/mode-session/active-model`,
