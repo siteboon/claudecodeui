@@ -1270,7 +1270,9 @@ export function useChatComposerState({
       let targetSessionId = selectedSession?.id || currentSessionId || null;
       // The user may open another chat while the upload or session creation runs;
       // a brand-new chat moving from its project scope to its session id has not left.
-      const leftChat = () => newSessionTriggerRef.current !== submittedNewSessionTrigger
+      // New Session only leaves a send that started a new chat: an existing chat keeps its own scope.
+      const startsNewChat = targetSessionId === null;
+      const leftChat = () => (startsNewChat && newSessionTriggerRef.current !== submittedNewSessionTrigger)
         || (draftScopeRef.current !== submittedScope
           && (targetSessionId === null || draftScopeRef.current !== targetSessionId));
 
@@ -1446,6 +1448,11 @@ export function useChatComposerState({
         // The chat left keeps text the user went back and edited during the upload.
         if (submittedScope && readDraftText(submittedScope) === currentInput) {
           writeDraftText(submittedScope, '');
+        }
+        // A New Session in the same project shares the scope, so its composer still shows the sent text.
+        if (draftScopeRef.current === submittedScope && inputValueRef.current === currentInput) {
+          setInput('');
+          inputValueRef.current = '';
         }
         return;
       }

@@ -135,4 +135,6 @@ test('a second new chat opened in the same project counts as leaving the first',
 
   assert.deepEqual(composer.established.map(([id, context]) => [id, context.chatLeft]), [['session-new', true]]);
   assert.deepEqual(composer.added, []);
+  // The second chat's composer does not keep the sent text.
+  assert.equal(composer.view.result.current.input, '');
 });
