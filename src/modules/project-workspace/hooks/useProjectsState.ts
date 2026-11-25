@@ -879,6 +879,8 @@ export function useProjectsState({
       upsertGenerationRef.current += 1;
       if (listRequestsInFlightRef.current > 0) {
         upsertLogRef.current.push({ generation: upsertGenerationRef.current, upsert });
+        // shortcut: a list request that hangs past 500 upserts can land stale; add a fetch timeout if that shows up.
+        if (upsertLogRef.current.length > 500) upsertLogRef.current.shift();
       }
       setProjects((previousProjects) => applySessionUpsert(previousProjects, upsert));
 
@@ -1136,7 +1138,7 @@ export function useProjectsState({
         navigate('/');
       }
 
-      forgetUpserts((upsert) => upsert.sessionId === sessionIdToDelete);
+      forgetUpserts((upsert) => getSessionAliasIds(upsert).has(sessionIdToDelete));
       setProjects((prevProjects) =>
         prevProjects.map((project) => removeSessionFromProject(project, sessionIdToDelete)),
       );
@@ -1222,7 +1224,7 @@ export function useProjectsState({
       console.error('[Workspace] Failed to rename session:', response.status);
       return false;
     }
-    forgetUpserts((upsert) => upsert.sessionId === sessionIdToRename);
+    forgetUpserts((upsert) => getSessionAliasIds(upsert).has(sessionIdToRename));
 
     setProjects((previousProjects) => {
       let changed = false;
