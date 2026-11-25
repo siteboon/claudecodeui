@@ -52,6 +52,7 @@ type RegisterOptimisticSessionArgs = {
   provider: LLMProvider;
   project: Project;
   summary?: string | null;
+  chatLeft?: boolean;
 };
 
 /**
@@ -602,6 +603,7 @@ export function useProjectsState({
     provider,
     project,
     summary,
+    chatLeft,
   }: RegisterOptimisticSessionArgs) => {
     if (!newSessionId || !project?.projectId) {
       return;
@@ -654,6 +656,11 @@ export function useProjectsState({
         candidate.projectId === existingProject.projectId ? updatedProject : candidate,
       );
     });
+
+    // The user opened another chat meanwhile: list the session, keep theirs selected.
+    if (chatLeft) {
+      return;
+    }
 
     setSelectedSession((previousSession) => (
       previousSession?.id === newSessionId

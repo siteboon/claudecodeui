@@ -1194,11 +1194,13 @@ export function useChatComposerState({
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Queued file upload failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to upload files: ${message}`,
-            timestamp: new Date(),
-          });
+          if (draftScopeRef.current === submittedScope) {
+            addMessage({
+              type: 'error',
+              content: `Failed to upload files: ${message}`,
+              timestamp: new Date(),
+            });
+          }
           return;
         }
 
@@ -1259,6 +1261,12 @@ export function useChatComposerState({
 
       const messageContent = currentInput;
 
+      let targetSessionId = selectedSession?.id || currentSessionId || null;
+      // The user may open another chat while the upload or session creation runs;
+      // a brand-new chat moving from its project scope to its session id has not left.
+      const leftChat = () => draftScopeRef.current !== submittedScope
+        && (targetSessionId === null || draftScopeRef.current !== targetSessionId);
+
       let uploadedAttachments = previouslyUploadedAttachments;
       if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {
         try {
@@ -1266,7 +1274,7 @@ export function useChatComposerState({
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('File upload failed:', error);
-          if (draftScopeRef.current === submittedScope) {
+          if (!leftChat()) {
             addMessage({
               type: 'error',
               content: `Failed to upload files: ${message}`,
@@ -1284,10 +1292,6 @@ export function useChatComposerState({
       // BEFORE the first websocket send: brand-new chats allocate one here
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
-      let targetSessionId = selectedSession?.id || currentSessionId || null;
-      // The user may open another chat while the upload or session creation runs;
-      // a brand-new chat moving from its project scope to its session id has not left.
-      const leftChat = () => draftScopeRef.current !== submittedScope && draftScopeRef.current !== targetSessionId;
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
