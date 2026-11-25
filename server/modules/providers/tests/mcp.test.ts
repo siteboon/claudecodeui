@@ -423,3 +423,57 @@ test('Antigravity MCP lists native scopes and rejects direct edits without chang
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('Antigravity MCP concurrent rejected edits preserve native config and never attempt a replacement', { concurrency: false }, async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-native-ownership-'));
+  const file = path.join(root, '.agents', 'mcp_config.json');
+  const rename = fs.rename;
+  const write = fs.writeFile;
+  let replacements = 0;
+  try {
+    await fs.mkdir(path.dirname(file));
+    const original = JSON.stringify({ mcpServers: { native: { serverUrl: 'https://native.test', disabled: true } } });
+    await write(file, original);
+    fs.rename = async (...args: Parameters<typeof fs.rename>) => { replacements++; return rename(...args); };
+    fs.writeFile = async (...args: Parameters<typeof fs.writeFile>) => { replacements++; return write(...args); };
+    const edits = Array.from({ length: 8 }, (_, index) => providerMcpService.upsertProviderMcpServer('antigravity', {
+      scope: 'project', workspacePath: root, name: `ui-${index}`, transport: 'http', url: 'https://ui.test',
+    }));
+    await Promise.all(edits.map((edit) => assert.rejects(edit, { code: 'MCP_NATIVE_CONFIG_READ_ONLY', statusCode: 405 })));
+    assert.equal(replacements, 0);
+    assert.equal(await fs.readFile(file, 'utf8'), original);
+    // A later native save remains authoritative; neither a queued retry nor a temp file can overwrite it.
+    const native = JSON.stringify({ mcpServers: { native: { serverUrl: 'https://updated-native.test' } } });
+    await write(file, native);
+    await assert.rejects(providerMcpService.removeProviderMcpServer('antigravity', {
+      scope: 'project', workspacePath: root, name: 'native',
+    }), { code: 'MCP_NATIVE_CONFIG_READ_ONLY', statusCode: 405 });
+    assert.equal(replacements, 0);
+    assert.equal(await fs.readFile(file, 'utf8'), native);
+    assert.deepEqual(await fs.readdir(path.dirname(file)), ['mcp_config.json']);
+  } finally { fs.rename = rename; fs.writeFile = write; await fs.rm(root, { recursive: true, force: true }); }
+});
+
+
+test('review-4 regression: Antigravity MCP lists redact native credential values in every scope', { concurrency: false }, async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agy-mcp-redact-'));
+  const restore = patchHomeDir(root);
+  try {
+    for (const file of [path.join(root, '.gemini/config/mcp_config.json'), path.join(root, '.agents/mcp_config.json')]) {
+      await fs.mkdir(path.dirname(file), { recursive: true });
+      await fs.writeFile(file, JSON.stringify({ mcpServers: {
+        local: { command: 'node', env: { API_KEY: 'private-key' } },
+        remote: { serverUrl: 'https://example.com', env: { TOKEN: 'private-env' }, headers: { Authorization: 'Bearer private-token' } },
+      } }));
+    }
+    const grouped = await providerMcpService.listProviderMcpServers('antigravity', { workspacePath: root });
+    for (const scope of ['user', 'project'] as const) {
+      const scoped = await providerMcpService.listProviderMcpServersForScope('antigravity', scope, { workspacePath: root });
+      assert.deepEqual(scoped, grouped[scope]);
+      assert.deepEqual(scoped.find((row) => row.name === 'local')?.env, { API_KEY: '[redacted]' });
+      assert.deepEqual(scoped.find((row) => row.name === 'remote')?.env, { TOKEN: '[redacted]' });
+      assert.deepEqual(scoped.find((row) => row.name === 'remote')?.headers, { Authorization: '[redacted]' });
+      assert.doesNotMatch(JSON.stringify(scoped), /private-key|private-token|private-env/);
+    }
+  } finally { restore(); await fs.rm(root, { recursive: true, force: true }); }
+});

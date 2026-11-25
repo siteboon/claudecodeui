@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { appendFile, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
+import fsp from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -8,7 +10,9 @@ import Database from 'better-sqlite3';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
 import { AntigravitySessionSynchronizer } from '@/modules/providers/list/antigravity/antigravity-session-synchronizer.provider.js';
+import { CursorSessionSynchronizer } from '@/modules/providers/list/cursor/cursor-session-synchronizer.provider.js';
 import { AntigravitySessionsProvider } from '@/modules/providers/list/antigravity/antigravity-sessions.provider.js';
+import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { antigravityRunBindings } from '@/modules/providers/services/antigravity-run-bindings.service.js';
 import { appendFilesInputTag, appendImagesInputTag } from '@/shared/index.js';
 
@@ -49,10 +53,9 @@ async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promis
   const databasePath = path.join(tempDirectory, 'auth.db');
 
   closeConnection();
-  process.env.DATABASE_PATH = databasePath;
-  await initializeDatabase();
-
   try {
+    process.env.DATABASE_PATH = databasePath;
+    await initializeDatabase();
     await runTest();
   } finally {
     closeConnection();
@@ -154,8 +157,9 @@ test('Antigravity synchronizer indexes transcript rows from history metadata', {
   }
 });
 
-test('Antigravity history reader normalizes transcript messages', async () => {
+test('Antigravity history reader normalizes transcript messages', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-history-'));
+  const restore = patchHomeDir(tempRoot);
   try {
     const transcriptPath = await writeAntigravityTranscript(tempRoot, 'agy-session-2');
     const provider = new AntigravitySessionsProvider();
@@ -173,6 +177,7 @@ test('Antigravity history reader normalizes transcript messages', async () => {
     assert.equal(history.messages[1]?.role, 'assistant');
     assert.equal(history.messages[1]?.content, 'History is visible now.');
   } finally {
+    restore();
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
@@ -198,8 +203,9 @@ test('Antigravity history reader resolves the native transcript when the indexed
   }
 });
 
-test('Antigravity history reader skips a partially written JSONL line', async () => {
+test('Antigravity history reader skips a partially written JSONL line', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'antigravity-partial-history-'));
+  const restore = patchHomeDir(tempRoot);
   try {
     const transcriptPath = await writeAntigravityTranscript(tempRoot, 'agy-session-partial');
     await appendFile(transcriptPath, '{"step_index":2,"source":"MODEL"', 'utf8');
@@ -218,6 +224,7 @@ test('Antigravity history reader skips a partially written JSONL line', async ()
     assert.equal(history.offset, 1);
     assert.equal(history.limit, 1);
   } finally {
+    restore();
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
@@ -339,6 +346,8 @@ test('watcher defers unmapped transcripts then reuses the exact app row without 
   const root = await mkdtemp(path.join(os.tmpdir(), 'agy-pending-sidebar-'));
   const restore = patchHomeDir(root);
   try {
+    const sync = new AntigravitySessionSynchronizer();
+    await sync.synchronize();
     const workspace = path.join(root, 'workspace');
     const own = await writeAntigravityTranscript(root, 'own-native', 'same prompt');
     const foreign = await writeAntigravityTranscript(root, 'terminal-native', 'same prompt');
@@ -346,7 +355,6 @@ test('watcher defers unmapped transcripts then reuses the exact app row without 
       ['own-native', 'terminal-native'].map((id) => JSON.stringify({ conversationId: id, workspace, display: 'same prompt' })).join('\n'));
     await withIsolatedDatabase(async () => {
       sessionsDb.createAppSession('app-session', 'antigravity', workspace, 'same prompt');
-      const sync = new AntigravitySessionSynchronizer();
       const releasePendingBinding = antigravityRunBindings.trackPendingRun(workspace);
       assert.equal(await sync.synchronizeFile(own), null);
       assert.equal(await sync.synchronizeFile(foreign), null);
@@ -425,4 +433,250 @@ test('incremental AGY scans refresh resumed transcripts and retain the mapped ap
       assert.equal(session?.updated_at, updated.toISOString());
     } finally { restoreHome(); await rm(home, { recursive: true, force: true }); }
   });
+});
+
+test('live AGY chunks preserve whitespace and deferred history retries without another transcript write', async () => {
+  const provider = new AntigravitySessionsProvider();
+  assert.equal(['hello', ' ', 'world', '\n'].flatMap((chunk) => provider.normalizeMessage(chunk, 'a')).map((message) => message.content).join(''), 'hello world\n');
+  assert.equal(provider.normalizeMessage({ content: '  ' }, 'a')[0]?.content, '  ');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-deferred-metadata-'));
+  const restore = patchHomeDir(root);
+  try {
+    await writeAntigravityTranscript(root, 'deferred');
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new AntigravitySessionSynchronizer();
+      assert.equal(await synchronizer.synchronize(), 0);
+      await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'), JSON.stringify({ conversationId: 'deferred', workspace: root }) + '\n');
+      assert.equal(await synchronizer.synchronize(new Date(Date.now() + 10000)), 1);
+      assert.equal(sessionsDb.getSessionById('deferred')?.project_path, root);
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('deferred old transcript survives an indexing failure', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-deferred-failure-'));
+  const restore = patchHomeDir(root);
+  try {
+    await writeAntigravityTranscript(root, 'deferred-failure');
+    await withIsolatedDatabase(async () => {
+      const sync = new AntigravitySessionSynchronizer();
+      assert.equal(await sync.synchronize(), 0);
+      await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'), JSON.stringify({ conversationId: 'deferred-failure', workspace: root }));
+      const original = sessionsDb.createSession;
+      sessionsDb.createSession = () => { throw new Error('injected database failure'); };
+      try { await assert.rejects(sync.synchronize(new Date(Date.now() + 10000)), /injected/); }
+      finally { sessionsDb.createSession = original; }
+      assert.equal(await sync.synchronize(new Date(Date.now() + 10000)), 1);
+      assert.equal(sessionsDb.getSessionById('deferred-failure')?.project_path, root);
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('startup scan recovers deferred transcripts older than the persisted cursor', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-deferred-restart-'));
+  const restore = patchHomeDir(root);
+  try {
+    const transcript = await writeAntigravityTranscript(root, 'restart');
+    await utimes(transcript, new Date('2020-01-01'), new Date('2020-01-01'));
+    await withIsolatedDatabase(async () => {
+      assert.equal(await new AntigravitySessionSynchronizer().synchronize(), 0);
+      await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'), JSON.stringify({ conversationId: 'restart', workspace: root }));
+      const restarted = new AntigravitySessionSynchronizer();
+      assert.equal(await restarted.synchronize(new Date()), 1);
+      assert.equal(sessionsDb.getSessionById('restart')?.project_path, root);
+      assert.equal(await restarted.synchronize(new Date(Date.now() + 10000)), 0, 'later scans retain the incremental cursor');
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('Cursor single-file and batch rescans preserve an external session rename', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'cursor-rename-sync-'));
+  const restore = patchHomeDir(root);
+  try {
+    const project = path.join(root, '.cursor', 'projects', 'example');
+    const directory = path.join(project, 'agent-transcripts', 'renamed');
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(project, 'worker.log'), 'workspacePath=' + root);
+    const transcript = path.join(directory, 'renamed.jsonl');
+    await writeFile(transcript, JSON.stringify({ role: 'user', message: { content: [{ text: 'debug build' }] } }));
+    await withIsolatedDatabase(async () => {
+      const sync = new CursorSessionSynchronizer();
+      await sync.synchronizeFile(transcript);
+      assert.equal(sessionsDb.getSessionById('renamed')?.custom_name, 'debug build');
+      sessionsDb.updateSessionCustomName('renamed', 'Release checklist');
+      await sync.synchronizeFile(transcript);
+      assert.equal(sessionsDb.getSessionById('renamed')?.custom_name, 'Release checklist');
+      await sync.synchronize();
+      assert.equal(sessionsDb.getSessionById('renamed')?.custom_name, 'Release checklist');
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('transient transcript read failures retry past the cursor and missing deferred files are forgotten', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-transient-read-'));
+  const restore = patchHomeDir(root);
+  try {
+    const transcript = await writeAntigravityTranscript(root, 'transient');
+    await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'), JSON.stringify({ conversationId: 'transient', workspace: root }));
+    await withIsolatedDatabase(async () => {
+      await rm(transcript); await mkdir(transcript);
+      const sync = new AntigravitySessionSynchronizer();
+      assert.equal(await sync.synchronize(), 0);
+      // A directory is excluded by batch discovery; a watcher notification
+      // supplies the candidate and exercises the actual EISDIR read failure.
+      assert.equal(await sync.synchronizeFile(transcript), null);
+      await rm(transcript, { recursive: true });
+      await writeFile(transcript, JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', content: 'retry' }) + '\n');
+      assert.equal(await sync.synchronize(new Date(Date.now() + 10000)), 1);
+      await rm(transcript); await mkdir(transcript);
+      assert.equal(await sync.synchronizeFile(transcript), null);
+      await rm(transcript, { recursive: true });
+      assert.equal(await sync.synchronize(new Date(Date.now() + 10000)), 0);
+      assert.equal((sync as unknown as { deferredFiles: Set<string> }).deferredFiles.size, 0);
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('metadata-only first records do not hide the first visible AGY prompt title', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-visible-title-'));
+  const restore = patchHomeDir(root);
+  try {
+    const transcript = await writeAntigravityTranscript(root, 'title-native');
+    await writeFile(transcript, [
+      { source: 'USER_EXPLICIT', type: 'USER_INPUT', content: '<ADDITIONAL_METADATA>hidden</ADDITIONAL_METADATA>' },
+      { source: 'USER_EXPLICIT', type: 'USER_INPUT', content: 'Visible prompt' },
+    ].map(x => JSON.stringify(x)).join('\n'));
+    await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'), JSON.stringify({ conversationId: 'title-native', workspace: root }));
+    await withIsolatedDatabase(async () => {
+      await new AntigravitySessionSynchronizer().synchronizeFile(transcript);
+      assert.equal(sessionsDb.getSessionByProviderSessionId('title-native')?.custom_name, 'Visible prompt');
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('AGY restores native terminal errors when the transcript is missing', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-missing-history-'));
+  const restore = patchHomeDir(root);
+  try {
+    const directory = path.join(root, '.gemini', 'antigravity-cli', 'conversations');
+    await mkdir(directory, { recursive: true });
+    const db = new Database(path.join(directory, 'native-error.db'));
+    db.exec('CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, step_payload BLOB)');
+    db.prepare('INSERT INTO steps VALUES (?, ?, ?)').run(0, 17,
+      encodeWireField(24, encodeWireField(3, encodeWireField(1, Buffer.from('Native failure')))));
+    db.close();
+    const result = await new AntigravitySessionsProvider().fetchHistory('app', { providerSessionId: 'native-error', jsonlPath: path.join(root, 'missing.jsonl') });
+    assert.equal(result.total, 1);
+    assert.equal(result.messages[0].kind, 'error');
+    assert.equal(result.messages[0].content, 'Native failure');
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('AGY synchronization excludes backup transcripts from both indexing entrypoints', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-canonical-transcript-'));
+  const restore = patchHomeDir(root);
+  try {
+    await withIsolatedDatabase(async () => {
+      const id = 'canonical-id';
+      const canonical = await writeAntigravityTranscript(root, id);
+      const native = path.join(root, '.gemini', 'antigravity-cli');
+      await writeFile(path.join(native, 'history.jsonl'), JSON.stringify({ conversationId: id, workspace: root }) + '\n');
+      const synchronizer = new AntigravitySessionSynchronizer();
+      assert.ok(await synchronizer.synchronizeFile(canonical));
+      const backup = path.join(native, 'brain', id, 'backup', 'transcript.jsonl');
+      await mkdir(path.dirname(backup), { recursive: true });
+      await writeFile(backup, JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', content: 'backup' }));
+      assert.equal(await synchronizer.synchronizeFile(backup), null);
+      await synchronizer.synchronize();
+      assert.equal(sessionsDb.getSessionByProviderSessionId(id)?.jsonl_path, canonical);
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('review regression: a startup rescan preserves an archived unchanged native transcript', { concurrency: false }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-archived-restart-'));
+  const restore = patchHomeDir(root);
+  try {
+    await writeAntigravityTranscript(root, 'archived-native');
+    await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'),
+      JSON.stringify({ conversationId: 'archived-native', workspace: root }));
+    await withIsolatedDatabase(async () => {
+      await new AntigravitySessionSynchronizer().synchronize();
+      sessionsDb.updateSessionIsArchived('archived-native', true);
+      await new AntigravitySessionSynchronizer().synchronize(new Date(Date.now() + 60000));
+      assert.equal(sessionsDb.getSessionById('archived-native')?.isArchived, 1);
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('review-2 regression: history service observes native-only terminal errors after an unchanged transcript', { concurrency: false }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-native-cache-'));
+  const restore = patchHomeDir(root);
+  try {
+    const nativeId = 'native-cache';
+    const transcript = await writeAntigravityTranscript(root, nativeId);
+    const directory = path.join(root, '.gemini', 'antigravity-cli', 'conversations');
+    await mkdir(directory, { recursive: true });
+    const native = new Database(path.join(directory, `${nativeId}.db`));
+    try {
+      native.exec('CREATE TABLE steps (idx INTEGER PRIMARY KEY, step_type INTEGER, step_payload BLOB)');
+      await withIsolatedDatabase(async () => {
+        sessionsDb.createSession(nativeId, 'antigravity', root, 'Cache test', undefined, undefined, transcript);
+        assert.equal((await sessionsService.fetchHistory(nativeId)).messages.some(row => row.kind === 'error'), false);
+        native.prepare('INSERT INTO steps VALUES (?, ?, ?)').run(20, 17,
+          encodeWireField(24, encodeWireField(3, encodeWireField(1, Buffer.from('Native terminal error')))));
+        const after = await sessionsService.fetchHistory(nativeId);
+        assert.equal(after.messages.at(-1)?.content, 'Native terminal error');
+      });
+    } finally { native.close(); }
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('review-2 regression: a transcript removed during its final stat is not reinserted', { concurrency: false }, async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-deleted-scan-'));
+  const restore = patchHomeDir(root);
+  try {
+    const transcript = await writeAntigravityTranscript(root, 'deleted-native');
+    await writeFile(path.join(root, '.gemini', 'antigravity-cli', 'history.jsonl'),
+      JSON.stringify({ conversationId: 'deleted-native', workspace: root }));
+    await withIsolatedDatabase(async () => {
+      const original = fsp.stat;
+      const mocked = t.mock.method(fsp, 'stat', async (...args: Parameters<typeof fsp.stat>) => {
+        if (String(args[0]) === transcript) await rm(transcript, { force: true });
+        return original(...args);
+      });
+      syncBuiltinESMExports();
+      try {
+        assert.equal(await new AntigravitySessionSynchronizer().synchronizeFile(transcript), null);
+        assert.equal(mocked.mock.callCount(), 1);
+        assert.equal(sessionsDb.getSessionById('deleted-native'), null);
+      } finally { mocked.mock.restore(); syncBuiltinESMExports(); }
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('review-6 regression: history metadata cannot index a partial-only transcript', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-partial-only-')); const restore = patchHomeDir(root);
+  try {
+    // Complete startup discovery before creating the old deferred transcript.
+    await mkdir(path.join(root, '.gemini/antigravity-cli/brain'), { recursive: true });
+    const sync = new AntigravitySessionSynchronizer();
+    await sync.synchronize();
+    const transcript = await writeAntigravityTranscript(root, 'partial-only');
+    await writeFile(transcript, '{"source":"USER_EXPLICIT"');
+    await writeFile(path.join(root, '.gemini/antigravity-cli/history.jsonl'), JSON.stringify({ conversationId: 'partial-only', workspace: root, display: 'Title exists already' }));
+    await withIsolatedDatabase(async () => {
+      assert.equal(await sync.synchronizeFile(transcript), null);
+      assert.equal(sessionsDb.getSessionById('partial-only'), null);
+      await writeFile(transcript, JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', content: 'complete', step_index: 0 }) + '\n{"partial":');
+      await sync.synchronize(new Date('2099-01-01'));
+      assert.ok(sessionsDb.getSessionById('partial-only'));
+    });
+  } finally { restore(); await rm(root, { recursive: true, force: true }); }
 });

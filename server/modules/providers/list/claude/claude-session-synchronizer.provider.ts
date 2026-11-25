@@ -65,6 +65,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       }
 
       const timestamps = await readFileTimestamps(filePath);
+      if (sessionsDb.isProviderSessionSuperseded(parsed.sessionId, this.provider)) continue;
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
@@ -98,6 +99,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     const timestamps = await readFileTimestamps(filePath);
+    if (sessionsDb.isProviderSessionSuperseded(parsed.sessionId, this.provider)) return null;
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,

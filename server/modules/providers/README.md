@@ -65,8 +65,9 @@ The app retains the source model, effort, title and fork ancestry. AGY currently
 exposes `/fork` only in its interactive TUI, so this adapter validates the known
 native storage layout and rejects unsupported layouts. Prefix snapshots filter
 generation/executor caches by their referenced step indices, not cache ordinals;
-failed generations with no output steps are dropped. Linked/battle histories
-and malformed references fail without changing the app mapping. Native step
+failed generations with no output steps are dropped. Prefix forks reject linked/battle
+histories and malformed references without changing the app mapping. Whole-conversation
+forks still require valid native schema and identity. Native step
 anchors also drive the shared pencil edit/resend gateway; editing the first
 prompt detaches the old native conversation, and later edits repoint the app
 session only after its independent prefix snapshot succeeds.
@@ -192,7 +193,8 @@ import the service from `server/modules/providers/index.ts`.
 3. Implement auth.
 
 - Return a full `ProviderAuthStatus`.
-- Implement `checkInstalled()` with `probeCliVersion(...)` on the CLI the runtime
+- Implement `checkInstalled()` with a `CliVersionProbe` or a promise of one; use
+  an asynchronous bounded probe for slow CLIs (as Antigravity does). Probe the CLI the runtime
   actually runs; it fills `installed` and `installedVersion`, and the CLI
   update service reads versions through it. A CLI that updates itself can be
   added to `CLI_UPDATERS` in `services/provider-cli.service.ts`.
@@ -248,7 +250,7 @@ Current skill discovery roots are:
 | Codex | `~/.agents/skills`, `~/.codex/skills/.system`, `/etc/codex/skills` | `<workspace>/.agents/skills`, `path.dirname(workspacePath)/.agents/skills`, topmost git root `.agents/skills` | `$` | Overlapping roots are deduplicated before scanning. |
 | Cursor | `~/.cursor/skills` | `<workspace>/.cursor/skills`, `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 | OpenCode | `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` | Cwd-to-topmost-git-root `.opencode/skills`, `.claude/skills`, and `.agents/skills` | `/` | Reuses OpenCode, Claude, and Agents skill locations. Overlapping roots are deduplicated before scanning. |
-| Antigravity | `~/.gemini/antigravity-cli/skills` | `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
+| Antigravity | `~/.gemini/antigravity-cli/skills`, `~/.gemini/config/skills`, `~/.gemini/skills` | `<workspace>/.agents/skills` | `/` | Uses slash-style commands. |
 
 Command forms currently used by the providers are:
 
@@ -295,7 +297,7 @@ Current session sync roots are:
 | Codex | `~/.codex/sessions/**/*.jsonl` | Uses `~/.codex/session_index.jsonl` for title lookup and the last `task_complete` message for a fallback title. |
 | Cursor | `~/.cursor/projects/**/*.jsonl` | Uses sibling `worker.log` to recover `workspacePath`, then derives the session title from the first user prompt. |
 | OpenCode | `~/.local/share/opencode/opencode.db` | Reads active sessions/messages/parts from OpenCode's shared SQLite database and stores `jsonl_path` as `null` so deleting one app session cannot remove the shared DB. |
-| Antigravity | `~/.gemini/antigravity-cli/brain/*/transcript.jsonl` | Uses `~/.gemini/antigravity-cli/history.jsonl` for workspace and title metadata. |
+| Antigravity | `~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript.jsonl` | Uses `~/.gemini/antigravity-cli/history.jsonl` for workspace and title metadata. |
 
 8. Register the provider.
 

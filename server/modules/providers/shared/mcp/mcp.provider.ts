@@ -73,7 +73,10 @@ export abstract class McpProvider implements IProviderMcp {
     const workspacePath = resolveWorkspacePath(input.workspacePath);
     const normalizedName = normalizeServerName(input.name);
     const scopedServers = await this.readScopedServers(scope, workspacePath);
-    scopedServers[normalizedName] = this.buildServerConfig(input);
+    // Persist special names as own entries rather than invoking Object.prototype setters.
+    Object.defineProperty(scopedServers, normalizedName, {
+      value: this.buildServerConfig(input), enumerable: true, writable: true, configurable: true,
+    });
     await this.writeScopedServers(scope, workspacePath, scopedServers);
 
     return {

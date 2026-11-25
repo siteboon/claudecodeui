@@ -388,7 +388,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       timeoutMs: dependencies.updateTimeoutMs,
       killGraceMs: dependencies.updateKillGraceMs,
     });
-    const installedVersion = provider.auth.checkInstalled().version;
+    const installedVersion = (await provider.auth.checkInstalled()).version;
     const note = CLI_UPDATERS[provider.id]?.explainRun?.(update, run.exitCode);
 
     return {
@@ -415,7 +415,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       // and cursor-agent), a page that follows the run asks every few seconds,
       // and the updater may be replacing that binary right then.
       const running = updatesInProgress.get(provider.id);
-      let { installed, version: installedVersion } = running?.before ?? provider.auth.checkInstalled();
+      let { installed, version: installedVersion } = running?.before ?? await provider.auth.checkInstalled();
       const update = resolveUpdateCommand(provider.id);
       const updateUnavailableReason: CliUpdateUnavailableReason | null = dependencies.platformMode
         ? 'platform'
@@ -435,7 +435,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       // reported instead (still no probe while a run is going on).
       const runAfterLookup = updatesInProgress.get(provider.id);
       if (running && runAfterLookup !== running) {
-        ({ installed, version: installedVersion } = runAfterLookup?.before ?? provider.auth.checkInstalled());
+        ({ installed, version: installedVersion } = runAfterLookup?.before ?? await provider.auth.checkInstalled());
       }
 
       return {
@@ -496,7 +496,11 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
         );
       }
 
-      const before = provider.auth.checkInstalled();
+      const probe = provider.auth.checkInstalled();
+      const before = probe instanceof Promise ? await probe : probe;
+      // Async version probes must not admit duplicate updaters while awaiting.
+      const startedDuringProbe = updatesInProgress.get(provider.id);
+      if (startedDuringProbe) return startedDuringProbe.result;
       if (!before.installed) {
         throw new AppError(`${getProviderLabel(provider.id)} is not installed on the server, so there is nothing to update.`, {
           code: 'PROVIDER_CLI_NOT_INSTALLED',

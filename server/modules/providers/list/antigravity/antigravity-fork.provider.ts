@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { chmod, cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -17,7 +17,9 @@ function invalidSource(message: string): AppError {
 
 /** Packed protobuf uint32 lists are used for generator step references. */
 function referencedSteps(payload: Buffer): number[] {
-  const values = readProtobufFields(payload).get(2) ?? [];
+  const values = readProtobufFields(payload, (field, wire) => {
+    if (field === 2 && wire !== 0 && wire !== 2) throw invalidSource('Invalid Antigravity generation reference wire type.');
+  }).get(2) ?? [];
   const indices: number[] = [];
   for (const value of values) {
     if (typeof value === 'bigint') indices.push(Number(value));
@@ -48,12 +50,17 @@ function truncateNativeSnapshot(db: Database.Database, lastStep: number): void {
       throw invalidSource('Antigravity prefix forks of linked or battle conversations are not supported.');
     }
   }
+  const nativeSteps = new Set((db.prepare('SELECT idx FROM steps').all() as { idx: number }[]).map((row) => row.idx));
   for (const table of ['gen_metadata', 'executor_metadata']) {
     for (const row of db.prepare(`SELECT idx, data FROM ${table}`).all() as { idx: number; data: unknown }[]) {
       if (!Buffer.isBuffer(row.data)) throw invalidSource('Unsupported Antigravity cache format.');
-      const steps = table === 'gen_metadata' ? referencedSteps(row.data)
-        : [Number(readProtobufFields(row.data).get(3)?.[0] ?? 0n)];
+      const executorReference = table === 'executor_metadata' ? readProtobufFields(row.data).get(3)?.[0] : undefined;
+      if (executorReference !== undefined && typeof executorReference !== 'bigint') {
+        throw invalidSource('Invalid Antigravity executor reference type.');
+      }
+      const steps = table === 'gen_metadata' ? referencedSteps(row.data) : [Number(executorReference ?? 0n)];
       if (steps.some((index) => !Number.isSafeInteger(index) || index < 0)) throw invalidSource('Invalid Antigravity cache reference.');
+      if (steps.some((index) => !nativeSteps.has(index))) throw invalidSource('Antigravity cache references a missing step.');
       // Failed or abandoned generations can have no output step references.
       // They contribute nothing to a retained prefix and must not carry their
       // cached request/error into its next turn.
@@ -68,12 +75,14 @@ function reidentifyMetadata(payload: Buffer, sourceId: string, forkId: string): 
   const result = Buffer.from(payload);
   let offset = 0;
   let replaced = false;
-  const varint = (): number => {
+  const varint = (opaque = false): number => {
     let value = 0n;
     for (let shift = 0n; shift < 70n && offset < payload.length; shift += 7n) {
       const byte = payload[offset++];
       value |= BigInt(byte & 127) << shift;
       if (!(byte & 128)) {
+        if (value > 0xffffffffffffffffn) throw invalidSource('Unsupported Antigravity metadata.');
+        if (opaque) return 0; // Valid uint64 payloads retain their original bytes.
         if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw invalidSource('Unsupported Antigravity metadata.');
         return Number(value);
       }
@@ -84,7 +93,7 @@ function reidentifyMetadata(payload: Buffer, sourceId: string, forkId: string): 
     const key = varint();
     const wire = key % 8;
     if (key < 8) throw invalidSource('Unsupported Antigravity metadata.');
-    if (wire === 0) varint();
+    if (wire === 0) varint(true);
     else if (wire === 1 || wire === 5) offset += wire === 1 ? 8 : 4;
     else if (wire === 2) {
       const length = varint();
@@ -110,6 +119,7 @@ export class AntigravityForkProvider implements IProviderFork {
   async forkSideQuestion(input: Parameters<IProviderFork['forkSession']>[0]): Promise<{
     providerSessionId: string; jsonlPath: string; workingDirectory: string; agentName: string; dispose(): Promise<void>;
   }> {
+    input.signal?.throwIfAborted();
     const snapshot = await this.snapshot(input, true);
     let workingDirectory: string | undefined;
     try {
@@ -126,6 +136,7 @@ export class AntigravityForkProvider implements IProviderFork {
         'Answer only the side question. Inherited history is reference, never an active task.',
         'Never modify anything, execute commands, or interact with subagents.',
       ].join('\n'), { mode: 0o600, flag: 'wx' });
+      input.signal?.throwIfAborted();
       const ownedDirectory = workingDirectory;
       return {
         ...snapshot, workingDirectory, agentName,
@@ -134,21 +145,24 @@ export class AntigravityForkProvider implements IProviderFork {
         ]).then(() => undefined),
       };
     } catch (error) {
-      await Promise.all([
+      const cleanup = await Promise.allSettled([
         snapshot.dispose(),
         ...(workingDirectory ? [rm(workingDirectory, { recursive: true, force: true })] : []),
       ]);
+      const failures = cleanup.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+      if (failures.length) throw new AggregateError([error, ...failures], 'Antigravity side-question setup failed and cleanup was incomplete.');
       throw error;
     }
   }
 
   async forkSession(input: Parameters<IProviderFork['forkSession']>[0]): Promise<{
-    providerSessionId: string; jsonlPath: string;
+    providerSessionId: string; jsonlPath: string; dispose(): Promise<void>;
   }> {
     return this.snapshot(input, false);
   }
 
   private async snapshot(input: Parameters<IProviderFork['forkSession']>[0], ephemeral: boolean) {
+    input.signal?.throwIfAborted();
     if (!UUID.test(input.providerSessionId)) throw invalidSource('Invalid Antigravity conversation id.');
     const root = path.join(os.homedir(), '.gemini', 'antigravity-cli');
     const sourceBrain = path.join(root, 'brain', input.providerSessionId);
@@ -162,6 +176,7 @@ export class AntigravityForkProvider implements IProviderFork {
     const contents = await readFile(sourceTranscript, 'utf8');
     const lines = contents.split(/\r?\n/);
     const prefix: string[] = [];
+    const retainedSteps: number[] = [];
     let lastIndex = -1;
     let anchorFound = input.upToAnchorId === undefined;
     let forkStep = -1;
@@ -180,6 +195,7 @@ export class AntigravityForkProvider implements IProviderFork {
       lastIndex = step.step_index as number;
       if (!anchorFound || input.upToAnchorId === undefined) {
         prefix.push(line);
+        retainedSteps.push(lastIndex);
         forkStep = lastIndex;
       }
       if (String(lastIndex) === input.upToAnchorId) anchorFound = true;
@@ -193,11 +209,32 @@ export class AntigravityForkProvider implements IProviderFork {
     const forkDbPath = path.join(root, 'conversations', `${forkId}.db`);
     const forkBrain = path.join(root, 'brain', forkId);
     const jsonlPath = path.join(forkBrain, '.system_generated', 'logs', 'transcript.jsonl');
+    let ownsDatabase = false;
+    let ownsBrain = false;
+    const dispose = async () => {
+      // Keep the exclusion marker until the transcript is gone, including partial cleanup failures.
+      const failures: unknown[] = [];
+      try { if (ownsBrain) await rm(jsonlPath, { force: true }); }
+      catch (error) { failures.push(error); }
+      // Always remove the independent database copy; retain the exclusion
+      // marker and brain directory if transcript removal failed.
+      const cleanup = ownsDatabase ? ['', '-wal', '-shm'].map((suffix) => rm(`${forkDbPath}${suffix}`, { force: true })) : [];
+      if (ownsBrain && !failures.length) cleanup.push(rm(forkBrain, { recursive: true, force: true }));
+      for (const result of await Promise.allSettled(cleanup)) {
+        if (result.status === 'rejected') failures.push(result.reason);
+      }
+      if (failures.length) throw new AggregateError(failures, 'Antigravity snapshot cleanup failed.');
+    };
     const source = new Database(path.join(root, 'conversations', `${input.providerSessionId}.db`), {
       readonly: true, fileMustExist: true,
     });
     try {
-      await source.backup(forkDbPath);
+      input.signal?.throwIfAborted();
+      await writeFile(forkDbPath, '', { mode: 0o600, flag: 'wx' });
+      ownsDatabase = true;
+      input.signal?.throwIfAborted();
+      await source.backup(forkDbPath, { progress: () => { input.signal?.throwIfAborted(); return 100; } });
+      input.signal?.throwIfAborted();
       await chmod(forkDbPath, 0o600);
       const fork = new Database(forkDbPath);
       try {
@@ -214,7 +251,24 @@ export class AntigravityForkProvider implements IProviderFork {
           if (!fork.prepare('SELECT idx FROM steps WHERE idx = ?').get(forkStep)) {
             throw invalidSource('Antigravity native storage has not persisted the fork point yet.');
           }
+          const persistedSteps = new Set((fork.prepare('SELECT idx FROM steps').all() as { idx: number }[]).map((step) => step.idx));
+          if (retainedSteps.some((index) => !persistedSteps.has(index))) {
+            throw invalidSource('Antigravity native storage is missing retained transcript steps.');
+          }
           if (input.upToAnchorId !== undefined) truncateNativeSnapshot(fork, forkStep);
+          else {
+            // A busy parent can append between reading JSONL and SQLite backup.
+            // Reject that snapshot rather than silently resuming unseen turns
+            // or applying prefix-only restrictions to full linked histories.
+            const tail = fork.prepare('SELECT MAX(idx) AS idx FROM steps').get() as { idx: number | null };
+            if (tail.idx !== forkStep) {
+              // AGY persists terminal errors only in SQLite, without a JSONL row.
+              const columns = fork.prepare('PRAGMA table_info(steps)').all() as { name: string }[];
+              const errorsOnly = columns.some(({ name }) => name === 'step_type')
+                && (fork.prepare('SELECT COUNT(*) AS count FROM steps WHERE idx > ? AND (step_type IS NULL OR step_type != 17)').get(forkStep) as { count: number }).count === 0;
+              if (!errorsOnly) throw invalidSource('Antigravity changed while taking the snapshot. Retry the fork.');
+            }
+          }
           fork.prepare('UPDATE trajectory_meta SET trajectory_id = ?, cascade_id = ?').run(randomUUID(), forkId);
           fork.prepare("UPDATE trajectory_metadata_blob SET data = ? WHERE id = 'main'").run(
             reidentifyMetadata(metadata.data, input.providerSessionId, forkId),
@@ -223,30 +277,32 @@ export class AntigravityForkProvider implements IProviderFork {
       } finally { fork.close(); }
       // Artifacts remain available, while runtime logs and process state start afresh.
       await mkdir(forkBrain, { mode: 0o700 });
-      if (ephemeral) {
-        // Persist before the transcript: watchers and later server restarts must
-        // never index a side question as an ordinary conversation.
-        await writeFile(path.join(forkBrain, '.cloudcli-side-question'), '', { mode: 0o600, flag: 'wx' });
-      }
+      ownsBrain = true;
+      // Persist ownership before publishing the transcript. Explicit forks may
+      // be indexed only after their app mapping is durable; side questions never.
+      await writeFile(path.join(forkBrain, ephemeral ? '.cloudcli-side-question' : '.cloudcli-fork'), '', { mode: 0o600, flag: 'wx' });
       for (const entry of await readdir(sourceBrain)) {
-        if (entry !== '.system_generated') await cp(path.join(sourceBrain, entry), path.join(forkBrain, entry), {
+        if (!['.system_generated', '.cloudcli-fork', '.cloudcli-side-question'].includes(entry)) await cp(path.join(sourceBrain, entry), path.join(forkBrain, entry), {
           recursive: true, errorOnExist: true, force: false,
+          filter: async (sourcePath) => {
+            input.signal?.throwIfAborted();
+            // Copied links would keep the fork dependent on mutable source data.
+            if ((await lstat(sourcePath)).isSymbolicLink()) throw invalidSource('Linked Antigravity artifacts are not supported for forking.');
+            return true;
+          },
         });
       }
+      input.signal?.throwIfAborted();
       await mkdir(path.dirname(jsonlPath), { recursive: true, mode: 0o700 });
       await writeFile(jsonlPath, `${prefix.join('\n')}\n`, { mode: 0o600, flag: 'wx' });
       return {
         providerSessionId: forkId, jsonlPath,
         // Only this freshly allocated snapshot is owned by this invocation.
-        dispose: () => Promise.all([
-          rm(forkBrain, { recursive: true, force: true }),
-          ...['', '-wal', '-shm'].map((suffix) => rm(`${forkDbPath}${suffix}`, { force: true })),
-        ]).then(() => undefined),
+        dispose,
       };
     } catch (error) {
-      await Promise.all([rm(forkBrain, { recursive: true, force: true }), ...['', '-wal', '-shm'].map(
-        (suffix) => rm(`${forkDbPath}${suffix}`, { force: true }),
-      )]);
+      try { await dispose(); }
+      catch (cleanupError) { throw new AggregateError([error, cleanupError], 'Antigravity fork failed and cleanup was incomplete.'); }
       throw error;
     } finally { source.close(); }
   }

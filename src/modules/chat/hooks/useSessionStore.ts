@@ -10,6 +10,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
+import { matchesAssistantStreamOwner } from '@/shared/utils';
 import type { LLMProvider, NormalizedMessage } from '@/shared/types';
 import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
 import { removeOptimisticUserEchoes } from '@/modules/chat/utils/sessionMessageReconciliation';
@@ -269,7 +270,7 @@ function dedupeAdjacentAssistantEchoes(merged: NormalizedMessage[]): NormalizedM
   const out: NormalizedMessage[] = [];
   for (const m of merged) {
     const prev = out[out.length - 1];
-    if (prev) {
+    if (prev && matchesAssistantStreamOwner(prev, m)) {
       if (prev.kind === 'stream_delta' && m.kind === 'text' && m.role === 'assistant') {
         const ps = (prev.content || '').trim();
         const ms = (m.content || '').trim();
@@ -769,7 +770,15 @@ export function useSessionStore() {
       msg.sessionId === sessionId
         ? msg
         : { ...msg, sessionId };
-    let updated = [...slot.realtimeMessages, normalizedMessage];
+    // The canonical final supersedes the transient row, including partial text.
+    const previous = msg.kind === 'text' && msg.role !== 'user'
+      ? slot.realtimeMessages.filter((row) => {
+        const transient = row.id === `__streaming_${sessionId}`
+          || (row.isStreamPlaceholder && row.assistantReplyId && msg.assistantReplyId);
+        return !transient || !matchesAssistantStreamOwner(row, normalizedMessage);
+      })
+      : slot.realtimeMessages;
+    let updated = [...previous, normalizedMessage];
     if (updated.length > MAX_REALTIME_MESSAGES) {
       updated = updated.slice(-MAX_REALTIME_MESSAGES);
     }
@@ -822,10 +831,12 @@ export function useSessionStore() {
    * Update or create a streaming message (accumulated text so far).
    * Uses a well-known ID so subsequent calls replace the same message.
    */
-  const updateStreaming = useCallback((sessionId: string, accumulatedText: string, msgProvider: LLMProvider) => {
+  const updateStreaming = useCallback((sessionId: string, accumulatedText: string, msgProvider: LLMProvider, owner?: Pick<NormalizedMessage, 'assistantReplyId' | 'assistantBlockIndex' | 'parentToolUseId'>) => {
     const slot = getSlot(sessionId);
     const streamId = `__streaming_${sessionId}`;
     const msg: NormalizedMessage = {
+      ...owner,
+      isStreamPlaceholder: true,
       id: streamId,
       sessionId,
       timestamp: new Date().toISOString(),

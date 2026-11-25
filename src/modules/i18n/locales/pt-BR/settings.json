@@ -607,6 +607,7 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "Veja os servidores MCP do Antigravity aqui. Use /mcp no Antigravity para alterá-los.",
     "title": "Servidores MCP",
     "description": {
       "claude": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao Claude",

@@ -182,6 +182,14 @@ test('AGY queued messages wait for an external native turn and survive an admiss
     const runs: RunCall[] = [];
     assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0);
     assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, queuedMessage);
+    t.mock.method(sessionsService, 'getExternalSessionActivity', async () => ({ ...busy, unavailable: true }));
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 0, 'unknown native activity retains the queued turn');
+    assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, queuedMessage);
+    t.mock.restoreAll();
+    t.mock.method(sessionsService, 'getExternalSessionActivity', async () => {
+      probes += 1;
+      return external || (racing && probes % 2 === 0) ? busy : null;
+    });
     external = false;
     racing = true;
     probes = 0;
@@ -189,6 +197,17 @@ test('AGY queued messages wait for an external native turn and survive an admiss
     assert.equal(runs.length, 0, 'native activity won admission after the queue claim');
     assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, queuedMessage);
     racing = false;
+    probes = 0;
+    t.mock.method(sessionsService, 'getExternalSessionActivity', async () => {
+      probes += 1;
+      if (probes === 2) throw new Error('native activity database read failed after claim');
+      return null;
+    });
+    assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+    assert.equal(runs.length, 0, 'a failed lookup must not start the provider');
+    assert.deepEqual(sessionDraftsDb.getDrafts(userId)[0]?.queuedMessage, queuedMessage, 'lookup failure restores the claim');
+    t.mock.restoreAll();
+    t.mock.method(sessionsService, 'getExternalSessionActivity', async () => null);
     assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
     assert.equal(runs[0]?.provider, 'antigravity');
     assert.equal(runs[0]?.command, 'follow up');
@@ -883,5 +902,103 @@ test('a session\'s next due message stays pending while its earlier send is goin
     // The earlier pass sends it right after the first, not a poll later.
     assert.deepEqual(started, ['first', 'second']);
     assert.equal(await dispatchDueScheduledMessages(runtime), 0);
+  });
+});
+
+test('scheduled AGY occurrence remains pending during native activity and dispatches on the next pass', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    sessionsDb.createAppSession('scheduled-agy', 'antigravity', tmpdir());
+    scheduledMessagesDb.create({ userId, sessionId: 'scheduled-agy', content: 'retry once idle', options: {}, scheduledFor: new Date(Date.now() - 1000) });
+    const original = sessionsService.getExternalSessionActivity;
+    const runs: RunCall[] = [];
+    try {
+      sessionsService.getExternalSessionActivity = async () => ({ providerSessionId: 'native', startedAt: 1, canInterrupt: false });
+      assert.equal(await dispatchDueScheduledMessages(createRuntime(runs)), 0);
+      assert.equal(scheduledMessagesDb.listForSession(userId, 'scheduled-agy')[0].status, 'pending');
+      assert.equal(runs.length, 0);
+      sessionsService.getExternalSessionActivity = async () => null;
+      assert.equal(await dispatchDueScheduledMessages(createRuntime(runs)), 1);
+      assert.equal(scheduledMessagesDb.listForSession(userId, 'scheduled-agy')[0].status, 'sent');
+      assert.equal(runs.length, 1);
+      assert.equal(await dispatchDueScheduledMessages(createRuntime(runs)), 0);
+    } finally { sessionsService.getExternalSessionActivity = original; }
+  });
+});
+
+
+test('review-5 regression: scheduled preemption restores a queued message awaiting startup admission', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const original = sessionsService.getExternalSessionActivity;
+    let resolveAdmission!: (value: null) => void;
+    let entered!: () => void;
+    const paused = new Promise<void>((resolve) => { entered = resolve; });
+    let lookups = 0;
+    sessionsService.getExternalSessionActivity = async () => {
+      if (++lookups === 2) { entered(); return new Promise<null>((resolve) => { resolveAdmission = resolve; }); }
+      return null;
+    };
+    const runs: RunCall[] = [];
+    try {
+      sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'queued original', attachments: [] });
+      const queued = dispatchQueuedMessages(createRuntime(runs));
+      await paused;
+      scheduledMessagesDb.create({ userId, sessionId: SESSION_ID, content: 'scheduled preemption', options: {}, scheduledFor: new Date(Date.now() - 1000) });
+      assert.equal(await dispatchDueScheduledMessages(createRuntime(runs)), 1);
+      resolveAdmission(null); await queued;
+      assert.deepEqual(runs.map((run) => run.command), ['scheduled preemption']);
+      assert.equal(sessionDraftsDb.listQueuedMessages().length, 1);
+      assert.equal(await dispatchQueuedMessages(createRuntime(runs)), 1);
+      assert.deepEqual(runs.map((run) => run.command), ['scheduled preemption', 'queued original']);
+      assert.equal(sessionDraftsDb.listQueuedMessages().length, 0);
+    } finally { resolveAdmission?.(null); sessionsService.getExternalSessionActivity = original; }
+  });
+});
+
+
+test('review-5 regression: explicit stop of queued startup does not requeue the cancelled message', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const original = sessionsService.getExternalSessionActivity;
+    let release!: (value: null) => void; let entered!: () => void;
+    const paused = new Promise<void>((resolve) => { entered = resolve; });
+    let lookups = 0;
+    sessionsService.getExternalSessionActivity = async () => {
+      if (++lookups === 2) { entered(); return new Promise<null>((resolve) => { release = resolve; }); }
+      return null;
+    };
+    const runs: RunCall[] = [];
+    try {
+      sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'cancel this queued send', attachments: [] });
+      const queued = dispatchQueuedMessages(createRuntime(runs)); await paused;
+      const run = chatRunRegistry.getRun(SESSION_ID); assert.ok(run);
+      run.startupCancellation = 'explicit';
+      chatRunRegistry.completeRunIfCurrent(run, { aborted: true, exitCode: 0 });
+      release(null); await queued;
+      assert.equal(runs.length, 0); assert.equal(sessionDraftsDb.listQueuedMessages().length, 0);
+    } finally { release?.(null); sessionsService.getExternalSessionActivity = original; }
+  });
+});
+
+
+for (const replacement of [false, true]) for (const rejectLookup of [false, true]) test(`review-6 regression: explicit stop stays cancelled after lookup (replacement=${replacement}, reject=${rejectLookup})`, async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const original = sessionsService.getExternalSessionActivity;
+    let resolveAdmission!: (value: null) => void; let rejectAdmission!: (error: Error) => void; let entered!: () => void;
+    const paused = new Promise<void>((resolve) => { entered = resolve; }); let lookups = 0;
+    sessionsService.getExternalSessionActivity = async () => {
+      if (++lookups === 2) { entered(); return new Promise<null>((resolve, reject) => { resolveAdmission = resolve; rejectAdmission = reject; }); }
+      return null;
+    };
+    const runs: RunCall[] = [];
+    try {
+      sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'cancel original', attachments: [] });
+      const queued = dispatchQueuedMessages(createRuntime(runs)); await paused;
+      const stopped = chatRunRegistry.getRun(SESSION_ID); assert.ok(stopped); stopped.startupCancellation = 'explicit';
+      chatRunRegistry.completeRunIfCurrent(stopped, { aborted: true, exitCode: 0 });
+      const newer = replacement ? chatRunRegistry.startRun({ appSessionId: SESSION_ID, provider: 'claude', providerSessionId: null, connection: null, userId }) : null;
+      if (rejectLookup) rejectAdmission(new Error('late activity failure')); else resolveAdmission(null);
+      await queued;
+      assert.equal(sessionDraftsDb.listQueuedMessages().length, 0); assert.equal(runs.length, 0);
+      if (newer) assert.equal(chatRunRegistry.getRun(SESSION_ID), newer);
+    } finally { resolveAdmission?.(null); sessionsService.getExternalSessionActivity = original; }
   });
 });

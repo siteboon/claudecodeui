@@ -17,7 +17,8 @@ test('buildProviderCliEnv prepends common user executable directories', () => {
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('buildProviderCliEnv preserves the existing PATH key casing', () => {
+test('buildProviderCliEnv preserves the existing PATH key casing on Windows', (context) => {
+  context.mock.method(os, 'platform', () => 'win32');
   const result = buildProviderCliEnv({ Path: '/bin' });
 
   assert.equal(Object.keys(result).find((key) => key.toLowerCase() === 'path'), 'Path');
@@ -33,4 +34,13 @@ test('buildProviderCliEnv includes Windows npm shims in the prefix itself', (con
   assert.equal(entries[0], prefix);
   assert.ok(entries.includes(path.join(prefix, 'bin')));
   assert.ok(entries.includes('/system/bin'));
+});
+
+
+test('Unix PATH is augmented independently of an unrelated Path key', (context) => {
+  context.mock.method(os, 'platform', () => 'linux');
+  const result = buildProviderCliEnv({ Path: '/unused', PATH: '/usr/bin' });
+  assert.equal(result.Path, '/unused');
+  assert.ok(result.PATH?.split(path.delimiter).includes(path.join(os.homedir(), '.local', 'bin')));
+  assert.ok(result.PATH?.split(path.delimiter).includes('/usr/bin'));
 });

@@ -76,3 +76,22 @@ test('provider model migration adds Antigravity without losing existing rows', (
     db.close();
   }
 });
+
+test('model migration preserves the highest deleted AUTOINCREMENT id',()=>{
+ const db=new Database(':memory:');try {db.exec(INIT_SCHEMA_SQL.replace("'claude', 'cursor', 'codex', 'opencode', 'antigravity'","'claude', 'cursor', 'codex', 'opencode'"));
+ db.prepare("INSERT INTO provider_models(id,provider,model_id,model_name) VALUES (42,'codex','old','old'),(43,'codex','deleted','deleted')").run();db.prepare('DELETE FROM provider_models WHERE id=43').run();runMigrations(db);
+ const inserted=db.prepare("INSERT INTO provider_models(provider,model_id,model_name) VALUES ('antigravity','new','new')").run();assert.equal(Number(inserted.lastInsertRowid),44);} finally {db.close();}
+});
+
+
+test('model migration preserves sequence when every previous row was deleted', () => {
+  const db = new Database(':memory:');
+  try {
+    db.exec(INIT_SCHEMA_SQL.replace("'claude', 'cursor', 'codex', 'opencode', 'antigravity'", "'claude', 'cursor', 'codex', 'opencode'"));
+    db.prepare("INSERT INTO provider_models(id,provider,model_id,model_name) VALUES (43,'codex','deleted','deleted')").run();
+    db.exec('DELETE FROM provider_models');
+    runMigrations(db);
+    const added = db.prepare("INSERT INTO provider_models(provider,model_id,model_name) VALUES ('antigravity','new','new')").run();
+    assert.equal(Number(added.lastInsertRowid), 44);
+  } finally { db.close(); }
+});

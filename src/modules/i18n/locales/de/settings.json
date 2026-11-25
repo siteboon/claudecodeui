@@ -548,6 +548,7 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "Hier können Sie Antigravity-MCP-Server anzeigen. Verwenden Sie /mcp in Antigravity, um sie zu ändern.",
     "title": "MCP-Server",
     "description": {
       "claude": "Model Context Protocol-Server stellen Claude zusätzliche Werkzeuge und Datenquellen zur Verfügung",

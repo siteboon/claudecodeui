@@ -613,6 +613,7 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "Antigravity MCP sunucularını burada görüntüleyebilirsiniz. Değiştirmek için Antigravity içinde /mcp kullanın.",
     "title": "MCP Sunucuları",
     "description": {
       "claude": "Model Context Protocol sunucuları Claude'a ek araçlar ve veri kaynakları sağlar",

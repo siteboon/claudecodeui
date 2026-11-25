@@ -56,11 +56,13 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       }
 
       const timestamps = await readFileTimestamps(filePath);
+      const existing = sessionsDb.getSessionByProviderSessionId(parsed.sessionId);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
         parsed.projectPath,
-        parsed.sessionName,
+        existing?.custom_name && existing.custom_name !== 'Untitled Cursor Session'
+          ? existing.custom_name : parsed.sessionName,
         timestamps.createdAt,
         timestamps.updatedAt,
         filePath
@@ -85,11 +87,13 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     const timestamps = await readFileTimestamps(filePath);
+    const existing = sessionsDb.getSessionByProviderSessionId(parsed.sessionId);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
-      parsed.sessionName,
+      existing?.custom_name && existing.custom_name !== 'Untitled Cursor Session'
+          ? existing.custom_name : parsed.sessionName,
       timestamps.createdAt,
       timestamps.updatedAt,
       filePath

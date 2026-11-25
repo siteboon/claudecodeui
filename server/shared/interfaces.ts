@@ -125,7 +125,9 @@ export interface IProviderFork {
     projectPath: string;
     upToAnchorId?: string;
     title?: string;
-  }): Promise<{ providerSessionId: string; jsonlPath: string }>;
+    /** Optional cancellation for snapshots owned by transient side questions. */
+    signal?: AbortSignal;
+  }): Promise<{ providerSessionId: string; jsonlPath: string; /** Roll back owned artifacts if app persistence fails. */ dispose?: () => Promise<void> }>;
 }
 
 // ---------------------------
@@ -172,9 +174,10 @@ export interface IProviderAuth {
    * Runs `--version` on the CLI this provider's chats use: the same check
    * `getStatus()` reports as `installed` and `installedVersion`, without the
    * credential lookup (which can take seconds). The providers module's CLI
-   * update service reads versions through it.
+   * update service reads versions through it. Providers may probe asynchronously
+   * so slow CLI startup does not block the server event loop.
    */
-  checkInstalled(): CliVersionProbe;
+  checkInstalled(): CliVersionProbe | Promise<CliVersionProbe>;
 }
 
 // ---------------------------

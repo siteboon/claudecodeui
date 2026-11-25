@@ -567,6 +567,7 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "Zde si můžete prohlédnout MCP servery Antigravity. Změny proveďte pomocí /mcp v Antigravity.",
     "title": "MCP servery",
     "description": {
       "claude": "Servery Model Context Protocol rozšiřují Claude o další nástroje a zdroje dat",

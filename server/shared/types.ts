@@ -524,6 +524,11 @@ export type NormalizedMessage = {
    * has to survive a reload — never a value this app synthesized.
    */
   transcriptAnchorId?: string;
+  /** Native assistant message identity shared by live deltas and final text; never inferred from prose.
+   * Claude runtime/normalizer supplies it for Agent response reconciliation, including delayed finals. */
+  assistantReplyId?: string;
+  /** Native content block index within assistantReplyId; tool/thinking blocks retain their original positions. */
+  assistantBlockIndex?: number;
   sessionId: string;
   timestamp: string;
   provider: LLMProvider;

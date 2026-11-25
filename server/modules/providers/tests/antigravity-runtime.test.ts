@@ -41,13 +41,16 @@ function createFakeProcess(autoClose = true): FakeProcess {
 function emitEvent(child: FakeProcess, event: AnyRecord): void {
   child.stdout.write(`${JSON.stringify(event)}\n`);
 }
+const initialized = new WeakSet<FakeProcess>();
 function emitInit(child: FakeProcess, id = 'native-id'): void {
+  initialized.add(child);
   emitEvent(child, { event: 'init', conversation_id: id, init: { cwd: '/workspace' } });
 }
 function emitDelta(child: FakeProcess, text: string): void {
   emitEvent(child, { event: 'step_update', step_update: { step_type: 'agent_response', text_delta: text } });
 }
 function finish(child: FakeProcess, id = 'native-id', response = ''): void {
+  if (!initialized.has(child)) emitInit(child, id);
   emitEvent(child, { event: 'result', result: { conversation_id: id, status: 'SUCCESS', response } });
   child.emit('close', 0, null);
 }
@@ -159,7 +162,8 @@ test('AGY side questions stream on an independent native snapshot with enforced 
   assert.ok(!args.includes('--dangerously-skip-permissions'));
   const settings = JSON.parse(args[args.indexOf('--settings') + 1]);
   assert.deepEqual(settings.permissions.deny, ['write_file(*)', 'command(*)', 'unsandboxed(*)', 'mcp(*)', 'read_url(*)', 'execute_url(*)']);
-  assert.equal(settings.toolPermission, 'strict');
+  assert.equal(settings.toolPermission, 'request-review');
+  assert.deepEqual(settings.permissions.allow, ['read_file(/workspace)']);
   assert.match(JSON.parse(stdin).message.content, /Side conversation boundary/);
   assert.match(JSON.parse(stdin).message.content, /Which file was discussed/);
   assert.equal(runtime.abort('parent-app'), false, 'side questions never claim the parent process slot');
@@ -207,19 +211,23 @@ test('AGY side-question startup failures and dismiss during snapshot always disp
     const controller = new AbortController();
     let disposed = false;
     let forked = false;
+    let spawned = 0;
     const runtime = createAntigravityRuntime({
       forkProvider: { forkSideQuestion: async () => {
         forked = true;
         if (failure === 'dismiss') controller.abort();
         return { providerSessionId: 'side-native', jsonlPath: '/side/transcript.jsonl', workingDirectory: '/isolated-agent', agentName: 'readonly-agent', dispose: async () => { disposed = true; } };
       } },
-      spawnProcess: () => { throw new Error('spawn failed'); },
+      spawnProcess: () => { spawned += 1; throw new Error('spawn failed'); },
     });
     const outcome = await runtime.askSideQuestion!(sideQuestion({ signal: controller.signal }), { delta() {} }, createRuntimeContext({
       resolveResumeModel: async () => { if (failure === 'model') throw new Error('model failed'); return 'agy-model'; },
     }));
     assert.equal(outcome.status, 'error');
-    assert.equal(disposed, forked);
+    assert.equal(forked, failure !== 'model');
+    assert.equal(disposed, failure !== 'model');
+    assert.equal(spawned, failure === 'spawn' ? 1 : 0);
+    assert.match(outcome.status === 'error' ? outcome.error : '', failure === 'dismiss' ? /dismissed/ : failure === 'spawn' ? /spawn failed/ : /model failed/);
   }
 });
 
@@ -227,7 +235,7 @@ test('Antigravity permission modes map to native controls', () => {
   assert.deepEqual(resolveAntigravityPermissionArgs('plan'), ['--mode', 'plan']);
   assert.deepEqual(resolveAntigravityPermissionArgs('acceptEdits'), ['--mode', 'accept-edits']);
   assert.deepEqual(resolveAntigravityPermissionArgs('bypassPermissions'), ['--dangerously-skip-permissions']);
-  assert.deepEqual(resolveAntigravityPermissionArgs('default'), []);
+  assert.deepEqual(resolveAntigravityPermissionArgs('default'), ['--settings', JSON.stringify({ agentMode: '', toolPermission: 'request-review' })]);
 });
 
 test('AGY binds init before exit and streams split NDJSON without repeating result text', async () => {
@@ -256,8 +264,9 @@ test('AGY binds init before exit and streams split NDJSON without repeating resu
   assert.deepEqual(JSON.parse(child.stdin.read().toString()), { event: 'user', message: { content: 'Hi' } });
 });
 
-test('fresh runs overlap and ignore another conversation appearing on disk mid-run', async () => {
+test('fresh runs overlap and ignore another conversation appearing on disk mid-run', async (context) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'agy-concurrent-'));
+  context.mock.method(os, 'homedir', () => root);
   const children: FakeProcess[] = [];
   const runtime = createAntigravityRuntime({ spawnProcess: () => {
     const child = createFakeProcess(); children.push(child); return child as never;
@@ -269,9 +278,11 @@ test('fresh runs overlap and ignore another conversation appearing on disk mid-r
     const runB = runtime.run('second', { sessionId: 'app-b' }, second.writer, createRuntimeContext());
     await tick();
     assert.equal(children.length, 2, 'a long first turn must not block another new chat');
-    const foreign = path.join(root, 'brain', 'foreign', '.system_generated', 'logs');
+    const foreign = path.join(root, '.gemini', 'antigravity-cli', 'brain', 'foreign', '.system_generated', 'logs');
     await mkdir(foreign, { recursive: true });
     await writeFile(path.join(foreign, 'transcript.jsonl'), JSON.stringify({ source: 'USER_EXPLICIT', type: 'USER_INPUT', content: 'first' }));
+    await tick();
+    assert.equal(second.getProviderSessionId(), null, 'a foreign transcript in the provider home must not bind a pending run');
     emitInit(children[1], 'native-b'); finish(children[1], 'native-b'); await runB;
     assert.equal(first.getProviderSessionId(), 'native-a');
     finish(children[0], 'native-a'); await runA;
@@ -404,7 +415,10 @@ test('configured executable receives multiline leading-dash prompt only on stdin
   const previous = process.env.AGY_CLI_PATH;
   try {
     const executable = path.join(root, 'fake agy');
-    await writeFile(executable, `#!${process.execPath}\nlet input = '';\nprocess.stdin.setEncoding('utf8');\nprocess.stdin.on('data', chunk => input += chunk);\nprocess.stdin.on('end', () => {\n const prompt = JSON.parse(input).message.content;\n if (process.argv.some(arg => arg.includes('secret prompt'))) process.exit(9);\n console.log(JSON.stringify({event:'init', conversation_id:'stdin-native'}));\n console.log(JSON.stringify({event:'result', result:{conversation_id:'stdin-native',status:'SUCCESS',response:prompt}}));\n});\n`);
+    const program = path.join(root, 'probe.cjs');
+    const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
+    await writeFile(program, `let input = '';\nprocess.stdin.setEncoding('utf8');\nprocess.stdin.on('data', chunk => input += chunk);\nprocess.stdin.on('end', () => {\n const prompt = JSON.parse(input).message.content;\n if (process.argv.some(arg => arg.includes('secret prompt'))) process.exit(9);\n console.log(JSON.stringify({event:'init', conversation_id:'stdin-native'}));\n console.log(JSON.stringify({event:'result', result:{conversation_id:'stdin-native',status:'SUCCESS',response:prompt}}));\n});\n`);
+    await writeFile(executable, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(program)} \"$@\"\n`);
     await chmod(executable, 0o755); process.env.AGY_CLI_PATH = `"${executable}"`;
     const output = createWriter(); const prompt = '-secret prompt\nsecond line';
     await createAntigravityRuntime().run(prompt, {}, output.writer, createRuntimeContext());
@@ -413,4 +427,182 @@ test('configured executable receives multiline leading-dash prompt only on stdin
     if (previous === undefined) delete process.env.AGY_CLI_PATH; else process.env.AGY_CLI_PATH = previous;
     await rm(root, { recursive: true, force: true });
   }
+});
+
+
+test('abort after exit suppresses output until close', async () => {
+  const child = createFakeProcess(false);
+  const runtime = createAntigravityRuntime({ spawnProcess: () => child as never });
+  const { writer, messages } = createWriter();
+  const pending = runtime.run('hello', { sessionId: 'app' }, writer, createRuntimeContext());
+  await tick();
+  child.emit('exit', 0, null);
+  assert.equal(runtime.abort('app'), true);
+  emitInit(child, 'late-native');
+  emitDelta(child, 'late answer');
+  finish(child, 'late-native');
+  await pending;
+  assert.ok(!messages.some((message) => ['session_created', 'stream_delta', 'text', 'complete'].includes(String(message.kind))));
+});
+
+for (const emptyDelta of [false, true]) {
+  test(`terminal text survives ${emptyDelta ? 'an empty delta' : 'a literal marker prefix'}`, async () => {
+    const child = createFakeProcess();
+    const output = createWriter();
+    const runtime = createAntigravityRuntime({ spawnProcess: () => child as never });
+    const pending = runtime.run('prompt', {}, output.writer, createRuntimeContext());
+    await tick(); emitInit(child);
+    if (emptyDelta) emitDelta(child, '');
+    const response = emptyDelta ? 'present answer' : 'literal <';
+    finish(child, 'native-id', response); await pending;
+    assert.equal(output.messages.filter((m) => m.kind === 'stream_delta').map((m) => m.content).join(''), response);
+  });
+}
+
+
+test('result-only subprocesses cannot bind fresh or successfully resume known conversations', async () => {
+  for (const known of [null, 'native-id']) {
+    const child = createFakeProcess();
+    const { writer, getProviderSessionId } = createWriter();
+    const runtime = createAntigravityRuntime({ spawnProcess: () => child as never });
+    const pending = runtime.run('prompt', { sessionId: 'app' }, writer, createRuntimeContext({ resolveProviderSessionId: () => known }));
+    await tick();
+    emitEvent(child, { event: 'result', result: { conversation_id: 'native-id', status: 'SUCCESS', response: 'answer' } });
+    child.emit('close', 0, null);
+    await assert.rejects(pending, /init/);
+    assert.equal(getProviderSessionId(), known);
+  }
+});
+
+// Exercise the real notification preference boundary rather than replacing the notifier.
+import { notificationPreferencesDb, sessionsDb } from '@/modules/database/index.js';
+for (const outcome of ['success', 'failure', 'abort'] as const) {
+  test(`AGY notification lookup failure preserves ${outcome} settlement`, async (t) => {
+    const child = createFakeProcess();
+    const runtime = createAntigravityRuntime({ spawnProcess: () => child as never });
+    const { writer, messages } = createWriter();
+    writer.userId = 1;
+    t.mock.method(sessionsDb, 'getSessionById', () => null);
+    t.mock.method(sessionsDb, 'getSessionByProviderSessionId', () => null);
+    const lookup = t.mock.method(notificationPreferencesDb, 'getPreferences', () => { throw new Error('notification lookup failed'); });
+    const run = runtime.run('probe', { sessionId: `notify-${outcome}` }, writer, createRuntimeContext());
+    const settled = outcome === 'failure' ? assert.rejects(run) : run;
+    await tick();
+    emitInit(child);
+    if (outcome === 'success') finish(child);
+    else if (outcome === 'failure') child.emit('close', 1, null);
+    else await runtime.abort(`notify-${outcome}`);
+    await settled;
+    assert.equal(lookup.mock.callCount(), 1);
+    assert.equal(messages.filter((message) => message.kind === 'complete').length, outcome === 'abort' ? 0 : 1);
+    assert.equal(messages.filter((message) => message.kind === 'error').length, outcome === 'failure' ? 1 : 0);
+    assert.equal(await runtime.abort(`notify-${outcome}`), false);
+    child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
+  });
+}
+
+for (const stage of ['model', 'catalog']) {
+  test(`review regression: cancellation wins over rejected ${stage} startup lookup`, async () => {
+    let reject!: (error: Error) => void;
+    const lookup = new Promise<never>((_resolve, failure) => { reject = failure; });
+    const output = createWriter();
+    const runtime = createAntigravityRuntime({ spawnProcess: () => { throw new Error('must not spawn'); } });
+    const context = createRuntimeContext(stage === 'model'
+      ? { resolveResumeModel: () => lookup }
+      : { getProviderModels: () => lookup });
+    const run = runtime.run('cancel me', { sessionId: 'cancel-startup', model: 'model', effort: 'high' }, output.writer, context);
+    const settled = assert.doesNotReject(run);
+    await tick();
+    assert.equal(await runtime.abort('cancel-startup'), true);
+    reject(new Error('lookup rejected after cancellation'));
+    await settled;
+    assert.equal(output.messages.length, 0);
+  });
+}
+
+test('review-2 regression: a stalled side question times out and disposes after close', async () => {
+  const child = createFakeProcess(false);
+  let disposed = false;
+  const runtime = createAntigravityRuntime({
+    sideQuestionTimeoutMs: 10, abortTimeoutMs: 10,
+    forkProvider: { forkSideQuestion: async () => ({ providerSessionId: 'side-native', jsonlPath: '/side/transcript.jsonl', workingDirectory: '/isolated', agentName: 'readonly', dispose: async () => { disposed = true; } }) },
+    spawnProcess: () => child as never,
+  });
+  const kill = child.kill;
+  let escalated!: () => void;
+  const escalation = new Promise<void>(resolve => { escalated = resolve; });
+  child.kill = signal => { const result = kill(signal); if (signal === 'SIGKILL') escalated(); return result; };
+  const pending = runtime.askSideQuestion!(sideQuestion(), { delta() {} }, createRuntimeContext());
+  const watchdog = setTimeout(() => { child.emit('close', null, 'SIGKILL'); escalated(); }, 2000);
+  await escalation;
+  clearTimeout(watchdog);
+  assert.deepEqual(child.signals, ['SIGTERM', 'SIGKILL']);
+  assert.equal(disposed, false, 'storage remains owned until close');
+  child.emit('close', null, 'SIGKILL');
+  const outcome = await pending;
+  assert.equal(outcome.status, 'error');
+  assert.match(outcome.status === 'error' ? outcome.error : '', /timed out/);
+  assert.equal(disposed, true);
+  child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
+});
+
+
+for (const rejectProbe of [false, true]) test(`review-4 regression: abort wins during install probe (reject=${rejectProbe})`, async () => {
+  let release!: () => void;
+  const probe = new Promise<boolean>((resolve, reject) => { release = () => rejectProbe ? reject(new Error('probe failed')) : resolve(false); });
+  const child = createFakeProcess(); const output = createWriter();
+  const runtime = createAntigravityRuntime({ spawnProcess: () => child as never });
+  const pending = runtime.run('probe', { sessionId: 'abort-install' }, output.writer, createRuntimeContext({ isProviderInstalled: () => probe }));
+  await tick(); child.emit('close', 127, null); await tick();
+  assert.equal(await runtime.abort('abort-install'), true);
+  release(); await pending;
+  assert.equal(output.messages.some((message) => message.kind === 'error' || message.kind === 'complete'), false);
+});
+
+
+test('review-5 regression: successful side process exit cancels deadline during inherited pipe drain', async () => {
+  const child = createFakeProcess();
+  const runtime = createAntigravityRuntime({ sideQuestionTimeoutMs: 30, drainTimeoutMs: 60,
+    spawnProcess: () => child as never,
+    forkProvider: { forkSideQuestion: async () => ({ providerSessionId: 'side-native', jsonlPath: '/side/transcript.jsonl', workingDirectory: '/isolated', agentName: 'readonly', dispose: async () => {} }) },
+  });
+  const pending = runtime.askSideQuestion!(sideQuestion(), { delta() {} }, createRuntimeContext());
+  await tick(); emitInit(child, 'side-native');
+  emitEvent(child, { event: 'result', result: { conversation_id: 'side-native', status: 'SUCCESS', response: 'ok' } });
+  child.emit('exit', 0, null);
+  const keepAlive = setTimeout(() => {}, 500);
+  try { assert.equal((await pending).status, 'done'); assert.deepEqual(child.signals, []); }
+  finally { clearTimeout(keepAlive); }
+});
+
+test('review-5 regression: missing executable receives install guidance', async () => {
+  const child = createFakeProcess(); const output = createWriter();
+  const runtime = createAntigravityRuntime({ spawnProcess: () => child as never });
+  const pending = runtime.run('probe', {}, output.writer, createRuntimeContext());
+  const rejected = assert.rejects(pending, /not installed/);
+  await tick(); child.emit('error', Object.assign(new Error('spawn agy ENOENT'), { code: 'ENOENT' })); child.emit('close', -2, null);
+  await rejected;
+});
+
+
+test('review-6 regression: native terminal error before init is preserved without binding', async () => {
+  const child = createFakeProcess(); const output = createWriter();
+  const runtime = createAntigravityRuntime({ spawnProcess: () => child as never });
+  const pending = runtime.run('/model', {}, output.writer, createRuntimeContext());
+  const rejected = assert.rejects(pending, /use a separate --print invocation/);
+  await tick(); emitEvent(child, { event: 'result', result: { conversation_id: 'unbound-error', status: 'ERROR', error: 'use a separate --print invocation' } }); child.emit('close', 1, null);
+  await rejected; assert.equal(output.getProviderSessionId(), null);
+});
+
+
+test('review-7 regression: a failed stdin prompt terminates the child but settles only after close', async () => {
+  const child = createFakeProcess(false); const output = createWriter();
+  const runtime = createAntigravityRuntime({ spawnProcess: () => child as never });
+  const pending = runtime.run('prompt', { sessionId: 'failed-stdin' }, output.writer, createRuntimeContext());
+  const rejected = assert.rejects(pending, /input write failed/); let settled = false;
+  pending.then(() => { settled = true; }, () => { settled = true; });
+  await tick(); child.stdin.emit('error', new Error('input write failed')); await tick();
+  assert.deepEqual(child.signals, ['SIGTERM']); assert.equal(settled, false);
+  child.emit('close', 1, null); await rejected;
+  assert.equal(await runtime.abort('failed-stdin'), false);
 });

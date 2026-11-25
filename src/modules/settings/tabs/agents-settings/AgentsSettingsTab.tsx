@@ -31,10 +31,14 @@ export default function AgentsSettingsTab({
   onCodexPermissionModeChange,
   projects,
 }: AgentsSettingsTabProps) {
+  // Retain the provider selected while navigating its settings categories.
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
+  // Keep the chosen category, falling back when the next provider lacks it.
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
   const visibleCategories = useMemo<AgentCategory[]>(() => (
-    selectedAgent === 'opencode'
+    selectedAgent === 'antigravity'
+      ? ['account', 'mcp', 'skills']
+      : selectedAgent === 'opencode'
       ? ['account', 'permissions', 'mcp']
       : ['account', 'permissions', 'mcp', 'skills']
   ), [selectedAgent]);

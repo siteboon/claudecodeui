@@ -411,7 +411,7 @@ for (const provider of ['cursor', 'opencode'] as const) {
         assert.equal(response.status, 200);
         const body = await response.json() as { success: boolean; messages: Array<{ content: string }> };
         assert.equal(body.success, true);
-        assert.deepEqual(body.messages.map((message) => message.content), ['partial', 'answer']);
+        assert.deepEqual(body.messages.map((message) => message.content), ['answer']);
       });
     });
   });

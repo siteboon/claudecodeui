@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -52,6 +52,9 @@ async function fixture(run: (input: {
       table === 'steps' ? `step ${index}` : table === 'gen_metadata' ? Buffer.from([18, 1, index]) : Buffer.from([24, index]));
   }
   native.close();
+  const summaries = new Database(path.join(root, 'conversation_summaries.db'));
+  summaries.exec('CREATE TABLE conversation_summaries (conversation_id TEXT, status TEXT, not_fully_idle INTEGER, killed INTEGER, last_user_input_time TEXT)');
+  summaries.close();
   Object.defineProperty(os, 'homedir', { value: () => home, configurable: true });
   closeConnection();
   process.env.DATABASE_PATH = path.join(home, 'auth.db');
@@ -197,6 +200,13 @@ test('AGY edits preserve the original and retire its mapping, including edits of
     const row = sessionsDb.getSessionById(APP)!;
     assert.notEqual(row.provider_session_id, SOURCE);
     assert.equal(sessionsDb.isProviderSessionSuperseded(SOURCE, 'antigravity'), true);
+    await writeFile(path.join(root, 'history.jsonl'), JSON.stringify({ conversationId: SOURCE, workspace: _input.projectPath }));
+    const synchronizer = new AntigravitySessionSynchronizer();
+    assert.equal(await synchronizer.synchronizeFile(_input.jsonlPath), null);
+    assert.equal(sessionsDb.getSessionByProviderSessionId(SOURCE), null);
+    await new AntigravitySessionSynchronizer().synchronize(new Date());
+    assert.equal(sessionsDb.getSessionByProviderSessionId(SOURCE), null, 'startup must not resurrect the retired source');
+
     const history = await provider.fetchHistory(APP, { jsonlPath: row.jsonl_path });
     assert.deepEqual(history.messages.map((message) => message.content), ['first', 'answer']);
     await provider.rewindSession(APP, null);
@@ -227,5 +237,186 @@ test('AGY refuses managed and externally running turns before creating a fork', 
     try { await assert.rejects(sessionsService.forkSessionById(APP), { code: 'SESSION_BUSY' }); }
     finally { antigravityCliLivenessService.getSession = original; }
     assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
+  });
+});
+
+test('full AGY snapshots reject a database that advanced beyond the copied transcript', async () => {
+  await fixture(async (input, root) => {
+    const backup = Database.prototype.backup;
+    Database.prototype.backup = async function (...args) {
+      const writer = new Database(path.join(root, 'conversations', `${SOURCE}.db`));
+      try { writer.prepare('INSERT INTO steps VALUES (?, ?)').run(4, 'new unseen step'); }
+      finally { writer.close(); }
+      return backup.apply(this, args);
+    };
+    try {
+      await assert.rejects(new AntigravityForkProvider().forkSession(input), { code: 'FORK_SOURCE_INVALID' });
+      assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
+      assert.deepEqual(await readdir(path.join(root, 'brain')), [SOURCE]);
+    } finally { Database.prototype.backup = backup; }
+  });
+});
+
+
+test('AGY rejects linked artifacts without retaining a fork or modifying the source', async () => {
+  await fixture(async (input, root) => {
+    const brain = path.join(root, 'brain', SOURCE);
+    await mkdir(path.join(brain, 'nested'));
+    await symlink(path.join(brain, 'plan.md'), path.join(brain, 'nested', 'linked.md'));
+    await assert.rejects(new AntigravityForkProvider().forkSession(input), { code: 'FORK_SOURCE_INVALID' });
+    assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
+    assert.deepEqual(await readdir(path.join(root, 'brain')), [SOURCE]);
+    assert.equal(await readFile(path.join(brain, 'plan.md'), 'utf8'), 'shared context');
+  });
+});
+
+test('AGY rejects prefix caches referencing a missing native step', async () => {
+  await fixture(async (input, root) => {
+    const source = new Database(path.join(root, 'conversations', `${SOURCE}.db`));
+    source.prepare('DELETE FROM steps WHERE idx = 1').run();
+    source.close();
+    await assert.rejects(new AntigravityForkProvider().forkSession({ ...input, upToAnchorId: '2' }), { code: 'FORK_SOURCE_INVALID' });
+    assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
+    assert.deepEqual(await readdir(path.join(root, 'brain')), [SOURCE]);
+  });
+});
+
+
+test('AGY side snapshot cancellation during native backup removes only owned artifacts', async () => {
+  await fixture(async (input, root) => {
+    const controller = new AbortController();
+    const backup = Database.prototype.backup;
+    Database.prototype.backup = function(destination, options) {
+      return backup.call(this, destination, { ...options, progress: (progress) => {
+        controller.abort(new Error('dismissed during backup'));
+        return options?.progress?.(progress) ?? 100;
+      } });
+    };
+    try {
+      await assert.rejects(new AntigravityForkProvider().forkSideQuestion({ ...input, signal: controller.signal }), /dismissed during backup/);
+      assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
+      assert.deepEqual(await readdir(path.join(root, 'brain')), [SOURCE]);
+    } finally { Database.prototype.backup = backup; }
+  });
+});
+
+test('AGY app persistence failure rolls back its native fork', async () => {
+  await fixture(async (_input, root) => {
+    const create = sessionsDb.createForkedSession;
+    sessionsDb.createForkedSession = () => { throw new Error('injected app persistence failure'); };
+    try {
+      await assert.rejects(sessionsService.forkSessionById(APP), /injected app persistence failure/);
+      assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
+      assert.deepEqual(await readdir(path.join(root, 'brain')), [SOURCE]);
+      assert.equal(sessionsDb.getSessionById(APP)?.provider_session_id, SOURCE);
+    } finally { sessionsDb.createForkedSession = create; }
+  });
+});
+
+
+test('AGY rejects executor references encoded as bytes instead of protobuf integers', async () => {
+  await fixture(async (input, root) => {
+    const source = new Database(path.join(root, 'conversations', `${SOURCE}.db`));
+    source.prepare('UPDATE executor_metadata SET data = ? WHERE idx = 0').run(Buffer.from([26, 1, 48]));
+    source.close();
+    await assert.rejects(new AntigravityForkProvider().forkSession({ ...input, upToAnchorId: '2' }), { code: 'FORK_SOURCE_INVALID' });
+    assert.deepEqual(await readdir(path.join(root, 'conversations')), [`${SOURCE}.db`]);
+  });
+});
+
+test('AGY forks retain opaque uint64 metadata above the JavaScript safe-integer range', async () => {
+  await fixture(async (input, root) => {
+    const database = new Database(path.join(root, 'conversations', `${SOURCE}.db`));
+    const metadata = (database.prepare('SELECT data FROM trajectory_metadata_blob').get() as { data: Buffer }).data;
+    const opaque = Buffer.from([64, 128, 128, 128, 128, 128, 128, 128, 128, 16]); // field 8 = 2^60
+    database.prepare('UPDATE trajectory_metadata_blob SET data = ?').run(Buffer.concat([metadata, opaque]));
+    database.close();
+    const result = await new AntigravityForkProvider().forkSession(input);
+    const fork = new Database(path.join(root, 'conversations', `${result.providerSessionId}.db`), { readonly: true });
+    try {
+      const saved = (fork.prepare('SELECT data FROM trajectory_metadata_blob').get() as { data: Buffer }).data;
+      assert.deepEqual(saved.subarray(-opaque.length), opaque);
+    } finally { fork.close(); }
+  });
+});
+
+
+test('review-3 regression: generation references reject fixed-width wire types and accept unpacked integers', async () => {
+  await fixture(async (input, root) => {
+    const source = new Database(path.join(root, 'conversations', `${SOURCE}.db`));
+    try {
+      for (const bytes of [[21, 0, 0, 0, 0], [17, 0, 0, 0, 0, 0, 0, 0, 0]]) {
+        source.prepare('UPDATE gen_metadata SET data = ? WHERE idx = 0').run(Buffer.from(bytes));
+        await assert.rejects(new AntigravityForkProvider().forkSession({ ...input, upToAnchorId: '2' }), { code: 'FORK_SOURCE_INVALID' });
+      }
+      source.prepare('UPDATE gen_metadata SET data = ? WHERE idx = 0').run(Buffer.from([16, 0]));
+      const fork = await new AntigravityForkProvider().forkSession({ ...input, upToAnchorId: '2' });
+      await fork.dispose();
+    } finally { source.close(); }
+  });
+});
+
+
+test('review-4 regression: snapshots reject a missing interior transcript step', async () => {
+  await fixture(async (input, root) => {
+    const source = new Database(path.join(root, 'conversations', `${SOURCE}.db`));
+    try {
+      for (const table of ['steps', 'gen_metadata', 'executor_metadata']) source.prepare(`DELETE FROM ${table} WHERE idx = 1`).run();
+      await assert.rejects(new AntigravityForkProvider().forkSession({ ...input, upToAnchorId: '2' }), { code: 'FORK_SOURCE_INVALID' });
+    } finally { source.close(); }
+  });
+});
+
+test('review-4 regression: failed transcript cleanup still removes native snapshot database', async () => {
+  await fixture(async (input, root) => {
+    const fork = await new AntigravityForkProvider().forkSideQuestion(input);
+    await rm(fork.jsonlPath); await mkdir(fork.jsonlPath);
+    await assert.rejects(fork.dispose(), /snapshot cleanup failed/);
+    await assert.rejects(readFile(path.join(root, 'conversations', `${fork.providerSessionId}.db`)), { code: 'ENOENT' });
+    assert.equal(await readFile(path.join(root, 'brain', fork.providerSessionId, '.cloudcli-side-question'), 'utf8'), '');
+    await rm(fork.jsonlPath, { recursive: true }); await fork.dispose();
+  });
+});
+
+
+test('review-5 regression: native backup destination is private before any copied bytes', async (context) => {
+  const original = Database.prototype.backup;
+  let checked = false;
+  context.mock.method(Database.prototype, 'backup', async function(this: Database.Database, ...args: Parameters<typeof original>) {
+    const info = await stat(args[0]); checked = true;
+    if (process.platform !== 'win32') assert.equal(info.mode & 0o777, 0o600);
+    return original.apply(this, args);
+  });
+  await fixture(async (input) => {
+    const fork = await new AntigravityForkProvider().forkSession(input);
+    try { assert.equal(checked, true); } finally { await fork.dispose(); }
+  });
+});
+
+
+test('review-8 regression: an unpublished explicit fork cannot be indexed before app persistence', async () => {
+  await fixture(async (input, root) => {
+    const fork = await new AntigravityForkProvider().forkSession(input);
+    try {
+      await writeFile(path.join(root, 'history.jsonl'), JSON.stringify({ conversationId: fork.providerSessionId, workspace: input.projectPath }));
+      const sync = new AntigravitySessionSynchronizer();
+      assert.equal(await sync.synchronizeFile(fork.jsonlPath), null);
+      assert.equal(sessionsDb.getSessionByProviderSessionId(fork.providerSessionId), null);
+      sessionsDb.createForkedSession({
+        sessionId: 'durable-fork',
+        provider: 'antigravity',
+        projectPath: input.projectPath,
+        customName: 'Fork',
+        providerSessionId: fork.providerSessionId,
+        jsonlPath: fork.jsonlPath,
+        forkedFromSessionId: APP,
+        model: null,
+        effort: null,
+      });
+      assert.equal(await sync.synchronizeFile(fork.jsonlPath), 'durable-fork');
+      // A fork of a fork must not try to copy its predecessor's ownership marker.
+      const next = await new AntigravityForkProvider().forkSession({ ...input, providerSessionId: fork.providerSessionId, jsonlPath: fork.jsonlPath });
+      await next.dispose();
+    } finally { await fork.dispose(); }
   });
 });

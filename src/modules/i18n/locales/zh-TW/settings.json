@@ -549,6 +549,7 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "在此檢視 Antigravity MCP 伺服器。若要變更設定，請在 Antigravity 中使用 /mcp。",
     "title": "MCP 伺服器",
     "description": {
       "claude": "Model Context Protocol 伺服器為 Claude 提供額外的工具和資料來源",

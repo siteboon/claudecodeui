@@ -589,6 +589,7 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "כאן ניתן לצפות בשרתי MCP של Antigravity. לשינויים, יש להשתמש בפקודה /mcp בתוך Antigravity.",
     "title": "שרתי MCP",
     "description": {
       "claude": "שרתי Model Context Protocol מספקים ל-Claude כלים ומקורות מידע נוספים",

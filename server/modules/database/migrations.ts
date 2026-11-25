@@ -490,6 +490,7 @@ const ensureAntigravityProviderModelsConstraint = (db: Database): void => {
   console.log('Running migration: Adding Antigravity provider model support');
   db.exec('BEGIN TRANSACTION');
   try {
+    const sequence = db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'provider_models'").get() as { seq: number } | undefined;
     db.exec('DROP TABLE IF EXISTS provider_models__new');
     db.exec(`
       CREATE TABLE provider_models__new (
@@ -531,6 +532,11 @@ const ensureAntigravityProviderModelsConstraint = (db: Database): void => {
     `);
     db.exec('DROP TABLE provider_models');
     db.exec('ALTER TABLE provider_models__new RENAME TO provider_models');
+    // Deleted rows still reserve their AUTOINCREMENT identities, even for an empty table.
+    if (sequence) {
+      db.prepare("UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'provider_models'").run(sequence.seq);
+      db.prepare("INSERT INTO sqlite_sequence(name, seq) SELECT 'provider_models', ? WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'provider_models')").run(sequence.seq);
+    }
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');

@@ -61,3 +61,8 @@ test('steering is exposed only by a runtime that implements it', () => {
     assert.equal(capabilities.supportsSteering, capabilities.provider === 'claude', capabilities.provider);
   }
 });
+
+// Context clearing needs a provider reset contract, which AGY stream-json does not implement.
+test('Antigravity does not advertise unsupported context clearing', () => {
+  assert.equal(providerCapabilitiesService.getProviderCapabilities('antigravity').supportsContextClearing, false);
+});

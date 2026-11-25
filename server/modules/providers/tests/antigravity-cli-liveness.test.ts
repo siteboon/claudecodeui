@@ -1,3 +1,4 @@
+import fsp from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -121,5 +122,60 @@ linuxTest('a new summary with a zero or invalid input time uses its presence tim
       assert.ok(live.startedAt > Date.now() - 60_000);
       assert.ok(live.startedAt <= Date.now());
     }
+  });
+});
+
+linuxTest('unreadable native activity blocks admission while the listing remains tolerant', async () => {
+  await fixture(async ({ database, service }) => {
+    database.exec('BEGIN EXCLUSIVE');
+    try {
+      assert.deepEqual(await service.listSessions(), []);
+      assert.equal((await service.getSession(ID))?.unavailable, true);
+    } finally { database.exec('ROLLBACK'); }
+    assert.equal((await service.getSession(ID))?.unavailable, undefined);
+    database.exec('DROP TABLE conversation_summaries');
+    assert.deepEqual(await service.listSessions(), []);
+    assert.equal((await service.getSession(ID))?.unavailable, true);
+  });
+});
+
+linuxTest('a lock acquired during presence inspection is included in the liveness snapshot', async (t) => {
+  await fixture(async ({ procRoot, lockLine, service }) => {
+    await writeFile(path.join(procRoot, 'locks'), '');
+    const original = fsp.stat;
+    t.mock.method(fsp, 'stat', async (...args: Parameters<typeof fsp.stat>) => {
+      if (String(args[0]).endsWith(`${ID}.lock`)) await writeFile(path.join(procRoot, 'locks'), lockLine);
+      return original(...args);
+    });
+    assert.equal((await service.getSession(ID))?.providerSessionId, ID);
+  });
+});
+
+linuxTest('an unreadable lock table cannot prove an existing native session idle', async () => {
+  await fixture(async ({ procRoot, service }) => {
+    await unlink(path.join(procRoot, 'locks'));
+    assert.equal((await service.getSession(ID))?.unavailable, true);
+  });
+});
+
+linuxTest('review regression: an unrelated unreadable native owner cannot block an idle session', async (t) => {
+  await fixture(async ({ service }) => {
+    const original = fsp.stat;
+    t.mock.method(fsp, 'stat', async (...args: Parameters<typeof fsp.stat>) => {
+      if (String(args[0]).endsWith(`${ID}.lock`)) throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+      return original(...args);
+    });
+    assert.equal(await service.getSession('00000000-0000-4000-8000-000000000001'), null);
+    assert.equal((await service.getSession(ID))?.unavailable, true);
+  });
+});
+
+
+linuxTest('review-6 regression: deleted executable suffix retains live same-user lock ownership', async () => {
+  await fixture(async ({ procRoot, service }) => {
+    const executable = path.join(procRoot, String(PID), 'exe');
+    await unlink(executable); await symlink('/opt/antigravity/agy (deleted)', executable);
+    assert.equal((await service.listSessions()).length, 1);
+    assert.equal((await service.getSession(ID))?.providerSessionId, ID);
   });
 });

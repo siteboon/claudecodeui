@@ -1,6 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import { sessionsDb } from '@/modules/database/index.js';
@@ -9,7 +9,6 @@ import type { IProviderSessionSynchronizer } from '@/shared/index.js';
 import {
   findFilesRecursivelyModifiedAfter,
   normalizeSessionName,
-  readFileTimestamps,
   readObjectRecord,
   readOptionalString,
   stripAntigravityTags,
@@ -42,18 +41,21 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
   private readonly brainDir = path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain');
   private readonly historyPath = path.join(os.homedir(), '.gemini', 'antigravity-cli', 'history.jsonl');
   private readonly deferredFiles = new Set<string>();
+  private hasCompletedStartupScan = false;
 
   /** Scans changed AGY transcripts using one history snapshot per synchronization. */
   async synchronize(since?: Date): Promise<number> {
     const files = new Set([
       ...this.deferredFiles,
-      ...await findFilesRecursivelyModifiedAfter(this.brainDir, 'transcript.jsonl', since ?? null),
+      // Reconstruct deferred work after restart before honoring the durable cursor.
+      ...await findFilesRecursivelyModifiedAfter(this.brainDir, 'transcript.jsonl', this.hasCompletedStartupScan ? since ?? null : null),
     ]);
     const history = await this.readHistoryMetadata();
     let processed = 0;
     for (const filePath of files) {
       if (await this.synchronizeTranscript(filePath, history)) processed += 1;
     }
+    this.hasCompletedStartupScan = true;
     return processed;
   }
 
@@ -80,14 +82,31 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
       this.deferredFiles.add(filePath);
       return null;
     }
-    this.deferredFiles.delete(filePath);
-    const timestamps = await readFileTimestamps(filePath);
-    return sessionsDb.createSession(
-      parsed.sessionId, PROVIDER, parsed.projectPath,
-      existing?.custom_name && existing.custom_name !== UNTITLED_ANTIGRAVITY_SESSION
-        ? existing.custom_name : parsed.sessionName,
+    let timestamps: { createdAt: string; updatedAt: string };
+    try {
+      const current = await stat(filePath);
+      timestamps = { createdAt: current.birthtime.toISOString(), updatedAt: current.mtime.toISOString() };
+    } catch (error) {
+      // A delete may win after the transcript read; never resurrect its row.
+      if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) this.deferredFiles.delete(filePath);
+      else this.deferredFiles.add(filePath);
+      return null;
+    }
+    // A concurrent edit can retire the original while filesystem reads await.
+    if (sessionsDb.isProviderSessionSuperseded(parsed.sessionId, PROVIDER)) {
+      this.deferredFiles.delete(filePath);
+      return null;
+    }
+    // Re-read after filesystem I/O: runtime may have bound the app row meanwhile.
+    const mapped = sessionsDb.getSessionByProviderSessionId(parsed.sessionId);
+    const sessionId = sessionsDb.createSession(
+      parsed.sessionId, PROVIDER, mapped?.provider === PROVIDER ? mapped.project_path ?? parsed.projectPath : parsed.projectPath,
+      (mapped ?? existing)?.custom_name && (mapped ?? existing)?.custom_name !== UNTITLED_ANTIGRAVITY_SESSION
+        ? (mapped ?? existing)!.custom_name! : parsed.sessionName,
       timestamps.createdAt, timestamps.updatedAt, filePath,
     );
+    this.deferredFiles.delete(filePath);
+    return sessionId;
   }
 
   private async processTranscriptFile(
@@ -96,12 +115,27 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
   ): Promise<ParsedAntigravitySession | null> {
     const relative = path.relative(this.brainDir, filePath);
     const parts = relative.split(path.sep);
-    if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative) || parts.length < 2) return null;
+    if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative) || parts.length !== 4 || parts[1] !== '.system_generated' || parts[2] !== 'logs' || parts[3] !== 'transcript.jsonl') return null;
     const sessionId = parts[0];
+    if (sessionsDb.isProviderSessionSuperseded(sessionId, PROVIDER)) {
+      this.deferredFiles.delete(filePath);
+      return null;
+    }
     try {
       await access(path.join(this.brainDir, sessionId, '.cloudcli-side-question'));
       this.deferredFiles.delete(filePath);
       return null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    try {
+      await access(path.join(this.brainDir, sessionId, '.cloudcli-fork'));
+      // The gateway persists app identity synchronously after snapshot creation.
+      // Retain this marker across restart so failed/unpublished forks stay hidden.
+      if (!sessionsDb.getSessionByProviderSessionId(sessionId)) {
+        this.deferredFiles.add(filePath);
+        return null;
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
@@ -113,21 +147,33 @@ export class AntigravitySessionSynchronizer implements IProviderSessionSynchroni
     const projectPath = existing?.provider === PROVIDER
       ? existing.project_path ?? fromHistory?.projectPath
       : fromHistory?.projectPath;
+    let hasCompleteStep = false;
     try {
       const lines = (await readFile(filePath, 'utf8')).split(/\r?\n/);
       for (const line of lines) {
         try {
           const step = readObjectRecord(JSON.parse(line));
-          if (step?.source === 'USER_EXPLICIT' && step.type === 'USER_INPUT') {
+          if (!step || !readOptionalString(step.type)) continue;
+          hasCompleteStep = true;
+          if (step.source === 'USER_EXPLICIT' && step.type === 'USER_INPUT') {
             const content = readOptionalString(step.content);
-            if (content) firstUserMessage ??= stripAntigravityTags(content);
+            const visible = content ? stripAntigravityTags(content).trim() : undefined;
+            if (visible) firstUserMessage ??= visible;
           }
           // VIEW_FILE/LIST_DIRECTORY paths describe tool targets, not the workspace.
           if (projectPath && firstUserMessage) break;
         } catch { /* Live transcripts may end in a partial record. */ }
       }
-    } catch { return null; }
-    if (!projectPath) return null;
+    } catch (error) {
+      // A durable scan cursor must not strand a temporarily unreadable file.
+      if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) this.deferredFiles.delete(filePath);
+      else this.deferredFiles.add(filePath);
+      return null;
+    }
+    if (!projectPath || !hasCompleteStep) {
+      this.deferredFiles.add(filePath);
+      return null;
+    }
     return {
       sessionId, projectPath,
       sessionName: normalizeSessionName(firstUserMessage, UNTITLED_ANTIGRAVITY_SESSION),

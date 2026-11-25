@@ -114,7 +114,7 @@ function readTrailingAntigravityError(
 
 /** Resolves AGY's standard transcript location when an app-created DB row has not been synchronized yet. */
 function resolveAntigravityTranscriptPath(options: FetchHistoryOptions): string | null {
-  const indexedPath = readOptionalString(options.jsonlPath);
+  const indexedPath = readOptionalString(options.transcriptPath) ?? readOptionalString(options.jsonlPath);
   if (indexedPath) {
     return indexedPath;
   }
@@ -248,7 +248,9 @@ export class AntigravitySessionsProvider implements IProviderSessions {
   /** The common edit gateway addresses stable native step indices, never visible row ordinals. */
   async resolveEditAnchor(sessionId: string, anchorId: string) {
     const session = sessionsDb.getSessionById(sessionId);
-    if (!session?.jsonl_path || !session.provider_session_id) return { found: false, resumeThroughId: null };
+    if (!session?.jsonl_path || !session.provider_session_id) throw new AppError('The Antigravity transcript is not ready.', {
+      code: 'EDIT_SOURCE_NOT_READY', statusCode: 409,
+    });
     const lines = (await readFile(session.jsonl_path, 'utf8')).split(/\r?\n/);
     let previous: string | null = null;
     let lastIndex = -1;
@@ -290,9 +292,9 @@ export class AntigravitySessionsProvider implements IProviderSessions {
     const raw = readObjectRecord(rawMessage);
     const content = typeof rawMessage === 'string'
       ? rawMessage
-      : readOptionalString(raw?.content) ?? readOptionalString(raw?.text) ?? '';
+      : typeof raw?.content === 'string' ? raw.content : typeof raw?.text === 'string' ? raw.text : '';
 
-    if (!content.trim()) {
+    if (!content) {
       return [];
     }
 
@@ -368,13 +370,7 @@ export class AntigravitySessionsProvider implements IProviderSessions {
         '[AntigravityProvider] Failed to read session transcript:',
         error instanceof Error ? error.name : 'UnknownError',
       );
-      return {
-        messages: [],
-        total: 0,
-        hasMore: false,
-        offset: normalizedOffset,
-        limit: normalizedLimit,
-      };
+      // Native terminal errors remain available even when no transcript can be read.
     }
 
     const trailingError = readTrailingAntigravityError(

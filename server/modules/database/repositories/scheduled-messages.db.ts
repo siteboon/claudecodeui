@@ -127,6 +127,13 @@ export const scheduledMessagesDb = {
     })();
   },
 
+  /** Dispatcher restores an owned unsent claim after retryable admission. */
+  restoreUnsentClaim(id: string): void {
+    getConnection().prepare(
+      `UPDATE scheduled_messages SET status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'sent'`
+    ).run(id);
+  },
+
   markFailed(id: string, reason: string): void {
     getConnection()
       .prepare(

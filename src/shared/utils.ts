@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
+import type { NormalizedMessage, Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -270,3 +270,20 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
+
+
+//----------------- ASSISTANT STREAM OWNERSHIP ------------
+/**
+ * Chat realtime handling and its message store use native identity to match a
+ * final to its transient stream. Legacy transports without reply IDs retain
+ * their single-stream behavior; explicit parent or block mismatches never match.
+ */
+export function matchesAssistantStreamOwner(
+  stream: Pick<NormalizedMessage, 'assistantReplyId' | 'assistantBlockIndex' | 'parentToolUseId'>,
+  event: Pick<NormalizedMessage, 'assistantReplyId' | 'assistantBlockIndex' | 'parentToolUseId'>,
+): boolean {
+  return (stream.parentToolUseId ?? null) === (event.parentToolUseId ?? null)
+    && (!stream.assistantReplyId || !event.assistantReplyId || stream.assistantReplyId === event.assistantReplyId)
+    && (stream.assistantBlockIndex === undefined || event.assistantBlockIndex === undefined
+      || stream.assistantBlockIndex === event.assistantBlockIndex);
+}

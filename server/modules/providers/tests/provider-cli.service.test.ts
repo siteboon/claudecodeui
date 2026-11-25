@@ -209,7 +209,8 @@ const rejectsWithAppError = async (promise: Promise<unknown>, code: string, stat
 
 // ----------------- installed version in the auth status ------------
 
-test('Antigravity reports its configured CLI version without claiming it is bundled or running an updater', async () => {
+test('Antigravity reports its configured CLI version without claiming it is bundled or running an updater', async (context) => {
+  context.mock.method(spawn, 'sync', () => { throw new Error('status must not block the server event loop'); });
   await withIsolatedCliEnv(async (binDir) => {
     const agy = await createFakeCli(binDir, 'agy');
     await agy.set('version', '1.2.3\n');

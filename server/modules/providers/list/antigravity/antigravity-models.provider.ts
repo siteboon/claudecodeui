@@ -104,14 +104,16 @@ export const ANTIGRAVITY_FALLBACK_MODELS: ProviderModelsDefinition = {
 
 const MODELS_TIMEOUT_MS = 20_000;
 
-/** Used by AntigravityProviderModels and its tests to preserve the native account-specific model list. */
-export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefinition => {
-  const models = stdout
+/** Auth and model adapters share discovered rows without applying a fallback. */
+export const parseAntigravityModelRows = (stdout: string): ProviderModelOption[] => stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line.length > 0)
+    // Native IDs are lowercase tokens; diagnostics/headings are not models.
+    .filter((line) => /^[a-z0-9][a-z0-9._:/-]*(?:\s|$)/.test(line)
+      && !/^(?:(?:warning|notice|error|info|account)(?::|\s)|available models(?:\s|:))/i.test(line))
     .map((line) => {
-      const [modelId, displayName] = line.split('\t', 2);
+      const [modelId, ...displayWords] = line.split(/\s+/);
+      const displayName = displayWords.join(' ');
       return {
         value: modelId,
         label: displayName?.trim() || modelId,
@@ -119,6 +121,9 @@ export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefi
       };
     });
 
+/** Providers model catalog retains account rows, applying fallback only when discovery is empty. */
+export const parseAntigravityModelsStdout = (stdout: string): ProviderModelsDefinition => {
+  const models = parseAntigravityModelRows(stdout);
   if (models.length === 0) {
     return ANTIGRAVITY_FALLBACK_MODELS;
   }

@@ -2,6 +2,7 @@ export { appendFilesInputTag, appendImagesInputTag, parseImagesInputTag, buildCo
 
 // Providers, Agent response collection, and Websocket Shell launches consume these shared contracts.
 export type {
+  IProvider,
   IProviderAuth,
   IProviderFork,
   IProviderMcp,
@@ -56,6 +57,7 @@ export {
   normalizeSessionName,
   parseIncomingJsonObject,
   probeCliVersion,
+  parseCliVersion,
   readFileTimestamps,
   readJsonConfig,
   readObjectRecord,

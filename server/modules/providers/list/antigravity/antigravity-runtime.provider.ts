@@ -40,6 +40,8 @@ type AntigravitySpawn = (
 type AntigravityRuntimeDependencies = {
   spawnProcess: AntigravitySpawn;
   abortTimeoutMs: number;
+  drainTimeoutMs: number;
+  sideQuestionTimeoutMs: number;
   forkProvider: Pick<AntigravityForkProvider, 'forkSideQuestion'>;
 };
 
@@ -81,7 +83,10 @@ function createAntigravityStdoutFilter(sendVisibleText: (text: string) => void) 
       pending = pending.slice(visible.length);
       if (visible) sendVisibleText(visible);
     },
-    finish() { pending = ''; },
+    finish() {
+      if (pending) sendVisibleText(pending);
+      pending = '';
+    },
   };
 }
 
@@ -91,7 +96,9 @@ export function resolveAntigravityPermissionArgs(permissionMode: unknown): strin
     case 'plan': return ['--mode', 'plan'];
     case 'acceptEdits': return ['--mode', 'accept-edits'];
     case 'bypassPermissions': return ['--dangerously-skip-permissions'];
-    default: return [];
+    // Native auto mode can approve edits; explicitly select review mode.
+    // https://antigravity.google/docs/cli/modes documents agentMode: ''.
+    default: return ['--settings', JSON.stringify({ agentMode: '', toolPermission: 'request-review' })];
   }
 }
 
@@ -132,22 +139,26 @@ async function runAntigravity(
     if (sideQuestion) return;
     if (terminalNotificationSent) return;
     terminalNotificationSent = true;
-    if (outcome.aborted || (outcome.code === 0 && !outcome.error)) {
-      notifyRunStopped({
-        userId: writer.userId ?? null, provider: 'antigravity', sessionId: fallbackSessionId,
-        sessionName: sessionSummary, stopReason: outcome.aborted ? 'aborted' : 'completed',
-      });
-    } else {
-      notifyRunFailed({
-        userId: writer.userId ?? null, provider: 'antigravity', sessionId: fallbackSessionId,
-        sessionName: sessionSummary,
-        error: outcome.error ?? `Antigravity CLI exited with code ${outcome.code ?? 'unknown'}`,
-      });
+    try {
+      if (outcome.aborted || (outcome.code === 0 && !outcome.error)) {
+        notifyRunStopped({
+          userId: writer.userId ?? null, provider: 'antigravity', sessionId: fallbackSessionId,
+          sessionName: sessionSummary, stopReason: outcome.aborted ? 'aborted' : 'completed',
+        });
+      } else {
+        notifyRunFailed({
+          userId: writer.userId ?? null, provider: 'antigravity', sessionId: fallbackSessionId,
+          sessionName: sessionSummary,
+          error: outcome.error ? new Error(outcome.error.message.slice(-STDERR_BUFFER_LIMIT)) : `Antigravity CLI exited with code ${outcome.code ?? 'unknown'}`,
+        });
+      }
+    } catch (error) {
+      console.error('[Antigravity] Terminal notification failed:', error);
     }
   };
   const reportError = (error: Error) => {
     writer.send(createNormalizedMessage({
-      kind: 'error', content: error.message,
+      kind: 'error', content: error.message.slice(-STDERR_BUFFER_LIMIT),
       sessionId: nativeSessionId ?? fallbackSessionId, provider: 'antigravity',
     }));
     writer.send(createCompleteMessage({
@@ -160,6 +171,7 @@ async function runAntigravity(
   try {
     resolvedModel = await context.resolveResumeModel(appSessionId ?? undefined, readStringOption(options, 'model'));
   } catch (error) {
+    if (startup.aborted || sideQuestion?.signal.aborted) return;
     const resolvedError = error instanceof Error ? error : new Error(String(error));
     reportError(resolvedError);
     throw resolvedError;
@@ -175,11 +187,12 @@ async function runAntigravity(
       const catalog = await context.getProviderModels();
       const model = catalog.OPTIONS.find((option) => option.value === resolvedModel);
       const allowed = model ? model.effort?.values.map((option) => option.value) ?? []
-        : ['low', 'medium', 'high', 'xhigh', 'max'];
+        : [];
       if (allowed.includes(effort)) args.push('--effort', effort);
-      else if (allowed.length > 0) throw new Error(`Unsupported Antigravity effort: ${effort}`);
+      else if (!model || allowed.length > 0) throw new Error(`Unsupported Antigravity effort: ${effort}`);
     }
   } catch (error) {
+    if (startup.aborted || sideQuestion?.signal.aborted) return;
     const resolvedError = error instanceof Error ? error : new Error(String(error));
     reportError(resolvedError);
     throw resolvedError;
@@ -191,9 +204,9 @@ async function runAntigravity(
     // https://antigravity.google/docs/permissions?tab=cli
     args.push('--agent', sideQuestion.agentName, '--add-dir', sideQuestion.projectPath,
       '--mode', 'plan', '--disable-slash-commands', '--settings', JSON.stringify({
-        toolPermission: 'strict',
+        toolPermission: 'request-review',
         permissions: {
-          allow: [], ask: [],
+          allow: [`read_file(${sideQuestion.projectPath.replace(/\\/g, '/')})`], ask: [],
           deny: ['write_file(*)', 'command(*)', 'unsandboxed(*)', 'mcp(*)', 'read_url(*)', 'execute_url(*)'],
         },
       }));
@@ -223,11 +236,20 @@ async function runAntigravity(
     let stdoutBuffer = '';
     let settled = false;
     let failure: Error | null = null;
-    let sawResponseDelta = false;
+    let sawVisibleResponse = false;
+    let drainTimer: ReturnType<typeof setTimeout> | undefined;
+    let closing = false;
+    const sideDeadline = sideQuestion ? setTimeout(() => {
+      failure = new Error('Antigravity side question timed out.');
+      terminateAntigravityProcess(child, dependencies.abortTimeoutMs);
+    }, dependencies.sideQuestionTimeoutMs) : undefined;
+    sideDeadline?.unref();
     let sawResult = false;
+    let sawInit = false;
     const toolSteps = new Set<number>();
     const completedToolSteps = new Set<number>();
     const stdoutFilter = createAntigravityStdoutFilter((text) => {
+      sawVisibleResponse = true;
       for (const message of context.normalizeMessage(text, nativeSessionId ?? fallbackSessionId)) {
         writer.send(message);
       }
@@ -244,21 +266,39 @@ async function runAntigravity(
       // A delayed exit from an aborted run must not erase its replacement.
       if (activeProcesses.get(processKey) === child) activeProcesses.delete(processKey);
     };
-    child.once('exit', releaseProcess);
+    child.once('exit', (code) => {
+      clearTimeout(sideDeadline);
+      child.exited = true;
+      clearTimeout(child.killTimer);
+      // Descendants may inherit the pipes. Retain late-output suppression and
+      // ownership while allowing a bounded drain after the native owner exits.
+      drainTimer = setTimeout(() => {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        child.stdin?.destroy();
+        finishProcess(code);
+      }, dependencies.drainTimeoutMs);
+    });
 
     const readEvent = (line: string) => {
-      if (!line.trim() || child.aborted || failure) return;
+      if (!line.trim() || child.aborted || failure || closing) return;
       const event = readObjectRecord(JSON.parse(line));
       const step = readObjectRecord(event?.step_update);
       const result = readObjectRecord(event?.result);
       const id = readStringOption(event ?? {}, 'conversation_id')
         ?? readStringOption(step ?? {}, 'conversation_id')
         ?? readStringOption(result ?? {}, 'conversation_id');
-      if (id) {
+      if (event?.event === 'init') {
+        if (!readStringOption(event, 'conversation_id')) throw new Error('Antigravity init event is missing its conversation id');
+        sawInit = true;
+      }
+      const terminalError = event?.event === 'result' && result?.status !== 'SUCCESS';
+      if (id && !terminalError) {
         if (!/^[a-zA-Z0-9_.:-]+$/.test(id) || (nativeSessionId && nativeSessionId !== id)) {
           throw new Error('Antigravity CLI reported an inconsistent conversation id');
         }
         if (!nativeSessionId) {
+          if (event?.event !== 'init') throw new Error('Antigravity CLI reported a conversation before init');
           nativeSessionId = id;
           announceAntigravityConversation(writer, id);
           releasePendingBinding();
@@ -266,7 +306,6 @@ async function runAntigravity(
       }
       if (event?.event === 'step_update' && step?.step_type === 'agent_response'
         && typeof step.text_delta === 'string') {
-        sawResponseDelta = true;
         stdoutFilter.write(step.text_delta);
       }
       if (event?.event === 'step_update' && step?.step_type === 'tool' && Number.isSafeInteger(step.step_index)) {
@@ -301,8 +340,9 @@ async function runAntigravity(
         sawResult = true;
         if (result.status !== 'SUCCESS') {
           failure = new Error(readStringOption(result, 'error') ?? `Antigravity CLI returned ${String(result.status)}`);
-        } else if (!sawResponseDelta && typeof result.response === 'string') {
-          stdoutFilter.write(result.response);
+        } else if (typeof result.response === 'string') {
+          stdoutFilter.finish();
+          if (!sawVisibleResponse) stdoutFilter.write(result.response);
         }
       }
     };
@@ -332,13 +372,19 @@ async function runAntigravity(
       stderrBuffer = (stderrBuffer + data).slice(-STDERR_BUFFER_LIMIT);
     });
     child.once('error', (error) => {
-      failure = error;
+      failure = (error as NodeJS.ErrnoException).code === 'ENOENT'
+        ? new Error('Antigravity CLI is not installed. Install it from https://antigravity.google/cli/install.sh')
+        : error;
       // Node follows spawn errors with close. Retain the process until then.
     });
-    child.once('close', (code) => {
+    const finishProcess = (code: number | null) => {
+      if (closing) return;
+      clearTimeout(drainTimer);
+      clearTimeout(sideDeadline);
       sideQuestion?.signal.removeEventListener('abort', abortSideQuestion);
       releaseProcess();
       if (child.aborted) {
+        closing = true;
         notifyTerminalState({ aborted: true });
         settle();
         return;
@@ -346,12 +392,18 @@ async function runAntigravity(
       try { readStdout('', true); }
       catch (error) { failure = error instanceof Error ? error : new Error(String(error)); }
       stdoutFilter.finish();
+      closing = true;
       void (async () => {
-        if (!failure && code === 0 && (!nativeSessionId || !sawResult)) {
-          failure = new Error('Antigravity CLI did not report a conversation id and result; a CLI with stream-json support is required');
+        if (!failure && code === 0 && (!nativeSessionId || !sawInit || !sawResult)) {
+          failure = new Error('Antigravity CLI did not report a init conversation id and result; a CLI with stream-json support is required');
         }
         if (!failure && code !== 0) {
           const installed = code === 127 || code === null ? await context.isProviderInstalled() : true;
+          if (startup.aborted) {
+            notifyTerminalState({ aborted: true });
+            settle();
+            return;
+          }
           failure = new Error(!installed
             ? 'Antigravity CLI is not installed. Install it from https://antigravity.google/cli/install.sh'
             : `Antigravity CLI exited with code ${code ?? 'unknown'}${stderrBuffer.trim() ? `: ${stderrBuffer.trim()}` : ''}`);
@@ -367,13 +419,18 @@ async function runAntigravity(
           settle();
         }
       })().catch((error) => {
+        if (startup.aborted) { notifyTerminalState({ aborted: true }); settle(); return; }
         const resolvedError = error instanceof Error ? error : new Error(String(error));
         reportError(resolvedError);
         settle(resolvedError);
       });
-    });
+    };
+    child.once('close', finishProcess);
     // JSON stdin preserves multiline/leading-dash prompts and keeps them out of argv.
-    child.stdin?.on('error', (error) => { failure = error; });
+    child.stdin?.on('error', (error) => {
+      failure ??= error;
+      terminateAntigravityProcess(child, dependencies.abortTimeoutMs);
+    });
     const prompt = appendFilesInputTag(appendImagesInputTag(command, options.images), options.files);
     child.stdin?.end(`${JSON.stringify({ event: 'user', message: { content: prompt } })}\n`);
   });
@@ -382,7 +439,7 @@ async function runAntigravity(
 /** Providers registry and runtime tests consume this adapter with injectable subprocesses. */
 export function createAntigravityRuntime(overrides: Partial<AntigravityRuntimeDependencies> = {}): IProviderRuntime {
   const dependencies = {
-    spawnProcess: crossSpawn as AntigravitySpawn, abortTimeoutMs: 3000,
+    spawnProcess: crossSpawn as AntigravitySpawn, abortTimeoutMs: 3000, drainTimeoutMs: 3000, sideQuestionTimeoutMs: 120_000,
     forkProvider: new AntigravityForkProvider(), ...overrides,
   };
   const activeProcesses = new Map<string, AntigravityProcess>();
@@ -402,6 +459,7 @@ export function createAntigravityRuntime(overrides: Partial<AntigravityRuntimeDe
           jsonlPath: path.join(os.homedir(), '.gemini', 'antigravity-cli', 'brain',
             request.providerSessionId, '.system_generated', 'logs', 'transcript.jsonl'),
           projectPath: request.projectPath ?? process.cwd(),
+          signal: request.signal,
         });
         if (request.signal.aborted) throw new Error('The side question was dismissed.');
         const prompt = `${SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS}\n\n${SIDE_CONVERSATION_BOUNDARY_PROMPT}\n\n`

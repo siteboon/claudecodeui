@@ -33,6 +33,8 @@ type ChatRun = {
   writer: ChatSessionWriter;
   startedAt: number;
   completedAt: number | null;
+  /** Dispatch preserves unsent claims only when a scheduled turn preempts startup. */
+  startupCancellation?: 'explicit' | 'preempted';
 };
 
 /**

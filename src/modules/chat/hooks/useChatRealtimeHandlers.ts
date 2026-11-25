@@ -3,7 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground,SideQuestionEvent,SteerOutcome } from '@/shared/types';
 import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
-import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
+import { matchesAssistantStreamOwner, playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
@@ -55,6 +55,9 @@ type StreamingSessionState = {
   text: string;
   provider: LLMProvider;
   timerId: number | null;
+  assistantReplyId?: string;
+  assistantBlockIndex?: number;
+  parentToolUseId?: string;
 };
 
 /* ------------------------------------------------------------------ */
@@ -122,6 +125,11 @@ export function useChatRealtimeHandlers({
   }, []);
 
   useEffect(() => {
+    const writeStream = (sessionId: string, stream: StreamingSessionState) => {
+      if (stream.assistantReplyId || stream.parentToolUseId) {
+        sessionStore.updateStreaming(sessionId, stream.text, stream.provider, { assistantReplyId: stream.assistantReplyId, assistantBlockIndex: stream.assistantBlockIndex, parentToolUseId: stream.parentToolUseId });
+      } else sessionStore.updateStreaming(sessionId, stream.text, stream.provider);
+    };
     const flushStreamingSession = (sessionId: string) => {
       const stream = streamingSessionsRef.current.get(sessionId);
       if (!stream) {
@@ -131,7 +139,7 @@ export function useChatRealtimeHandlers({
       if (stream.timerId !== null) {
         clearTimeout(stream.timerId);
       }
-      sessionStore.updateStreaming(sessionId, stream.text, stream.provider);
+      writeStream(sessionId, stream);
       sessionStore.finalizeStreaming(sessionId);
       streamingSessionsRef.current.delete(sessionId);
     };
@@ -261,7 +269,7 @@ export function useChatRealtimeHandlers({
             // the run never started (or was rejected), so no `complete` follows.
             // A refused or failed stop request is not about the run, and
             // idling here would drop a response in flight on that session.
-            if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED' && msg.code !== 'TASK_STOP_FAILED') {
+            if (msg.code !== 'RUN_IN_PROGRESS' && msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED' && msg.code !== 'TASK_STOP_FAILED') {
               onSessionIdle?.(sid);
             }
             sessionStore.appendRealtime(sid, {
@@ -308,7 +316,15 @@ export function useChatRealtimeHandlers({
         const eventProvider = typeof msg.provider === 'string'
           ? msg.provider as LLMProvider
           : provider;
+        const owner = {
+          assistantReplyId: typeof msg.assistantReplyId === 'string' ? msg.assistantReplyId : undefined,
+          assistantBlockIndex: typeof msg.assistantBlockIndex === 'number' ? msg.assistantBlockIndex : undefined,
+          parentToolUseId: typeof msg.parentToolUseId === 'string' ? msg.parentToolUseId : undefined,
+        };
+        const previous = streamingSessionsRef.current.get(sid);
+        if (previous && !matchesAssistantStreamOwner(previous, owner)) flushStreamingSession(sid);
         const stream = streamingSessionsRef.current.get(sid) ?? {
+          ...owner,
           text: '',
           provider: eventProvider,
           timerId: null,
@@ -324,14 +340,15 @@ export function useChatRealtimeHandlers({
               return;
             }
             current.timerId = null;
-            sessionStore.updateStreaming(sid, current.text, current.provider);
+            writeStream(sid, current);
           }, 100);
         }
         return;
       }
 
       if (msg.kind === 'stream_end') {
-        if (sid) {
+        const stream = sid ? streamingSessionsRef.current.get(sid) : undefined;
+        if (sid && (!stream || matchesAssistantStreamOwner(stream, msg as NormalizedMessage))) {
           flushStreamingSession(sid);
         }
         return;
@@ -346,6 +363,13 @@ export function useChatRealtimeHandlers({
         && msg.kind !== 'permission_cancelled';
 
       if (sid && shouldPersist) {
+        if (msg.kind === 'text' && msg.role !== 'user') {
+          const stream = streamingSessionsRef.current.get(sid);
+          if (stream && matchesAssistantStreamOwner(stream, msg as NormalizedMessage)) {
+            if (stream.timerId != null) clearTimeout(stream.timerId);
+            streamingSessionsRef.current.delete(sid);
+          }
+        }
         sessionStore.appendRealtime(sid, msg as unknown as NormalizedMessage);
       }
 

@@ -39,8 +39,10 @@ import type {
  * Providers' AGY history and snapshot readers use this strict protobuf wire
  * decoder. It preserves repeated fields and unknown length-delimited bytes;
  * it rejects truncated/unsupported wire types instead of guessing a boundary.
+ * Snapshot readers may validate field-specific wire types before values lose
+ * their wire identity; other history readers retain the existing value API.
  */
-export function readProtobufFields(payload: Buffer): Map<number, Array<bigint | Buffer>> {
+export function readProtobufFields(payload: Buffer, validateWireType?: (field: number, wire: number) => void): Map<number, Array<bigint | Buffer>> {
   const fields = new Map<number, Array<bigint | Buffer>>();
   let offset = 0;
   const varint = (): bigint => {
@@ -58,6 +60,7 @@ export function readProtobufFields(payload: Buffer): Map<number, Array<bigint | 
     const field = Number(key >> 3n);
     const wire = Number(key & 7n);
     if (field < 1 || field > 0x1fffffff) throw new Error('Invalid protobuf field');
+    validateWireType?.(field, wire);
     let value: bigint | Buffer;
     if (wire === 0) value = varint();
     else {
@@ -1305,13 +1308,17 @@ export async function findFilesRecursivelyModifiedAfter(
         continue;
       }
 
-      const fileStat = await stat(fullPath);
-      if (fileStat.mtime > lastScanAt) {
-        fileList.push(fullPath);
+      try {
+        const fileStat = await stat(fullPath);
+        if (fileStat.mtime > lastScanAt) fileList.push(fullPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
     }
-  } catch {
-    // Missing provider folders are expected in first-run or partial setups.
+  } catch (error) {
+    // A disappeared provider directory is empty; unexpected errors must not
+    // advance the caller's durable scan cursor over unprocessed transcripts.
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 
   return fileList;
@@ -1509,6 +1516,7 @@ function readEnvValue(env: NodeJS.ProcessEnv, key: string): string | undefined {
 }
 
 function getPathEnvKey(env: NodeJS.ProcessEnv): string {
+  if (os.platform() !== 'win32') return 'PATH';
   return Object.keys(env).find((key) => key.toLowerCase() === 'path') || 'PATH';
 }
 
@@ -1575,7 +1583,7 @@ export function buildProviderCliEnv(env: NodeJS.ProcessEnv = process.env): NodeJ
 export function runProviderCliCommand(
   command: string,
   args: string[],
-  options: { env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
+  options: { env?: NodeJS.ProcessEnv; timeoutMs?: number; cwd?: string } = {},
 ): Promise<{
   exitCode: number | null;
   signal: NodeJS.Signals | null;
@@ -1587,11 +1595,15 @@ export function runProviderCliCommand(
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let deadline: NodeJS.Timeout | undefined;
+    let escalation: NodeJS.Timeout | undefined;
+    let timedOut = false;
 
     const child = crossSpawn(command, args, {
+      cwd: options.cwd,
       env: options.env ?? buildProviderCliEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: options.timeoutMs,
+      windowsHide: true,
     });
 
     const finish = (
@@ -1604,9 +1616,25 @@ export function runProviderCliCommand(
       }
 
       settled = true;
-      resolve({ exitCode, signal, stdout, stderr, error });
+      clearTimeout(deadline);
+      clearTimeout(escalation);
+      resolve({ exitCode: timedOut ? null : exitCode, signal, stdout, stderr,
+        error: timedOut ? Object.assign(new Error(`CLI probe timed out after ${options.timeoutMs}ms`), { code: 'ETIMEDOUT' }) : error });
     };
 
+    if (options.timeoutMs !== undefined) {
+      deadline = setTimeout(() => {
+        timedOut = true;
+        child.kill('SIGTERM');
+        escalation = setTimeout(() => {
+          child.kill('SIGKILL');
+          // Inherited pipes must not extend the request's bounded deadline.
+          child.stdout?.destroy();
+          child.stderr?.destroy();
+          finish(null, 'SIGKILL', null);
+        }, 250);
+      }, options.timeoutMs);
+    }
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
       stdout += chunk;
@@ -1712,7 +1740,8 @@ export const terminalTextStyles = {
  * `major.minor.patch` token with any `-prerelease` or `+build` suffix, or null
  * when the text has none.
  */
-function parseCliVersion(output: string): string | null {
+/** Auth adapters and synchronous installation probes share CLI version parsing. */
+export function parseCliVersion(output: string): string | null {
   const match = stripAnsiSequences(output).match(/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z][0-9A-Za-z.+-]*)?/);
   return match ? match[0] : null;
 }
@@ -1740,6 +1769,7 @@ export function probeCliVersion(command: string, args: string[] = ['--version'],
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
     timeout: 5000,
+    killSignal: 'SIGKILL',
     windowsHide: true,
   });
 

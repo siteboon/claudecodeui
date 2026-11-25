@@ -1,5 +1,7 @@
 import type { CliVersionProbe, IProviderAuth, ProviderAuthStatus } from '@/shared/index.js';
-import { buildProviderCliEnv, probeCliVersion, resolveConfiguredCliExecutable, runProviderCliCommand } from '@/shared/index.js';
+import { parseCliVersion, resolveConfiguredCliExecutable, runProviderCliCommand } from '@/shared/index.js';
+
+import { parseAntigravityModelRows } from './antigravity-models.provider.js';
 
 const antigravityExecutable = () =>
   resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy');
@@ -7,13 +9,20 @@ const antigravityExecutable = () =>
 /** Used by AntigravityProvider to report installation and usable account status. */
 export class AntigravityProviderAuth implements IProviderAuth {
   /** Used by Providers' auth and CLI-version services to probe the configured AGY binary. */
-  checkInstalled(): CliVersionProbe {
-    return probeCliVersion(antigravityExecutable(), ['--version'], buildProviderCliEnv());
+  async checkInstalled(): Promise<CliVersionProbe> {
+    const result = await runProviderCliCommand(antigravityExecutable(), ['--version'], { timeoutMs: 5000 });
+    return {
+      installed: !result.error || (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT',
+      exitCode: result.exitCode,
+      version: result.exitCode === 0 ? parseCliVersion(result.stdout) : null,
+    };
   }
 
   /** Reports installation and login state through lightweight AGY probes. */
   async getStatus(): Promise<ProviderAuthStatus> {
-    const { installed, version: installedVersion } = this.checkInstalled();
+    const versionResult = await runProviderCliCommand(antigravityExecutable(), ['--version'], { timeoutMs: 5000 });
+    const installed = !versionResult.error || (versionResult.error as NodeJS.ErrnoException).code === 'ETIMEDOUT';
+    const installedVersion = versionResult.exitCode === 0 ? parseCliVersion(versionResult.stdout) : null;
     if (!installed) {
       return {
         installed: false,
@@ -22,19 +31,21 @@ export class AntigravityProviderAuth implements IProviderAuth {
         authenticated: false,
         email: null,
         method: null,
-        error: 'Antigravity CLI is not installed',
+        error: (versionResult.error as NodeJS.ErrnoException)?.code === 'EACCES'
+          ? 'Cannot execute Antigravity CLI. Check AGY_CLI_PATH and the executable permissions.'
+          : 'Antigravity CLI is not installed',
       };
     }
 
     const modelsResult = await runProviderCliCommand(antigravityExecutable(), ['models'], {
-      timeoutMs: 10_000,
+      timeoutMs: 20_000,
     });
     const eligibilityFailure = /account ineligible|not eligible for antigravity|eligibility check failed/i.test(
       `${modelsResult.stdout ?? ''}\n${modelsResult.stderr ?? ''}`,
     );
     const authenticated = !modelsResult.error
       && modelsResult.exitCode === 0
-      && Boolean(modelsResult.stdout?.trim())
+      && parseAntigravityModelRows(modelsResult.stdout ?? '').length > 0
       && !eligibilityFailure;
 
     return {
@@ -48,7 +59,9 @@ export class AntigravityProviderAuth implements IProviderAuth {
         ? undefined
         : eligibilityFailure
           ? 'Antigravity account is not eligible. Verify the account in Antigravity and retry.'
-          : 'Antigravity CLI is not authenticated',
+          : modelsResult.error
+            ? `Antigravity model probe failed: ${(modelsResult.error as NodeJS.ErrnoException).code === 'ETIMEDOUT' ? 'timed out; retry the status check' : modelsResult.error.message}`
+            : 'Antigravity CLI is not authenticated',
     };
   }
 }

@@ -1,3 +1,4 @@
+import { runProviderCliCommand } from '@/shared/index.js';
 import assert from 'node:assert/strict';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -63,7 +64,11 @@ test('Antigravity auth uses AGY_CLI_PATH for installation and model probes', { c
         : `.COM;.EXE;.BAT;.CMD${previousPathExt ? `;${previousPathExt}` : ''}`;
     }
 
-    const status = await new AntigravityProviderAuth().getStatus();
+    const adapter = new AntigravityProviderAuth();
+    const probe = adapter.checkInstalled();
+    assert.equal(typeof probe.then, 'function');
+    assert.deepEqual(await probe, { installed: true, exitCode: 0, version: '1.2.3' });
+    const status = await adapter.getStatus();
 
     assert.equal(status.installed, true);
     assert.equal(status.installedVersion, '1.2.3');
@@ -121,6 +126,8 @@ test('Antigravity auth recovers from eligibility failures and rejects an empty m
 
     await writeFile(statePath, JSON.stringify({ stdout: '', exitCode: 0 }), 'utf8');
     assert.equal((await adapter.getStatus()).authenticated, false);
+    await writeFile(statePath, JSON.stringify({ stdout: 'Available models:\nwarning: verify account', exitCode: 0 }), 'utf8');
+    assert.equal((await adapter.getStatus()).authenticated, false);
 
     await writeFile(statePath, JSON.stringify({
       stdout: 'gemini-3.8-flash-low\tGemini 3.8 Flash (Low)\n', exitCode: 0,
@@ -134,4 +141,29 @@ test('Antigravity auth recovers from eligibility failures and rejects an empty m
     else process.env.AGY_CLI_PATH = previousPath;
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+
+test('CLI probe bounds SIGTERM-resistant children and auth does not invoke sync installation', async () => {
+  const started = Date.now();
+  const result = await runProviderCliCommand(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], { timeoutMs: 500 });
+  assert.equal((result.error as NodeJS.ErrnoException)?.code, 'ETIMEDOUT');
+  assert.ok(Date.now() - started < 5000);
+  const previous = process.env.AGY_CLI_PATH;
+  process.env.AGY_CLI_PATH = '/missing/agy';
+  const auth = new AntigravityProviderAuth();
+  auth.checkInstalled = () => { throw new Error('sync probe must not run'); };
+  try { assert.equal((await auth.getStatus()).installed, false); }
+  finally { if (previous === undefined) delete process.env.AGY_CLI_PATH; else process.env.AGY_CLI_PATH = previous; }
+});
+
+
+test('review-7 regression: an inaccessible CLI reports execute permissions rather than installation', { skip: process.platform === 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'agy-not-executable-')); const previous = process.env.AGY_CLI_PATH;
+  try {
+    const binary = path.join(root, 'agy'); await writeFile(binary, '#!/bin/sh\nexit 0\n', { mode: 0o644 });
+    process.env.AGY_CLI_PATH = binary;
+    const status = await new AntigravityProviderAuth().getStatus();
+    assert.equal(status.installed, false); assert.match(status.error ?? '', /AGY_CLI_PATH.*permissions/);
+  } finally { if (previous === undefined) delete process.env.AGY_CLI_PATH; else process.env.AGY_CLI_PATH = previous; await rm(root, { recursive: true, force: true }); }
 });

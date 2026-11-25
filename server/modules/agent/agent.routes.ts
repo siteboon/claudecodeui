@@ -568,7 +568,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
     }
 
     /**
-     * The assistant's replies, as the normalized `text` events the run
+     * The assistant's replies, as the normalized `text` events (or deltas when no final text exists) the run
      * produced. (Earlier versions filtered a `claude-response` shape no
      * runtime has emitted since the providers were unified, so this was
      * always empty.)
@@ -824,7 +824,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *     success: true,          // false, with aborted: true, when a tab aborted the run
    *     sessionId: "session-123",          // the app session id; pass it back as `sessionId` to continue
    *     providerSessionId: "native-id",    // the provider's own id, for tooling that drives the CLI directly
-   *     messages: [...],        // The assistant's replies: the run's normalized `text` events
+   *     messages: [...],        // The assistant's replies: the run's normalized `text` events, with delta-only fallback
    *     tokens: {
    *       inputTokens: 150,
    *       outputTokens: 50,

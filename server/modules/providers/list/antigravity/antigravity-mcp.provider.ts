@@ -11,6 +11,13 @@ import {
   readStringRecord,
 } from '@/shared/index.js';
 
+// Native configuration is read-only in CloudCLI; expose keys for inspection
+// without returning credentials to another authenticated server user.
+const redactValues = (value: unknown): Record<string, string> | undefined => {
+  const record = readStringRecord(value);
+  return record ? Object.fromEntries(Object.keys(record).map((key) => [key, '[redacted]'])) : undefined;
+};
+
 const nativeMcpEditError = () => new AppError('Manage Antigravity MCP servers in Antigravity using /mcp.', {
   code: 'MCP_NATIVE_CONFIG_READ_ONLY',
   statusCode: 405,
@@ -71,7 +78,7 @@ export class AntigravityMcpProvider implements IProviderMcp {
         transport: 'stdio',
         command,
         args: readStringArray(config.args),
-        env: readStringRecord(config.env),
+        env: redactValues(config.env),
         cwd: readOptionalString(config.cwd),
       };
     }
@@ -84,7 +91,8 @@ export class AntigravityMcpProvider implements IProviderMcp {
         scope,
         transport: 'http',
         url,
-        headers: readStringRecord(config.headers),
+        headers: redactValues(config.headers),
+        env: redactValues(config.env),
       };
     }
 

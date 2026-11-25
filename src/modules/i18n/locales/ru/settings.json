@@ -548,6 +548,7 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "Здесь можно просмотреть MCP-серверы Antigravity. Для изменения используйте /mcp в Antigravity.",
     "title": "MCP серверы",
     "description": {
       "claude": "Серверы Model Context Protocol предоставляют дополнительные инструменты и источники данных для Claude",

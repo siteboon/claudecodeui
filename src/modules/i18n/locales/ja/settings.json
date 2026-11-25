@@ -548,6 +548,7 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "ここでは Antigravity の MCP サーバーを確認できます。変更するには Antigravity で /mcp を使用してください。",
     "title": "MCPサーバー",
     "description": {
       "claude": "Model Context Protocolサーバーは、Claudeに追加のツールやデータソースを提供します",

@@ -129,3 +129,28 @@ test('Antigravity model discovery uses AGY_CLI_PATH', { concurrency: false }, as
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('space-aligned and tab-delimited native model rows preserve slug values', () => {
+  const result = parseAntigravityModelsStdout('native-model    Native Model Label\nother-model\tOther Model');
+  assert.equal(result.DEFAULT, 'native-model');
+  assert.deepEqual(result.OPTIONS.map(({ value, label }) => ({ value, label })), [
+    { value: 'native-model', label: 'Native Model Label' },
+    { value: 'other-model', label: 'Other Model' },
+  ]);
+});
+
+
+test('review-5 regression: stdout notices cannot become catalog defaults', () => {
+  const catalog = parseAntigravityModelsStdout('Account ineligible: Verify your account.\nWARNING: login notice\n[notice] probe completed\nnative-model\tNative model\n');
+  assert.equal(catalog.DEFAULT, 'native-model');
+  assert.deepEqual(catalog.OPTIONS.map((model) => model.value), ['native-model']);
+  assert.deepEqual(parseAntigravityModelsStdout('Account ineligible: Verify your account.'), ANTIGRAVITY_FALLBACK_MODELS);
+});
+
+
+test('review-6 regression: lowercase warning-only stdout falls back and cannot precede a valid default', () => {
+  const warning = 'warning: account verification required';
+  assert.deepEqual(parseAntigravityModelsStdout(warning), ANTIGRAVITY_FALLBACK_MODELS);
+  assert.equal(parseAntigravityModelsStdout(`${warning}\nnative-model\tNative Model`).DEFAULT, 'native-model');
+  assert.deepEqual(parseAntigravityModelsStdout('vendor:model\tVendor Model\nwarning-model\tWarning Model').OPTIONS.map((row) => row.value), ['vendor:model', 'warning-model']);
+});

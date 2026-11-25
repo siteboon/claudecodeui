@@ -5,13 +5,13 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { antigravityCliLivenessService } from '../services/antigravity-cli-liveness.service.js';
+import { antigravityCliLivenessService } from '@/modules/providers/services/antigravity-cli-liveness.service.js';
 
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { chatRunRegistry } from '@/modules/websocket/index.js';
-import type { IProvider } from '@/shared/interfaces.js';
-import type { BackgroundTaskSummary } from '@/shared/types.js';
+import type { IProvider } from '@/shared/index.js';
+import type { BackgroundTaskSummary } from '@/shared/index.js';
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -462,4 +462,15 @@ test('external AGY activity maps native IDs and yields to managed runs', async (
     antigravityCliLivenessService.getSession = originalGet;
     chatRunRegistry.clearAll();
   }
+});
+
+
+test('review-5 regression: optional native inspection failure preserves managed running sessions', async (context) => {
+  context.mock.method(antigravityCliLivenessService, 'listSessions', async () => { throw new Error('cannot read proc locks'); });
+  await withIsolatedDatabase(async () => {
+    sessionsDb.createAppSession('managed-safe', 'claude', '/workspace');
+    chatRunRegistry.startRun({ appSessionId: 'managed-safe', provider: 'claude', providerSessionId: 'native-safe', connection: null, userId: null });
+    try { assert.ok((await sessionsService.listRunningSessions()).some((entry) => entry.sessionId === 'managed-safe')); }
+    finally { chatRunRegistry.clearAll(); }
+  });
 });

@@ -270,9 +270,7 @@ function buildShellCommand(
 
   if (provider === 'antigravity') {
     const executable = resolveConfiguredCliExecutable(process.env.AGY_CLI_PATH, 'agy');
-    const shellExecutable = os.platform() === 'win32'
-      ? `& '${executable.replaceAll("'", "''")}'`
-      : `'${executable.replaceAll("'", "'\"'\"'")}'`;
+    const shellExecutable = `${os.platform() === 'win32' ? '& ' : ''}${quoteShellArgument(executable)}`;
     if (resumeSessionId) {
       return { ...otherProgram(`${shellExecutable} --conversation "${resumeSessionId}"`), useAntigravityEnv: true };
     }

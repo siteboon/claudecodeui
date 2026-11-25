@@ -103,6 +103,8 @@ export async function dispatchQueuedMessages(
     if (await isSessionBusy(candidate.sessionId, runtime)) {
       return;
     }
+    if (chatRunRegistry.isProcessing(candidate.sessionId) || runtime.hasBackgroundWork(candidate.sessionId)
+      || sessionsSending.has(candidate.sessionId)) return;
     if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
       return;
     }
@@ -122,7 +124,7 @@ function recordFailure(row: ScheduledMessageRow, reason: string): void {
 async function sendClaimedMessage(
   row: ScheduledMessageRow,
   runtime: ProviderRuntimeGateway,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const result = await runDetachedChatTurn(
       {
@@ -138,6 +140,12 @@ async function sendClaimedMessage(
       { runtime },
     );
 
+    if (!result.started && result.retryable) {
+      scheduledMessagesDb.restoreUnsentClaim(row.id);
+      announceScheduledMessagesChanged(row.session_id);
+      return false;
+    }
+
     // Recorded rather than retried, and recorded whether the run never started
     // (deleted session, unavailable provider) or started and then failed.
     // Silently dropping a message the user scheduled is worse than telling
@@ -149,6 +157,7 @@ async function sendClaimedMessage(
     const message = error instanceof Error ? error.message : String(error);
     recordFailure(row, message);
   }
+  return true;
 }
 
 /**
@@ -187,7 +196,7 @@ export async function dispatchDueScheduledMessages(
     try {
       let row: ScheduledMessageRow | null = first;
       while (row) {
-        await sendClaimedMessage(row, runtime);
+        if (!await sendClaimedMessage(row, runtime)) break;
         sent += 1;
         row = scheduledMessagesDb.claimNextDue(sessionId, now);
         if (row) announceScheduledMessagesChanged(sessionId);

@@ -634,6 +634,11 @@ export type NormalizedMessage = {
   summary?: string;
   exitCode?: number;
   actualSessionId?: string;
+  /** Native reply and block ownership keep delayed finals from erasing another stream. */
+  assistantReplyId?: string;
+  assistantBlockIndex?: number;
+  /** Client stream rows retain this until their matching canonical final replaces them. */
+  isStreamPlaceholder?: boolean;
   parentToolUseId?: string;
   /** Timeline of a spawned subagent's work, attached by the backend to the tool call that spawned it. */
   subagentTools?: SubagentActivity[];
