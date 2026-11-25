@@ -220,3 +220,46 @@ test('overlapping failed saves fall back to the confirmed value', async () => {
   // Neither click reached the server; `!next` of the last one would show on.
   assert.equal(result.current.enabled, false);
 });
+
+test('a click before the first read falls back to the opposite when nothing can be read', async () => {
+  vi.spyOn(api, 'sessionAutoContinue').mockResolvedValue(flagResponse(true, false));
+  vi.spyOn(api, 'setSessionAutoContinue').mockResolvedValue(flagResponse(false, false));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+  const { result } = renderHook(() => useSessionAutoContinue('session-a'));
+  await act(async () => {
+    await result.current.setEnabled(false);
+  });
+
+  // Nothing was ever confirmed, so the server still has what the click tried to change.
+  assert.equal(result.current.enabled, true);
+});
+
+test('a session opened again while its save is queued shows the saved value', async () => {
+  let serverValue = false;
+  vi.spyOn(api, 'sessionAutoContinue').mockImplementation(async () => flagResponse(serverValue));
+  let releaseSave: (() => void) | undefined;
+  vi.spyOn(api, 'setSessionAutoContinue').mockImplementation((_id: string, next: boolean) =>
+    new Promise<Response>((resolve) => {
+      releaseSave = () => { serverValue = next; resolve(flagResponse(next)); };
+    }));
+
+  const { result, rerender } = renderHook(({ sessionId }) => useSessionAutoContinue(sessionId), {
+    initialProps: { sessionId: 'session-a' as string | null },
+  });
+  await waitFor(() => assert.equal(result.current.enabled, false));
+
+  let saving: Promise<void> | undefined;
+  act(() => {
+    saving = result.current.setEnabled(true);
+  });
+  rerender({ sessionId: 'session-b' });
+  rerender({ sessionId: 'session-a' });
+  await waitFor(() => assert.ok(releaseSave));
+  await act(async () => {
+    releaseSave?.();
+    await saving;
+  });
+
+  await waitFor(() => assert.equal(result.current.enabled, true));
+});

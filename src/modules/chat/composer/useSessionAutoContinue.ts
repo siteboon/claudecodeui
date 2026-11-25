@@ -12,10 +12,10 @@ export function useSessionAutoContinue(sessionId: string | null) {
   // Bumped by a session switch and by every change: a read that lands after
   // something newer happened is dropped instead of overwriting it.
   const generationRef = useRef(0);
-  // The last value the server confirmed for the active session: the fallback when it cannot be read.
-  const confirmedRef = useRef(false);
-  // Saves run one after another, so the last click is the last write the server sees.
-  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  // The last value the server confirmed for the active session (null: not known yet): the fallback when it cannot be read.
+  const confirmedRef = useRef<boolean | null>(null);
+  // A session's saves run one after another, so its last click is the last write the server sees.
+  const saveChainsRef = useRef(new Map<string, Promise<void>>());
 
   // Reset during the switch render, so the old session's setting never paints on the new one.
   const [renderedSessionId, setRenderedSessionId] = useState(sessionId);
@@ -28,8 +28,7 @@ export function useSessionAutoContinue(sessionId: string | null) {
    * Reads the server's value and shows it, unless something newer happened
    * meanwhile. Returns whether the server could be read, not whether it was shown.
    */
-  const load = useCallback(async (id: string): Promise<boolean> => {
-    const generation = generationRef.current;
+  const load = useCallback(async (id: string, generation = generationRef.current): Promise<boolean> => {
     try {
       const response = await api.sessionAutoContinue(id);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -48,8 +47,11 @@ export function useSessionAutoContinue(sessionId: string | null) {
   useEffect(() => {
     activeSessionRef.current = sessionId;
     generationRef.current += 1;
-    confirmedRef.current = false;
-    if (sessionId) void load(sessionId);
+    confirmedRef.current = null;
+    if (!sessionId) return;
+    const generation = generationRef.current;
+    // A save still queued for this session lands first, so the read shows it.
+    void (saveChainsRef.current.get(sessionId) ?? Promise.resolve()).then(() => load(sessionId, generation));
   }, [load, sessionId]);
 
   const setEnabled = useCallback(async (next: boolean) => {
@@ -57,7 +59,8 @@ export function useSessionAutoContinue(sessionId: string | null) {
     if (!sessionId || activeSessionRef.current !== sessionId) return;
     const generation = ++generationRef.current;
     setEnabledState(next);
-    const save = saveChainRef.current.then(async () => {
+    const chains = saveChainsRef.current;
+    const save = (chains.get(sessionId) ?? Promise.resolve()).then(async () => {
       try {
         const response = await api.setSessionAutoContinue(sessionId, next);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -68,11 +71,12 @@ export function useSessionAutoContinue(sessionId: string | null) {
         if (generationRef.current !== generation) return;
         if (await load(sessionId)) return;
         // Unreadable too: show the last confirmed value, unless something newer happened.
-        if (generationRef.current === generation) setEnabledState(confirmedRef.current);
+        if (generationRef.current === generation) setEnabledState(confirmedRef.current ?? !next);
       }
     });
-    saveChainRef.current = save;
+    chains.set(sessionId, save);
     await save;
+    if (chains.get(sessionId) === save) chains.delete(sessionId);
   }, [load, sessionId]);
 
   return { enabled, setEnabled };
