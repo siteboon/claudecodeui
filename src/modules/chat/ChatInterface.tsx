@@ -416,23 +416,15 @@ function ChatInterface({
     }
   }, [onNavigateToSession, selectedSession?.id]);
 
-  // One id for the toggle and the scheduled list, so turning auto-continue off refreshes the list it changed.
   const autoContinueSessionId = currentSessionId || selectedSession?.id || null;
-  const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage, refresh: refreshScheduledMessages } =
+  // The server announces every change to this list, the automatic continue included.
+  const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
     useScheduledMessages(autoContinueSessionId, subscribe);
 
-  const sessionAutoContinue = useSessionAutoContinue(autoContinueSessionId);
-  const { setEnabled: setSessionAutoContinue } = sessionAutoContinue;
-  const handleAutoContinueChange = useCallback(async (enabled: boolean) => {
-    await setSessionAutoContinue(enabled);
-    // Turning it off drops a waiting continue on the server; take its banner down.
-    if (!enabled) void refreshScheduledMessages();
-  }, [refreshScheduledMessages, setSessionAutoContinue]);
-
-  // A turn stopped by the usage limit leaves a server-scheduled "continue" behind.
-  useEffect(() => {
-    if (!isProcessing) void refreshScheduledMessages();
-  }, [isProcessing, refreshScheduledMessages]);
+  // Only Claude chats are continued after a usage limit.
+  const sessionAutoContinue = useSessionAutoContinue(
+    selectedSessionProvider === 'claude' ? autoContinueSessionId : null,
+  );
 
   /**
    * Hands the composer's current text to the server to send later, and clears
@@ -619,9 +611,8 @@ function ChatInterface({
           scheduledMessages={scheduledMessages}
           onScheduleMessage={handleScheduleMessage}
           onCancelScheduledMessage={cancelScheduledMessage}
-          // Only Claude chats are continued after a usage limit.
           autoContinue={selectedSessionProvider === 'claude' && autoContinueSessionId
-            ? { enabled: sessionAutoContinue.enabled, onChange: handleAutoContinueChange }
+            ? { enabled: sessionAutoContinue.enabled, onChange: sessionAutoContinue.setEnabled }
             : undefined}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}

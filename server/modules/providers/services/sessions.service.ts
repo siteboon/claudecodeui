@@ -982,7 +982,12 @@ export const sessionsService = {
     sessionsDb.setSessionAutoContinue(sessionId, enabled);
     if (!enabled) {
       // A continue already waiting must not keep showing as pending, or fire.
-      scheduledMessagesDb.cancelPendingAutoContinue(sessionId);
+      if (scheduledMessagesDb.cancelPendingAutoContinue(sessionId) > 0) {
+        // Loaded on use: the scheduled-messages module imports the provider runtimes.
+        void import('@/modules/scheduled-messages/index.js')
+          .then(({ announceScheduledMessagesChanged }) => announceScheduledMessagesChanged(sessionId))
+          .catch((error) => console.error('[Sessions] Could not announce the scheduled-message change:', error));
+      }
     }
     return { sessionId, enabled };
   },

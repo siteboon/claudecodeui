@@ -1196,6 +1196,13 @@ export function createUsageLimitWatcher(): (sdkMessage: AnyRecord, now?: number)
   };
 }
 
+/** Loaded on use: the scheduled-messages module imports the provider runtimes, so a static import is circular. */
+function announceScheduledChange(sessionId: string): void {
+  void import('@/modules/scheduled-messages/index.js')
+    .then(({ announceScheduledMessagesChanged }) => announceScheduledMessagesChanged(sessionId))
+    .catch((error) => console.error('[Claude] Could not announce the scheduled-message change:', error));
+}
+
 /**
  * Schedules the "continue" for a turn the usage limit stopped, if the session
  * has auto-continue turned on. It shows up as a pending scheduled message the user
@@ -1228,6 +1235,7 @@ export function scheduleUsageLimitContinue({ userId, sessionId, runOptions, cont
     scheduledFor: continueAt,
   });
   scheduledMessagesDb.cancelPendingAutoContinue(sessionId, id);
+  announceScheduledChange(sessionId);
   return true;
 }
 
@@ -1721,14 +1729,19 @@ async function queryClaudeSDK(
       // schedules a fresh continue below.
       if (!autoContinueDropped && message.type === 'system' && message.subtype === 'init' && sessionId) {
         try {
-          scheduledMessagesDb.cancelPendingAutoContinue(sessionId);
+          if (scheduledMessagesDb.cancelPendingAutoContinue(sessionId) > 0) {
+            announceScheduledChange(sessionId);
+          }
           autoContinueDropped = true;
         } catch (error) {
           console.error('[Claude] Could not drop the waiting continue:', error instanceof Error ? error.message : error);
         }
       }
       const continueAt = watchUsageLimit(message);
-      if (continueAt && sessionId && ws?.userId != null) {
+      // A run another run replaced must not schedule into the newer one's conversation.
+      const liveInstance = sessionId ? getSession(sessionId)?.instance : undefined;
+      const supersededRun = liveInstance !== undefined && liveInstance !== queryInstance;
+      if (continueAt && sessionId && ws?.userId != null && !supersededRun) {
         try {
           const scheduled = scheduleUsageLimitContinue({
             userId: Number(ws.userId),

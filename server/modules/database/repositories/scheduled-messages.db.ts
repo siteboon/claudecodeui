@@ -149,15 +149,16 @@ export const scheduledMessagesDb = {
   },
 
   /** Drops the session's waiting automatic "continue" after a usage limit, except `keepId`. */
-  cancelPendingAutoContinue(sessionId: string, keepId = ''): void {
-    getConnection()
+  /** Returns how many waiting continues were cancelled. */
+  cancelPendingAutoContinue(sessionId: string, keepId = ''): number {
+    return getConnection()
       .prepare(
         `UPDATE scheduled_messages
          SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
          WHERE session_id = ? AND id != ? AND status = 'pending'
            AND json_extract(options, '$.autoContinue') = 1`
       )
-      .run(sessionId, keepId);
+      .run(sessionId, keepId).changes;
   },
 
   markFailed(id: string, reason: string): void {
