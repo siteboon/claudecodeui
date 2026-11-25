@@ -1,0 +1,106 @@
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { api } from '@/shared/api';
+import type { Plugin, Project } from '@/shared/types';
+import { useTheme } from '@/shared/context/ThemeContext';
+import {
+  loadToolRendererModule,
+  type PluginToolContext,
+  type PluginToolHandle,
+} from '@/modules/plugins/tool-renderers/loadToolRendererModule';
+
+type PluginToolRendererProps = {
+  plugin: Plugin;
+  toolName: string;
+  toolId?: string;
+  toolInput: unknown;
+  toolResult?: { content?: unknown; isError?: boolean } | null;
+  status: PluginToolContext['status'];
+  selectedProject?: Project | null;
+  /** The host's own rendering, shown until the plugin draws and whenever it cannot. */
+  fallback: ReactNode;
+};
+
+/**
+ * Renders one chat tool row with a plugin's `renderTool`. Rendered by chat's ToolRenderer for tools a plugin
+ * claims through `toolRenderers` in its manifest. Any failure keeps the host's own rendering.
+ */
+export default function PluginToolRenderer({
+  plugin, toolName, toolId, toolInput, toolResult, status, selectedProject, fallback,
+}: PluginToolRendererProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const handleRef = useRef<PluginToolHandle | null>(null);
+  const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const { isDarkMode } = useTheme();
+  const navigate = useNavigate();
+  const { sessionId = null } = useParams();
+
+  const context: PluginToolContext = {
+    toolName,
+    toolId: toolId ?? null,
+    toolInput,
+    toolResult: toolResult ? { content: toolResult.content ?? null, isError: Boolean(toolResult.isError) } : null,
+    status,
+    theme: isDarkMode ? 'dark' : 'light',
+    project: selectedProject
+      ? { name: selectedProject.projectId, path: selectedProject.fullPath || selectedProject.path || '' }
+      : null,
+    sessionId,
+  };
+  const contextRef = useRef(context);
+  contextRef.current = context;
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+    let active = true;
+    (async () => {
+      try {
+        const mod = await loadToolRendererModule(plugin.name, plugin.entry);
+        if (!active) return;
+        if (typeof mod.renderTool !== 'function') throw new Error('plugin module has no renderTool export');
+        const handle = await mod.renderTool(container, contextRef.current, {
+          async rpc(method, path, body) {
+            const res = await api.plugins.rpc(plugin.name, method, path, body);
+            if (!res.ok) throw new Error(`RPC error ${res.status}`);
+            return res.json();
+          },
+          openSession: (id) => navigateRef.current(`/session/${encodeURIComponent(id)}`),
+        });
+        if (!active) {
+          handle?.destroy?.();
+          return;
+        }
+        handleRef.current = handle ?? null;
+        setState('ready');
+      } catch (error) {
+        console.error(`[Plugin:${plugin.name}] renderTool failed for ${toolName}:`, error);
+        if (active) setState('failed');
+      }
+    })();
+    return () => {
+      active = false;
+      try { handleRef.current?.destroy?.(); } catch { /* plugin error — ignore */ }
+      handleRef.current = null;
+      container.replaceChildren();
+    };
+  }, [plugin.name, plugin.entry, toolName]);
+
+  // Push every prop change (streamed input, the result arriving, theme) to the mounted renderer.
+  const contextKey = JSON.stringify([toolInput, toolResult?.content, toolResult?.isError, status, isDarkMode, sessionId]);
+  useEffect(() => {
+    if (state !== 'ready') return;
+    try { handleRef.current?.update?.(contextRef.current); } catch { /* plugin error — ignore */ }
+  }, [contextKey, state]);
+
+  return (
+    <>
+      {state !== 'ready' && fallback}
+      <div ref={containerRef} hidden={state !== 'ready'} data-plugin-tool={plugin.name} />
+    </>
+  );
+}

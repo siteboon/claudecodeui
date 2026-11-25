@@ -1335,6 +1335,8 @@ export type Plugin = {
   entry: string;
   server: string | null;
   permissions: string[];
+  /** Tool names, or prefixes ending in `*`, whose chat rows this plugin renders via its module's `renderTool`. */
+  toolRenderers?: string[];
   enabled: boolean;
   serverRunning: boolean;
   dirName: string;
