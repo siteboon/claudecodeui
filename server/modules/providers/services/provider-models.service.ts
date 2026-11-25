@@ -19,6 +19,7 @@ type ProviderModelsSessionStore = {
     model: string | null;
     effort: string | null;
     permission_mode?: string | null;
+    provider?: string | null;
   } | null;
   setSessionModel(sessionId: string, model: string): void;
   setSessionEffort(sessionId: string, effort: string): void;
@@ -453,11 +454,10 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     permissionMode: string,
   ): { provider: LLMProvider; sessionId: string; permissionMode: string; source: 'session' } | null => {
     const normalizedSessionId = sessionId.trim();
-    if (
-      !normalizedSessionId
-      || !providerCapabilitiesService.getProviderCapabilities(provider).permissionModes.includes(permissionMode)
-      || !sessions.getSessionById(normalizedSessionId)
-    ) {
+    const row = normalizedSessionId ? sessions.getSessionById(normalizedSessionId) : null;
+    // Checked against the session's own provider: the URL's can name another one.
+    const rowProvider = (row?.provider || provider) as LLMProvider;
+    if (!row || !providerCapabilitiesService.getProviderCapabilities(rowProvider).permissionModes.includes(permissionMode)) {
       return null;
     }
 

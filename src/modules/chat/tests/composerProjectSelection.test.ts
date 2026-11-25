@@ -55,7 +55,8 @@ vi.mock('@/shared/api', () => ({
               OPTIONS: ['sonnet', 'opus'].map((value) => ({
                 value,
                 label: value,
-                effort: { values: [{ value: 'low' }, { value: 'high' }] },
+                // Only opus offers max, so a pick can be valid for one model alone.
+                effort: { values: [{ value: 'low' }, { value: 'high' }, ...(value === 'opus' ? [{ value: 'max' }] : [])] },
               })),
               DEFAULT: 'sonnet',
             },
@@ -225,6 +226,21 @@ test('the empty state shows the project model and its own pick replaces it', asy
   assert.equal(result.current.providerModels.claude, 'sonnet');
 });
 
+test('an effort pick in a new chat is checked against the project model it shows', async () => {
+  localStorage.setItem('claude-model', 'sonnet');
+  const { result } = await renderProviderState(null);
+  await waitFor(() => {
+    assert.equal(result.current.currentProviderModel, 'opus');
+  });
+
+  await act(async () => {
+    await result.current.selectProviderEffort('claude', 'max');
+  });
+
+  // Sonnet, the provider default, has no max; the opus the chat shows does.
+  assert.equal(result.current.currentProviderEffort, 'max');
+});
+
 test('an open session restores and saves its backend permission mode', async () => {
   localStorage.setItem('permissionMode-last-claude', 'default');
   const { result } = await renderProviderState(session('session-1'));
@@ -360,6 +376,33 @@ test('a refused mode save takes the mode back', async () => {
   });
   assert.equal(localStorage.getItem('permissionMode-session-1'), null);
   assert.equal(localStorage.getItem('permissionMode-last-claude'), 'plan');
+});
+
+test('an older failed mode save does not roll back a newer pick of the same mode', async () => {
+  const { result } = await renderProviderState(session('session-1'));
+  await waitFor(() => {
+    assert.equal(result.current.permissionMode, 'plan');
+  });
+
+  const { api } = await import('@/shared/api');
+  let failFirst: (() => void) | undefined;
+  vi.spyOn(api.providers, 'setSessionActivePermissionMode')
+    .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      failFirst = () => resolve({ ok: false, status: 500, json: async () => ({ success: false }) } as Response);
+    }))
+    .mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true }) } as Response);
+  act(() => {
+    result.current.selectPermissionMode('acceptEdits');
+    result.current.selectPermissionMode('default');
+    result.current.selectPermissionMode('acceptEdits');
+  });
+  await act(async () => {
+    failFirst?.();
+  });
+
+  // The last pick was saved; the first pick's rollback must not restore plan.
+  assert.equal(result.current.permissionMode, 'acceptEdits');
+  assert.equal(localStorage.getItem('permissionMode-session-1'), 'acceptEdits');
 });
 
 test('a failed effort save rolls back only the effort', async () => {

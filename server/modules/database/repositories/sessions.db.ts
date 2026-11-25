@@ -560,7 +560,7 @@ export const sessionsDb = {
            AND provider = ?
            AND isArchived = 0
            AND (model IS NOT NULL OR permission_mode IS NOT NULL)
-         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
+         ORDER BY julianday(COALESCE(updated_at, created_at)) DESC, session_id DESC
          LIMIT 1`
       )
       .get(normalizeProjectPath(projectPath), provider) as

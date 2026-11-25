@@ -273,11 +273,6 @@ async function dispatchRun(
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
 
-  // Record what this turn runs with so reopening the session later restores the
-  // same model, reasoning effort and permission mode, and so the resume path
-  // has a session-scoped model answer to use.
-  providerModelsService.recordSessionSelection(provider, sessionId, clientOptions);
-
   const uniqueAttachments = readVerifiedAttachments(clientOptions);
 
   // The provider runtimes receive the stable app session id. When their
@@ -301,6 +296,11 @@ async function dispatchRun(
 
   let failure: string | null = null;
   try {
+    // Record what this turn runs with so reopening the session later restores the
+    // same model, reasoning effort and permission mode, and so the resume path
+    // has a session-scoped model answer to use. Inside the try so a failed write
+    // still releases the run.
+    providerModelsService.recordSessionSelection(provider, sessionId, clientOptions);
     // Runs only now that the session is reserved, because an edit rewinds the
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the

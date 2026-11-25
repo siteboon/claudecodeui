@@ -596,6 +596,16 @@ test('setSessionPermissionMode ignores unsupported modes and sessions without a 
   assert.equal(service.readSessionPermissionMode('session-1'), null);
 });
 
+test('setSessionPermissionMode checks the mode against the session row provider', () => {
+  const sessions = createSessionStore({ 'session-1': 'gpt-5.4' });
+  Object.assign(sessions.sessions.get('session-1')!, { provider: 'codex' });
+  const { service } = createTestService({ sessions });
+
+  // A Claude URL cannot store Claude's plan mode on a Codex session.
+  assert.equal(service.setSessionPermissionMode('claude', 'session-1', 'plan'), null);
+  assert.equal(service.readSessionPermissionMode('session-1'), null);
+});
+
 test('resolveProjectSelection returns the latest session selection, or nulls', () => {
   const empty = createTestService({ sessions: createSessionStore() }).service;
   assert.deepEqual(empty.resolveProjectSelection('claude', '/repo'), {

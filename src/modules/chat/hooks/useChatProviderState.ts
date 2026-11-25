@@ -540,6 +540,9 @@ export function useChatProviderState({
   // Snapshots for a permission-mode rollback, without making the pick
   // callback change identity on every selection change.
   const permissionModeRef = useRef(permissionMode);
+  // The latest permission-mode pick per session: only that one may roll back.
+  const permissionPickRef = useRef(new Map<string, number>());
+  const permissionPickCountRef = useRef(0);
   const sessionSelectionRef = useRef(sessionSelection);
 
   /**
@@ -741,6 +744,8 @@ export function useChatProviderState({
       return;
     }
 
+    const pick = ++permissionPickCountRef.current;
+    permissionPickRef.current.set(target.sessionId, pick);
     const storageKey = `permissionMode-${target.sessionId}`;
     const previousStoredMode = localStorage.getItem(storageKey);
     const currentSelection = sessionSelectionRef.current;
@@ -755,6 +760,10 @@ export function useChatProviderState({
     // offer) is taken back, so the composer never shows a mode the row lacks.
     const rollBack = (reason: unknown) => {
       console.error('Error saving the session permission mode:', reason);
+      // A newer pick for this session already replaced these values (A, B, A again).
+      if (permissionPickRef.current.get(target.sessionId) !== pick) {
+        return;
+      }
       // The restore effect falls back to both keys, so both go back.
       for (const [key, previous] of [[storageKey, previousStoredMode], [lastModeKey, previousLastMode]] as const) {
         if (localStorage.getItem(key) !== nextMode) {
@@ -834,6 +843,8 @@ export function useChatProviderState({
           savesBeforeRead = startedSessionSavesRef.current;
           const response = await api.providers.sessionActiveModel(targetProvider, selectedSessionId, { signal });
           body = (await response.json()) as SessionSelectionApiResponse;
+          // An error reply is no answer: the catch below keeps the current selection.
+          if (!response.ok || !body.success) throw new Error(`HTTP ${response.status}`);
         } while (!signal.aborted && startedSessionSavesRef.current !== savesBeforeRead);
         if (
           signal.aborted
@@ -943,10 +954,16 @@ export function useChatProviderState({
    * the latest click.
    */
   const selectProviderEffort = useCallback(async (targetProvider: LLMProvider, effort: string) => {
+    const target = resolvePickTarget(targetProvider);
+    // A new chat showing the project's model keeps the pick with that model: the
+    // provider default is checked against the provider's own model and would drop it.
+    if (!target && targetProvider === provider && projectModel) {
+      setProjectSelection((current) => (current ? { ...current, effort } : current));
+      return { scope: 'default' as const, effort };
+    }
     setStoredProviderEffort(targetProvider, effort);
     clearProjectSelectionField(targetProvider, 'effort');
 
-    const target = resolvePickTarget(targetProvider);
     if (!target) {
       return { scope: 'default' as const, effort };
     }
@@ -1000,7 +1017,7 @@ export function useChatProviderState({
       }
       throw error;
     }
-  }, [clearProjectSelectionField, isComposerTarget, resolvePickTarget, setStoredProviderEffort, trackSessionSave]);
+  }, [clearProjectSelectionField, isComposerTarget, projectModel, provider, resolvePickTarget, setStoredProviderEffort, trackSessionSave]);
 
   /**
    * Whether a model pick for a provider is saved on a session, for the /model
