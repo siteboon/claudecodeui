@@ -148,14 +148,25 @@ const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [
   },
 ];
 
+/**
+ * Turns a GitHub URL into the `owner/repo` form shown in the UI.
+ */
 function repoSlug(repoUrl: string) {
   return repoUrl.replace(/^https?:\/\/(www\.)?github\.com\//, '');
 }
 
+/**
+ * Normalizes a repo URL for comparison, so the same repository pasted with a
+ * `.git` suffix, a trailing slash or different casing still matches.
+ */
 function normalizeRepoUrl(repoUrl: string | null) {
   return repoUrl?.replace(/\.git$/, '').replace(/\/$/, '').toLowerCase() ?? null;
 }
 
+/**
+ * Decides whether a recommendation is already installed, by name or by the same
+ * repository under a different plugin name.
+ */
 function pluginMatchesRecommendation(plugin: Plugin, recommendation: PluginRecommendation) {
   return (
     recommendation.installedNames.includes(plugin.name)
@@ -217,6 +228,7 @@ type PluginCardProps = {
   updateError: string | null;
 };
 
+/** One installed plugin's card in Settings > Plugins: state, git actions and the update error. */
 function PluginCard({
   plugin,
   index,
@@ -266,6 +278,14 @@ function PluginCard({
                 <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {plugin.slot}
                 </span>
+                {plugin.alwaysMount && (
+                  <span
+                    className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] text-sky-600 dark:text-sky-300"
+                    title={t('pluginSettings.residentBadgeTitle')}
+                  >
+                    {t('pluginSettings.residentBadge')}
+                  </span>
+                )}
                 <ServerDot running={!!plugin.serverRunning} t={t} />
               </div>
               {plugin.description && (

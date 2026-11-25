@@ -6,6 +6,7 @@ import ProjectCommandPalette from '@/modules/project-workspace/ProjectCommandPal
 import ProjectMainRegion from '@/modules/project-workspace/ProjectMainRegion';
 import ProjectQuickSettingsRegion from '@/modules/project-workspace/ProjectQuickSettingsRegion';
 import ProjectSidebarRegion from '@/modules/project-workspace/ProjectSidebarRegion';
+import WorkspacePluginLayer from '@/modules/project-workspace/WorkspacePluginLayer';
 
 /** Rendered by ProjectWorkspaceRoute to lay out the workspace sidebar, main region and global overlays. */
 function ProjectWorkspaceShell({
@@ -34,6 +35,8 @@ function ProjectWorkspaceShell({
       <ProjectCommandPalette />
       {/* Last flex child on purpose: when pinned it docks to the right of the main region. */}
       <ProjectQuickSettingsRegion />
+      {/* Contributes no layout of its own; it only gives resident plugins a mount point. */}
+      <WorkspacePluginLayer />
     </div>
   );
 }
