@@ -22,6 +22,7 @@ type SidebarProjectItemProps = {
   renameDraft: string;
   /** The folder the project points at while it is being edited; saved with the name. */
   renamePathDraft: string;
+  includeOffPagePins?: boolean;
   sessions: SessionWithProvider[];
   initialSessionsLoaded: boolean;
   isLoadingMoreSessions: boolean;
@@ -78,6 +79,7 @@ function SidebarProjectItem({
   isEditing,
   renameDraft,
   renamePathDraft,
+  includeOffPagePins = true,
   sessions,
   initialSessionsLoaded,
   isLoadingMoreSessions,
@@ -500,6 +502,7 @@ function SidebarProjectItem({
       <SidebarProjectSessions
         project={project}
         isExpanded={isExpanded}
+        includeOffPagePins={includeOffPagePins}
         sessions={sessions}
         selectedSession={selectedSession}
         initialSessionsLoaded={initialSessionsLoaded}

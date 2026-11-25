@@ -8,6 +8,7 @@ import SidebarProjectsState from '@/modules/sidebar/SidebarProjectsState';
 
 /** Rendered by SidebarContent to list the filtered projects, delegating each row to SidebarProjectItem. */
 export default function SidebarProjectList({
+  includeOffPagePins = true,
   projects,
   filteredProjects,
   selectedProject,
@@ -107,6 +108,7 @@ export default function SidebarProjectList({
                 isEditing={renamingProject !== null}
                 renameDraft={renamingProject?.draft ?? ''}
                 renamePathDraft={renamingProject?.pathDraft ?? ''}
+                includeOffPagePins={includeOffPagePins}
                 sessions={getProjectSessions(project)}
                 initialSessionsLoaded={initialSessionsLoaded.has(project.projectId)}
                 isLoadingMoreSessions={loadingMoreProjects.has(project.projectId)}

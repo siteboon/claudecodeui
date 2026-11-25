@@ -456,14 +456,15 @@ test('the CLI update route refuses while that provider is busy in a session', {
   // A session held open for background work counts as busy, like a running
   // chat: replacing the CLI under it could break the work it is still doing.
   const realListProviders = providerRegistry.listProviders;
-  providerRegistry.listProviders = () => [{
-    id: 'claude',
-    runtime: { listBackgroundWork: () => [{ sessionId: 'held-session', tasks: [] }] },
-  } as unknown as IProvider];
+  providerRegistry.listProviders = () => ['claude', 'codex'].map((id) => ({
+    id,
+    runtime: { listBackgroundWork: () => [{ sessionId: `held-${id}-session`, tasks: [] }] },
+  } as unknown as IProvider));
 
   // The route runs the real service, so the CLI it would update is a stub that
   // only logs its calls: if the busy guard ever broke, this test must not run
-  // `claude update` on the developer's own install.
+  // `claude update` on the developer's own install. PATH holds only the stub's
+  // folder, so a broken guard finds neither a `codex` to update nor `npm`.
   const cliDirectory = await mkdtemp(path.join(os.tmpdir(), 'provider-routes-cli-'));
   const callLog = path.join(cliDirectory, 'calls.log');
   const stubPath = path.join(cliDirectory, process.platform === 'win32' ? 'claude.cmd' : 'claude');
@@ -476,7 +477,10 @@ test('the CLI update route refuses while that provider is busy in a session', {
   );
   await chmod(stubPath, 0o755);
   const previousCliPath = process.env.CLAUDE_CLI_PATH;
+  const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
+  const previousPath = process.env[pathKey];
   process.env.CLAUDE_CLI_PATH = stubPath;
+  process.env[pathKey] = cliDirectory;
 
   try {
     await withProviderServer(async (baseUrl) => {
@@ -486,17 +490,19 @@ test('the CLI update route refuses while that provider is busy in a session', {
       assert.equal(busyPayload.error.code, 'PROVIDER_CLI_BUSY');
       assert.equal(await readFile(callLog, 'utf8'), '', 'a refused update never runs the CLI');
 
-      // Codex ships with CloudCLI: nothing to update, and the status says why.
+      // Codex updates separately from CloudCLI too, so the same guard applies.
       const codex = await fetch(`${baseUrl}/api/providers/codex/cli/update`, { method: 'POST' });
-      assert.equal(codex.status, 400);
-      const codexStatus = await fetch(`${baseUrl}/api/providers/codex/cli`);
-      const codexPayload = await codexStatus.json() as { data: { updateUnavailableReason: string; updateCommand: null } };
-      assert.equal(codexStatus.status, 200);
-      assert.equal(codexPayload.data.updateUnavailableReason, 'bundled');
-      assert.equal(codexPayload.data.updateCommand, null);
+      const codexPayload = await codex.json() as { error: { code: string } };
+      assert.equal(codex.status, 409);
+      assert.equal(codexPayload.error.code, 'PROVIDER_CLI_BUSY');
     });
   } finally {
     providerRegistry.listProviders = realListProviders;
+    if (previousPath === undefined) {
+      delete process.env[pathKey];
+    } else {
+      process.env[pathKey] = previousPath;
+    }
     if (previousCliPath === undefined) {
       delete process.env.CLAUDE_CLI_PATH;
     } else {

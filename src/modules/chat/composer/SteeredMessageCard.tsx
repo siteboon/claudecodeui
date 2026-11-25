@@ -19,7 +19,7 @@ export default function SteeredMessageCard({ steer, providerLabel }: SteeredMess
   const attachmentCount = steer.uploadedAttachments.length || steer.attachments.length;
 
   return (
-    <div className="settings-content-enter mx-auto mb-2 max-w-[54.25rem] rounded-xl rounded-t-none border border-primary/30 bg-primary/[0.06] px-3 py-2">
+    <div className="settings-content-enter mx-auto mb-2 chat-content-width rounded-xl rounded-t-none border border-primary/30 bg-primary/[0.06] px-3 py-2">
       <div className="flex items-start gap-2.5">
         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden />
 
