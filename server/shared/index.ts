@@ -77,3 +77,6 @@ export { getLinuxFileLockIdentity, parseLinuxExclusiveFileLocks } from './utils.
 
 export { getGlobalImageAssetsDir, isImageAttachmentDescriptor, normalizeAttachmentDescriptors, parseFilesInputTag } from './image-attachments.js';
 export type { ChatAttachmentDescriptor } from './image-attachments.js';
+
+export type { SessionPinRecord, ClearedContextSegment, SessionForkAncestor, McpTransport, CustomProviderModelEffort, CustomProviderModelInput, ProviderSkillCreateFile, ProviderSkillCreateInput } from './types.js';
+export { asyncHandler, createApiSuccessResponse } from './utils.js';

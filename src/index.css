@@ -772,6 +772,12 @@
     }
   }
 
+  /* Scale transcript, composer, and status banners with the pane width (80%) instead of a fixed rem cap, keeping some breathing room at the sides. */
+  .chat-content-width {
+    min-width: 0;
+    max-width: 80%;
+  }
+
   /* Text wrapping improvements */
   .chat-message {
     word-wrap: break-word;

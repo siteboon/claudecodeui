@@ -1,4 +1,10 @@
 {
+  "pinned": {
+    "title": "Pinned sessions",
+    "pin": "Pin session",
+    "unpin": "Unpin session",
+    "error": "Could not load or save session pins. Please try again."
+  },
   "projects": {
     "title": "Projects",
     "newProject": "New Project",
@@ -38,7 +44,9 @@
     "selectAllLoaded": "Select all loaded",
     "clearSelection": "Clear",
     "deleteSelected_one": "Delete {{count}} session",
-    "deleteSelected_other": "Delete {{count}} sessions"
+    "deleteSelected_other": "Delete {{count}} sessions",
+    "expandForks": "Expand forks of {{session}}",
+    "collapseForks": "Collapse forks of {{session}}"
   },
   "tooltips": {
     "viewEnvironments": "View Environments",

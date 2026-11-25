@@ -1,4 +1,10 @@
 {
+  "pinned": {
+    "title": "핀한 세션",
+    "pin": "세션 핀 고정",
+    "unpin": "세션 핀 해제",
+    "error": "세션 핀을 불러오거나 저장하지 못했습니다. 다시 시도해 주세요."
+  },
   "projects": {
     "title": "프로젝트",
     "newProject": "새 프로젝트",
@@ -38,7 +44,9 @@
     "selectAllLoaded": "불러온 항목 모두 선택",
     "clearSelection": "선택 해제",
     "deleteSelected_one": "세션 {{count}}개 삭제",
-    "deleteSelected_other": "세션 {{count}}개 삭제"
+    "deleteSelected_other": "세션 {{count}}개 삭제",
+    "expandForks": "{{session}}의 포크 펼치기",
+    "collapseForks": "{{session}}의 포크 접기"
   },
   "tooltips": {
     "viewEnvironments": "환경 보기",

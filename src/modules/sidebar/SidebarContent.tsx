@@ -9,6 +9,7 @@ import SidebarFooter from '@/modules/sidebar/SidebarFooter';
 import SidebarHeader from '@/modules/sidebar/SidebarHeader';
 import SidebarProjectList from '@/modules/sidebar/SidebarProjectList';
 import SidebarRecentConversations from '@/modules/sidebar/SidebarRecentConversations';
+import SidebarPinnedSessions from '@/modules/sidebar/SidebarPinnedSessions';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
   const parts: ReactNode[] = [];
@@ -210,6 +211,16 @@ export default function SidebarContent({
       />
 
       <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
+        {(searchMode === 'projects' || searchMode === 'conversations') && !searchFilter.trim() && (
+          <SidebarPinnedSessions
+            showSessions={searchMode === 'conversations'}
+            selectedSession={projectListProps.selectedSession}
+            currentTime={projectListProps.currentTime}
+            sessionActions={projectListProps}
+            onConversationSelect={onConversationResultClick}
+            t={t}
+          />
+        )}
         {showConversationSearch ? (
           isSearching && !conversationResults ? (
             <div className="px-4 py-12 text-center md:py-8">
@@ -377,6 +388,7 @@ export default function SidebarContent({
           ) : null
         ) : searchMode === 'conversations' ? (
           <SidebarRecentConversations
+            excludePinned={!searchFilter.trim()}
             conversations={recentConversations}
             total={recentConversationsTotal}
             hasMore={recentConversationsHasMore}
@@ -421,7 +433,7 @@ export default function SidebarContent({
                   {runningSessionsCount}
                 </span>
               </div>
-              <SidebarProjectList {...projectListProps} />
+              <SidebarProjectList {...projectListProps} includeOffPagePins={false} />
             </div>
           )
         ) : searchMode === 'archived' ? (
@@ -681,7 +693,7 @@ export default function SidebarContent({
             </div>
           )
         ) : (
-          <SidebarProjectList {...projectListProps} />
+          <SidebarProjectList {...projectListProps} includeOffPagePins />
         )}
       </ScrollArea>
 

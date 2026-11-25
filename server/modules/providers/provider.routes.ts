@@ -20,10 +20,18 @@ import type {
   ProviderSkillCreateFile,
   ProviderSkillCreateInput,
   UpsertProviderMcpServerInput,
-} from '@/shared/types.js';
-import { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from '@/shared/index.js';
 
 const router = express.Router();
+
+function readPinUserId(req: Request): number {
+  const userId = Number((req as Request & { user?: { id?: unknown } }).user?.id);
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    throw new AppError('Authentication is required.', { code: 'UNAUTHORIZED', statusCode: 401 });
+  }
+  return userId;
+}
 
 const readPathParam = (value: unknown, name: string): string => {
   if (typeof value === 'string') {
@@ -935,6 +943,27 @@ router.get(
 );
 
 router.get(
+  '/sessions/pinned',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse({ sessions: sessionsService.listPinnedSessions(readPinUserId(req)) }));
+  }),
+);
+
+router.put(
+  '/sessions/:sessionId/pin',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = readPinUserId(req);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const isPinned: unknown = req.body?.isPinned;
+    if (typeof isPinned !== 'boolean') {
+      throw new AppError('isPinned must be a boolean.', { code: 'INVALID_SESSION_PIN', statusCode: 400 });
+    }
+    const sessions = sessionsService.setSessionPinned(userId, sessionId, isPinned);
+    res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
+router.get(
   '/sessions/:sessionId/provider-id',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
@@ -1002,6 +1031,16 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
     const result = sessionsService.restoreSessionById(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+// Starts the session's next message on a fresh context; its history stays.
+router.post(
+  '/sessions/:sessionId/clear-context',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.clearSessionContext(sessionId);
     res.json(createApiSuccessResponse(result));
   }),
 );

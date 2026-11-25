@@ -170,9 +170,12 @@ export type CustomProviderModelInput = {
  * `model` must always be populated. Provider adapters should use the
  * provider-specific lookup method requested by the caller, and only fall back
  * to the provider catalog `DEFAULT` value when the active model cannot be read.
+ * `isFallback` marks that case, so a session really running on the catalog
+ * default can be told apart from a lookup that found nothing.
  */
 export type ProviderCurrentActiveModel = {
   model: string;
+  isFallback?: boolean;
 };
 
 /**
@@ -427,9 +430,65 @@ export type SessionUpsertedEvent = {
     summary: string;
     messageCount: number;
     lastActivity: string;
+    /** App-facing parent id; null for a session without a recorded fork source. */
+    forkedFromSessionId?: string | null;
+    /** Active ancestors outside the current page, for the Projects tree only. */
+    forkAncestors?: SessionForkAncestor[];
   };
   project: SessionUpsertedProject | null;
   timestamp: string;
+};
+
+/**
+ * Minimal ancestor context for the Projects sidebar, shared by the database,
+ * projects and WebSocket modules. IDs are canonical app IDs. Only active
+ * ancestors in the same project and provider are included. These rows do not
+ * belong to the paginated session slice and must not advance its offset.
+ */
+export type SessionForkAncestor = {
+  id: string;
+  provider: LLMProvider;
+  summary: string;
+  lastActivity: string;
+  forkedFromSessionId: string | null;
+};
+
+//----------------- SESSION PINS ------------
+
+/**
+ * A visible pinned session joined to its owning project by the Database module.
+ * Providers converts it to a sidebar summary without reading transcripts or
+ * depending on project pagination. IDs are stable app IDs. The database returns
+ * these records in newest-pin-first order, independently of session activity.
+ * Nullable project fields support sessions whose project was removed.
+ */
+export type SessionPinRecord = {
+  session_id: string;
+  /** Canonical app parent id, used with bounded active ancestry in pin summaries. */
+  forked_from_session_id: string | null;
+  provider: LLMProvider;
+  project_id: string | null;
+  project_path: string | null;
+  custom_project_name: string | null;
+  custom_name: string | null;
+  last_activity: string | null;
+};
+
+// ---------------------------
+
+/**
+ * One earlier part of a conversation whose context was cleared, shared by the
+ * database module (which records it) and the providers module (which reads it
+ * back as history). `providerSessionId` and `jsonlPath` address the provider
+ * transcript the session ran on before the clear; `jsonlPath` is null when the
+ * provider keeps no per-session file. `clearedAt` is an ISO timestamp and is
+ * where the "context cleared" marker sits in the stitched history. Segments
+ * are read-only: nothing resumes, edits or forks from them.
+ */
+export type ClearedContextSegment = {
+  providerSessionId: string;
+  jsonlPath: string | null;
+  clearedAt: string;
 };
 
 /**
@@ -504,6 +563,12 @@ export type NormalizedMessage = {
   isCompactSummary?: boolean;
   /** Set on the row that stands in for a compaction, so the UI can draw it as one. */
   compact?: CompactionInfo;
+  /**
+   * Set on the row marking where the session's context was cleared: the model
+   * remembers nothing above it. Synthesized by the sessions service between
+   * two parts of a conversation, never read from a provider transcript.
+   */
+  contextCleared?: boolean;
   images?: unknown;
   /** Non-image files attached to a user turn after provider history normalization. */
   files?: unknown;
@@ -820,6 +885,11 @@ export type ProviderRunFunction = (
  * must use it — never the app-facing session id they were called with — when
  * matching transcript rows on disk, because app-created sessions use an
  * app-allocated id that the provider has never seen.
+ *
+ * `transcriptPath` reads that transcript file instead of the one the session
+ * row points at. It is how an earlier part of a conversation — one its context
+ * was cleared off — is read back, and must be paired with that part's own
+ * `providerSessionId`. Only readers that parse a per-session file honour it.
  */
 export type FetchHistoryOptions = {
   projectPath?: string;
@@ -827,6 +897,7 @@ export type FetchHistoryOptions = {
   offset?: number;
   providerSessionId?: string;
   jsonlPath?: string | null;
+  transcriptPath?: string;
 };
 
 /**
