@@ -228,13 +228,13 @@ export function useChatProviderState({
   const sessionEffortMutationIdRef = useRef(0);
 
   const [projectSelection, setProjectSelection] = useState<ProjectProviderSelection | null>(null);
-  // `provider:field` pairs the user picked in this new chat, which a project
-  // selection that arrives afterwards must leave alone.
-  const pickedProjectFieldsRef = useRef(new Set<string>());
+  // `provider:field` pairs the user picked in this new chat, with the picked
+  // value (null: cleared), which a project selection arriving afterwards keeps.
+  const pickedProjectFieldsRef = useRef(new Map<string, string | null>());
 
   /** Drops one project value once the user picks that field themselves. */
   const clearProjectSelectionField = useCallback((targetProvider: LLMProvider, field: ProjectSelectionField) => {
-    pickedProjectFieldsRef.current.add(`${targetProvider}:${field}`);
+    pickedProjectFieldsRef.current.set(`${targetProvider}:${field}`, null);
     setProjectSelection((current) => (
       current?.provider === targetProvider && current[field] !== null ? { ...current, [field]: null } : current
     ));
@@ -654,7 +654,7 @@ export function useChatProviderState({
 
   // Picks belong to one new chat; a provider switch inside it keeps them.
   useEffect(() => {
-    pickedProjectFieldsRef.current = new Set();
+    pickedProjectFieldsRef.current = new Map();
   }, [newSessionTrigger, selectedProjectPath, selectedSessionId]);
 
   // A new chat starts from what the project's latest session ran with.
@@ -676,7 +676,9 @@ export function useChatProviderState({
           return;
         }
         const unlessPicked = (field: ProjectSelectionField) => (
-          pickedProjectFieldsRef.current.has(`${provider}:${field}`) ? null : body.data?.[field] ?? null
+          pickedProjectFieldsRef.current.has(`${provider}:${field}`)
+            ? pickedProjectFieldsRef.current.get(`${provider}:${field}`) ?? null
+            : body.data?.[field] ?? null
         );
         setProjectSelection({
           provider,
@@ -795,7 +797,10 @@ export function useChatProviderState({
             rollBack(`HTTP ${response.status}`);
           }
         })
-        .catch(rollBack),
+        .catch(rollBack)
+        .finally(() => {
+          if (permissionPickRef.current.get(target.sessionId) === pick) permissionPickRef.current.delete(target.sessionId);
+        }),
     );
   }, [clearProjectSelectionField, isComposerTarget, provider, trackSessionSave]);
 
@@ -856,9 +861,9 @@ export function useChatProviderState({
 
         const resolvedModel = body.data?.model?.trim();
         const row = {
-          model: body.success && resolvedModel && body.data?.source !== 'default' ? resolvedModel : null,
-          effort: body.success ? body.data?.effort?.trim() || null : null,
-          permissionMode: body.success ? body.data?.permissionMode?.trim() || null : null,
+          model: resolvedModel && body.data?.source !== 'default' ? resolvedModel : null,
+          effort: body.data?.effort?.trim() || null,
+          permissionMode: body.data?.permissionMode?.trim() || null,
         };
         // A save that outlasted the wait has not reached the row yet; its
         // field keeps what the composer already shows.
@@ -958,6 +963,7 @@ export function useChatProviderState({
     // A new chat showing the project's model keeps the pick with that model: the
     // provider default is checked against the provider's own model and would drop it.
     if (!target && targetProvider === provider && projectModel) {
+      pickedProjectFieldsRef.current.set(`${targetProvider}:effort`, effort);
       setProjectSelection((current) => (current ? { ...current, effort } : current));
       return { scope: 'default' as const, effort };
     }

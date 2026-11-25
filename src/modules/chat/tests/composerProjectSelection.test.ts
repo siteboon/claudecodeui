@@ -241,6 +241,29 @@ test('an effort pick in a new chat is checked against the project model it shows
   assert.equal(result.current.currentProviderEffort, 'max');
 });
 
+test('an effort pick in a new chat survives a switch to another provider and back', async () => {
+  const { result } = await renderProviderState(null);
+  await waitFor(() => {
+    assert.equal(result.current.currentProviderModel, 'opus');
+  });
+  await act(async () => {
+    await result.current.selectProviderEffort('claude', 'max');
+  });
+
+  act(() => {
+    result.current.setProvider('codex');
+  });
+  act(() => {
+    result.current.setProvider('claude');
+  });
+
+  await waitFor(() => {
+    assert.equal(result.current.currentProviderModel, 'opus');
+  });
+  // The reloaded project selection does not replace the pick.
+  assert.equal(result.current.currentProviderEffort, 'max');
+});
+
 test('an open session restores and saves its backend permission mode', async () => {
   localStorage.setItem('permissionMode-last-claude', 'default');
   const { result } = await renderProviderState(session('session-1'));

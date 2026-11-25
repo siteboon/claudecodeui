@@ -462,7 +462,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     }
 
     sessions.setSessionPermissionMode(normalizedSessionId, permissionMode);
-    return { provider, sessionId: normalizedSessionId, permissionMode, source: 'session' };
+    return { provider: rowProvider, sessionId: normalizedSessionId, permissionMode, source: 'session' };
   };
 
   /**
