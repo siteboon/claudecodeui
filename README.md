@@ -59,7 +59,7 @@
 - **Integrated Shell Terminal** - Direct access to the Agents CLI through built-in shell functionality
 - **File Explorer** - Interactive file tree with syntax highlighting and live editing
 - **Git Explorer** - View, stage and commit your changes. You can also switch branches 
-- **Browser Use** - Open browser sessions for web research, testing, and agent-driven browser tasks. Select **Take control** in the Browser tab to drive the same page, then **Return to agent** to resume automation after pending input finishes. [Live control details](features.md#browser-live-control)
+- **Browser Use** - Open browser sessions for web research, testing, and agent-driven browser tasks. Select **Take control** to drive the same page, with wheel or single-finger scrolling, then **Return to agent** to resume automation. [Live control details](features.md#browser-live-control)
 - **Session Management** - Resume conversations, manage multiple sessions, and track history
 - **Plugin System** - Extend CloudCLI with custom plugins — add new tabs, backend services, and integrations. [Build your own →](https://github.com/cloudcli-ai/cloudcli-plugin-starter)
 - **TaskMaster AI Integration** *(Optional)* - Advanced project management with AI-powered task planning, PRD parsing, and workflow automation

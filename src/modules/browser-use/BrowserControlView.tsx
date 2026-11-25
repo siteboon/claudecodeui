@@ -6,9 +6,10 @@ import { api, readApiJson, ApiRequestError } from '@/shared/api';
 import { Button, Dialog, DialogContent, DialogTitle } from '@/shared/ui';
 
 type Point = { x: number; y: number };
+type ScrollInput = { type: 'wheel'; dx: number; dy: number } & Point;
 type LiveInput =
   | ({ type: 'pointer'; to?: Point } & Point)
-  | ({ type: 'wheel'; dx: number; dy: number } & Point)
+  | ScrollInput
   | { type: 'text'; text: string }
   | { type: 'key'; key: string };
 
@@ -31,6 +32,14 @@ function pointAt(element: HTMLElement, x: number, y: number): Point {
   return { x: clamp((x - rect.left) / rect.width), y: clamp((y - rect.top) / rect.height) };
 }
 
+function scrollDelta(element: HTMLImageElement, dx: number, dy: number) {
+  const { width, height } = element.getBoundingClientRect();
+  return {
+    dx: dx * ((element.naturalWidth && width) ? element.naturalWidth / width : 1),
+    dy: dy * ((element.naturalHeight && height) ? element.naturalHeight / height : 1),
+  };
+}
+
 /** Used by BrowserUsePanel to control an existing Chromium page inside the workspace. */
 export default function BrowserControlView({ sessionId, controlId, onClose, onLost, onReturned }: BrowserControlViewProps) {
   const { t } = useTranslation('settings');
@@ -44,10 +53,11 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
   const [returning, setReturning] = useState(false);
   const image = useRef<HTMLImageElement>(null);
   const keyboard = useRef<HTMLTextAreaElement>(null);
-  const gesture = useRef<Point | null>(null);
+  const gesture = useRef<{ start: Point; last: Point; scrolling: boolean } | null>(null);
   const composing = useRef(false);
   const inputTail = useRef<Promise<void>>(Promise.resolve());
   const queued = useRef(0);
+  const pendingScroll = useRef<ScrollInput | null>(null);
   const returningRef = useRef(false);
   const lifetime = useRef<AbortController | null>(null);
   const hasFrame = frame !== null;
@@ -82,16 +92,19 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
 
   const send = useCallback((...inputs: LiveInput[]) => {
     const signal = lifetime.current?.signal;
-    if (!signal || signal.aborted || returningRef.current) return;
+    if (!signal || signal.aborted || returningRef.current) return false;
     if (queued.current + inputs.length > 32) {
       setQueueFull(true);
-      return;
+      return false;
     }
+    // Do not merge scroll events across a queued click or key press.
+    if (inputs.some((input) => input.type !== 'wheel')) pendingScroll.current = null;
     setQueueFull(false);
     queued.current += inputs.length;
     inputTail.current = inputTail.current.then(async () => {
       for (const input of inputs) {
         if (signal.aborted) return;
+        if (pendingScroll.current === input) pendingScroll.current = null;
         await readApiJson(await api.browserUse.control(sessionId, 'input', { controlId, ...input }, { signal }));
       }
       if (!signal.aborted) setFailed(false);
@@ -100,49 +113,74 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
     }).finally(() => {
       queued.current -= inputs.length;
     });
+    return true;
   }, [sessionId, controlId]);
+
+  const queueScroll = useCallback((point: Point, dx: number, dy: number) => {
+    if (returningRef.current || (!dx && !dy)) return;
+    const clamp = (delta: number) => Math.max(-2_000, Math.min(2_000, delta));
+    const pending = pendingScroll.current;
+    if (pending) {
+      // One pending batch follows the in-flight request, rather than a request per wheel event.
+      Object.assign(pending, point, { dx: clamp(pending.dx + dx), dy: clamp(pending.dy + dy) });
+    } else {
+      const input: ScrollInput = { type: 'wheel', ...point, dx: clamp(dx), dy: clamp(dy) };
+      if (send(input)) pendingScroll.current = input;
+    }
+  }, [send]);
 
   useEffect(() => {
     const element = image.current;
     if (!element || !hasFrame) return;
-    let pending: (Point & { dx: number; dy: number }) | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const wheel = (event: WheelEvent) => {
       if (event.ctrlKey) return;
       event.preventDefault();
       const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 600 : 1;
-      pending = {
-        ...pointAt(element, event.clientX, event.clientY),
-        dx: (pending?.dx ?? 0) + event.deltaX * scale,
-        dy: (pending?.dy ?? 0) + event.deltaY * scale,
-      };
-      if (timer !== undefined) return;
-      timer = setTimeout(() => {
-        const clamp = (delta: number) => Math.max(-2_000, Math.min(2_000, delta));
-        if (pending) send({ ...pending, type: 'wheel', dx: clamp(pending.dx), dy: clamp(pending.dy) });
-        pending = undefined;
-        timer = undefined;
-      }, 40);
+      const { dx, dy } = scrollDelta(element, event.deltaX * scale, event.deltaY * scale);
+      queueScroll(pointAt(element, event.clientX, event.clientY), dx, dy);
     };
     element.addEventListener('wheel', wheel, { passive: false });
     return () => {
       element.removeEventListener('wheel', wheel);
-      clearTimeout(timer);
+      pendingScroll.current = null;
     };
-  }, [hasFrame, send]);
+  }, [hasFrame, queueScroll]);
 
   const pointerDown = (event: PointerEvent<HTMLImageElement>) => {
     if (event.button !== 0 || !event.isPrimary) return;
     event.preventDefault();
-    gesture.current = pointAt(event.currentTarget, event.clientX, event.clientY);
+    gesture.current = {
+      start: pointAt(event.currentTarget, event.clientX, event.clientY),
+      last: { x: event.clientX, y: event.clientY },
+      scrolling: false,
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
-    keyboard.current?.focus({ preventScroll: true });
+    if (event.pointerType !== 'touch') keyboard.current?.focus({ preventScroll: true });
+  };
+
+  const pointerMove = (event: PointerEvent<HTMLImageElement>) => {
+    const active = gesture.current;
+    if (!active || !event.isPrimary || event.pointerType !== 'touch') return;
+    const dx = active.last.x - event.clientX;
+    const dy = active.last.y - event.clientY;
+    if (!active.scrolling && Math.hypot(dx, dy) < 8) return;
+    active.scrolling = true;
+    active.last = { x: event.clientX, y: event.clientY };
+    const delta = scrollDelta(event.currentTarget, dx, dy);
+    queueScroll(active.start, delta.dx, delta.dy);
   };
 
   const pointerUp = (event: PointerEvent<HTMLImageElement>) => {
     if (!event.isPrimary || !gesture.current) return;
-    const start = gesture.current;
+    const { start, scrolling } = gesture.current;
     gesture.current = null;
+    if (event.pointerType === 'touch') {
+      if (!scrolling) {
+        keyboard.current?.focus({ preventScroll: true });
+        send({ type: 'pointer', ...start });
+      }
+      return;
+    }
     const end = pointAt(event.currentTarget, event.clientX, event.clientY);
     const isDrag = Math.hypot(start.x - end.x, start.y - end.y) > 0.005;
     send({ type: 'pointer', ...start, ...(isDrag ? { to: end } : {}) });
@@ -215,6 +253,7 @@ export default function BrowserControlView({ sessionId, controlId, onClose, onLo
               className="block max-h-full max-w-full cursor-crosshair touch-none select-none"
               draggable={false}
               onPointerDown={pointerDown}
+              onPointerMove={pointerMove}
               onPointerUp={pointerUp}
               onPointerCancel={() => { gesture.current = null; }}
             />

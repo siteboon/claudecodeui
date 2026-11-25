@@ -6,4 +6,4 @@ In the Browser tab, select a running agent-owned Chromium session and choose **T
 
 Only one viewer can control a session. While the user is in control, CloudCLI's browser tools cannot inspect, modify, or stop the page. Closing the viewer or losing the connection does not close the browser or resume the agent. After 15 seconds without frames, an authenticated viewer can reclaim control; choose **Return to agent** when the page is safe to share again. The ordinary browser session idle timeout still applies.
 
-The viewer uses the existing Browser Use runtime and authenticated API. No VNC service, new port, or runtime configuration is required. Oversized pastes are rejected rather than partially inserted; already queued input finishes before control returns.
+The viewer uses the existing Browser Use runtime and authenticated API. No VNC service, new port, or runtime configuration is required. Wheel deltas follow the preview scale and merge while an input request is in flight; on touch screens, single-finger swipes scroll and taps click. Oversized pastes are rejected rather than partially inserted; already queued input finishes before control returns.

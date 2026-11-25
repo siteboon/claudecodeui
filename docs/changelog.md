@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 2026-11-25
+
+- Scale and coalesce live browser scroll input, and support single-finger scrolling without sending a drag.
+
 ### 2026-11-23
 
 - Keep keyboard focus on remote Tab, reject oversized pastes atomically, and serialize live-control handoff with input and session refresh.
