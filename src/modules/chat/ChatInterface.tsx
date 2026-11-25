@@ -416,7 +416,8 @@ function ChatInterface({
     }
   }, [onNavigateToSession, selectedSession?.id]);
 
-  const autoContinueSessionId = currentSessionId || selectedSession?.id || null;
+  // The chat on screen: `currentSessionId` can still name the chat left behind.
+  const autoContinueSessionId = selectedSession?.id || currentSessionId || null;
   // The server announces every change to this list, the automatic continue included.
   const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
     useScheduledMessages(autoContinueSessionId, subscribe);
