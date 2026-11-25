@@ -74,15 +74,17 @@ export function VersionUpgradeModal({
 
         try {
             // Call the backend API to run the update command
-            let response: Response;
-            try {
-                response = await api.system.update();
-            } catch (error) {
-                // The POST may have reached the server before the connection dropped; only a running update proves it did.
+            let postError: unknown = null;
+            let response: Response | null = await api.system.update().catch((error: unknown) => {
+                postError = error;
+                return null;
+            });
+            // A dropped connection or a proxy 502-504 can hide a POST the server got; only a running update proves it did.
+            if (!response || (response.status >= 502 && response.status <= 504)) {
                 const status = await api.system.updateStatus().catch(() => null);
-                if (status?.status !== 202) throw error;
-                response = status;
+                if (status?.status === 202) response = status;
             }
+            if (!response) throw postError;
 
             // The server answers 202 and keeps installing in the background so
             // a slow install cannot run into a proxy timeout; poll until done.
