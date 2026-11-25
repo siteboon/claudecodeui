@@ -137,7 +137,7 @@ test('a failed or killed npm install leaves the running installation untouched',
   assert.equal(calls.some(([operation]) => operation === 'move'), false);
 });
 
-test('an update after a failed restore puts the backup back before replacing it', async () => {
+test('an update after a failed restore keeps the backup and moves the new version in', async () => {
   const calls: unknown[][] = [];
   const service = createSystemUpdateService(createNpmDependencies(calls, {
     // The earlier swap lost the app directory; only the backup holds the working version.
@@ -146,10 +146,9 @@ test('an update after a failed restore puts the backup back before replacing it'
 
   await service.updateSystem();
 
-  assert.deepEqual(calls.slice(3, 5), [
-    ['move', NPM_PREVIOUS_APP, NPM_APP_ROOT],
-    ['remove', NPM_PREVIOUS_APP],
-  ]);
+  const moves = calls.filter(([operation]) => operation === 'move');
+  assert.deepEqual(moves, [['move', NPM_STAGED_APP, NPM_APP_ROOT]]);
+  assert.equal(calls.filter(([operation, target]) => operation === 'remove' && target === NPM_PREVIOUS_APP).length, 1, 'only the cleanup after the swap removes the backup');
 });
 
 test('a failed swap restores the previous installation', async () => {

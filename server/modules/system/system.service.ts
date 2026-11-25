@@ -98,13 +98,12 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
       return result;
     }
 
-    // shortcut: the global bin symlink is reused as is, so a release that renames its bin entry needs a manual `npm install -g`.
-    // A swap that could not put the old version back left it only in the backup: restore it before replacing the backup.
-    if (!(await dependencies.pathExists(dependencies.appRoot))) {
-      await dependencies.moveDirectory(previousApp, dependencies.appRoot);
+    // A swap that could not put the old version back left it only in the backup: keep that backup.
+    if (await dependencies.pathExists(dependencies.appRoot)) {
+      await dependencies.removeDirectory(previousApp);
+      await dependencies.moveDirectory(dependencies.appRoot, previousApp);
     }
-    await dependencies.removeDirectory(previousApp);
-    await dependencies.moveDirectory(dependencies.appRoot, previousApp);
+    // shortcut: the global bin symlink is reused as is, so a release that renames its bin entry needs a manual `npm install -g`.
     try {
       await dependencies.moveDirectory(stagedApp, dependencies.appRoot);
     } catch (error) {

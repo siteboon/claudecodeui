@@ -78,9 +78,9 @@ export function VersionUpgradeModal({
             try {
                 response = await api.system.update();
             } catch (error) {
-                // The POST may have reached the server before the connection dropped; ask before reporting a failure.
+                // The POST may have reached the server before the connection dropped; only a running update proves it did.
                 const status = await api.system.updateStatus().catch(() => null);
-                if (!status || status.status === 404) throw error;
+                if (status?.status !== 202) throw error;
                 response = status;
             }
 
