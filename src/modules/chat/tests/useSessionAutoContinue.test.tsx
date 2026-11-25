@@ -334,3 +334,30 @@ test('a session opened again falls back to a save confirmed meanwhile when its r
 
   await waitFor(() => assert.equal(result.current.enabled, true));
 });
+
+test('a click while an earlier recovery read runs keeps the fallback from before both', async () => {
+  let failRead: (() => void) | undefined;
+  vi.spyOn(api, 'sessionAutoContinue')
+    .mockResolvedValueOnce(flagResponse(false, false))
+    .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      failRead = () => resolve(flagResponse(false, false));
+    }))
+    .mockResolvedValue(flagResponse(false, false));
+  vi.spyOn(api, 'setSessionAutoContinue').mockResolvedValue(flagResponse(false, false));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+  const { result } = renderHook(() => useSessionAutoContinue('session-a'));
+  let first: Promise<void> | undefined;
+  act(() => {
+    first = result.current.setEnabled(true);
+  });
+  await waitFor(() => assert.ok(failRead));
+  // The switch shows the refused `on` while the recovery read runs.
+  await act(async () => {
+    await result.current.setEnabled(false);
+    failRead?.();
+    await first;
+  });
+
+  assert.equal(result.current.enabled, false);
+});

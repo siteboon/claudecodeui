@@ -16,8 +16,9 @@ export function useSessionAutoContinue(sessionId: string | null) {
   const confirmedRef = useRef<boolean | null>(null);
   // A session's saves run one after another, so its last click is the last write the server sees.
   const saveChainsRef = useRef(new Map<string, Promise<void>>());
-  // What the switch showed before a run of clicks began: the fallback while nothing is confirmed.
-  const unconfirmedRef = useRef(false);
+  // Per session, clicks still being handled and what the switch showed before
+  // the first of them: the fallback while nothing is confirmed.
+  const clicksRef = useRef(new Map<string, { pending: number; fallback: boolean }>());
 
   // Reset during the switch render, so the old session's setting never paints on the new one.
   const [renderedSessionId, setRenderedSessionId] = useState(sessionId);
@@ -66,7 +67,10 @@ export function useSessionAutoContinue(sessionId: string | null) {
     const generation = ++generationRef.current;
     setEnabledState(next);
     const chains = saveChainsRef.current;
-    if (!chains.has(sessionId)) unconfirmedRef.current = !next;
+    const clicks = clicksRef.current;
+    const run = clicks.get(sessionId) ?? { pending: 0, fallback: !next };
+    run.pending += 1;
+    clicks.set(sessionId, run);
     // Only the writes queue up; a recovery read after a failure must not hold back the next click.
     const save = (chains.get(sessionId) ?? Promise.resolve()).then(async () => {
       const response = await api.setSessionAutoContinue(sessionId, next);
@@ -75,9 +79,6 @@ export function useSessionAutoContinue(sessionId: string | null) {
     });
     const queued = save.then(() => undefined, () => undefined);
     chains.set(sessionId, queued);
-    void queued.then(() => {
-      if (chains.get(sessionId) === queued) chains.delete(sessionId);
-    });
     try {
       await save;
     } catch (error) {
@@ -86,7 +87,11 @@ export function useSessionAutoContinue(sessionId: string | null) {
       if (generationRef.current !== generation) return;
       if (await load(sessionId)) return;
       // Unreadable too: show the last confirmed value, unless something newer happened.
-      if (generationRef.current === generation) setEnabledState(confirmedRef.current ?? unconfirmedRef.current);
+      if (generationRef.current === generation) setEnabledState(confirmedRef.current ?? run.fallback);
+    } finally {
+      if (chains.get(sessionId) === queued) chains.delete(sessionId);
+      run.pending -= 1;
+      if (run.pending === 0) clicks.delete(sessionId);
     }
   }, [load, sessionId]);
 
