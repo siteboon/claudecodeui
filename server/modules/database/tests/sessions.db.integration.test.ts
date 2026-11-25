@@ -192,3 +192,14 @@ test('getLatestProjectSelection reads the newest session of that provider in the
     assert.equal(sessionsDb.getLatestProjectSelection(project, 'claude')?.model, 'sonnet');
   });
 });
+
+test('a fork keeps the permission mode of the session it was branched from', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createForkedSession({
+      sessionId: 'fork', provider: 'claude', projectPath: '/workspace/demo-project', customName: 'Fork',
+      providerSessionId: 'native-fork', jsonlPath: '/transcripts/fork.jsonl', forkedFromSessionId: 'source',
+      model: 'opus', effort: 'high', permissionMode: 'plan',
+    });
+    assert.equal(sessionsDb.getSessionById('fork')?.permission_mode, 'plan');
+  });
+});
