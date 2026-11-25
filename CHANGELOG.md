@@ -3,6 +3,25 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.10](https://github.com/siteboon/claudecodeui/compare/v1.37.9...v1.37.10) (2026-11-25)
+
+### New Features
+
+* **chat:** scale transcript and composer width with the pane ([#1830](https://github.com/siteboon/claudecodeui/issues/1830)) ([b1d5fb2](https://github.com/siteboon/claudecodeui/commit/b1d5fb298dcc1426a048b7d0e7ab1593ae57fe0a))
+* **codex:** update the Codex CLI from Settings without rebuilding CloudCLI ([#1802](https://github.com/siteboon/claudecodeui/issues/1802)) ([4dcbb71](https://github.com/siteboon/claudecodeui/commit/4dcbb7145fc4afd5119ca7cfff9d9ff1ec59fba7))
+* **sidebar:** pin sessions while preserving fork trees ([#1812](https://github.com/siteboon/claudecodeui/issues/1812)) ([53dea39](https://github.com/siteboon/claudecodeui/commit/53dea39fab9e98d23252276c09b32e328f4f558d))
+
+### Bug Fixes
+
+* **assets:** report and correlate attachment upload failures ([#1814](https://github.com/siteboon/claudecodeui/issues/1814)) ([16defeb](https://github.com/siteboon/claudecodeui/commit/16defeb6d83841dbef5c4f19972eabafc8605a11))
+* **auth:** compare API_KEY and Browser MCP token in constant time ([#1804](https://github.com/siteboon/claudecodeui/issues/1804)) ([b695914](https://github.com/siteboon/claudecodeui/commit/b6959148ec006f258d737e72bb630ff2e5e84672))
+* **chat:** improve markdown table column sizing and line breaks ([#1825](https://github.com/siteboon/claudecodeui/issues/1825)) ([d0604e2](https://github.com/siteboon/claudecodeui/commit/d0604e2cc350cc345dd6a6b8d14223ff119b5555))
+* **chat:** name attachments refused for size or count instead of dropping them ([#1801](https://github.com/siteboon/claudecodeui/issues/1801)) ([d17b8a9](https://github.com/siteboon/claudecodeui/commit/d17b8a97d2ba66daa6a97e21b464f3cf5aab2506))
+* **editor:** stop the docked editor from snapping width when the resize handle is pressed ([#1799](https://github.com/siteboon/claudecodeui/issues/1799)) ([3aa4645](https://github.com/siteboon/claudecodeui/commit/3aa464521a3881d454dc2a34354d6904fcc51116))
+* keep optional web fonts from blocking startup ([#1815](https://github.com/siteboon/claudecodeui/issues/1815)) ([09ff15b](https://github.com/siteboon/claudecodeui/commit/09ff15bd6680edb6f230cee9d8e27041d5a577dd))
+* **models:** keep a provider-reported session model that equals the built-in default ([#1813](https://github.com/siteboon/claudecodeui/issues/1813)) ([43e57ec](https://github.com/siteboon/claudecodeui/commit/43e57ecf2f712ff533e5b3f51536fb675d8861f1))
+* **server:** parse request bodies only after authentication ([#1805](https://github.com/siteboon/claudecodeui/issues/1805)) ([d3d8741](https://github.com/siteboon/claudecodeui/commit/d3d87414d64c6367ed0c85f5a6015e9a12793475))
+
 ## [1.37.9](https://github.com/siteboon/claudecodeui/compare/v1.37.8...v1.37.9) (2026-11-16)
 
 ### New Features
