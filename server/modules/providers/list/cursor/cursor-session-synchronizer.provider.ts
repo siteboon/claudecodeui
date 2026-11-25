@@ -204,6 +204,11 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
           continue;
         }
 
+        // A CLI chat started since its folder was listed above.
+        if (await this.hasCliChat(transcriptEntry.name)) {
+          continue;
+        }
+
         const transcriptPath = path.join(transcriptsDir, transcriptEntry.name, `${transcriptEntry.name}.jsonl`);
         try {
           if (await this.indexIdeTranscript(transcriptEntry.name, workspacePath, transcriptPath)) {
@@ -323,7 +328,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
    * Returns `null` when `workspaceStorage` or one of its `workspace.json`
    * files exists but can't be read: an unseen folder could share a slug with
    * one that was read, so no chat is placed from an incomplete list. That
-   * result is not cached.
+   * result is not cached, and it drops any list cached before.
    */
   private async readIdeWorkspaceFolders(refresh: boolean): Promise<Map<string, string | null> | null> {
     if (!refresh && this.ideWorkspacesCache && Date.now() - this.ideWorkspacesCache.readAt < IDE_WORKSPACES_CACHE_MS) {
@@ -334,6 +339,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
     const storageEntries = await listDirectoryEntriesSafe(storageDir);
     if (!storageEntries) {
       console.error('Failed to read Cursor workspaceStorage directory', { storageDir });
+      this.ideWorkspacesCache = null;
       return null;
     }
 
@@ -353,6 +359,8 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
           continue;
         }
         console.error('Failed to read Cursor workspace.json', { workspaceJsonPath });
+        // An older list could still map this folder's slug to another folder.
+        this.ideWorkspacesCache = null;
         return null;
       }
 
@@ -443,9 +451,22 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    let rawMeta: string;
+    try {
+      rawMeta = await fsp.readFile(path.join(chatDir, 'meta.json'), 'utf8');
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        return null;
+      }
+      // Unreadable rather than missing: fail this chat so the scan counts as
+      // incomplete and its row survives the stale-row cleanup.
+      throw error;
+    }
+
     let meta: Record<string, unknown>;
     try {
-      meta = JSON.parse(await fsp.readFile(path.join(chatDir, 'meta.json'), 'utf8'));
+      meta = JSON.parse(rawMeta);
     } catch {
       return null;
     }

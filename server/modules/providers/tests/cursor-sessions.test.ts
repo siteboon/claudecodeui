@@ -8,11 +8,11 @@ import { pathToFileURL } from 'node:url';
 
 import Database from 'better-sqlite3';
 
-import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { closeConnection, initializeDatabase, projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { spawnCursor } from '@/modules/providers/list/cursor/cursor-runtime.provider.js';
 import { CursorSessionSynchronizer } from '@/modules/providers/list/cursor/cursor-session-synchronizer.provider.js';
 import { CursorSessionsProvider } from '@/modules/providers/list/cursor/cursor-sessions.provider.js';
-import { deleteSessionJsonlFilesForProjectPath } from '@/modules/projects/index.js';
+import { deleteOrArchiveProject } from '@/modules/projects/index.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import { prependCursorContinuedChatTag, toCursorProjectSlug } from '@/shared/utils.js';
 
@@ -466,6 +466,62 @@ test('Cursor synchronizer places no IDE chat while a workspace.json is unreadabl
   });
 });
 
+test('Cursor synchronizer drops its cached IDE folders when a workspace.json turns unreadable', { concurrency: false, skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+  await withCursorHome('cursor-ide-stale-cache-', async (homeDir) => {
+    const dashed = path.join(homeDir, 'my-app');
+    const underscored = path.join(homeDir, 'my_app');
+    await mkdir(dashed);
+    await mkdir(underscored);
+    await writeIdeWorkspace(homeDir, 'storage-dashed', dashed);
+    await writeIdeTranscript(homeDir, dashed, 'placed-chat', 'Placed while the slug was unambiguous');
+
+    await withCursorUserDirectoryUnderHome(() => withIsolatedDatabase(async () => {
+      const synchronizer = new CursorSessionSynchronizer();
+      await synchronizer.synchronize();
+      assert.equal(sessionsDb.getSessionById('placed-chat')?.project_path, dashed);
+
+      // A second folder with the same slug appears, its workspace.json unreadable.
+      await writeIdeWorkspace(homeDir, 'storage-underscored', underscored);
+      const unreadable = path.join(cursorWorkspaceStorageDir(homeDir), 'storage-underscored', 'workspace.json');
+      await chmod(unreadable, 0o000);
+      try {
+        await synchronizer.synchronize();
+
+        // The cached list still says the slug is only `my-app`; it must not be used.
+        const lateTranscript = await writeIdeTranscript(homeDir, dashed, 'late-chat', 'Which folder now?');
+        assert.equal(await synchronizer.synchronizeFile(lateTranscript), null);
+        assert.equal(sessionsDb.getSessionById('late-chat'), null);
+      } finally {
+        await chmod(unreadable, 0o644);
+      }
+    }));
+  });
+});
+
+test('Cursor synchronizer keeps a transcript row whose chat metadata is unreadable', { concurrency: false, skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+  await withCursorHome('cursor-sync-unreadable-meta-', async (homeDir, workspacePath) => {
+    const chatDir = await writeCursorCliChat(homeDir, workspacePath, 'cli-chat-locked', { firstUserLine: 'Locked' });
+    const legacyTranscript = path.join(
+      homeDir, '.cursor', 'projects', toCursorProjectSlug(workspacePath), 'agent-transcripts', 'cli-chat-locked', 'cli-chat-locked.jsonl'
+    );
+    const metaPath = path.join(chatDir, 'meta.json');
+    await chmod(metaPath, 0o000);
+
+    try {
+      await withIsolatedDatabase(async () => {
+        // A row as the transcript-based indexer left it.
+        sessionsDb.createSession('cli-chat-locked', 'cursor', workspacePath, 'Locked', undefined, undefined, legacyTranscript);
+
+        await new CursorSessionSynchronizer().synchronize();
+
+        assert.equal(sessionsDb.getSessionById('cli-chat-locked')?.jsonl_path, legacyTranscript);
+      });
+    } finally {
+      await chmod(metaPath, 0o644);
+    }
+  });
+});
+
 test('Cursor synchronizer indexes an IDE chat from its watched transcript', { concurrency: false }, async () => {
   await withCursorHome('cursor-ide-watch-', async (homeDir, workspacePath) => {
     await writeIdeWorkspace(homeDir, 'storage-1', workspacePath);
@@ -565,7 +621,10 @@ test('A read-only session is archived instead of deleted, and its transcript is 
       assert.equal((await readFile(transcriptPath, 'utf8')).length > 0, true);
 
       // Deleting the whole project removes its transcripts, but not the IDE's.
-      await deleteSessionJsonlFilesForProjectPath(workspacePath);
+      const projectId = projectsDb.getProjectPath(workspacePath)?.project_id;
+      assert.ok(projectId);
+      await deleteOrArchiveProject(projectId, true);
+      assert.equal(sessionsDb.getSessionById('ide-chat-delete'), null);
       assert.equal((await readFile(transcriptPath, 'utf8')).length > 0, true);
     }));
   });
