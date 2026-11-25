@@ -40,6 +40,7 @@ type SessionUpsertedEvent = ServerEvent & {
     fullPath: string;
     displayName: string;
     isStarred: boolean;
+    worktreeOf?: string | null;
   } | null;
 };
 
@@ -830,6 +831,7 @@ export function useProjectsState({
             fullPath: upsert.project.fullPath,
             displayName: upsert.project.displayName,
             isStarred: upsert.project.isStarred,
+            worktreeOf: upsert.project.worktreeOf ?? null,
             sessions: [],
             sessionMeta: { hasMore: false, total: 0 },
           } as Project;
