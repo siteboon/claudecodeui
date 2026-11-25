@@ -482,6 +482,8 @@ export type SessionEstablishedContext = {
   provider: LLMProvider;
   project: Project;
   summary?: string | null;
+  /** The user opened another chat before the session was created: list it, but leave the screen alone. */
+  chatLeft?: boolean;
 };
 
 /** The result returned for a tool call, carrying its content, error flag, timestamp and any provider-specific extras that the tool renderers read. */

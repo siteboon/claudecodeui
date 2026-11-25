@@ -185,8 +185,11 @@ function ChatInterface({
   // the session gateway before the first send. Record it locally and put it
   // in the URL — this id never changes again, so there is no later handoff.
   const handleSessionEstablished = useCallback<NonNullable<ChatInterfaceProps['onSessionEstablished']>>((sessionId, context) => {
-    setCurrentSessionId(sessionId);
     onSessionEstablished?.(sessionId, context);
+    if (context.chatLeft) {
+      return;
+    }
+    setCurrentSessionId(sessionId);
     onNavigateToSession?.(sessionId);
   }, [setCurrentSessionId, onSessionEstablished, onNavigateToSession]);
 

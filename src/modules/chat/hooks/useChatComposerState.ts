@@ -1266,11 +1266,13 @@ export function useChatComposerState({
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('File upload failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to upload files: ${message}`,
-            timestamp: new Date(),
-          });
+          if (draftScopeRef.current === submittedScope) {
+            addMessage({
+              type: 'error',
+              content: `Failed to upload files: ${message}`,
+              timestamp: new Date(),
+            });
+          }
           return;
         }
       }
@@ -1283,6 +1285,9 @@ export function useChatComposerState({
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
       let targetSessionId = selectedSession?.id || currentSessionId || null;
+      // The user may open another chat while the upload or session creation runs;
+      // a brand-new chat moving from its project scope to its session id has not left.
+      const leftChat = () => draftScopeRef.current !== submittedScope && draftScopeRef.current !== targetSessionId;
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
@@ -1307,20 +1312,24 @@ export function useChatComposerState({
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Session creation failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to start a new session: ${message}`,
-            timestamp: new Date(),
-          });
+          if (!leftChat()) {
+            addMessage({
+              type: 'error',
+              content: `Failed to start a new session: ${message}`,
+              timestamp: new Date(),
+            });
+          }
           return;
         }
 
         if (!targetSessionId) {
-          addMessage({
-            type: 'error',
-            content: 'Failed to start a new session: no session id returned.',
-            timestamp: new Date(),
-          });
+          if (!leftChat()) {
+            addMessage({
+              type: 'error',
+              content: 'Failed to start a new session: no session id returned.',
+              timestamp: new Date(),
+            });
+          }
           return;
         }
 
@@ -1328,6 +1337,7 @@ export function useChatComposerState({
           provider,
           project: selectedProject,
           summary: createdSessionName,
+          chatLeft: leftChat(),
         });
       }
 
@@ -1378,7 +1388,10 @@ export function useChatComposerState({
         ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
       };
 
-      addMessage(userMessage);
+      const chatLeft = leftChat();
+      if (!chatLeft) {
+        addMessage(userMessage);
+      }
       // Mark this request as processing in the per-session activity map (the
       // single source of truth the indicator derives from). The id is always
       // concrete at this point — no pending placeholder exists anymore.
@@ -1387,8 +1400,10 @@ export function useChatComposerState({
         canInterrupt: true,
       });
 
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
+      if (!chatLeft) {
+        setIsUserScrolledUp(false);
+        setTimeout(() => scrollToBottom(), 100);
+      }
 
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
@@ -1416,9 +1431,7 @@ export function useChatComposerState({
       recordSentMessage(currentInput, targetSessionId);
       // Attachments are not kept per chat, so only the ones just sent go.
       setAttachedFiles((files) => files.filter((file) => !currentAttachments.includes(file)));
-      // A brand-new chat moves from its project scope to its allocated session id meanwhile.
-      const stillOpen = draftScopeRef.current === submittedScope || draftScopeRef.current === targetSessionId;
-      if (!stillOpen) {
+      if (chatLeft) {
         // The chat left keeps text the user went back and edited during the upload.
         if (submittedScope && readDraftText(submittedScope) === currentInput) {
           writeDraftText(submittedScope, '');
