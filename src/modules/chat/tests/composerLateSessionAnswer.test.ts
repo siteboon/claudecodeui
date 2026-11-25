@@ -15,7 +15,7 @@ import type { PermissionMode, Project, ProjectSession, SessionEstablishedContext
  */
 
 const PROJECT: Project = { projectId: 'project-1', displayName: 'Project One', fullPath: '/tmp/project-one' };
-type Props = { session: ProjectSession | null };
+type Props = { session: ProjectSession | null; newSessionTrigger?: number };
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -27,11 +27,12 @@ const renderComposer = () => {
   const added: unknown[] = [];
   const established: Array<[string, SessionEstablishedContext]> = [];
   let rerender: ((props: Props) => void) | undefined;
-  const view = renderHook(({ session }: Props) =>
+  const view = renderHook(({ session, newSessionTrigger }: Props) =>
     useChatComposerState({
       selectedProject: PROJECT,
       selectedSession: session,
       currentSessionId: session?.id ?? null,
+      newSessionTrigger,
       provider: 'claude',
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
@@ -53,7 +54,7 @@ const renderComposer = () => {
       setIsUserScrolledUp: () => undefined,
       setPendingPermissionRequests: () => undefined,
     }),
-  { initialProps: { session: null as ProjectSession | null } });
+  { initialProps: { session: null } as Props });
   rerender = view.rerender;
   return { view, sent, added, established };
 };
@@ -120,4 +121,18 @@ test('a new chat the user stayed in is still selected and shows the message', as
 
   assert.deepEqual(composer.established.map(([id, context]) => [id, context.chatLeft]), [['session-new', false]]);
   assert.equal(composer.added.length, 1);
+});
+
+test('a second new chat opened in the same project counts as leaving the first', async () => {
+  const composer = renderComposer();
+  await act(async () => { composer.view.result.current.setInput('first message'); });
+  await act(async () => {
+    void composer.view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  // Same project, so the same draft scope; only the New Session click tells them apart.
+  await act(async () => { composer.view.rerender({ session: null, newSessionTrigger: 1 }); });
+  await answerCreate(jsonResponse({ success: true, data: { sessionId: 'session-new' } }, 201));
+
+  assert.deepEqual(composer.established.map(([id, context]) => [id, context.chatLeft]), [['session-new', true]]);
+  assert.deepEqual(composer.added, []);
 });

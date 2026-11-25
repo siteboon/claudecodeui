@@ -42,6 +42,8 @@ type UseChatComposerStateArgs = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
+  /** Bumped on every New Session click; a new chat in the same project keeps its draft scope. */
+  newSessionTrigger?: number;
   provider: LLMProvider;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
@@ -235,6 +237,7 @@ export function useChatComposerState({
   selectedProject,
   selectedSession,
   currentSessionId,
+  newSessionTrigger,
   provider,
   permissionMode,
   cyclePermissionMode,
@@ -326,6 +329,8 @@ export function useChatComposerState({
   const draftScope = sessionKey ?? (selectedProjectId ? `project:${selectedProjectId}` : null);
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
+  const newSessionTriggerRef = useRef(newSessionTrigger);
+  newSessionTriggerRef.current = newSessionTrigger;
   // Composition is tracked on `window` in the capture phase rather than on the textarea, so a
   // composition that starts in one field and ends after focus moves still closes cleanly.
   const isComposingRef = useRef(false);
@@ -1148,6 +1153,7 @@ export function useChatComposerState({
       // The chat this send belongs to: the upload and session allocation below can outlast a
       // chat switch, and the cleanup at the end must not empty whichever chat is open by then.
       const submittedScope = draftScopeRef.current;
+      const submittedNewSessionTrigger = newSessionTriggerRef.current;
 
       // `/btw <question>` never becomes a turn: checked before the in-flight
       // queue below, since that branch runs before slash-command
@@ -1264,8 +1270,9 @@ export function useChatComposerState({
       let targetSessionId = selectedSession?.id || currentSessionId || null;
       // The user may open another chat while the upload or session creation runs;
       // a brand-new chat moving from its project scope to its session id has not left.
-      const leftChat = () => draftScopeRef.current !== submittedScope
-        && (targetSessionId === null || draftScopeRef.current !== targetSessionId);
+      const leftChat = () => newSessionTriggerRef.current !== submittedNewSessionTrigger
+        || (draftScopeRef.current !== submittedScope
+          && (targetSessionId === null || draftScopeRef.current !== targetSessionId));
 
       let uploadedAttachments = previouslyUploadedAttachments;
       if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {

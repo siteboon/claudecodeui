@@ -296,6 +296,7 @@ function ChatInterface({
     selectedProject,
     selectedSession,
     currentSessionId,
+    newSessionTrigger,
     provider,
     permissionMode,
     cyclePermissionMode,

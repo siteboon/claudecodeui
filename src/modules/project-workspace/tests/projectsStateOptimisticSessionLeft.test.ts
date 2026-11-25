@@ -29,7 +29,7 @@ vi.mock('@/shared/api', () => ({
   },
 }));
 
-test('a session created after the user left its chat is listed but not selected', async () => {
+const renderProjects = async () => {
   const { useProjectsState } = await import('@/modules/project-workspace/hooks/useProjectsState');
   const { result } = renderHook(() => useProjectsState({
     sessionId: undefined,
@@ -40,15 +40,30 @@ test('a session created after the user left its chat is listed but not selected'
   }));
   await waitFor(() => assert.equal(result.current.projects.length, 1));
   act(() => result.current.handleSessionSelect({ ...PROJECT.sessions![0], __projectId: 'project-1' }));
+  return result;
+};
 
-  act(() => result.current.registerOptimisticSession({
+const register = (result: Awaited<ReturnType<typeof renderProjects>>, chatLeft: boolean) => act(() => {
+  result.current.registerOptimisticSession({
     sessionId: 'session-new',
     provider: 'claude',
     project: PROJECT,
     summary: 'first message',
-    chatLeft: true,
-  }));
+    chatLeft,
+  });
+});
+
+test('a session created after the user left its chat is listed but not selected', async () => {
+  const result = await renderProjects();
+  register(result, true);
 
   assert.ok(result.current.projects[0].sessions?.some((session) => session.id === 'session-new'));
   assert.equal(result.current.selectedSession?.id, 'session-other');
+});
+
+test('a session created in the chat the user stayed in is selected', async () => {
+  const result = await renderProjects();
+  register(result, false);
+
+  assert.equal(result.current.selectedSession?.id, 'session-new');
 });

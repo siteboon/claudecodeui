@@ -657,16 +657,13 @@ export function useProjectsState({
       );
     });
 
-    // The user opened another chat meanwhile: list the session, keep theirs selected.
-    if (chatLeft) {
-      return;
-    }
-
-    setSelectedSession((previousSession) => (
-      previousSession?.id === newSessionId
-        ? { ...previousSession, ...optimisticSession }
-        : optimisticSession
-    ));
+    setSelectedSession((previousSession) => {
+      if (previousSession?.id === newSessionId) {
+        return { ...previousSession, ...optimisticSession };
+      }
+      // The user opened another chat meanwhile: list the session, keep theirs selected.
+      return chatLeft ? previousSession : optimisticSession;
+    });
   }, []);
 
   // Hydrates TaskMaster details for the given `projectId`. The project
