@@ -219,7 +219,7 @@ function ChatMessagesPane({
           </div>
         </div>
       )}
-      <div className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4">
+      <div className="mx-auto w-full chat-content-width space-y-3 px-4 sm:space-y-4">
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
           <div className="flex items-center justify-center space-x-2">
@@ -340,6 +340,9 @@ function ChatMessagesPane({
                   lazyRows={lazyRows}
                   timestamp={item.timestamp}
                   initiallyNearViewport={initiallyNearViewport}
+                  // A side question's answer is the bottom half of the aside
+                  // its question row starts, so the list's gap goes.
+                  className={item.sideQuestion && item.type === 'assistant' ? '!mt-0' : undefined}
                 >
                   <MessageComponent
                     message={item}

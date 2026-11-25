@@ -1,6 +1,7 @@
 import express from 'express';
 
 import { browserUseService } from '@/modules/browser-use/browser-use.service.js';
+import { secretsMatch } from '@/shared/utils.js';
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ function readBearerToken(header: unknown): string | null {
 router.use((req, res, next) => {
   const expected = browserUseService.getMcpToken();
   const token = readBearerToken(req.headers.authorization) || String(req.headers['x-browser-use-mcp-token'] || '');
-  if (!token || token !== expected) {
+  if (!token || !secretsMatch(token, expected)) {
     res.status(401).json({ success: false, error: 'Invalid Browser MCP token.' });
     return;
   }
@@ -83,6 +84,12 @@ router.post('/tools/:toolName', async (req, res) => {
           String(input.selector || ''),
           Array.isArray(input.values) ? input.values.filter((value): value is string => typeof value === 'string') : [],
         );
+        break;
+      case 'browser_upload_file':
+        result = await browserUseService.agentUploadFiles(sessionId, {
+          selector: typeof input.selector === 'string' ? input.selector : undefined,
+          paths: Array.isArray(input.paths) ? input.paths.filter((value): value is string => typeof value === 'string') : [],
+        });
         break;
       case 'browser_wait_for':
         result = await browserUseService.agentWaitFor(sessionId, {

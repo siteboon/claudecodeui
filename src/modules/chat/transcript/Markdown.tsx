@@ -1,5 +1,6 @@
 import React, { memo, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import type { Nodes, Root } from 'mdast';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -40,6 +41,24 @@ const lineFromRef = (value: string): number | null => {
 // Strip a trailing `:line` / `:line:col` suffix (e.g. `src/foo.ts:130`).
 const stripLineSuffix = (value: string): string => value.replace(/:\d+(?::\d+)?$/, '');
 
+// Markdown hrefs are URLs, while the editor needs a filesystem path. Decode
+// once at this boundary; repeated decoding would rename literal `%20` files.
+const decodeFileHref = (value: string): string => {
+  // Match one UTF-8 character at a time so a literal percent or an invalid
+  // byte sequence cannot prevent valid escapes elsewhere from decoding.
+  return value.replace(
+    /%(?:[0-7][\da-f]|[cd][\da-f]%[89ab][\da-f]|e[\da-f](?:%[89ab][\da-f]){2}|f[0-4](?:%[89ab][\da-f]){3})/gi,
+    (encodedCharacter) => {
+      try {
+        return decodeURIComponent(encodedCharacter);
+      } catch {
+        // Preserve invalid UTF-8 (including overlong or surrogate encodings).
+        return encodedCharacter;
+      }
+    },
+  );
+};
+
 // A usable file path contains a separator or a filename with an extension.
 const looksLikeFilePath = (value?: string): value is string => {
   if (!value) {
@@ -73,6 +92,23 @@ const childrenToText = (children: React.ReactNode): string => {
 const MATH_DELIMITER = /\$\$/;
 
 const EMPTY_PLUGINS: never[] = [];
+
+// Only parser-recognized, attribute-free HTML breaks inside table cells are safe
+// to promote. Text, escaped tags and code nodes keep react-markdown's defaults.
+const remarkTableBreaks = () => (tree: Root) => {
+  const visit = (node: Nodes, inTableCell = false) => {
+    if (!('children' in node)) return;
+    const insideCell = inTableCell || node.type === 'tableCell';
+    node.children.forEach((child, index) => {
+      if (insideCell && child.type === 'html' && /^<br\s*\/?>$/i.test(child.value)) {
+        node.children[index] = { type: 'break' };
+      } else {
+        visit(child, insideCell);
+      }
+    });
+  };
+  visit(tree);
+};
 
 type CodeBlockProps = {
   node?: any;
@@ -205,6 +241,12 @@ if (!document.getElementById(SYNTAX_THEME_STYLE_ELEMENT_ID)) {
   document.head.appendChild(styleElement);
 }
 
+type MarkdownTableCellProps = {
+  children?: React.ReactNode;
+  align?: 'left' | 'center' | 'right';
+  style?: React.CSSProperties;
+};
+
 const markdownComponents = {
   code: CodeBlock,
   // Workspace image paths are fetched through the authenticated files route;
@@ -236,20 +278,20 @@ const markdownComponents = {
   ),
   li: ({ children }: { children?: React.ReactNode }) => <li className="[&>div:last-child]:mb-0 [&>div]:mb-1">{children}</li>,
   table: ({ children }: { children?: React.ReactNode }) => (
-    <div className="my-3 overflow-x-auto rounded-lg border border-border">
-      {/* my-0 cancels Tailwind Typography's table margin, which would show as blank bands inside the border */}
-      <table className="my-0 min-w-full border-collapse text-sm">{children}</table>
+    <div className="my-3 min-w-0 max-w-full overflow-x-auto rounded-lg border border-border">
+      {/* Keep content-based column sizing; readable cell minimums overflow only this wrapper. */}
+      <table className="my-0 w-full table-auto border-collapse text-sm [&_code]:[overflow-wrap:anywhere]">{children}</table>
     </div>
   ),
   thead: ({ children }: { children?: React.ReactNode }) => <thead className="bg-muted/60">{children}</thead>,
   tr: ({ children }: { children?: React.ReactNode }) => (
     <tr className="[&:last-child>td]:border-b-0">{children}</tr>
   ),
-  th: ({ children }: { children?: React.ReactNode }) => (
-    <th className="border-b border-border px-3 py-2 text-left font-semibold text-foreground">{children}</th>
+  th: ({ children, align, style }: MarkdownTableCellProps) => (
+    <th style={{ ...style, textAlign: align || style?.textAlign }} className="min-w-32 border-b border-border px-3 py-2 text-left font-semibold text-foreground [overflow-wrap:anywhere]">{children}</th>
   ),
-  td: ({ children }: { children?: React.ReactNode }) => (
-    <td className="border-b border-border/60 px-3 py-2 align-top">{children}</td>
+  td: ({ children, align, style }: MarkdownTableCellProps) => (
+    <td style={{ ...style, textAlign: align || style?.textAlign }} className="min-w-32 border-b border-border/60 px-3 py-2 align-top [overflow-wrap:anywhere]">{children}</td>
   ),
 };
 
@@ -271,7 +313,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
   const hasMath = useMemo(() => MATH_DELIMITER.test(content), [content]);
   const remarkPlugins = useMemo(
     () => {
-      const plugins: unknown[] = [remarkGfm];
+      const plugins: unknown[] = [remarkGfm, remarkTableBreaks];
       if (hasMath) {
         plugins.push([remarkMath, { singleDollarTextMath: false }]);
       }
@@ -292,7 +334,10 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
         // Prefer the href when it is a real path; otherwise fall back to the
         // link text, since models often emit `[src/foo.ts]()` with an empty href.
         const linkText = childrenToText(linkChildren);
-        const fileRef = looksLikeFilePath(href) ? href : looksLikeFilePath(linkText) ? linkText : undefined;
+        // Classify a decoded copy, retaining the original for line metadata.
+        const fileRef = looksLikeFilePath(href && decodeFileHref(href))
+          ? href
+          : looksLikeFilePath(linkText) ? linkText : undefined;
 
         if (fileRef && !isExternalHref(href)) {
           return (
@@ -306,11 +351,16 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
                 // trailing space (``[`src/foo.ts:12` ]()``), and that space
                 // defeats the `$`-anchored suffix strip.
                 const reference = fileRef.trim();
-                if (reference.endsWith('/')) {
-                  openDirectory(reference);
+                // Strip line metadata before decoding so an encoded colon in
+                // a filename is not mistaken for a line suffix. Link text is
+                // already literal text and must not be URL-decoded.
+                const path = stripLineSuffix(reference);
+                const filePath = href === fileRef ? decodeFileHref(path) : path;
+                if (filePath.endsWith('/')) {
+                  openDirectory(filePath);
                   return;
                 }
-                openFileInEditor(stripLineSuffix(reference), lineFromRef(reference));
+                openFileInEditor(filePath, lineFromRef(reference));
               }}
             >
               {linkChildren}

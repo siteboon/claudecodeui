@@ -12,6 +12,7 @@ import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSes
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
 import SidebarModals from '@/modules/sidebar/SidebarModals';
+import { SessionPinsProvider } from '@/modules/sidebar/SessionPinsProvider';
 
 type SidebarProps = {
   projects: Project[];
@@ -124,6 +125,7 @@ function Sidebar({
     cancelRename,
     saveProjectName,
     showDeleteSessionConfirmation,
+    archiveSession,
     confirmDeleteSession,
     sessionSelection,
     setProjectSessionSelection,
@@ -222,6 +224,7 @@ function Sidebar({
     onSaveProjectName: handleSaveProjectName,
     onDeleteProject: requestProjectDelete,
     onSessionSelect: handleSessionClick,
+    onArchiveSession: archiveSession,
     onDeleteSession: showDeleteSessionConfirmation,
     onForkSession: forkSession,
     onLoadMoreSessions: loadMoreSessionsForProject,
@@ -238,7 +241,7 @@ function Sidebar({
   };
 
   return (
-    <>
+    <SessionPinsProvider projects={projects}>
         <SidebarModals
           projects={projects}
         showSettings={showSettings}
@@ -305,11 +308,7 @@ function Sidebar({
             onArchivedSessionClick={openArchivedSession}
             onRestoreArchivedSession={restoreArchivedSession}
             onDeleteArchivedSession={(session) => {
-              showDeleteSessionConfirmation(
-                session.sessionId,
-                session.sessionTitle,
-                { isArchived: true },
-              );
+              showDeleteSessionConfirmation(session.sessionId, session.sessionTitle);
             }}
             onConversationResultClick={(projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
               // `projectId` (DB key) is the canonical identifier post-migration.
@@ -357,7 +356,7 @@ function Sidebar({
         </>
       )}
 
-    </>
+    </SessionPinsProvider>
   );
 }
 

@@ -1,4 +1,5 @@
 import { Loader2, MessageSquare } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import type { MouseEvent } from 'react';
 import type { TFunction } from 'i18next';
 
@@ -7,8 +8,12 @@ import { cn } from '@/shared/utils';
 import type { ProjectSession, RecentConversationListItem, SessionRowActions } from '@/shared/types';
 import { formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
+import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
 
 type SidebarRecentConversationsProps = {
+  listKind?: 'recent' | 'pinned';
+  /** Only remove pinned duplicates while SidebarContent is actually showing the pinned section. */
+  excludePinned?: boolean;
   conversations: RecentConversationListItem[];
   total: number;
   hasMore: boolean;
@@ -50,6 +55,8 @@ function RecentConversationSkeleton() {
 
 /** Rendered by SidebarContent in the recents search mode to list recently active sessions across all projects. */
 export default function SidebarRecentConversations({
+  listKind = 'recent',
+  excludePinned = false,
   conversations,
   total,
   hasMore,
@@ -64,6 +71,61 @@ export default function SidebarRecentConversations({
   onRetry,
   t,
 }: SidebarRecentConversationsProps) {
+  // The row after the last conversation: once it scrolls into view, the next
+  // page loads, so older conversations arrive without clicking the button.
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+  // Latest onLoadMore, so a new callback identity does not rebuild the observer.
+  const onLoadMoreRef = useRef(onLoadMore);
+  // The list length when a page was last requested by scrolling. A page that
+  // added nothing (e.g. all duplicates) leaves it unchanged, which stops the
+  // automatic loading instead of requesting the same page in a loop.
+  const autoLoadedAtLengthRef = useRef<number | null>(null);
+  // A full reload replaces the list, so a page requested during it would be
+  // dropped; the observer comes back once the reload finishes.
+  const canAutoLoadMore = hasMore && !isLoading && !isLoadingMore && !hasError;
+  const conversationCount = conversations.length;
+
+  useEffect(() => {
+    onLoadMoreRef.current = onLoadMore;
+  }, [onLoadMore]);
+
+  // A full reload starts a new list, which may again have the stopped length.
+  useEffect(() => {
+    if (isLoading) {
+      autoLoadedAtLengthRef.current = null;
+    }
+  }, [isLoading]);
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (
+      !canAutoLoadMore
+      || !sentinel
+      || autoLoadedAtLengthRef.current === conversationCount
+      || typeof IntersectionObserver === 'undefined'
+    ) {
+      return undefined;
+    }
+
+    // Re-created after each page (the loading flag and length change), so a
+    // sentinel that is still visible after a short page loads the next one.
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) {
+        return;
+      }
+      observer.disconnect();
+      autoLoadedAtLengthRef.current = conversationCount;
+      onLoadMoreRef.current();
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [canAutoLoadMore, conversationCount]);
+
+  const pins = useSessionPins();
+  const isPinnedList = listKind === 'pinned';
+  const visibleConversations = isPinnedList || !pins || !excludePinned
+    ? conversations
+    : conversations.filter((conversation) => !pins.pinnedIds.has(conversation.sessionId));
   if (isLoading && conversations.length === 0) {
     return <RecentConversationSkeleton />;
   }
@@ -82,6 +144,10 @@ export default function SidebarRecentConversations({
     );
   }
 
+  if (!isPinnedList && excludePinned && pins && pins.sessions.length > 0 && visibleConversations.length === 0 && !hasMore) {
+    return null;
+  }
+
   if (conversations.length === 0) {
     return (
       <div className="px-4 py-10 text-center">
@@ -97,16 +163,20 @@ export default function SidebarRecentConversations({
   }
 
   return (
-    <div className="px-1" data-testid="recent-conversations-list">
-      <div className="flex items-center justify-between px-2 pb-1.5 pt-0.5">
-        <span className="text-[11px] font-medium text-muted-foreground">
-          {t('recent.title', 'Recent conversations')}
-        </span>
-        <span className="text-[10px] tabular-nums text-muted-foreground/70">{total}</span>
-      </div>
+    <div className="px-1" data-testid={isPinnedList ? 'pinned-conversations-list' : 'recent-conversations-list'}>
+      {!isPinnedList && (
+        <div className="flex items-center justify-between px-2 pb-1.5 pt-0.5">
+          <span className="text-[11px] font-medium text-muted-foreground">
+            {t('recent.title', 'Recent conversations')}
+          </span>
+          <span className="text-[10px] tabular-nums text-muted-foreground/70">
+            {!excludePinned ? total : Math.max(0, total - (pins?.sessions.length ?? 0))}
+          </span>
+        </div>
+      )}
 
       <div className="space-y-0.5">
-        {conversations.map((conversation) => {
+        {visibleConversations.map((conversation) => {
           const isSelected = String(selectedSession?.id ?? '') === conversation.sessionId;
           const age = formatCompactAge(conversation.lastActivity, currentTime);
           const hasBackgroundWork = sessionActions.backgroundSessionIds.has(conversation.sessionId);
@@ -157,7 +227,8 @@ export default function SidebarRecentConversations({
                 onClick={handleClick}
                 data-testid="recent-conversation-row"
                 className={cn(
-                  'flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 pr-11 text-left transition-colors',
+                  'flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors',
+                  pins ? 'pr-[4.5rem]' : 'pr-11',
                   isSelected
                     ? 'bg-primary/10 text-foreground'
                     : 'text-foreground hover:bg-accent/60',
@@ -209,7 +280,7 @@ export default function SidebarRecentConversations({
               </a>
 
               <SessionOptions
-                className="absolute right-2 top-1/2 -translate-y-1/2 transform"
+                className="absolute inset-y-0 right-2"
                 sessionId={conversation.sessionId}
                 sessionName={conversation.sessionTitle}
                 provider={conversation.provider}
@@ -221,6 +292,7 @@ export default function SidebarRecentConversations({
                 onStartEditingSession={sessionActions.onStartEditingSession}
                 onCancelEditingSession={sessionActions.onCancelEditingSession}
                 onSaveEditingSession={sessionActions.onSaveEditingSession}
+                onArchiveSession={sessionActions.onArchiveSession}
                 onDeleteSession={sessionActions.onDeleteSession}
                 // The fork path reads only the id, provider and owning project,
                 // which is all a recents row knows about the session.
@@ -240,17 +312,24 @@ export default function SidebarRecentConversations({
       </div>
 
       {hasMore && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mt-1 h-8 w-full text-xs text-muted-foreground"
-          onClick={onLoadMore}
-          disabled={isLoadingMore}
-        >
-          {isLoadingMore
-            ? t('recent.loadingMore', 'Loading more...')
-            : t('recent.loadMore', 'Load older conversations')}
-        </Button>
+        // Kept as a button: a fallback where scrolling cannot trigger the load
+        // (no IntersectionObserver, a failed page) and for keyboard users.
+        <div ref={loadMoreSentinelRef} data-testid="recent-conversations-load-more">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-1 h-8 w-full text-xs text-muted-foreground"
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                {t('recent.loadingMore', 'Loading more...')}
+              </>
+            ) : t('recent.loadMore', 'Load older conversations')}
+          </Button>
+        </div>
       )}
     </div>
   );

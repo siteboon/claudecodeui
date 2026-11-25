@@ -28,6 +28,8 @@ type ProviderTokenUsageServiceDependencies = {
   getClaudeContextWindow: () => string | undefined;
   getReportedClaudeContextWindow: (providerSessionId: string) => number | undefined;
   isProviderSessionSuperseded: (providerSessionId: string, provider: string) => boolean;
+  /** Whether the session has earlier parts its context was cleared off. */
+  hasClearedContext: (sessionId: string) => boolean;
 };
 
 type TokenUsageResult = {
@@ -96,6 +98,7 @@ const defaultDependencies: ProviderTokenUsageServiceDependencies = {
   getReportedClaudeContextWindow: (providerSessionId) => getReportedClaudeContextWindow(providerSessionId),
   isProviderSessionSuperseded: (providerSessionId, provider) =>
     sessionsDb.isProviderSessionSuperseded(providerSessionId, provider),
+  hasClearedContext: (sessionId) => sessionsDb.getClearedContextSegments(sessionId).length > 0,
 };
 
 /**
@@ -421,10 +424,15 @@ export function createProviderTokenUsageService(
       // stops being true the moment an edit rewinds the conversation off a
       // thread: until the replacement run announces its own id, the fallback
       // would resolve the retired transcript and report the discarded
-      // conversation's usage against an empty one.
+      // conversation's usage against an empty one. A session whose context was
+      // just cleared is in the same place: nothing has run on the new context
+      // yet, so it has used nothing.
       if (
         !session.provider_session_id
-        && dependencies.isProviderSessionSuperseded(sessionId, session.provider)
+        && (
+          dependencies.isProviderSessionSuperseded(sessionId, session.provider)
+          || dependencies.hasClearedContext(sessionId)
+        )
       ) {
         return {
           used: 0,

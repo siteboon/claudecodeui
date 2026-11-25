@@ -245,6 +245,10 @@ CREATE TABLE IF NOT EXISTS session_drafts (
  * on disk untouched — nothing is deleted — but it is no longer the session's,
  * and the indexer would otherwise rediscover it on its next full scan and hand
  * the session back to the version the user edited away from.
+ *
+ * Clearing a session's context leaves a provider session behind the same way,
+ * with one difference recorded in \`reason\`: that transcript is still part of
+ * the conversation the user sees, only no longer part of what the model reads.
  */
 export const SUPERSEDED_PROVIDER_SESSIONS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
@@ -255,9 +259,24 @@ CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
     -- stops pointing at it, and "delete this conversation from disk" has to
     -- reach every file the conversation ever lived in.
     jsonl_path TEXT,
+    -- Why the session left it. 'edit' transcripts are a discarded version of
+    -- the conversation and are never shown again; 'context_cleared' ones are
+    -- earlier parts of the same conversation, still read back as its history.
+    reason TEXT NOT NULL DEFAULT 'edit',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (provider_session_id, provider)
 );
+`;
+
+/** Database initialization and migrations create the per-user session bookmarks. */
+export const SESSION_PINS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS session_pins (
+    pin_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    UNIQUE(user_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_session_pins_user_order ON session_pins(user_id, pin_id DESC);
 `;
 
 export const INIT_SCHEMA_SQL = `

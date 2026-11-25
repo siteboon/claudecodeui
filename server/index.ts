@@ -126,18 +126,29 @@ createWebSocketServer(server, {
 });
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
-app.use(express.json({
-    limit: '50mb',
-    type: (req) => {
-        // Skip multipart/form-data requests (for file uploads like images)
-        const contentType = req.headers['content-type'] || '';
-        if (contentType.includes('multipart/form-data')) {
-            return false;
-        }
-        return contentType.includes('json');
-    }
-}));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+function createBodyParsers(limit: string) {
+    return [
+        express.json({
+            limit,
+            type: (req) => {
+                // Skip multipart/form-data requests (for file uploads like images)
+                const contentType = req.headers['content-type'] || '';
+                if (contentType.includes('multipart/form-data')) {
+                    return false;
+                }
+                return contentType.includes('json');
+            }
+        }),
+        express.urlencoded({ limit, extended: true }),
+    ];
+}
+
+// Bodies are parsed only after a route's auth check, so an unauthenticated
+// client cannot make the server buffer and parse a 50 MB payload. Routes that
+// check credentials themselves get a small cap instead.
+const parseAuthenticatedBody = createBodyParsers('50mb');
+const parsePublicBody = createBodyParsers('1mb');
 
 // Public health check endpoint (no authentication required)
 app.get('/health', (req, res) => {
@@ -153,56 +164,56 @@ app.get('/health', (req, res) => {
 app.use('/api', validateApiKey);
 
 // Authentication routes (public)
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', parsePublicBody, authRoutes);
 
 // File Tree API Routes (protected)
-app.use('/api/file-tree', authenticateToken, fileTreeRoutes);
+app.use('/api/file-tree', authenticateToken, parseAuthenticatedBody, fileTreeRoutes);
 
 // Projects API Routes (protected)
-app.use('/api/projects', authenticateToken, projectModuleRoutes);
+app.use('/api/projects', authenticateToken, parseAuthenticatedBody, projectModuleRoutes);
 
 // Chat attachment upload/serving (global ~/.cloudcli/assets store, protected)
-app.use('/api/assets', authenticateToken, assetsRoutes);
+app.use('/api/assets', authenticateToken, parseAuthenticatedBody, assetsRoutes);
 
 // Git API Routes (protected)
-app.use('/api/git', authenticateToken, gitRoutes);
+app.use('/api/git', authenticateToken, parseAuthenticatedBody, gitRoutes);
 
 // Git worktree management (protected)
-app.use('/api/worktrees', authenticateToken, worktreesRoutes);
+app.use('/api/worktrees', authenticateToken, parseAuthenticatedBody, worktreesRoutes);
 
 // TaskMaster API Routes (protected)
-app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
+app.use('/api/taskmaster', authenticateToken, parseAuthenticatedBody, taskmasterRoutes);
 
 // Commands API Routes (protected)
-app.use('/api/commands', authenticateToken, commandsRoutes);
+app.use('/api/commands', authenticateToken, parseAuthenticatedBody, commandsRoutes);
 
 // Settings API Routes (protected)
-app.use('/api/settings', authenticateToken, settingsRoutes);
+app.use('/api/settings', authenticateToken, parseAuthenticatedBody, settingsRoutes);
 
-app.use('/api/system', authenticateToken, systemRoutes);
+app.use('/api/system', authenticateToken, parseAuthenticatedBody, systemRoutes);
 
-app.use('/api/notifications', authenticateToken, notificationRoutes);
+app.use('/api/notifications', authenticateToken, parseAuthenticatedBody, notificationRoutes);
 
 // User API Routes (protected)
-app.use('/api/user', authenticateToken, userRoutes);
+app.use('/api/user', authenticateToken, parseAuthenticatedBody, userRoutes);
 
 // Plugins API Routes (protected)
-app.use('/api/plugins', authenticateToken, pluginsRoutes);
+app.use('/api/plugins', authenticateToken, parseAuthenticatedBody, pluginsRoutes);
 
 // Browser MCP bridge API (local token protected)
-app.use('/api/browser-use-mcp', browserUseMcpRoutes);
+app.use('/api/browser-use-mcp', parsePublicBody, browserUseMcpRoutes);
 
 // Browser API Routes (protected)
-app.use('/api/browser-use', authenticateToken, browserUseRoutes);
+app.use('/api/browser-use', authenticateToken, parseAuthenticatedBody, browserUseRoutes);
 
 // Unified provider MCP routes (protected)
-app.use('/api/providers', authenticateToken, providerRoutes);
-app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
+app.use('/api/providers', authenticateToken, parseAuthenticatedBody, providerRoutes);
+app.use('/api/scheduled-messages', authenticateToken, parseAuthenticatedBody, scheduledMessagesRoutes);
 
 // Agent API Routes (uses API key authentication)
-app.use('/api/agent', agentRoutes);
+app.use('/api/agent', parsePublicBody, agentRoutes);
 
-app.use('/api/voice', authenticateToken, voiceRoutes);
+app.use('/api/voice', authenticateToken, parseAuthenticatedBody, voiceRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));
@@ -264,6 +275,22 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
         code: err.code,
         message: err.message,
         details: err.details,
+      },
+    });
+  }
+
+  // body-parser rejects oversized or malformed bodies with a client-safe http-error.
+  if (
+    typeof err === 'object' && err !== null
+    && 'expose' in err && err.expose === true
+    && 'status' in err && typeof err.status === 'number' && err.status >= 400 && err.status < 500
+    && 'type' in err && typeof err.type === 'string'
+  ) {
+    return res.status(err.status).json({
+      success: false,
+      error: {
+        code: err.type === 'entity.too.large' ? 'PAYLOAD_TOO_LARGE' : 'INVALID_REQUEST_BODY',
+        message: err.type === 'entity.too.large' ? 'Request body is too large' : 'Request body could not be parsed',
       },
     });
   }

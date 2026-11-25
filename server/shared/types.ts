@@ -170,9 +170,12 @@ export type CustomProviderModelInput = {
  * `model` must always be populated. Provider adapters should use the
  * provider-specific lookup method requested by the caller, and only fall back
  * to the provider catalog `DEFAULT` value when the active model cannot be read.
+ * `isFallback` marks that case, so a session really running on the catalog
+ * default can be told apart from a lookup that found nothing.
  */
 export type ProviderCurrentActiveModel = {
   model: string;
+  isFallback?: boolean;
 };
 
 /**
@@ -244,6 +247,7 @@ export type GatewayEventKind =
   | 'session_upserted'
   | 'loading_progress'
   | 'protocol_error'
+  | 'side_question'
   | 'scheduled_messages_changed';
 
 /**
@@ -254,6 +258,129 @@ export type GatewayEventKind =
  * `GatewayEventKind` values.
  */
 export type ServerEventKind = MessageKind | GatewayEventKind;
+
+// ---------------------------
+//----------------- SIDE QUESTION TYPES ------------
+/**
+ * Status of a side question being answered on the side in parallel.
+ */
+export type SideQuestionStatus = 'running' | 'done' | 'error';
+
+/**
+ * A question asked while a session runs, with its answer accumulated as it streams.
+ *
+ * Side questions run independently on the provider's runtime and are never
+ * part of the main conversation history. The client can inspect their state
+ * in real time and dismiss them if needed.
+ */
+export type SideQuestion = {
+  id: string;
+  sessionId: string;        // app session id
+  question: string;
+  answer: string;           // '' until text arrives; partial while running
+  status: SideQuestionStatus;
+  error: string | null;
+  model: string | null;
+  createdAt: string;        // ISO
+  finishedAt: string | null;
+};
+
+/**
+ * Real-time event for side question state changes, broadcast to all chat clients.
+ *
+ * `started` and `done` include the whole row; `delta` carries incremental text;
+ * `error` marks failure and may carry the existing row on a duplicate id or null
+ * on other refusals. `dismissed` is sent when a side question is dismissed,
+ * running or not, so every tab drops the id instead of leaving it pending
+ * until a full reload. Every event is broadcast to every connected chat client
+ * so side-by-side tabs stay in sync.
+ */
+export type SideQuestionEvent = {
+  kind: 'side_question';
+  sessionId: string;            // app session id
+  sideQuestionId: string;
+  phase: 'started' | 'delta' | 'done' | 'error' | 'dismissed';
+  text?: string;                // delta only: the next piece of the answer
+  error?: string;               // error only
+  sideQuestion?: SideQuestion;  // started, done, and error when a row exists: the whole row
+  timestamp: string;            // ISO, when the server sent it
+};
+
+/**
+ * Request payload for asking a side question on the provider runtime.
+ *
+ * `appSessionId` is the user-facing session being asked about; `providerSessionId`
+ * is the provider's own native session id needed for context (or null). `projectPath`
+ * is the working directory for read-only tools. `model` is what the client asked for.
+ */
+export type SideQuestionRequest = {
+  appSessionId: string;
+  providerSessionId: string | null;
+  projectPath: string | null;
+  question: string;
+  model: string | null;     // what the client asked for
+  signal: AbortSignal;
+};
+
+/**
+ * Output callback for receiving streamed text of a side question answer.
+ *
+ * Implementations call `delta(text)` each time a piece of the answer arrives.
+ */
+export type SideQuestionSink = { delta(text: string): void };
+
+/**
+ * Result of asking a side question on the provider runtime.
+ *
+ * `status: 'done'` carries the complete final answer; `status: 'error'` carries
+ * what text was delivered before failure plus the error message.
+ */
+export type SideQuestionOutcome =
+  | { status: 'done'; answer: string }
+  | { status: 'error'; error: string; answer: string };
+
+/**
+ * Side-question capability of a provider runtime.
+ *
+ * The service layer calls this method on the runtime to ask a question on the
+ * side while a session is active, using whatever path the provider's own
+ * runtime implements. It never rejects: all failures are returned as error
+ * outcomes.
+ */
+export type SideQuestionRuntime = {
+  askSideQuestion(provider: LLMProvider, request: SideQuestionRequest, sink: SideQuestionSink): Promise<SideQuestionOutcome>;
+};
+
+/**
+ * The one place a side question's mutable state lives.
+ *
+ * It holds `SideQuestion` objects directly, so the service, the history
+ * route and the websocket handler all read and write the same object and no
+ * row-to-wire mapping is needed. Side questions are deliberately in memory
+ * only: a CloudCLI restart is a clean slate, and `createdAt`/`finishedAt` are
+ * ISO strings, not database timestamps. Used by
+ * `server/modules/providers/services/side-questions.store.ts` (the only
+ * implementation) and `side-questions.service.ts` (the only consumer).
+ */
+export type InMemorySideQuestionsStore = {
+  /** Inserts a fresh question as `running` and returns it. */
+  create(input: {
+    id: string;
+    sessionId: string;
+    question: string;
+    model: string | null;
+  }): SideQuestion;
+  /** The whole question, whatever its status, or null once deleted. */
+  getById(id: string): SideQuestion | null;
+  /** Appends streamed text to the answer; a no-op once deleted. */
+  appendAnswer(id: string, text: string): void;
+  /** Settles a running question; a no-op once deleted. */
+  finish(id: string, outcome: SideQuestionOutcome): void;
+  /** The session's questions, oldest first. */
+  listForSession(sessionId: string): SideQuestion[];
+  /** Deletes one question of one session. Reports whether anything went. */
+  delete(sessionId: string, id: string): boolean;
+};
 
 /** The owning project as it appears inside a `session_upserted` delta. */
 export type SessionUpsertedProject = {
@@ -286,9 +413,65 @@ export type SessionUpsertedEvent = {
     summary: string;
     messageCount: number;
     lastActivity: string;
+    /** App-facing parent id; null for a session without a recorded fork source. */
+    forkedFromSessionId?: string | null;
+    /** Active ancestors outside the current page, for the Projects tree only. */
+    forkAncestors?: SessionForkAncestor[];
   };
   project: SessionUpsertedProject | null;
   timestamp: string;
+};
+
+/**
+ * Minimal ancestor context for the Projects sidebar, shared by the database,
+ * projects and WebSocket modules. IDs are canonical app IDs. Only active
+ * ancestors in the same project and provider are included. These rows do not
+ * belong to the paginated session slice and must not advance its offset.
+ */
+export type SessionForkAncestor = {
+  id: string;
+  provider: LLMProvider;
+  summary: string;
+  lastActivity: string;
+  forkedFromSessionId: string | null;
+};
+
+//----------------- SESSION PINS ------------
+
+/**
+ * A visible pinned session joined to its owning project by the Database module.
+ * Providers converts it to a sidebar summary without reading transcripts or
+ * depending on project pagination. IDs are stable app IDs. The database returns
+ * these records in newest-pin-first order, independently of session activity.
+ * Nullable project fields support sessions whose project was removed.
+ */
+export type SessionPinRecord = {
+  session_id: string;
+  /** Canonical app parent id, used with bounded active ancestry in pin summaries. */
+  forked_from_session_id: string | null;
+  provider: LLMProvider;
+  project_id: string | null;
+  project_path: string | null;
+  custom_project_name: string | null;
+  custom_name: string | null;
+  last_activity: string | null;
+};
+
+// ---------------------------
+
+/**
+ * One earlier part of a conversation whose context was cleared, shared by the
+ * database module (which records it) and the providers module (which reads it
+ * back as history). `providerSessionId` and `jsonlPath` address the provider
+ * transcript the session ran on before the clear; `jsonlPath` is null when the
+ * provider keeps no per-session file. `clearedAt` is an ISO timestamp and is
+ * where the "context cleared" marker sits in the stitched history. Segments
+ * are read-only: nothing resumes, edits or forks from them.
+ */
+export type ClearedContextSegment = {
+  providerSessionId: string;
+  jsonlPath: string | null;
+  clearedAt: string;
 };
 
 /**
@@ -363,6 +546,12 @@ export type NormalizedMessage = {
   isCompactSummary?: boolean;
   /** Set on the row that stands in for a compaction, so the UI can draw it as one. */
   compact?: CompactionInfo;
+  /**
+   * Set on the row marking where the session's context was cleared: the model
+   * remembers nothing above it. Synthesized by the sessions service between
+   * two parts of a conversation, never read from a provider transcript.
+   */
+  contextCleared?: boolean;
   images?: unknown;
   /** Non-image files attached to a user turn after provider history normalization. */
   files?: unknown;
@@ -651,8 +840,13 @@ export type ProviderRuntimeContext = {
    * runtime uses the SDK's own; tests supply a scripted stream so the hold
    * and background-work paths can be driven without a CLI process.
    */
+  // `interrupt()`'s return type is `unknown` rather than the SDK's own
+  // `SDKControlInterruptResponse | undefined` (@anthropic-ai/claude-agent-sdk
+  // 0.3.311): no caller here reads the resolved value, and widening it keeps
+  // this structural type assignable from both the real `query()` (whose
+  // return type is the SDK's own `Query`) and a test's scripted stand-in.
   createQuery?: (input: { prompt: AsyncIterable<unknown>; options: AnyRecord }) => AsyncIterable<unknown> & {
-    interrupt(): Promise<void>;
+    interrupt(): Promise<unknown>;
     stopTask?(taskId: string): Promise<void>;
   };
 };
@@ -674,12 +868,18 @@ export type ProviderRunFunction = (
  * must use it — never the app-facing session id they were called with — when
  * matching transcript rows on disk, because app-created sessions use an
  * app-allocated id that the provider has never seen.
+ *
+ * `transcriptPath` reads that transcript file instead of the one the session
+ * row points at. It is how an earlier part of a conversation — one its context
+ * was cleared off — is read back, and must be paired with that part's own
+ * `providerSessionId`. Only readers that parse a per-session file honour it.
  */
 export type FetchHistoryOptions = {
   projectPath?: string;
   limit?: number | null;
   offset?: number;
   providerSessionId?: string;
+  transcriptPath?: string;
 };
 
 /**

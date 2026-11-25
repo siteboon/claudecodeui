@@ -20,6 +20,7 @@ type SidebarProjectItemProps = {
   /** Resolved for this row: only the project being renamed re-renders on a keystroke. */
   isEditing: boolean;
   renameDraft: string;
+  includeOffPagePins?: boolean;
   sessions: SessionWithProvider[];
   initialSessionsLoaded: boolean;
   isLoadingMoreSessions: boolean;
@@ -38,6 +39,7 @@ type SidebarProjectItemProps = {
   onSaveProjectName: (projectId: string, nextName: string) => void;
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
+  onArchiveSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   onForkSession?: (session: SessionWithProvider) => void;
   onLoadMoreSessions: (projectId: string) => void;
@@ -72,6 +74,7 @@ function SidebarProjectItem({
   isStarred,
   isEditing,
   renameDraft,
+  includeOffPagePins = true,
   sessions,
   initialSessionsLoaded,
   isLoadingMoreSessions,
@@ -89,6 +92,7 @@ function SidebarProjectItem({
   onSaveProjectName,
   onDeleteProject,
   onSessionSelect,
+  onArchiveSession,
   onDeleteSession,
   onForkSession,
   onLoadMoreSessions,
@@ -442,6 +446,7 @@ function SidebarProjectItem({
       <SidebarProjectSessions
         project={project}
         isExpanded={isExpanded}
+        includeOffPagePins={includeOffPagePins}
         sessions={sessions}
         selectedSession={selectedSession}
         initialSessionsLoaded={initialSessionsLoaded}
@@ -459,6 +464,7 @@ function SidebarProjectItem({
         onSaveEditingSession={onSaveEditingSession}
         onProjectSelect={onProjectSelect}
         onSessionSelect={onSessionSelect}
+        onArchiveSession={onArchiveSession}
         onDeleteSession={onDeleteSession}
         onForkSession={onForkSession}
         onLoadMoreSessions={onLoadMoreSessions}

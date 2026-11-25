@@ -9,6 +9,7 @@ import { providerModelsService } from '@/modules/providers/services/provider-mod
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
+import { sideQuestionsService } from '@/modules/providers/services/side-questions.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
 import type {
   CustomProviderModelEffort,
@@ -19,10 +20,18 @@ import type {
   ProviderSkillCreateFile,
   ProviderSkillCreateInput,
   UpsertProviderMcpServerInput,
-} from '@/shared/types.js';
-import { AppError, asyncHandler, createApiSuccessResponse } from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from '@/shared/index.js';
 
 const router = express.Router();
+
+function readPinUserId(req: Request): number {
+  const userId = Number((req as Request & { user?: { id?: unknown } }).user?.id);
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    throw new AppError('Authentication is required.', { code: 'UNAUTHORIZED', statusCode: 401 });
+  }
+  return userId;
+}
 
 const readPathParam = (value: unknown, name: string): string => {
   if (typeof value === 'string') {
@@ -54,6 +63,18 @@ const parseSessionId = (value: unknown): string => {
   }
 
   return sessionId;
+};
+
+const parseSideQuestionId = (value: unknown): string => {
+  const sideQuestionId = readPathParam(value, 'sideQuestionId').trim();
+  if (!SIDE_QUESTION_ID_PATTERN.test(sideQuestionId)) {
+    throw new AppError('Invalid sideQuestionId.', {
+      code: 'INVALID_SIDE_QUESTION_ID',
+      statusCode: 400,
+    });
+  }
+
+  return sideQuestionId;
 };
 
 /** A workflow run id as the harness mints one (`wf_16fbf852-274`). */
@@ -971,6 +992,27 @@ router.get(
 );
 
 router.get(
+  '/sessions/pinned',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse({ sessions: sessionsService.listPinnedSessions(readPinUserId(req)) }));
+  }),
+);
+
+router.put(
+  '/sessions/:sessionId/pin',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = readPinUserId(req);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const isPinned: unknown = req.body?.isPinned;
+    if (typeof isPinned !== 'boolean') {
+      throw new AppError('isPinned must be a boolean.', { code: 'INVALID_SESSION_PIN', statusCode: 400 });
+    }
+    const sessions = sessionsService.setSessionPinned(userId, sessionId, isPinned);
+    res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
+router.get(
   '/sessions/:sessionId/provider-id',
   asyncHandler(async (req: Request, res: Response) => {
     const sessionId = parseSessionId(req.params.sessionId);
@@ -985,6 +1027,26 @@ router.get(
     const sessionId = parseSessionId(req.params.sessionId);
     const result = await providerTokenUsageService.getSessionTokenUsage(sessionId);
     res.json(createApiSuccessResponse(result));
+  }),
+);
+
+// Declared before the generic `/sessions/:sessionId` routes below, like every
+// other session-specific route in this file.
+router.delete(
+  '/sessions/:sessionId/side-questions/:sideQuestionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const sideQuestionId = parseSideQuestionId(req.params.sideQuestionId);
+    // `dismiss` broadcasts the `dismissed` event itself, through the same
+    // connected-clients fan-out the `chat.side_question` handler uses.
+    const deleted = sideQuestionsService.dismiss(sessionId, sideQuestionId);
+    if (!deleted) {
+      throw new AppError('Side question not found.', {
+        code: 'SIDE_QUESTION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+    res.json(createApiSuccessResponse({ deleted: true }));
   }),
 );
 
@@ -1022,6 +1084,16 @@ router.post(
   }),
 );
 
+// Starts the session's next message on a fresh context; its history stays.
+router.post(
+  '/sessions/:sessionId/clear-context',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.clearSessionContext(sessionId);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
 router.post(
   '/sessions/:sessionId/fork',
   asyncHandler(async (req: Request, res: Response) => {
@@ -1052,7 +1124,11 @@ router.get(
       limit,
       offset,
     });
-    res.json(createApiSuccessResponse(result));
+    // The session's whole side-question list, on every page: side questions
+    // are not part of the paged transcript, and the client wants to draw
+    // every one of them regardless of which page it is looking at.
+    const sideQuestions = sideQuestionsService.listForSession(sessionId);
+    res.json(createApiSuccessResponse({ ...result, sideQuestions }));
   }),
 );
 
