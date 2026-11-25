@@ -91,6 +91,39 @@ test('global npm installations stage the new version before replacing the runnin
   assert.equal(result.output, 'Update completed successfully');
 });
 
+test('an npm install outside a global node_modules folder keeps the plain global install', async () => {
+  const calls: unknown[][] = [];
+  const service = createSystemUpdateService(createNpmDependencies(calls, {
+    appRoot: '/Applications/CloudCLI.app/Contents/Resources/app',
+    homeDirectory: '/home/user',
+  }));
+
+  const result = await service.updateSystem();
+
+  assert.deepEqual(calls, [['run', 'npm install -g @cloudcli-ai/cloudcli@latest', '/home/user']]);
+  assert.equal(result.success, true);
+});
+
+test('a cleanup that fails after the swap still reports the update as done', async () => {
+  const calls: unknown[][] = [];
+  let swapped = false;
+  const service = createSystemUpdateService(createNpmDependencies(calls, {
+    moveDirectory: async (from, to) => {
+      calls.push(['move', from, to]);
+      if (to === NPM_APP_ROOT) swapped = true;
+    },
+    removeDirectory: async (directory) => {
+      calls.push(['remove', directory]);
+      if (swapped) throw new Error('EACCES');
+    },
+  }));
+
+  const result = await service.updateSystem();
+
+  assert.equal(result.success, true);
+  assert.deepEqual(calls.slice(-2), [['remove', NPM_STAGING_ROOT], ['remove', NPM_PREVIOUS_APP]]);
+});
+
 test('a failed or killed npm install leaves the running installation untouched', async () => {
   const calls: unknown[][] = [];
   const service = createSystemUpdateService(createNpmDependencies(calls, {

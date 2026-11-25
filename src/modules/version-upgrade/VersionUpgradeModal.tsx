@@ -80,11 +80,19 @@ export function VersionUpgradeModal({
             // a slow install cannot run into a proxy timeout; poll until done.
             while (response.status === 202) {
                 await new Promise(resolve => window.setTimeout(resolve, UPDATE_POLL_INTERVAL_MS));
-                response = await api.system.updateStatus();
+                try {
+                    const next = await api.system.updateStatus();
+                    // A proxy answers 502-504 while the server is busy or restarting: ask again.
+                    if (next.status < 502 || next.status > 504) {
+                        response = next;
+                    }
+                } catch {
+                    // A dropped connection says nothing about the update, which keeps running.
+                }
             }
 
-            if (IS_PLATFORM && response.status === 404) {
-                // A restarted platform server no longer knows the update it ran.
+            if (response.status === 404) {
+                // A restarted server no longer knows the update it ran.
                 setUpdateOutput(prev => prev + '\n' + t('versionUpdate.updateStartedRestarting') + '\n');
                 return;
             }

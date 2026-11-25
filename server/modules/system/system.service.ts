@@ -35,6 +35,14 @@ type SystemUpdateDependencies = {
 const NPM_STAGED_INSTALL_COMMAND =
   'npm install --prefix . --install-strategy=shallow --no-save --no-package-lock @cloudcli-ai/cloudcli@latest';
 
+/** Whether `appRoot` is `<prefix>/node_modules/@cloudcli-ai/cloudcli`, the layout `npm install -g` creates. */
+function isGlobalNpmPackage(appRoot: string): boolean {
+  const packageDirectory = path.resolve(appRoot);
+  return path.basename(packageDirectory) === 'cloudcli'
+    && path.basename(path.dirname(packageDirectory)) === '@cloudcli-ai'
+    && path.basename(path.dirname(path.dirname(packageDirectory))) === 'node_modules';
+}
+
 /**
  * Creates the update workflow used by the system module and its focused tests.
  * Runtime-specific process spawning stays behind the injected command adapter.
@@ -95,12 +103,24 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
     try {
       await dependencies.moveDirectory(stagedApp, dependencies.appRoot);
     } catch (error) {
-      await dependencies.moveDirectory(previousApp, dependencies.appRoot);
+      try {
+        await dependencies.moveDirectory(previousApp, dependencies.appRoot);
+      } catch (restoreError) {
+        const detail = restoreError instanceof Error ? restoreError.message : String(restoreError);
+        dependencies.logError(`Could not restore the previous version from ${previousApp}:`, detail);
+      }
       throw error;
     }
 
-    await dependencies.removeDirectory(stagingRoot);
-    await dependencies.removeDirectory(previousApp);
+    // The new version is in place; a leftover directory must not turn that into a failure.
+    for (const directory of [stagingRoot, previousApp]) {
+      try {
+        await dependencies.removeDirectory(directory);
+      } catch (cleanupError) {
+        const detail = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+        dependencies.logError(`Could not remove ${directory} after the update:`, detail);
+      }
+    }
     return result;
   }
 
@@ -108,7 +128,13 @@ export function createSystemUpdateService(dependencies: SystemUpdateDependencies
   async function updateSystem(): Promise<SystemUpdateResult> {
     try {
       if (!dependencies.isPlatform && dependencies.installMode === 'npm') {
-        return await updateNpmInstallation();
+        // Only a global npm package directory can be swapped; anything else
+        // (a desktop app bundle, an unpacked tarball) keeps the plain global install.
+        if (isGlobalNpmPackage(dependencies.appRoot)) {
+          return await updateNpmInstallation();
+        }
+        dependencies.logInfo('Starting system update from directory:', dependencies.homeDirectory);
+        return await runUpdateCommand('npm install -g @cloudcli-ai/cloudcli@latest', dependencies.homeDirectory);
       }
 
       const updateCommand = dependencies.isPlatform
