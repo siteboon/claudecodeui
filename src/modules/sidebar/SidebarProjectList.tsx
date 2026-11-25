@@ -21,8 +21,6 @@ export default function SidebarProjectList({
   currentTime,
 
   deletingProjects,
-  tasksEnabled,
-  mcpServerStatus,
   getProjectSessions,
   onLoadMoreSessions,
   loadingMoreProjects,
@@ -32,7 +30,6 @@ export default function SidebarProjectList({
   isProjectStarred,
   onRenameDraftChange,
   onToggleProject,
-  onProjectSelect,
   onToggleStarProject,
   onStartEditingProject,
   onCancelEditingProject,
@@ -83,7 +80,7 @@ export default function SidebarProjectList({
                   ? activeRename
                   : null;
               const renamingSession =
-                activeRename?.target === 'session' && activeRename.projectId === project.projectId
+                activeRename?.target === 'session' && activeRename.projectId === project.projectId && !activeRename.origin
                   ? activeRename
                   : null;
               // Resolved here for the same reason as the renames: only the
@@ -98,7 +95,6 @@ export default function SidebarProjectList({
               <SidebarProjectItem
                 key={project.projectId}
                 project={project}
-                selectedProject={selectedProject}
                 selectedSession={selectedSession}
                 isExpanded={isProjectExpanded(project.projectId)}
                 isDeleting={deletingProjects.has(project.projectId)}
@@ -112,11 +108,8 @@ export default function SidebarProjectList({
                 currentTime={currentTime}
                 sessionRenameId={renamingSession?.id ?? null}
                 sessionRenameDraft={renamingSession?.draft ?? ''}
-                tasksEnabled={tasksEnabled}
-                mcpServerStatus={mcpServerStatus}
                 onRenameDraftChange={onRenameDraftChange}
                 onToggleProject={onToggleProject}
-                onProjectSelect={onProjectSelect}
                 onToggleStarProject={onToggleStarProject}
                 onStartEditingProject={onStartEditingProject}
                 onCancelEditingProject={onCancelEditingProject}

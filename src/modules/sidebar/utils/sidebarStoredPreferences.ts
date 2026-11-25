@@ -2,7 +2,7 @@ import type { ProjectSortOrder } from '@/shared/types';
 import { readUserPreference } from '@/shared/userSettings';
 
 export const readProjectSortOrder = (): ProjectSortOrder => (
-  readUserPreference<ProjectSortOrder>('projectSortOrder', 'name') === 'date' ? 'date' : 'name'
+  readUserPreference<ProjectSortOrder>('projectSortOrder', 'date') === 'name' ? 'name' : 'date'
 );
 
 const LEGACY_STARRED_PROJECTS_STORAGE_KEY = 'starredProjects';

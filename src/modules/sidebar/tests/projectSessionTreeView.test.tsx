@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import type { TFunction } from 'i18next';
 import { test, vi } from 'vitest';
@@ -9,10 +9,9 @@ import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
 import SidebarRecentConversations from '@/modules/sidebar/SidebarRecentConversations';
 import type { SessionWithProvider } from '@/shared/types';
 
-const compact = vi.hoisted(() => ({ value: false }));
-vi.mock('@/modules/sidebar/hooks/useCompactSidebar', () => ({ useCompactSidebar: () => compact.value }));
 vi.mock('@/shared/hooks/useProviderCapabilities', () => ({ useSessionForkingProviders: () => new Set(['claude', 'codex']) }));
-vi.mock('@/modules/sidebar/SessionOptions', () => ({ default: () => null }));
+const optionsProps = vi.hoisted(() => [] as Record<string, unknown>[]);
+vi.mock('@/modules/sidebar/SessionOptions', () => ({ default: (props: Record<string, unknown>) => { optionsProps.push(props); return null; } }));
 
 const t = ((key: string, options?: { session?: string }) => options?.session ? `${key} ${options.session}` : key) as TFunction;
 const noop = () => {};
@@ -29,15 +28,14 @@ const props = (overrides: Partial<ComponentProps<typeof SidebarProjectSessions>>
   activeSessions: new Set(), backgroundSessionIds: new Set(), attentionSessionIds: new Set(),
   currentTime: new Date('2026-10-18T00:00:00Z'), sessionRenameId: null, sessionRenameDraft: '',
   onRenameDraftChange: noop, onStartEditingSession: noop, onCancelEditingSession: noop,
-  onSaveEditingSession: noop, onProjectSelect: noop, onSessionSelect: noop, onArchiveSession: noop, onDeleteSession: noop,
-  onForkSession: noop, onLoadMoreSessions: noop, onNewSession: noop, selectedSessionIds: null,
+  onSaveEditingSession: noop, onSessionSelect: noop, onArchiveSession: noop, onDeleteSession: noop,
+  onForkSession: noop, onLoadMoreSessions: noop, selectedSessionIds: null,
   onSetSessionSelection: noop, onToggleSessionSelected: noop, onCancelSessionSelection: noop,
   onDeleteSelectedSessions: noop, t, ...overrides,
 });
 const rowIds = (container: HTMLElement) => Array.from(container.querySelectorAll('[data-session-id]')).map((row) => row.getAttribute('data-session-id'));
 
-test.each([false, true])('Projects nests forks and preserves row actions in compact=%s', (isCompact) => {
-  compact.value = isCompact;
+test('Projects nests forks and preserves row actions', () => {
   const select = vi.fn();
   const { container } = render(<SidebarProjectSessions {...props({ onSessionSelect: select })} />);
   assert.deepEqual(rowIds(container), ['root', 'child', 'leaf', 'unrelated']);
@@ -59,29 +57,17 @@ test.each([false, true])('Projects nests forks and preserves row actions in comp
   assert.deepEqual(rowIds(container), ['root', 'child', 'leaf', 'unrelated']);
 });
 
-test.each([root, leaf])('the mobile fork tree archives $id without selecting or deleting it', async (session) => {
-  compact.value = true;
-  const onArchiveSession = vi.fn();
-  const onDeleteSession = vi.fn();
-  const onSessionSelect = vi.fn();
-  render(<SidebarProjectSessions {...props({
-    sessions: [{ ...leaf, forkAncestors: [child, root] }],
-    onArchiveSession, onDeleteSession, onSessionSelect,
-  })} />);
+test.each([root, leaf])('the fork tree gives $id, loaded or an off-page ancestor, options for itself', (session) => {
+  optionsProps.length = 0;
+  render(<SidebarProjectSessions {...props({ sessions: [{ ...leaf, forkAncestors: [child, root] }] })} />);
 
-  await act(async () => {
-    fireEvent.click(screen.getByRole('button', { name: `Session options for ${session.summary}` }));
-  });
-  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archive session' }));
-
-  assert.deepEqual(onArchiveSession.mock.calls, [[session.id]]);
-  assert.equal(onDeleteSession.mock.calls.length, 0);
-  assert.equal(onSessionSelect.mock.calls.length, 0);
-  assert.equal(screen.queryByRole('dialog'), null);
+  const options = optionsProps.filter((entry) => entry.sessionId === session.id);
+  assert.ok(options.length > 0);
+  assert.equal(options.at(-1)?.sessionName, session.summary);
+  assert.equal(options.at(-1)?.projectId, 'project');
 });
 
-test.each([false, true])('fork connectors identify siblings and terminate the family in compact=%s', (isCompact) => {
-  compact.value = isCompact;
+test('fork connectors identify siblings and terminate the family', () => {
   const second = { ...child, id: 'second', summary: 'Second fork', forkedFromSessionId: 'root' };
   const last = { ...second, id: 'last', summary: 'Last fork' };
   const initial = props({ sessions: [leaf, second, last, child, root, unrelated] });
@@ -112,7 +98,6 @@ test.each([false, true])('fork connectors identify siblings and terminate the fa
 });
 
 test('selecting or renaming a hidden descendant opens its complete ancestry', () => {
-  compact.value = false;
   const initial = props();
   const { container, rerender } = render(<SidebarProjectSessions {...initial} />);
   fireEvent.click(screen.getByRole('button', { name: 'sessions.collapseForks Alternative' }));
@@ -125,7 +110,6 @@ test('selecting or renaming a hidden descendant opens its complete ancestry', ()
 });
 
 test('an off-page source is shown once, and a newly selected fork opens its collapsed source', () => {
-  compact.value = false;
   const initial = props({ sessions: [child, root] });
   const { container, rerender } = render(<SidebarProjectSessions {...initial} />);
   fireEvent.click(screen.getByRole('button', { name: 'sessions.collapseForks Original' }));
@@ -137,7 +121,6 @@ test('an off-page source is shown once, and a newly selected fork opens its coll
 });
 
 test('live activity and title updates preserve a user collapse around the selected fork', () => {
-  compact.value = false;
   const initial = props({ selectedSession: leaf });
   const { container, rerender } = render(<SidebarProjectSessions {...initial} />);
   fireEvent.click(screen.getByRole('button', { name: 'sessions.collapseForks Original' }));
@@ -148,7 +131,6 @@ test('live activity and title updates preserve a user collapse around the select
 });
 
 test('bulk selection includes displayed ancestor context and hidden forks, excluding responding sessions', () => {
-  compact.value = false;
   const onSetSessionSelection = vi.fn();
   render(<SidebarProjectSessions {...props({
     sessions: [{ ...leaf, forkAncestors: [child, root] }], selectedSessionIds: new Set(),

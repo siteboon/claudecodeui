@@ -42,13 +42,6 @@ vi.mock('@/modules/sidebar/SessionOptions', () => ({
   },
 }));
 
-// The breakpoint hook caches one MediaQueryList for the whole module, so the
-// compact layout is selected through the mock rather than by resizing jsdom.
-let isCompactLayout = false;
-
-vi.mock('@/modules/sidebar/hooks/useCompactSidebar', () => ({
-  useCompactSidebar: () => isCompactLayout,
-}));
 
 const { default: SidebarProjectSessions } = await import('@/modules/sidebar/SidebarProjectSessions');
 const { useSidebarController } = await import('@/modules/sidebar/hooks/useSidebarController');
@@ -114,12 +107,10 @@ const renderSessions = (overrides: ListOverrides = {}) =>
       onStartEditingSession: noop,
       onCancelEditingSession: noop,
       onSaveEditingSession: noop,
-      onProjectSelect: noop,
       onSessionSelect: noop,
       onArchiveSession: noop,
       onDeleteSession: noop,
       onLoadMoreSessions: noop,
-      onNewSession: noop,
       selectedSessionIds: null,
       onSetSessionSelection: noop,
       onToggleSessionSelected: noop,
@@ -140,7 +131,6 @@ const jsonResponse = (data: unknown) => Promise.resolve({ ok: true, json: async 
 
 beforeEach(() => {
   localStorage.clear();
-  isCompactLayout = false;
   recordedOptionsProps.length = 0;
   deleteSession.mockReset();
   deleteSession.mockResolvedValue({ ok: true, text: async () => '' });
@@ -307,34 +297,6 @@ test('a page emptied by deleting every loaded row keeps Load more', () => {
   const reallyEmpty = renderSessions({ sessions: [], hasMoreSessions: false });
   assert.equal(reallyEmpty.container.textContent?.includes('sessions.noSessions'), true);
   assert.equal(buttonWithText(reallyEmpty.container, 'Load more sessions'), null);
-});
-
-test('the compact layout selects with the same rules and hides its options button', () => {
-  isCompactLayout = true;
-  const onToggleSessionSelected = vi.fn();
-  const { container } = renderSessions({
-    selectedSessionIds: new Set(['s1']),
-    activeSessions: new Set(['s3']),
-    onToggleSessionSelected,
-  });
-
-  const rows = checkboxes(container);
-  assert.equal(rows.length, SESSIONS.length);
-  assert.deepEqual(rows.map((row) => row.getAttribute('aria-checked')), ['true', 'false', 'false']);
-  assert.equal(
-    container.querySelector('[aria-label^="Session options for"]'),
-    null,
-    'the mobile row hides its "..." button while selecting',
-  );
-
-  fireEvent.click(rows[1]);
-  assert.deepEqual(onToggleSessionSelected.mock.calls[0], ['project-1', 's2']);
-
-  fireEvent.keyDown(rows[1], { key: ' ' });
-  assert.deepEqual(onToggleSessionSelected.mock.calls[1], ['project-1', 's2']);
-
-  fireEvent.click(rows[2]);
-  assert.equal(onToggleSessionSelected.mock.calls.length, 2, 'the running row stays locked on touch too');
 });
 
 type SessionActivity = {
@@ -655,18 +617,6 @@ test('unavailable browser storage does not prevent opening projects', () => {
   assert.equal(result.current.isProjectExpanded('project-1'), true);
   assert.equal(result.current.isProjectExpanded('project-2'), true);
 });
-
-test('Running groups keep their independent collapse state in multi-open mode', () => {
-  const { result } = renderController(vi.fn(), { ...IDLE, keepProjectsExpanded: true });
-  act(() => result.current.toggleProject('project-1'));
-  act(() => result.current.setSearchMode('running'));
-  assert.equal(result.current.isProjectExpanded('project-1'), true);
-  act(() => result.current.toggleProject('project-1'));
-  assert.equal(result.current.isProjectExpanded('project-1'), false);
-  act(() => result.current.setSearchMode('projects'));
-  assert.equal(result.current.isProjectExpanded('project-1'), true);
-});
-
 
 test('a selected project intentionally collapsed before reload stays collapsed', () => {
   localStorage.setItem('cloudcli-expanded-projects', JSON.stringify(['other-project']));

@@ -4,7 +4,6 @@ import React from 'react';
 import { test, vi } from 'vitest';
 import type { Project, SessionWithProvider, SidebarProjectListProps } from '@/shared/types';
 
-vi.mock('@/modules/sidebar/hooks/useCompactSidebar', () => ({ useCompactSidebar: () => false }));
 vi.mock('@/modules/sidebar/SessionOptions', () => ({ default: () => null }));
 const { default: SidebarSessionItem } = await import('@/modules/sidebar/SidebarSessionItem');
 const project = { projectId: 'project-1', name: 'project', fullPath: '/tmp/project', sessions: [] } as unknown as Project;
@@ -18,7 +17,7 @@ function renderRow(overrides: { isSelecting?: boolean; isEditing?: boolean } = {
     project, session, selectedSession: null, isProcessing: false, hasBackgroundWork: false,
     needsAttention: false, currentTime: new Date('2026-10-29T11:00:00Z'), isEditing: false,
     renameDraft: '', onRenameDraftChange: noop, onStartEditingSession: rename,
-    onCancelEditingSession: noop, onSaveEditingSession: noop, onProjectSelect: noop,
+    onCancelEditingSession: noop, onSaveEditingSession: noop,
     onSessionSelect: select, onArchiveSession: noop, onDeleteSession: noop, isSelecting: false, isChecked: false,
     onToggleSessionSelected: noop, t: ((key: string) => key) as SidebarProjectListProps['t'], ...overrides,
   }));

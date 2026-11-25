@@ -5,10 +5,10 @@ import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
 import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
 import { useSidebarController } from '@/modules/sidebar/hooks/useSidebarController';
-import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
+import { useTaskMaster } from '@/modules/task-master';
 import { usePaletteOps } from '@/modules/command-palette';
 import { useBackgroundSessionIdSet, useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
-import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
+import type { LLMProvider, LoadingProgress, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
 import SidebarModals from '@/modules/sidebar/SidebarModals';
@@ -39,7 +39,6 @@ type SidebarProps = {
 
 type TaskMasterSidebarContext = {
   setCurrentProject: (project: Project) => void;
-  mcpServerStatus: MCPServerStatus;
 };
 
 /** Exported through the sidebar barrel; the project-workspace module renders it as the app's project and session navigation panel. */
@@ -72,8 +71,7 @@ function Sidebar({
   const preferences = useUiPreferences();
   const setPreference = useSetUiPreference();
   const { sidebarVisible } = preferences;
-  const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
-  const { tasksEnabled } = useTasksSettings();
+  const { setCurrentProject } = useTaskMaster() as TaskMasterSidebarContext;
   const paletteOps = usePaletteOps();
   // Only membership is rendered here, so subscribing to the full activity map
   // would re-render the whole tree on every provider status frame.
@@ -87,7 +85,6 @@ function Sidebar({
     showNewProject,
     initialSessionsLoaded,
     currentTime,
-    isRefreshing,
     searchFilter,
     searchMode,
     setSearchMode,
@@ -95,7 +92,6 @@ function Sidebar({
     isSearching,
     searchProgress,
     clearConversationResults,
-    runningSessionsCount,
     deletingProjects,
     pendingDeletion,
     showVersionModal,
@@ -207,8 +203,6 @@ function Sidebar({
     initialSessionsLoaded,
     currentTime,
     deletingProjects,
-    tasksEnabled,
-    mcpServerStatus,
     getProjectSessions,
     loadingMoreProjects,
     activeSessions,
@@ -267,6 +261,8 @@ function Sidebar({
       {isSidebarCollapsed ? (
         <SidebarCollapsed
           onExpand={handleExpandSidebar}
+          onNewSession={selectedProject ? () => onNewSession(selectedProject) : undefined}
+          newSessionLabel={selectedProject ? `${t('sessions.newSession')}: ${selectedProject.displayName}` : t('sessions.newSession')}
           onShowSettings={onShowSettings}
           updateAvailable={updateAvailable}
           restartRequired={restartRequired}
@@ -280,7 +276,6 @@ function Sidebar({
             isMobile={isMobile}
             isLoading={isLoading}
             projects={projects}
-            runningSessionsCount={runningSessionsCount}
             archivedProjects={archivedProjects}
             archivedSessions={archivedSessions}
             archivedSessionsCount={archivedSessionsCount}
@@ -340,7 +335,6 @@ function Sidebar({
             onRefresh={() => {
               void refreshProjects();
             }}
-            isRefreshing={isRefreshing}
             onCreateProject={() => setShowNewProject(true)}
             onCollapseSidebar={handleCollapseSidebar}
             updateAvailable={updateAvailable}

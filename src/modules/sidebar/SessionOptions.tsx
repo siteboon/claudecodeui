@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Archive, Check, Edit2, GitBranch, MoreHorizontal, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Archive, Check, Edit2, GitBranch, MoreHorizontal, Pin, PinOff, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { ActionMenu } from '@/shared/ui';
@@ -8,7 +8,7 @@ import type { LLMProvider } from '@/shared/types';
 import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
 import { PROVIDER_LABELS } from '@/modules/sidebar/utils/sidebarProjectFormatting';
-import SessionPinButton from '@/modules/sidebar/SessionPinButton';
+import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
 
 type SessionOptionsProps = {
   sessionId: string;
@@ -67,6 +67,9 @@ export default function SessionOptions({
   t,
 }: SessionOptionsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const pins = useSessionPins();
+  const isPinned = pins?.pinnedIds.has(sessionId) ?? false;
   const showRename = isEditing;
   const providerLabel = PROVIDER_LABELS[provider];
   const { copyState, copyLabel, setOptionsOpen, handleCopyAction, isCopyPending, CopyStateIcon } =
@@ -104,7 +107,15 @@ export default function SessionOptions({
   };
 
   return (
-    <div ref={containerRef} className={cn('flex items-center gap-1', className)}>
+    <div
+      ref={containerRef}
+      className={cn(
+        'flex items-center gap-1',
+        // Revealed on hover so idle rows stay quiet; kept while open or renaming.
+        !showRename && !isMenuOpen && 'opacity-0 focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100',
+        className,
+      )}
+    >
       {showRename ? (
         <>
           <input
@@ -120,7 +131,7 @@ export default function SessionOptions({
               }
             }}
             onClick={(event) => event.stopPropagation()}
-            className="w-32 rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-32 rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary max-md:text-base"
             autoFocus
           />
           <button
@@ -145,8 +156,6 @@ export default function SessionOptions({
           </button>
         </>
       ) : (
-        <>
-        <SessionPinButton sessionId={sessionId} sessionName={sessionName} t={t} />
         <ActionMenu
           label="Session options"
           ariaLabel={`Session options for ${sessionName}`}
@@ -155,18 +164,21 @@ export default function SessionOptions({
           portal
           variant="ghost"
           size="icon"
-          onOpenChange={setOptionsOpen}
-          triggerClassName="h-7 w-7 text-muted-foreground opacity-70 hover:bg-muted hover:opacity-100"
+          onOpenChange={(open) => {
+            setIsMenuOpen(open);
+            setOptionsOpen(open);
+          }}
+          triggerClassName="h-7 w-7 text-muted-foreground hover:bg-muted hover:text-foreground"
           menuClassName="w-[260px] rounded-xl p-1.5 shadow-xl"
-          header={(
-            <div className="mb-1 border-b border-border px-3 py-2">
-              <p className="truncate text-xs font-medium text-foreground" title={sessionName}>
-                {sessionName}
-              </p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">{providerLabel} session</p>
-            </div>
-          )}
           items={[
+            ...(pins ? [{
+              key: 'pin',
+              label: isPinned ? t('pinned.unpin', 'Unpin session') : t('pinned.pin', 'Pin session'),
+              icon: isPinned ? PinOff : Pin,
+              loading: pins.pendingSessionId === sessionId,
+              disabled: !pins.ready || pins.pendingSessionId !== null,
+              onSelect: () => void pins.setPinned(sessionId, !isPinned),
+            }] : []),
             ...(projectId !== null ? [{
               key: 'rename',
               label: 'Rename session',
@@ -206,7 +218,6 @@ export default function SessionOptions({
             }] : []),
           ]}
         />
-        </>
       )}
     </div>
   );

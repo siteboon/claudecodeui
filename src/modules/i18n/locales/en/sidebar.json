@@ -1,9 +1,10 @@
 {
   "pinned": {
-    "title": "Pinned sessions",
+    "title": "Pinned",
     "pin": "Pin session",
     "unpin": "Unpin session",
-    "error": "Could not load or save session pins. Please try again."
+    "error": "Could not load or save session pins. Please try again.",
+    "pinned": "Pinned"
   },
   "projects": {
     "title": "Projects",
@@ -65,7 +66,9 @@
     "clearSearch": "Clear search",
     "openCommandPalette": "Open command palette",
     "attentionRequiredIndicator": "Session needs attention",
-    "backgroundWorkIndicator": "Background work running"
+    "backgroundWorkIndicator": "Background work running",
+    "projectOptions": "Project options",
+    "closeArchive": "Close archive"
   },
   "navigation": {
     "chat": "Chat",
@@ -137,7 +140,8 @@
   },
   "version": {
     "updateAvailable": "Update available",
-    "restartRequired": "Update installed — restart the server to apply"
+    "restartRequired": "Update installed — restart the server to apply",
+    "update": "Update"
   },
   "search": {
     "modeProjects": "Projects",
@@ -152,10 +156,14 @@
     "matches_one": "{{count}} match",
     "matches_other": "{{count}} matches",
     "projectsScanned_one": "{{count}} project scanned",
-    "projectsScanned_other": "{{count}} projects scanned"
+    "projectsScanned_other": "{{count}} projects scanned",
+    "allPlaceholder": "Search...",
+    "showByDate": "Show by date",
+    "groupByProject": "Group by project",
+    "archiveOnlyTooltip": "Archive"
   },
   "recent": {
-    "title": "Recent conversations",
+    "title": "Recent",
     "emptyTitle": "No conversations yet",
     "emptyDescription": "Your most recently updated conversations will appear here.",
     "loadFailed": "Could not load recent conversations",
@@ -185,5 +193,9 @@
     "archiveSessions_other": "Archive {{count}} sessions",
     "archiveSessionsNotice_one": "Archive keeps the session out of the active list while preserving its history.",
     "archiveSessionsNotice_other": "Archive keeps the sessions out of the active list while preserving their history."
+  },
+  "sections": {
+    "active": "Active",
+    "needsReply": "{{count}} needs reply"
   }
 }
