@@ -29,6 +29,7 @@ import {
 } from '@/shared/context/SessionProtectionContext';
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
+import ReadOnlySessionNotice from '@/modules/chat/composer/ReadOnlySessionNotice';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
 type ChatInterfaceProps = {
@@ -414,6 +415,39 @@ function ChatInterface({
     }
   }, [onNavigateToSession, selectedSession?.id]);
 
+  // Read by the continue handler after its request, which may finish once the
+  // user has already moved to another session.
+  const selectedSessionIdRef = useRef(selectedSession?.id);
+  useEffect(() => {
+    selectedSessionIdRef.current = selectedSession?.id;
+  }, [selectedSession?.id]);
+
+  /**
+   * Starts a new chat continuing a read-only session (a Cursor IDE chat) and
+   * opens it, unless the user has moved to another session meanwhile. The
+   * read-only session itself is left as it was. Errors are rethrown for the
+   * notice to show.
+   */
+  const handleContinueReadOnlySession = useCallback(async () => {
+    const sourceSessionId = selectedSession?.id;
+    if (!sourceSessionId) return;
+
+    try {
+      const response = await api.continueSession(sourceSessionId);
+      const payload = await response.json();
+      const newSessionId = payload?.data?.sessionId;
+      if (!response.ok || typeof newSessionId !== 'string') {
+        throw new Error(payload?.message || `HTTP ${response.status}`);
+      }
+      if (selectedSessionIdRef.current === sourceSessionId) {
+        onNavigateToSession?.(newSessionId);
+      }
+    } catch (error) {
+      console.error('Error continuing read-only session:', error);
+      throw error;
+    }
+  }, [onNavigateToSession, selectedSession?.id]);
+
   const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
     useScheduledMessages(currentSessionId || selectedSession?.id || null, subscribe);
 
@@ -575,6 +609,9 @@ function ChatInterface({
             </div>
           )}
 
+          {selectedSession?.readOnly ? (
+            <ReadOnlySessionNotice key={selectedSession.id} onContinue={handleContinueReadOnlySession} />
+          ) : (
           <ChatComposer
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
@@ -655,6 +692,7 @@ function ChatInterface({
           sendByCtrlEnter={sendByCtrlEnter}
           supportsSideQuestions={supportsSideQuestions}
         />
+          )}
         </div>
       </div>
 

@@ -6,7 +6,14 @@ import {
   normalizeAttachmentDescriptors
 } from '@/shared/image-attachments.js';
 import { notifyRunFailed, notifyRunStopped } from '@/modules/notifications/index.js';
-import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, stripAnsiSequences } from '@/shared/utils.js';
+import {
+  createCompleteMessage,
+  createNormalizedMessage,
+  flattenPromptForWindowsShell,
+  hasCursorChatStore,
+  prependCursorContinuedChatTag,
+  stripAnsiSequences
+} from '@/shared/utils.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
@@ -35,6 +42,11 @@ async function spawnCursor(command, options = {}, ws, context) {
   // promise is created: inside an async executor a rejected `resolveResumeModel`
   // would be swallowed and leave the returned promise pending forever.
   const providerSessionId = context.resolveProviderSessionId(options.sessionId);
+  // A chat started to continue a Cursor IDE chat: its first turn points
+  // cursor-agent at the IDE transcript, which it reads for itself.
+  const continuedTranscriptPath = providerSessionId
+    ? null
+    : context.resolveContinuedTranscriptPath?.(options.sessionId) ?? null;
   const resolvedModel = await context.resolveResumeModel(options.sessionId, options.model);
 
   return new Promise((resolve, reject) => {
@@ -82,7 +94,10 @@ async function spawnCursor(command, options = {}, ws, context) {
       // cursor-agent is a .cmd shim on Windows, so the whole argument must be
       // newline-free or cmd.exe silently truncates it at the first newline.
       const promptWithAttachments = appendFilesInputTag(
-        appendImagesInputTag(command || '', images),
+        appendImagesInputTag(
+          continuedTranscriptPath ? prependCursorContinuedChatTag(command || '', continuedTranscriptPath) : command || '',
+          images
+        ),
         files
       );
       baseArgs.push('-p', flattenPromptForWindowsShell(promptWithAttachments));
@@ -367,6 +382,21 @@ async function spawnCursor(command, options = {}, ws, context) {
       // Close stdin since Cursor doesn't need interactive input
       cursorProcess.stdin.end();
     };
+
+    // `--resume` with an id cursor-agent has no chat store for (a Cursor IDE
+    // chat, or a CLI chat deleted since) does not fail: it starts a new chat
+    // under that id and overwrites any transcript already at that id's path.
+    if (providerSessionId && !hasCursorChatStore(workingDir, providerSessionId)) {
+      const error = new Error(
+        'This Cursor session cannot be continued: cursor-agent has no CLI chat for it in this workspace. '
+        + 'Cursor IDE chats cannot be resumed from the CLI.'
+      );
+      ws.send(createNormalizedMessage({ kind: 'error', content: error.message, sessionId, provider: 'cursor' }));
+      completeSent = true;
+      ws.send(createCompleteMessage({ provider: 'cursor', sessionId, exitCode: 1 }));
+      settleOnce(() => reject(error));
+      return;
+    }
 
     runCursorProcess(baseArgs, 'initial');
   });

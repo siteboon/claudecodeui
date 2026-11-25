@@ -40,9 +40,12 @@ async function unlinkJsonlIfExists(filePath: string): Promise<void> {
 
 /**
  * Loads all session rows for the project path and removes each distinct `jsonl_path` file on disk.
+ * A read-only session's transcript (a Cursor IDE chat) belongs to the IDE and is left in place.
  */
 export async function deleteSessionJsonlFilesForProjectPath(projectPath: string): Promise<void> {
-  const sessions = sessionsDb.getSessionsByProjectPathIncludingArchived(projectPath);
+  const sessions = sessionsDb
+    .getSessionsByProjectPathIncludingArchived(projectPath)
+    .filter((session) => !session.read_only);
   // Including the transcripts a session has left behind: editing a message on
   // a provider that rewinds by branching moves the session onto a copy, and
   // the row stops pointing at the file the replaced turns are still in.

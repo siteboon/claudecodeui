@@ -90,6 +90,8 @@ type SessionDetails = {
   updatedAt: string | null;
   lastActivity: string | null;
   isArchived: boolean;
+  /** The session can be read but not continued (a Cursor IDE chat). */
+  readOnly: boolean;
   project: {
     projectId: string;
     path: string;
@@ -105,6 +107,18 @@ const MAX_CLOUDCLI_SESSION_NAME_WORDS = 4;
 function buildCloudCliSessionName(initialMessage: string): string {
   const words = initialMessage.trim().split(/\s+/).filter(Boolean);
   return words.slice(0, MAX_CLOUDCLI_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
+}
+
+/**
+ * Returns whether a file or folder exists.
+ */
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fsp.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -439,6 +453,23 @@ export const sessionsService = {
   },
 
   /**
+   * Returns the transcript of the read-only session a not-yet-run session was
+   * started to continue (see `continueReadOnlySession`), or `null`.
+   *
+   * Once the session has run it has its own provider history, so the pointer
+   * is only ever added to its first turn.
+   */
+  resolveContinuedTranscriptPath(sessionId: string | null | undefined): string | null {
+    const session = sessionId ? sessionsDb.getSessionById(sessionId) : null;
+    if (!session || session.provider_session_id || !session.forked_from_session_id) {
+      return null;
+    }
+
+    const source = sessionsDb.getSessionById(session.forked_from_session_id);
+    return source?.read_only && source.provider === session.provider ? source.jsonl_path : null;
+  },
+
+  /**
    * Normalizes one provider-native event into frontend session message events.
    */
   normalizeMessage(
@@ -554,6 +585,55 @@ export const sessionsService = {
       sessionId: forkSessionId,
       provider,
       projectPath: source.project_path ?? '',
+      sessionName,
+    };
+  },
+
+  /**
+   * Starts a new session that continues a read-only one, such as a Cursor IDE
+   * chat that cursor-agent cannot resume.
+   *
+   * The new session is an ordinary app session with no provider id yet, linked
+   * through `forked_from_session_id`. Its first run starts a fresh provider
+   * chat and points it at the source transcript (see
+   * `resolveContinuedTranscriptPath`); the source is never resumed or changed.
+   */
+  async continueReadOnlySession(sessionId: string): Promise<CreateAppSessionResult> {
+    const source = sessionsDb.getSessionById(sessionId);
+    if (!source) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    if (!source.read_only || !source.jsonl_path) {
+      throw new AppError('Only a read-only session can be continued in a new chat.', {
+        code: 'SESSION_NOT_READ_ONLY',
+        statusCode: 409,
+      });
+    }
+
+    // The new chat only points at the transcript, so without it there would
+    // be no earlier conversation to continue.
+    if (!(await pathExists(source.jsonl_path))) {
+      throw new AppError('The transcript of this session no longer exists.', {
+        code: 'SESSION_TRANSCRIPT_MISSING',
+        statusCode: 409,
+      });
+    }
+
+    const provider = source.provider as LLMProvider;
+    const projectPath = source.project_path ?? '';
+    const newSessionId = randomUUID();
+    const sessionName = `${source.custom_name?.trim() || 'Session'} (CLI)`;
+    sessionsDb.createAppSession(newSessionId, provider, projectPath, sessionName, source.session_id);
+    await broadcastSessionUpserted(newSessionId);
+
+    return {
+      sessionId: newSessionId,
+      provider,
+      projectPath,
       sessionName,
     };
   },
@@ -825,6 +905,7 @@ export const sessionsService = {
       updatedAt: session.updated_at ?? null,
       lastActivity: session.updated_at ?? session.created_at ?? null,
       isArchived: Boolean(session.isArchived),
+      readOnly: Boolean(session.read_only),
       project: project && projectPath
         ? {
             projectId: project.project_id,
@@ -878,6 +959,10 @@ export const sessionsService = {
    * Soft-delete mirrors the project behavior by toggling `isArchived` so the
    * row disappears from active lists but remains restorable. Force-delete
    * optionally removes the transcript file before deleting the database row.
+   *
+   * A read-only session (a Cursor IDE chat) is always archived instead: its
+   * transcript belongs to the IDE, and a deleted row would be indexed again
+   * from it on the next scan.
    */
   async deleteOrArchiveSessionById(
     sessionId: string,
@@ -894,7 +979,7 @@ export const sessionsService = {
       });
     }
 
-    if (!options.force) {
+    if (!options.force || session.read_only) {
       sessionsDb.updateSessionIsArchived(sessionId, true);
       return {
         sessionId,

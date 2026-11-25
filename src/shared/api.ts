@@ -293,6 +293,10 @@ export const api = {
   // visible; `cleared` is false when there was no context to clear.
   clearSessionContext: (sessionId: string) =>
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/clear-context`),
+  // Starts a new chat continuing a read-only session (a Cursor IDE chat),
+  // which is itself left untouched.
+  continueSession: (sessionId: string) =>
+    post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/continue`),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
   // What one agent of a workflow run did, read from its transcript on demand

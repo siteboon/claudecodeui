@@ -142,6 +142,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- normally. Informational only: a fork is a fully independent provider
     -- session, and deleting the source does not affect it.
     forked_from_session_id TEXT,
+    -- 1 for a session that can be read but not continued, such as a Cursor
+    -- IDE chat: its history comes from a transcript cursor-agent cannot resume.
+    read_only BOOLEAN DEFAULT 0,
     isArchived BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
