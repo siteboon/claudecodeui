@@ -114,19 +114,14 @@ test('a failed older save does not undo a newer choice', async () => {
   const { result } = renderHook(() => useSessionAutoContinue('session-a'));
   await waitFor(() => assert.equal(result.current.enabled, false));
 
-  let firstSave: Promise<void> | undefined;
+  let saves: Promise<void>[] = [];
   act(() => {
-    firstSave = result.current.setEnabled(true);
+    saves = [result.current.setEnabled(true), result.current.setEnabled(false), result.current.setEnabled(true)];
   });
-  await act(async () => {
-    await result.current.setEnabled(false);
-  });
-  await act(async () => {
-    await result.current.setEnabled(true);
-  });
+  await waitFor(() => assert.ok(failFirst));
   await act(async () => {
     failFirst?.();
-    await firstSave;
+    await Promise.all(saves);
   });
 
   // Rolling the first click back would flip the newest choice off.
@@ -173,5 +168,55 @@ test('a failed save rolls back when the server cannot be read either', async () 
 
   // An error reply is not the server's answer; nothing was saved.
   assert.equal(read.mock.calls.length, 2);
+  assert.equal(result.current.enabled, false);
+});
+
+test('saves reach the server in click order', async () => {
+  vi.spyOn(api, 'sessionAutoContinue').mockResolvedValue(flagResponse(false));
+  let releaseFirst: (() => void) | undefined;
+  const save = vi.spyOn(api, 'setSessionAutoContinue')
+    .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      releaseFirst = () => resolve(flagResponse(true));
+    }))
+    .mockResolvedValue(flagResponse(false));
+
+  const { result } = renderHook(() => useSessionAutoContinue('session-a'));
+  await waitFor(() => assert.equal(result.current.enabled, false));
+
+  let saves: Promise<void>[] = [];
+  act(() => {
+    saves = [result.current.setEnabled(true), result.current.setEnabled(false)];
+  });
+  await waitFor(() => assert.ok(releaseFirst));
+  // The second write waits for the first, so it cannot overtake it.
+  assert.equal(save.mock.calls.length, 1);
+  await act(async () => {
+    releaseFirst?.();
+    await Promise.all(saves);
+  });
+
+  assert.deepEqual(save.mock.calls, [['session-a', true], ['session-a', false]]);
+  assert.equal(result.current.enabled, false);
+});
+
+test('overlapping failed saves fall back to the confirmed value', async () => {
+  vi.spyOn(api, 'sessionAutoContinue')
+    .mockResolvedValueOnce(flagResponse(false))
+    .mockResolvedValue(flagResponse(true, false));
+  vi.spyOn(api, 'setSessionAutoContinue').mockResolvedValue(flagResponse(true, false));
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+  const { result } = renderHook(() => useSessionAutoContinue('session-a'));
+  await waitFor(() => assert.equal(result.current.enabled, false));
+
+  let saves: Promise<void>[] = [];
+  act(() => {
+    saves = [result.current.setEnabled(true), result.current.setEnabled(false)];
+  });
+  await act(async () => {
+    await Promise.all(saves);
+  });
+
+  // Neither click reached the server; `!next` of the last one would show on.
   assert.equal(result.current.enabled, false);
 });

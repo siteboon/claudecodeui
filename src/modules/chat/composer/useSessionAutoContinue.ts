@@ -12,6 +12,10 @@ export function useSessionAutoContinue(sessionId: string | null) {
   // Bumped by a session switch and by every change: a read that lands after
   // something newer happened is dropped instead of overwriting it.
   const generationRef = useRef(0);
+  // The last value the server confirmed for the active session: the fallback when it cannot be read.
+  const confirmedRef = useRef(false);
+  // Saves run one after another, so the last click is the last write the server sees.
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   // Reset during the switch render, so the old session's setting never paints on the new one.
   const [renderedSessionId, setRenderedSessionId] = useState(sessionId);
@@ -31,7 +35,8 @@ export function useSessionAutoContinue(sessionId: string | null) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
       if (generationRef.current === generation) {
-        setEnabledState(payload?.data?.enabled === true);
+        confirmedRef.current = payload?.data?.enabled === true;
+        setEnabledState(confirmedRef.current);
       }
       return true;
     } catch (error) {
@@ -43,6 +48,7 @@ export function useSessionAutoContinue(sessionId: string | null) {
   useEffect(() => {
     activeSessionRef.current = sessionId;
     generationRef.current += 1;
+    confirmedRef.current = false;
     if (sessionId) void load(sessionId);
   }, [load, sessionId]);
 
@@ -51,17 +57,22 @@ export function useSessionAutoContinue(sessionId: string | null) {
     if (!sessionId || activeSessionRef.current !== sessionId) return;
     const generation = ++generationRef.current;
     setEnabledState(next);
-    try {
-      const response = await api.setSessionAutoContinue(sessionId, next);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    } catch (error) {
-      console.error('Failed to save auto-continue setting:', error);
-      // Show what the server has rather than guessing; skipped if something newer happened.
-      if (generationRef.current !== generation) return;
-      if (await load(sessionId)) return;
-      // Unreadable too: assume nothing was saved and undo the click, unless something newer happened.
-      if (generationRef.current === generation) setEnabledState(!next);
-    }
+    const save = saveChainRef.current.then(async () => {
+      try {
+        const response = await api.setSessionAutoContinue(sessionId, next);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (activeSessionRef.current === sessionId) confirmedRef.current = next;
+      } catch (error) {
+        console.error('Failed to save auto-continue setting:', error);
+        // Show what the server has rather than guessing; skipped if something newer happened.
+        if (generationRef.current !== generation) return;
+        if (await load(sessionId)) return;
+        // Unreadable too: show the last confirmed value, unless something newer happened.
+        if (generationRef.current === generation) setEnabledState(confirmedRef.current);
+      }
+    });
+    saveChainRef.current = save;
+    await save;
   }, [load, sessionId]);
 
   return { enabled, setEnabled };
