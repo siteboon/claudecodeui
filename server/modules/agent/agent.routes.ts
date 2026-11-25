@@ -10,6 +10,22 @@ import { normalizeProjectPath } from '../../shared/utils.js';
 /** The providers an Agent API run can start: the ones with a runtime and a model catalog. */
 const AGENT_RUN_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode'];
 
+/**
+ * Permission modes an Agent API caller may ask for, per provider. The first entry is what a request that names
+ * none gets, which keeps the route's historical behaviour (agent runs bypass permissions). The others leave the
+ * run's tool approvals to the person watching the session, as a chat turn would:
+ *   - claude: `default` asks for every edit and command, `acceptEdits` only for commands, `plan` only plans;
+ *   - codex: both run in the `workspace-write` sandbox; `default` may ask, `acceptEdits` never asks;
+ *   - opencode: `default` asks;
+ *   - cursor: its CLI cannot ask, so bypass is the only mode.
+ */
+export const AGENT_PERMISSION_MODES: Readonly<Record<string, readonly string[]>> = {
+  claude: ['bypassPermissions', 'default', 'acceptEdits', 'plan'],
+  codex: ['bypassPermissions', 'default', 'acceptEdits'],
+  opencode: ['bypassPermissions', 'default'],
+  cursor: ['bypassPermissions'],
+};
+
 /** What the route reads off a session row it continues: the row, not the request, says which provider and project a session belongs to. */
 type AgentSessionRow = {
   session_id: string;
@@ -664,6 +680,13 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *                          Codex supports: 'low', 'medium', 'high', 'xhigh', 'max', 'ultra' depending on model.
    *                          'default' or omission lets the provider decide.
    *
+   * @param {string} permissionMode - (Optional) How the run's tool calls are approved. Default: "bypassPermissions".
+   *                                   Allowed per provider (see GET /api/agent/capabilities):
+   *                                   claude: bypassPermissions | default | acceptEdits | plan
+   *                                   codex: bypassPermissions | default | acceptEdits (workspace-write sandbox)
+   *                                   opencode: bypassPermissions | default;  cursor: bypassPermissions
+   *                                   Any mode other than bypass shows approval requests in the session's tab.
+   *
    * @param {boolean} unattended - (Optional) Whether nobody will answer the run's MCP elicitation forms.
    *                              Claude only. Default: true
    *                              - true: a form an MCP server sends mid-call is declined at once
@@ -871,6 +894,33 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    *     "cleanup": false
    *   }
    */
+  /**
+   * What this server's Agent API accepts beyond the basics, so a caller (e.g. a plugin) can detect it instead of
+   * probing with failing requests. Same API-key authentication as POST /api/agent.
+   */
+  router.get('/capabilities', validateExternalApiKey, (_req, res) => {
+    res.json({ permissionModes: AGENT_PERMISSION_MODES, unattended: true, sessionStatus: true });
+  });
+
+  /**
+   * Whether a session has a run in progress, by app or provider-native id — what POST /api/agent answers
+   * with 409, without starting anything. Lets a caller that lost track of a run (e.g. after a restart)
+   * tell a session that is still working from one that stopped.
+   */
+  router.get('/sessions/:sessionId', validateExternalApiKey, (req, res) => {
+    const id = String(req.params.sessionId);
+    const row = sessionGateway.getSessionById(id) ?? sessionGateway.getSessionByProviderSessionId(id);
+    if (!row) {
+      return res.status(404).json({ error: `Session "${id}" was not found` });
+    }
+    res.json({
+      sessionId: row.session_id,
+      providerSessionId: row.provider_session_id ?? null,
+      provider: row.provider,
+      processing: runRegistry.isProcessing(row.session_id),
+    });
+  });
+
   router.post('/', validateExternalApiKey, async (req, res) => {
     const { githubUrl, projectPath, message, model, githubToken, branchName } = req.body;
     // Transport input is typed here, before anything binds it to a query:
@@ -937,6 +987,14 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       }
     }
     const provider = sessionRow?.provider ?? requestedProvider ?? 'claude';
+    const allowedPermissionModes = AGENT_PERMISSION_MODES[provider] ?? ['bypassPermissions'];
+    const requestedPermissionMode = req.body.permissionMode ?? null;
+    if (requestedPermissionMode !== null && !allowedPermissionModes.includes(requestedPermissionMode)) {
+      return res.status(400).json({
+        error: `permissionMode must be one of ${allowedPermissionModes.map((mode) => `"${mode}"`).join(', ')} for provider "${provider}"`,
+      });
+    }
+    const permissionMode: string = requestedPermissionMode ?? allowedPermissionModes[0];
 
     let finalProjectPath = null;
     let clonedProjectCreated = false;
@@ -1061,7 +1119,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           sessionId: appSessionId,
           model: model || providerModels?.DEFAULT,
           effort,
-          permissionMode: 'bypassPermissions', // Bypass all permissions for API calls
+          permissionMode,
           // A caller that only reads this response cannot answer an MCP form;
           // one whose run a person watches in the UI says so with `false`.
           unattended
@@ -1075,7 +1133,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           cwd: finalProjectPath,
           sessionId: appSessionId,
           model: model || cursorDefaultModel,
-          skipPermissions: true // Bypass permissions for Cursor
+          skipPermissions: permissionMode === 'bypassPermissions'
         }, run.writer);
       } else if (provider === 'codex') {
         console.log('🤖 Starting Codex SDK session');
@@ -1086,7 +1144,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           sessionId: appSessionId,
           model: model || providerModels?.DEFAULT,
           effort,
-          permissionMode: 'bypassPermissions'
+          permissionMode
         }, run.writer);
       } else if (provider === 'opencode') {
         console.log('Starting OpenCode CLI session');
@@ -1097,7 +1155,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           sessionId: appSessionId,
           model: model || providerModels?.DEFAULT,
           effort,
-          permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
+          permissionMode
         }, run.writer);
       }
 

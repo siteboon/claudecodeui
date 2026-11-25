@@ -553,6 +553,12 @@
                                         <td>Claude only (default: <code>true</code>). While <code>true</code>, a form an MCP server sends mid-call is declined at once. Pass <code>false</code> when a person will watch the run in the UI: the form then appears in any tab that opens the session and waits for an answer there.</td>
                                     </tr>
                                     <tr>
+                                        <td><code>permissionMode</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-optional">Optional</span></td>
+                                        <td>How the run's tool calls are approved (default: <code>bypassPermissions</code>). Claude: <code>bypassPermissions</code>, <code>default</code>, <code>acceptEdits</code>, <code>plan</code>. Codex: <code>bypassPermissions</code>, <code>default</code>, <code>acceptEdits</code> (both sandboxed to the workspace). OpenCode: <code>bypassPermissions</code>, <code>default</code>. Cursor: <code>bypassPermissions</code> only. Any other mode shows approval requests in the session's tab. <code>GET /api/agent/capabilities</code> lists what this server accepts.</td>
+                                    </tr>
+                                    <tr>
                                         <td><code>cleanup</code></td>
                                         <td>boolean</td>
                                         <td><span class="badge badge-optional">Optional</span></td>
