@@ -759,6 +759,45 @@ function extractTokenBudget(sdkMessage: unknown, reportedContextWindow?: number 
 }
 
 /**
+ * Extracts the post-compaction token budget from a `compact_boundary` system event.
+ * Exported for `claude-token-budget.test.ts` to verify compaction budget resets.
+ * @param {unknown} sdkMessage - SDK stream message
+ * @param {number|null} [reportedContextWindow] - SDK-reported window for the session's model
+ * @returns {TokenBudget|null} Token budget object or null
+ */
+export function extractCompactTokenBudget(
+  sdkMessage: unknown,
+  reportedContextWindow?: number | null,
+): TokenBudget | null {
+  if (!sdkMessage || typeof sdkMessage !== 'object') {
+    return null;
+  }
+
+  const message = sdkMessage as AnyRecord;
+  if (message.type !== 'system' || message.subtype !== 'compact_boundary') {
+    return null;
+  }
+
+  const compactMeta = (message.compact_metadata ?? message.compactMetadata) as AnyRecord | undefined;
+  const postTokens = readNumber(compactMeta?.post_tokens ?? compactMeta?.postTokens);
+  if (postTokens <= 0) {
+    return null;
+  }
+
+  const contextWindow = resolveContextWindow(reportedContextWindow);
+  return {
+    used: postTokens,
+    total: contextWindow,
+    inputTokens: postTokens,
+    outputTokens: 0,
+    breakdown: {
+      input: postTokens,
+      output: 0,
+    },
+  };
+}
+
+/**
  * Last-resort budget read from a turn's `result` message.
  *
  * `result.usage` and `result.modelUsage` are the turn's *bill*: every request
@@ -1711,7 +1750,8 @@ async function queryClaudeSDK(
       // Extract and send token budget updates from assistant usage payloads,
       // falling back to the turn's cumulative bill only for SDK builds that
       // report no per-assistant usage at all.
-      let tokenBudgetData = extractTokenBudget(message, reportedContextWindow)
+      let tokenBudgetData = extractCompactTokenBudget(message, reportedContextWindow)
+        || extractTokenBudget(message, reportedContextWindow)
         || (assistantBudgetSent ? null : extractCumulativeTokenBudget(message, reportedContextWindow));
       if (
         !tokenBudgetData

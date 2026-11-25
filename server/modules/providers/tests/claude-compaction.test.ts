@@ -99,3 +99,23 @@ test('the summary keeps its flag, so the client can fold it into the row', () =>
   assert.equal(row.role, 'assistant');
   assert.equal(row.isCompactSummary, true);
 });
+
+test('synthetic continuation summaries normalize as compact summaries and repeated stdout rows are dropped', () => {
+  const [synthetic] = provider.normalizeMessage({
+    type: 'user',
+    isSynthetic: true,
+    message: { role: 'user', content: 'This session is being continued from a previous conversation that ran out of context.' },
+  }, SESSION_ID);
+
+  assert.equal(synthetic.role, 'assistant');
+  assert.equal(synthetic.isCompactSummary, true);
+
+  assert.deepEqual(
+    provider.normalizeMessage({
+      type: 'user',
+      repeatsCompactSummary: true,
+      message: { role: 'user', content: '<local-command-stdout>PreCompact completed</local-command-stdout>' },
+    }, SESSION_ID),
+    [],
+  );
+});

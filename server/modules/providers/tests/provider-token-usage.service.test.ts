@@ -255,6 +255,34 @@ test('the Claude summarizer reports zero for a transcript with no assistant turn
   assert.equal(usage.total, 200_000);
 });
 
+test('the Claude summarizer uses postTokens when a compact_boundary is the newest usage event', () => {
+  const entries = [
+    { type: 'assistant', message: { usage: { input_tokens: 100, cache_read_input_tokens: 149_000, output_tokens: 200 } } },
+    { type: 'system', subtype: 'compact_boundary', compactMetadata: { preTokens: 149_300, postTokens: 6_200 } },
+  ];
+
+  assert.deepEqual(summarizeClaudeTokenUsage(entries, '200000'), {
+    used: 6_200,
+    total: 200_000,
+    inputTokens: 6_200,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+    cacheTokens: 0,
+    breakdown: { input: 6_200, output: 0 },
+  });
+});
+
+test('the Claude summarizer prefers a newer assistant turn after compact_boundary', () => {
+  const entries = [
+    { type: 'assistant', message: { usage: { input_tokens: 100, cache_read_input_tokens: 149_000, output_tokens: 200 } } },
+    { type: 'system', subtype: 'compact_boundary', compact_metadata: { pre_tokens: 149_300, post_tokens: 6_200 } },
+    { type: 'assistant', message: { usage: { input_tokens: 50, cache_read_input_tokens: 8_000, output_tokens: 120 } } },
+  ];
+
+  assert.equal(summarizeClaudeTokenUsage(entries, '200000').used, 8_170);
+});
+
 /** Padding rows large enough to push earlier rows out of the 4MB tail window. */
 function paddingLines(totalBytes: number): string {
   const line = JSON.stringify({ type: 'attachment', filler: 'x'.repeat(4096) });

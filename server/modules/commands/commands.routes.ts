@@ -204,6 +204,12 @@ const builtInCommands = [
     metadata: { type: "builtin" },
   },
   {
+    name: "/compact",
+    description: "Compact conversation history to free context space",
+    namespace: "builtin",
+    metadata: { type: "builtin" },
+  },
+  {
     name: "/cost",
     description: "Display token usage information",
     namespace: "builtin",
@@ -462,6 +468,43 @@ Custom commands can be created in:
     };
   },
 
+  "/compact": async (args, context, rawArgs) => {
+    const currentProvider = readModelProvider(context?.provider);
+    if (currentProvider !== "claude") {
+      return {
+        type: "builtin",
+        action: "memory",
+        data: {
+          error: "Unsupported provider",
+          message: "/compact is currently supported for Claude sessions only.",
+        },
+      };
+    }
+
+    if (!context?.sessionId) {
+      return {
+        type: "builtin",
+        action: "memory",
+        data: {
+          error: "No active session",
+          message: "Start a conversation before running /compact.",
+        },
+      };
+    }
+
+    const instructions = typeof rawArgs === "string"
+      ? rawArgs.trim()
+      : (Array.isArray(args) ? args.join(" ").trim() : "");
+
+    return {
+      type: "custom",
+      command: "/compact",
+      content: instructions ? `/compact ${instructions}` : "/compact",
+      hasFileIncludes: false,
+      hasBashCommands: false,
+    };
+  },
+
   "/config": async (args, context) => {
     return {
       type: "builtin",
@@ -551,7 +594,7 @@ router.post("/execute", async (req, res) => {
     const handler = builtInHandlers[commandName];
     if (handler) {
       try {
-        const result = await handler(args, context);
+        const result = await handler(args, context, rawArgs);
         return res.json({
           ...result,
           command: commandName,

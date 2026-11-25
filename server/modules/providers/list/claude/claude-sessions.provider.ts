@@ -1277,6 +1277,13 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     if (raw.type === 'content_block_stop') {
       return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
     }
+    // A compaction's stdout row repeats the summary and the hook chatter that
+    // produced it. The `compact_boundary` row already draws the compaction, so
+    // this one is dropped rather than leaking the hooks' raw text
+    // ("PreCompact [...] completed successfully") into the chat.
+    if (raw.repeatsCompactSummary === true) {
+      return [];
+    }
 
     const messages: NormalizedMessage[] = [];
     const ts = raw.timestamp || new Date().toISOString();
@@ -1489,7 +1496,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
          * text; otherwise it is both filtered by the generic internal-prefix
          * check and visually mislabeled as a user message.
          */
-        if (raw.isCompactSummary === true && text.trim()) {
+        if ((raw.isCompactSummary === true
+          || (raw.isSynthetic === true
+            && text.startsWith('This session is being continued from a previous conversation')))
+          && text.trim()) {
           messages.push(createNormalizedMessage({
             id: baseId,
             sessionId,
@@ -1838,7 +1848,35 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     const normalized: NormalizedMessage[] = [];
+    /**
+     * Sending `/compact` runs it in the CLI, which records the command twice
+     * under one `promptId`: the bare `/compact` prompt that carried it in,
+     * and its own `<command-name>/compact</command-name>` row. Both normalize
+     * to a user bubble, so the transcript showed the command twice.
+     *
+     * The tagged row is the authoritative one (it also carries the args), so
+     * a bare slash-command prompt sharing a `promptId` with one is dropped.
+     */
+    const taggedCommandPromptIds = new Set<string>();
     for (const raw of rawMessages) {
+      if (raw?.type !== 'user' || typeof raw.promptId !== 'string' || !raw.promptId) {
+        continue;
+      }
+      const rawText = raw.message?.content;
+      if (typeof rawText === 'string' && parseLocalCommandPayload(rawText)) {
+        taggedCommandPromptIds.add(raw.promptId);
+      }
+    }
+    for (const raw of rawMessages) {
+      if (
+        raw?.type === 'user'
+        && typeof raw.promptId === 'string'
+        && taggedCommandPromptIds.has(raw.promptId)
+        && typeof raw.message?.content === 'string'
+        && /^\/[A-Za-z0-9:_-]+$/.test(raw.message.content.trim())
+      ) {
+        continue;
+      }
       normalized.push(...this.normalizeMessage(raw, sessionId));
     }
 

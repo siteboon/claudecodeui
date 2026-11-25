@@ -620,6 +620,54 @@ test('Claude history reports a forked background agent stopped: no transcript, n
   }
 });
 
+test('Claude history drops bare slash-command echo sharing a promptId with its tagged command row', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-compact-dedup-'));
+  const transcriptPath = path.join(tempRoot, `${SESSION_ID}.jsonl`);
+
+  try {
+    await writeFile(
+      transcriptPath,
+      [
+        JSON.stringify({
+          type: 'user',
+          uuid: 'u-bare',
+          promptId: 'p-compact-1',
+          sessionId: SESSION_ID,
+          timestamp: '2026-08-21T10:00:00.000Z',
+          message: { role: 'user', content: '/compact' },
+        }),
+        JSON.stringify({
+          type: 'user',
+          uuid: 'u-tagged',
+          promptId: 'p-compact-1',
+          sessionId: SESSION_ID,
+          timestamp: '2026-08-21T10:00:01.000Z',
+          message: {
+            role: 'user',
+            content: '<command-name>/compact</command-name><command-args>focus</command-args>',
+          },
+        }),
+      ].join('\n') + '\n',
+      'utf8',
+    );
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Compact session', now, now, transcriptPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+      });
+
+      const userBubbles = history.messages.filter((message) => message.role === 'user');
+      assert.equal(userBubbles.length, 1);
+      assert.equal(userBubbles[0].commandName, '/compact');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('a live SDK tool result keeps its launch metadata under the stream key', () => {
   // The transcript spells it `toolUseResult`; the SDK stream spells it
   // `tool_use_result`. Reading only the former sent every live agent launch to

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  extractCompactTokenBudget,
   extractCumulativeTokenBudget,
   extractTokenBudget,
 } from '@/modules/providers/list/claude/claude-runtime.provider.js';
@@ -101,4 +102,33 @@ test('the cumulative reader ignores anything that is not a result', () => {
     }),
     null,
   );
+});
+
+test('compact_boundary emits a post-compaction token budget', () => {
+  const budget = extractCompactTokenBudget({
+    type: 'system',
+    subtype: 'compact_boundary',
+    compact_metadata: { trigger: 'manual', pre_tokens: 140_000, post_tokens: 6_500 },
+  }, 1_000_000);
+
+  assert.deepEqual(budget, {
+    used: 6_500,
+    total: 1_000_000,
+    inputTokens: 6_500,
+    outputTokens: 0,
+    breakdown: {
+      input: 6_500,
+      output: 0,
+    },
+  });
+
+  assert.equal(
+    extractCompactTokenBudget({
+      type: 'system',
+      subtype: 'compact_boundary',
+      compactMetadata: { postTokens: 0 },
+    }),
+    null,
+  );
+  assert.equal(extractCompactTokenBudget({ type: 'system', subtype: 'init' }), null);
 });

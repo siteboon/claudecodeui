@@ -42,6 +42,7 @@ async function executeCommand(
   commandName: string,
   context: Record<string, unknown>,
   sessionModels: Record<string, string> = {},
+  rawArgs?: string,
 ): Promise<Record<string, unknown>> {
   const router = createCommandsRouter({
     fileSystem: {
@@ -63,7 +64,7 @@ async function executeCommand(
     const address = server.address() as AddressInfo;
     const response = await fetch(`http://127.0.0.1:${address.port}/api/commands/execute`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ commandName, context }),
+      body: JSON.stringify({ commandName, context, rawArgs }),
     });
     assert.equal(response.status, 200);
     return await response.json() as Record<string, unknown>;
@@ -111,4 +112,67 @@ test('cost and status commands report the same resolved model as /models', async
 
   assert.equal((cost.data as { model: string }).model, 'haiku');
   assert.equal((status.data as { model: string }).model, 'haiku');
+});
+
+test('commands list includes /compact and execute handles validation and custom prompt passthrough', async () => {
+  const router = createCommandsRouter({
+    fileSystem: {
+      access: async () => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); },
+      readFile: async () => JSON.stringify({ name: 'claude-code-ui', version: '0.0.0-test' }),
+    } as unknown as typeof import('node:fs/promises'),
+    homeDirectory: () => '/home/test',
+    appRoot: '/app',
+    models: createModelsService() as never,
+    runtime: {
+      uptime: () => 0,
+      memoryUsage: () => ({ rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 }),
+      version: 'v22', platform: 'linux', pid: 1,
+    },
+  });
+  const app = express().use(express.json()).use('/api/commands', router);
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const address = server.address() as AddressInfo;
+    const listRes = await fetch(`http://127.0.0.1:${address.port}/api/commands/list`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(listRes.status, 200);
+    const listBody = await listRes.json() as { builtIn: Array<{ name: string }> };
+    assert.ok(listBody.builtIn.some((cmd) => cmd.name === '/compact'));
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+
+  const nonClaude = await executeCommand('/compact', { provider: 'codex', sessionId: 's-1' });
+  assert.equal(nonClaude.type, 'builtin');
+  assert.equal((nonClaude.data as { error: string }).error, 'Unsupported provider');
+
+  const noSession = await executeCommand('/compact', { provider: 'claude' });
+  assert.equal(noSession.type, 'builtin');
+  assert.equal((noSession.data as { error: string }).error, 'No active session');
+
+  const bareCompact = await executeCommand('/compact', { provider: 'claude', sessionId: 's-1' }, {}, '');
+  assert.deepEqual(bareCompact, {
+    type: 'custom',
+    command: '/compact',
+    content: '/compact',
+    hasFileIncludes: false,
+    hasBashCommands: false,
+  });
+
+  const instructedCompact = await executeCommand(
+    '/compact',
+    { provider: 'claude', sessionId: 's-1' },
+    {},
+    'focus on auth',
+  );
+  assert.deepEqual(instructedCompact, {
+    type: 'custom',
+    command: '/compact',
+    content: '/compact focus on auth',
+    hasFileIncludes: false,
+    hasBashCommands: false,
+  });
 });

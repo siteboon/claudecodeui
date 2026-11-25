@@ -257,6 +257,17 @@ export function summarizeClaudeTokenUsage(
   let outputTokens = 0;
   let cacheReadTokens = 0;
   let cacheCreationTokens = 0;
+  /**
+   * A compaction rewrites the conversation: everything before the boundary is
+   * replaced by a summary, so the next request carries `postTokens`, not the
+   * `preTokens` of the turn that ran before it.
+   *
+   * Walking backwards, the newest assistant row still sits *before* the
+   * boundary until a turn runs again, and reading it snapped the counter back
+   * to the pre-compaction size — a session compacted from 149K to 6K kept
+   * showing 149K, so the user had no way to see the compaction worked.
+   */
+  let compactedPostTokens = 0;
 
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
@@ -264,6 +275,16 @@ export function summarizeClaudeTokenUsage(
     // conversation's; reading one makes the counter drop to the subagent's
     // number and bounce back on the next main-thread turn.
     if (entry?.isSidechain === true) {
+      continue;
+    }
+
+    if (entry?.type === 'system' && entry.subtype === 'compact_boundary') {
+      const metadata = entry.compactMetadata ?? entry.compact_metadata;
+      const postTokens = readUsageNumber(metadata?.postTokens ?? metadata?.post_tokens);
+      if (postTokens > 0) {
+        compactedPostTokens = postTokens;
+        break;
+      }
       continue;
     }
 
@@ -305,6 +326,21 @@ export function summarizeClaudeTokenUsage(
     ? reportedContextWindow
     : configuredOrDefaultContextWindow;
   const cacheTokens = cacheReadTokens + cacheCreationTokens;
+
+  // A compaction is the newest thing that happened, so it wins over the turn
+  // that preceded it: the context now holds the summary, not that turn.
+  if (compactedPostTokens > 0) {
+    return {
+      used: compactedPostTokens,
+      total: contextWindow,
+      inputTokens: compactedPostTokens,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      cacheTokens: 0,
+      breakdown: { input: compactedPostTokens, output: 0 },
+    };
+  }
 
   return {
     used: inputTokens + outputTokens,
