@@ -1900,8 +1900,13 @@ async function abortClaudeSDKSession(sessionId: string) {
     // Update session status
     session.status = 'aborted';
 
-    // Clean up session
-    removeSession(sessionId);
+    // A turn that started while the interrupt was awaited owns the map entry
+    // now, and the abort flag would suppress that turn's terminal `complete`.
+    if (getSession(sessionId)?.instance === session.instance) {
+      removeSession(sessionId);
+    } else {
+      abortedSessionIds.delete(sessionId);
+    }
 
     return true;
   } catch (error) {

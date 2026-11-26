@@ -7,6 +7,8 @@ import test from 'node:test';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
+  abortClaudeSDKSession,
+  isClaudeSDKSessionActive,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
   stopClaudeSDKTask,
@@ -300,6 +302,60 @@ test('a new turn stops the tasks the held process still has going before letting
     second.script.end();
     await secondRun;
     assert.deepEqual(listClaudeSDKBackgroundWork(), []);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('a stop still in progress leaves the turn that started meanwhile alone', async () => {
+  // The first process is held for background work, so no chat run blocks a
+  // new message. Stop is pressed, and the next turn starts before the CLI
+  // has answered the interrupt.
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
+  const first = createScriptedQuery();
+  const second = createScriptedQuery();
+  let answerInterrupt: (() => void) | undefined;
+  const firstCreateQuery: typeof first.createQuery = (input) => Object.assign(first.createQuery(input), {
+    interrupt: () => new Promise<void>((resolve) => { answerInterrupt = resolve; }),
+  });
+  const sent: NormalizedMessage[] = [];
+  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
+    resolveProviderSessionId: () => null,
+    resolveResumeModel: async () => undefined,
+    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
+    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
+    isProviderInstalled: async () => true,
+  };
+  const completes = () => sent.filter((message) => message.kind === 'complete').length;
+
+  try {
+    const firstRun = queryClaudeSDK('start an agent', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: firstCreateQuery });
+    await settle();
+    first.script.emit(init());
+    first.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
+    first.script.emit(taskStarted('a1', 'toolu_agent', 'local_agent'));
+    first.script.emit(ack('toolu_agent', 'Async agent launched successfully.', { status: 'async_launched', agentId: 'a1' }));
+    first.script.emit(result());
+    await waitFor(() => completes() === 1);
+
+    const stop = abortClaudeSDKSession(SESSION_ID);
+    await waitFor(() => answerInterrupt !== undefined);
+    const answerStop = answerInterrupt;
+    const secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
+    await settle();
+    answerStop?.();
+    assert.equal(await stop, true);
+
+    assert.equal(isClaudeSDKSessionActive(SESSION_ID), true, 'the new turn is still registered, so Stop can reach it');
+    first.script.end();
+    await firstRun;
+    second.script.emit(init());
+    second.script.emit(result());
+    second.script.end();
+    await secondRun;
+    assert.equal(completes(), 2, 'the new turn reports its own completion');
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
