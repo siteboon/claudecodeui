@@ -1124,6 +1124,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           model: model || providerModels?.DEFAULT,
           effort,
           permissionMode,
+          // An explicitly requested mode is applied as is, even 'default' (see mapCliOptionsToSDK).
+          enforcePermissionMode: requestedPermissionMode !== null,
           // A caller that only reads this response cannot answer an MCP form;
           // one whose run a person watches in the UI says so with `false`.
           unattended

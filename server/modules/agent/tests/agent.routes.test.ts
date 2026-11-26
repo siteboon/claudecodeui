@@ -328,8 +328,8 @@ async function runWithoutModel(
   return { models, catalogReads };
 }
 
-async function startClaudeRunWith(extraBody: Record<string, unknown>): Promise<{ unattended?: boolean; permissionMode?: string }> {
-  const runOptions: { unattended?: boolean; permissionMode?: string }[] = [];
+async function startClaudeRunWith(extraBody: Record<string, unknown>): Promise<{ unattended?: boolean; permissionMode?: string; enforcePermissionMode?: boolean }> {
+  const runOptions: { unattended?: boolean; permissionMode?: string; enforcePermissionMode?: boolean }[] = [];
   await withAgentServer(createDependencies({
     fileSystem: { access: async () => undefined } as unknown as AgentDependencies['fileSystem'],
     models: {
@@ -535,4 +535,13 @@ test('Agent session status reports whether a run is in progress without starting
     assert.equal(((await (await fetch(`${baseUrl}/api/agent/sessions/app-1`)).json()) as { processing: boolean }).processing, false);
     assert.equal((await fetch(`${baseUrl}/api/agent/sessions/nope`)).status, 404);
   });
+});
+
+test('Agent route enforces an explicitly requested Claude mode and leaves the implicit default as before', async () => {
+  const explicit = await startClaudeRunWith({ permissionMode: 'default' });
+  assert.equal(explicit.permissionMode, 'default');
+  assert.equal(explicit.enforcePermissionMode, true);
+  const implicit = await startClaudeRunWith({});
+  assert.equal(implicit.permissionMode, 'bypassPermissions');
+  assert.equal(implicit.enforcePermissionMode, false);
 });
