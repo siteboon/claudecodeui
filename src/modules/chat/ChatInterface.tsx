@@ -336,6 +336,21 @@ function ChatInterface({
     });
   }, [isActive, requestLatestMessages, selectedProject, selectedSession, sendMessage]);
 
+  // A run the server started on its own (the dispatcher's queued turn, a
+  // scheduled message) streams only to sockets that subscribe while it runs.
+  // Subscribing again attaches this page to that run so the turn arrives live
+  // instead of showing up only after a reload.
+  const handleSessionRunStarted = useCallback((sessionId: string) => {
+    statusCheckSentAtRef.current.set(sessionId, Date.now());
+    sendMessage({
+      type: 'chat.subscribe',
+      sessions: [{
+        sessionId,
+        lastSeq: lastSeqRef.current.get(sessionId) ?? 0,
+      }],
+    });
+  }, [sendMessage]);
+
   useChatRealtimeHandlers({
     isActive,
     subscribe,
@@ -354,6 +369,7 @@ function ChatInterface({
     onSessionBackground,
     getSessionActivity,
     onWebSocketReconnect: handleWebSocketReconnect,
+    requestResubscribe: handleSessionRunStarted,
     requestLatestMessages,
     sessionStore,
     onSteerOutcome: handleSteerOutcome,

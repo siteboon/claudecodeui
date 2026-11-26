@@ -43,6 +43,13 @@ type UseChatRealtimeHandlersArgs = {
   onSessionBackground?: MarkSessionBackground;
   getSessionActivity?: GetSessionActivity;
   onWebSocketReconnect?: () => void;
+  /**
+   * Re-sends `chat.subscribe` for a session whose run started without this
+   * page sending it. The run's writer only streams to sockets that subscribed
+   * while it runs, so without this the transcribed turn reaches the page only
+   * on reload (history fetch), never live.
+   */
+  requestResubscribe?: (sessionId: string) => void;
   requestLatestMessages: (sessionId: string, allowNetwork?: boolean) => Promise<void>;
   sessionStore: SessionStore;
   /**
@@ -84,6 +91,7 @@ export function useChatRealtimeHandlers({
   onSessionBackground,
   getSessionActivity,
   onWebSocketReconnect,
+  requestResubscribe,
   requestLatestMessages,
   sessionStore,
   onSteerOutcome,
@@ -153,6 +161,12 @@ export function useChatRealtimeHandlers({
           // until the run's first text arrives.
           if (sid) {
             onSessionProcessing?.(sid);
+            // The writer streams only to sockets subscribed while the run is
+            // live. This page subscribed before the run existed, so it has to
+            // subscribe again or the whole turn stays invisible until reload.
+            if (sid === activeViewSessionIdRef.current) {
+              requestResubscribe?.(sid);
+            }
           }
           return;
         }
