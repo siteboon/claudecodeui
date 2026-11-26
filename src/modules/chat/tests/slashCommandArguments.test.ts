@@ -208,6 +208,19 @@ test('an expanded body that is exactly "help" is sent as the message, not opened
   assert.deepEqual(chatSends().map((message) => message.content), ['help']);
 });
 
+test('a command pick clears the composer as soon as its expanded body is submitted', async () => {
+  const { view } = await renderLoadedComposer();
+  await act(async () => { view.result.current.setInput('/echo hi'); });
+  await act(async () => {
+    view.result.current.handleCommandSelect(ECHO_COMMAND as SlashCommand, 0, false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  // The expanded body was sent, but the command text must not remain in the
+  // composer even if the send path exits early (busy session, queue refusal).
+  assert.equal(view.result.current.input, '');
+});
+
 test('a voice transcript sent straight away is still read as a command', async () => {
   // Only the re-submit of an expanded body skips interception; "stop and send"
   // goes through the same path as typing and pressing Enter.

@@ -497,8 +497,14 @@ export function useChatComposerState({
       if (handleSubmitRef.current) {
         handleSubmitRef.current(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
       }
+      // The submit reads the expanded body synchronously, but its own cleanup
+      // runs after uploads/session allocation. Clear here too so the command
+      // text never lingers if that path exits early (busy session, queue
+      // rejection, or a session switch during the await).
+      setInput('');
+      inputValueRef.current = '';
     }, 0);
-  }, [addMessage]);
+  }, [addMessage, setInput]);
 
   const executeCommand = useCallback(
     async (command: SlashCommand, rawInput?: string, options?: { preserveInput?: boolean }) => {
