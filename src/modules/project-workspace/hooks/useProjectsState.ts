@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 import { api } from '@/shared/api';
+import { NEW_SESSION_ROUTE } from '@/shared/constants';
 import type { ServerEvent,
   AppTab,
   LLMProvider,
@@ -9,6 +10,11 @@ import type { ServerEvent,
   Project,
   ProjectSession,IsSessionProcessing } from '@/shared/types';
 import { mergeProjectSelectionMetadata } from '@/modules/project-workspace/utils/projectSelectionMetadata';
+import {
+  forgetLastOpenedSession,
+  readLastOpenedSession,
+  rememberLastOpenedSession,
+} from '@/modules/project-workspace/utils/lastSession';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 
 type UseProjectsStateArgs = {
@@ -18,6 +24,8 @@ type UseProjectsStateArgs = {
   subscribe: (listener: (event: ServerEvent) => void) => () => void;
   isMobile: boolean;
   isSessionProcessing: IsSessionProcessing;
+  /** True on `NEW_SESSION_ROUTE`: the user asked for a new chat, so do not reopen the last one. */
+  isNewSessionRoute?: boolean;
 };
 
 /**
@@ -401,6 +409,7 @@ export function useProjectsState({
   subscribe,
   isMobile,
   isSessionProcessing,
+  isNewSessionRoute = false,
 }: UseProjectsStateArgs) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -907,6 +916,76 @@ export function useProjectsState({
     clearSessionAttention(selectedSession?.id ?? sessionId ?? null);
   }, [clearSessionAttention, selectedSession?.id, sessionId]);
 
+  // Remember the conversation that is on screen. The root path reopens it, so a
+  // reload or a tab reopened from the background does not land on a blank new
+  // chat and turn the next message into a second session.
+  useEffect(() => {
+    const openSessionId = selectedSession?.id ?? sessionId ?? null;
+    if (!openSessionId) {
+      return;
+    }
+
+    rememberLastOpenedSession(
+      openSessionId,
+      selectedSession?.__projectId ?? selectedProject?.projectId ?? null,
+    );
+  }, [selectedProject?.projectId, selectedSession?.__projectId, selectedSession?.id, sessionId]);
+
+  /**
+   * Reopen the remembered conversation when the route names none and the user
+   * did not ask for a new chat.
+   *
+   * Runs once, after the first project fetch, because the recorded id has to be
+   * checked against the backend before navigating: project payloads are
+   * paginated, so a session missing from them is not proof that it is gone, and
+   * navigating to a deleted one would open an empty placeholder instead.
+   */
+  const restoreLastSessionAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (sessionId || isNewSessionRoute || isLoadingProjects || restoreLastSessionAttemptedRef.current) {
+      return;
+    }
+
+    restoreLastSessionAttemptedRef.current = true;
+    const lastSession = readLastOpenedSession();
+    if (!lastSession) {
+      return;
+    }
+
+    // The lookup outlives a click: if the user opens another chat or asks for a
+    // new one while it is in flight, that choice wins and this attempt must no
+    // longer redirect, nor forget the record the newer chat wrote.
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await api.sessionDetails(lastSession.sessionId);
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok) {
+          // Only a definitive "no such session" clears the record. A 5xx or a
+          // gateway hiccup says nothing about the session, and forgetting it
+          // here would silently disable recovery until the user opens something
+          // else. The network-error branch below already keeps the record.
+          if (response.status === 404) {
+            forgetLastOpenedSession();
+          }
+          return;
+        }
+      } catch (error) {
+        console.error(`Error restoring the last opened session ${lastSession.sessionId}:`, error);
+        return;
+      }
+
+      navigate(`/session/${lastSession.sessionId}`, { replace: true });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoadingProjects, isNewSessionRoute, navigate, sessionId]);
+
   useEffect(() => {
     if (!sessionId) {
       return;
@@ -1041,7 +1120,8 @@ export function useProjectsState({
     (project: Project) => {
       setSelectedProject(project);
       setSelectedSession(null);
-      navigate('/');
+      forgetLastOpenedSession();
+      navigate(NEW_SESSION_ROUTE);
 
       if (isMobile) {
         setSidebarOpen(false);
@@ -1083,7 +1163,8 @@ export function useProjectsState({
       setSelectedSession(null);
       setActiveTab('chat');
       setNewSessionTrigger((previous) => previous + 1);
-      navigate('/');
+      forgetLastOpenedSession();
+      navigate(NEW_SESSION_ROUTE);
 
       if (isMobile) {
         setSidebarOpen(false);
@@ -1098,7 +1179,8 @@ export function useProjectsState({
 
       if (selectedSession?.id === sessionIdToDelete) {
         setSelectedSession(null);
-        navigate('/');
+        forgetLastOpenedSession();
+        navigate(NEW_SESSION_ROUTE);
       }
 
       setProjects((prevProjects) =>
@@ -1258,7 +1340,8 @@ export function useProjectsState({
       if (selectedProject?.projectId === projectId) {
         setSelectedProject(null);
         setSelectedSession(null);
-        navigate('/');
+        forgetLastOpenedSession();
+        navigate(NEW_SESSION_ROUTE);
       }
 
       setProjects((prevProjects) => prevProjects.filter((project) => project.projectId !== projectId));

@@ -241,6 +241,20 @@ export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPrefer
 
 // ---------------------------
 
+//----------------- WORKSPACE ROUTES ------------
+
+/**
+ * The route that means "I want a new conversation".
+ *
+ * The root path used to carry that meaning implicitly, which made every loss of
+ * page context (reopening the tab, a notification without a session) look like a
+ * deliberate new chat and split one task across two sessions. Starting a chat is
+ * now an explicit navigation; the root path reopens the last conversation.
+ */
+export const NEW_SESSION_ROUTE = '/new';
+
+// ---------------------------
+
 //----------------- KEYBOARD ESCAPE LAYERS ------------
 
 /**
