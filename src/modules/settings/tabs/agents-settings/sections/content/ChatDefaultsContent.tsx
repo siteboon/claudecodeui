@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
 import type { AgentProvider, ChatDefaultsState, ProviderModelsApiResponse, ProviderModelOption } from '@/shared/types';
+import { ActionMenu, type ActionMenuItem } from '@/shared/ui';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
 import SettingsSection from '@/modules/settings/SettingsSection';
@@ -115,6 +116,48 @@ export default function ChatDefaultsContent({
     });
   };
 
+  const followProviderDefaultLabel = t('agents.defaults.followProviderDefault', {
+    defaultValue: 'Provider default',
+  });
+  const followModelDefaultLabel = t('agents.defaults.followModelDefault', {
+    defaultValue: 'Model default',
+  });
+
+  const selectedModelLabel = selectedModel
+    ? models.find((option) => option.value === selectedModel)?.label || selectedModel
+    : followProviderDefaultLabel;
+
+  const modelItems: ActionMenuItem[] = [
+    {
+      key: 'provider-default',
+      label: followProviderDefaultLabel,
+      isSelected: !selectedModel,
+      onSelect: () => handleModelChange(EMPTY_VALUE),
+    },
+    ...models.map((option) => ({
+      key: option.value,
+      label: option.label,
+      description: option.description,
+      isSelected: option.value === selectedModel,
+      onSelect: () => handleModelChange(option.value),
+    })),
+  ];
+
+  const effortItems: ActionMenuItem[] = [
+    {
+      key: 'model-default',
+      label: followModelDefaultLabel,
+      isSelected: !selectedEffort,
+      onSelect: () => update({ effort: EMPTY_VALUE }),
+    },
+    ...effortLevels.map((level) => ({
+      key: level,
+      label: level,
+      isSelected: level === selectedEffort,
+      onSelect: () => update({ effort: level }),
+    })),
+  ];
+
   return (
     <SettingsSection
       title={t('agents.defaults.title', { defaultValue: 'New session defaults' })}
@@ -129,20 +172,17 @@ export default function ChatDefaultsContent({
             defaultValue: 'Used when a new session is created without picking a model.',
           })}
         >
-          <select
-            value={selectedModel}
-            onChange={(event) => handleModelChange(event.target.value)}
+          <ActionMenu
+            label={selectedModelLabel}
+            ariaLabel={t('agents.defaults.model', { defaultValue: 'Default model' })}
+            items={modelItems}
             disabled={loading}
-            aria-label={t('agents.defaults.model', { defaultValue: 'Default model' })}
-            className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-56"
-          >
-            <option value={EMPTY_VALUE}>
-              {t('agents.defaults.followProviderDefault', { defaultValue: 'Provider default' })}
-            </option>
-            {models.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
+            portal
+            align="right"
+            className="w-full sm:w-56"
+            triggerClassName="w-full justify-between font-normal"
+            menuClassName="w-56"
+          />
         </SettingsRow>
 
         <SettingsRow
@@ -152,20 +192,17 @@ export default function ChatDefaultsContent({
           })}
         >
           {effortLevels.length > 0 ? (
-            <select
-              value={selectedEffort}
-              onChange={(event) => update({ effort: event.target.value })}
+            <ActionMenu
+              label={selectedEffort || followModelDefaultLabel}
+              ariaLabel={t('agents.defaults.effort', { defaultValue: 'Default reasoning effort' })}
+              items={effortItems}
               disabled={loading}
-              aria-label={t('agents.defaults.effort', { defaultValue: 'Default reasoning effort' })}
-              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-56"
-            >
-              <option value={EMPTY_VALUE}>
-                {t('agents.defaults.followModelDefault', { defaultValue: 'Model default' })}
-              </option>
-              {effortLevels.map((level) => (
-                <option key={level} value={level} className="capitalize">{level}</option>
-              ))}
-            </select>
+              portal
+              align="right"
+              className="w-full sm:w-56"
+              triggerClassName="w-full justify-between font-normal capitalize"
+              menuClassName="w-56"
+            />
           ) : (
             <span className="text-sm text-muted-foreground">
               {loading

@@ -63,39 +63,41 @@ const renderContent = (defaults: ChatDefaultsState = {}) => {
   return { onChange };
 };
 
+/** Opens the ActionMenu behind an accessible name and returns the trigger. */
+const openMenu = async (name: RegExp) => {
+  const trigger = await screen.findByRole('button', { name });
+  await waitFor(() => {
+    expect((trigger as HTMLButtonElement).disabled).toBe(false);
+  });
+  fireEvent.click(trigger);
+  return trigger;
+};
+
 test('choosing a model stores it as the provider default', async () => {
   const { onChange } = renderContent();
-  const modelSelect = await screen.findByLabelText(/default model/i);
+  await openMenu(/default model/i);
 
-  await waitFor(() => {
-    expect(screen.getByRole('option', { name: 'Best' })).toBeTruthy();
-  });
-
-  fireEvent.change(modelSelect, { target: { value: 'best' } });
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Best' }));
 
   expect(onChange).toHaveBeenCalledWith({ claude: { model: 'best' } });
 });
 
 test('choosing an effort keeps the selected model', async () => {
   const { onChange } = renderContent({ claude: { model: 'best' } });
-  const effortSelect = await screen.findByLabelText(/default reasoning effort/i);
+  await openMenu(/default reasoning effort/i);
 
-  fireEvent.change(effortSelect, { target: { value: 'max' } });
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'max' }));
 
   expect(onChange).toHaveBeenCalledWith({ claude: { model: 'best', effort: 'max' } });
 });
 
 test('an effort the new model cannot run is cleared instead of stored', async () => {
   const { onChange } = renderContent({ claude: { model: 'best', effort: 'max' } });
-  const modelSelect = await screen.findByLabelText(/default model/i);
+  await openMenu(/default model/i);
 
-  await waitFor(() => {
-    expect(screen.getByRole('option', { name: 'Sonnet' })).toBeTruthy();
-  });
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Sonnet' }));
 
-  fireEvent.change(modelSelect, { target: { value: 'sonnet' } });
-
-  expect(onChange).toHaveBeenCalledWith({ claude: { model: 'sonnet' } });
+  expect(onChange).toHaveBeenLastCalledWith({ claude: { model: 'sonnet' } });
 });
 
 test('a provider without effort support says so instead of offering a menu', async () => {
