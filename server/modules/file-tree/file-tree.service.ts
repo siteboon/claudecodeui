@@ -515,7 +515,21 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async saveTextFile(projectId, filePath, content) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      // The viewer opens a file by the identifier the transcript quoted, which
+      // on a Linux host can be the Windows path (`F:\...`) mounted under
+      // `/mnt/f`. Reads resolve that identifier to the host path; the save has
+      // to start from the same place, or it writes a literal `F:` directory
+      // under the project root instead of the file on screen. Containment is
+      // still enforced afterwards, so a read-only root stays unwritable.
+      let candidatePath = filePath;
+      if (isWindowsStylePath(filePath)) {
+        const hostResolution = resolveWorkspacePathForHost(filePath);
+        if (hostResolution.error) {
+          throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+        }
+        candidatePath = hostResolution.path;
+      }
+      const resolvedPath = resolvePathInsideProject(projectRoot, candidatePath);
       try {
         await fileSystem.writeTextFile(resolvedPath, content);
       } catch (error) {
