@@ -146,6 +146,17 @@ export function useChatRealtimeHandlers({
           return;
         }
 
+        case 'chat_run_started': {
+          // A run that started somewhere other than this composer: the
+          // dispatcher sending the queued turn once the previous one settles,
+          // or a scheduled message. Without this the session reads as idle
+          // until the run's first text arrives.
+          if (sid) {
+            onSessionProcessing?.(sid);
+          }
+          return;
+        }
+
         case 'chat_subscribed': {
           // Ack for chat.subscribe: authoritative processing state plus any
           // pending tool-permission prompts for the run.

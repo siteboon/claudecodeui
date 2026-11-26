@@ -12,7 +12,7 @@ import {
   sideQuestionsService,
 } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
-import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
+import { connectedClients, broadcastToConnectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
   getGlobalImageAssetsDir,
   isImageAttachmentDescriptor,
@@ -269,6 +269,12 @@ async function dispatchRun(
     }
     return { started: false, error: 'A run is already in progress for this session.' };
   }
+
+  // Announce the run to every open tab. A run this page did not send -- the
+  // dispatcher's queued turn, a scheduled message -- otherwise stays invisible
+  // until its first text arrives, which for a slow first token looks like the
+  // session is idle; only a reload (a fresh `chat.subscribed` ack) showed it.
+  broadcastToConnectedClients(JSON.stringify({ kind: 'chat_run_started', sessionId }));
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
