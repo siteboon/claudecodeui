@@ -772,10 +772,17 @@
     }
   }
 
-  /* Scale transcript, composer, and status banners with the pane width (80%) instead of a fixed rem cap, keeping some breathing room at the sides. */
+  /* Scale transcript, composer, and status banners with the pane width (80%) instead of a fixed rem cap, keeping some breathing room at the sides.
+     Phones and narrow panes keep the full width: the 80% cap only applies from the lg breakpoint up (#1852). */
   .chat-content-width {
     min-width: 0;
-    max-width: 80%;
+    max-width: 100%;
+  }
+
+  @media (min-width: 1024px) {
+    .chat-content-width {
+      max-width: 80%;
+    }
   }
 
   /* Text wrapping improvements */
