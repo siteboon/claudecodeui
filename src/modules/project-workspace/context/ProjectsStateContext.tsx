@@ -199,9 +199,18 @@ export function useProjectActiveSessionState(): ProjectActiveSessionState {
 export function useOptionalProjectActions(): {
   projects: ProjectsState['sidebarSharedProps']['projects'];
   refresh: ProjectsState['refreshProjectsSilently'];
+  /** Drops a project from local state and leaves it if it was selected, as the sidebar's delete does. */
+  removeProject: ProjectsState['sidebarSharedProps']['onProjectDelete'];
+  /** Drops a session from local state and leaves it if it was selected, as the sidebar's session delete does. */
+  removeSession: ProjectsState['sidebarSharedProps']['onSessionDelete'];
 } | null {
   const sidebar = useContext(ProjectSidebarContext);
   const main = useContext(ProjectMainContext);
   if (!sidebar || !main) return null;
-  return { projects: sidebar.sidebarSharedProps.projects, refresh: main.refreshProjectsSilently };
+  return {
+    projects: sidebar.sidebarSharedProps.projects,
+    refresh: main.refreshProjectsSilently,
+    removeProject: sidebar.sidebarSharedProps.onProjectDelete,
+    removeSession: sidebar.sidebarSharedProps.onSessionDelete,
+  };
 }

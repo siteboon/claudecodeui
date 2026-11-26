@@ -5,7 +5,12 @@ import { test, vi } from 'vitest';
 
 const deleteProject = vi.fn();
 const deleteSession = vi.fn();
-let workspace: { projects: { projectId: string; fullPath: string; worktreeOf?: string | null }[]; refresh: () => Promise<void> } | null = null;
+let workspace: {
+  projects: { projectId: string; fullPath: string; worktreeOf?: string | null }[];
+  refresh: () => Promise<void>;
+  removeProject?: (id: string) => void;
+  removeSession?: (id: string) => void;
+} | null = null;
 
 vi.mock('@/shared/api', () => ({
   api: { deleteProject: (...args: unknown[]) => deleteProject(...args), deleteSession: (...args: unknown[]) => deleteSession(...args) },
@@ -62,4 +67,27 @@ test('session archive and delete call the sidebar session request and refresh', 
   assert.equal(refresh.mock.calls.length, 2);
   deleteSession.mockResolvedValue({ ok: false, status: 404, json: async () => ({ error: 'Session not found' }) });
   assert.deepEqual(await result.current!('nope', 'archive'), { ok: false, error: 'Session not found' });
+});
+
+test('successful actions drop the target locally before refreshing, so a refresh merge cannot bring it back', async () => {
+  const order: string[] = [];
+  const refresh = vi.fn(async () => { order.push('refresh'); });
+  workspace = {
+    projects: [{ projectId: 'p-1', fullPath: '/src/app-worktrees/w1', worktreeOf: '/src/app' }],
+    refresh,
+    removeProject: (id) => order.push(`removeProject:${id}`),
+    removeSession: (id) => order.push(`removeSession:${id}`),
+  };
+  deleteProject.mockResolvedValue({ ok: true });
+  deleteSession.mockResolvedValue({ ok: true });
+  const projects = renderHook(() => usePluginProjectActions()).result;
+  const sessions = renderHook(() => usePluginSessionActions()).result;
+  await projects.current!('/src/app-worktrees/w1', 'archive');
+  await sessions.current!('s-2', 'archive');
+  assert.deepEqual(order, ['removeProject:p-1', 'refresh', 'removeSession:s-2', 'refresh']);
+
+  order.length = 0;
+  deleteSession.mockResolvedValue({ ok: false, status: 500, json: async () => ({ error: 'nope' }) });
+  await sessions.current!('s-3', 'delete');
+  assert.deepEqual(order, [], 'nothing is removed locally when the request fails');
 });
