@@ -7,6 +7,7 @@ import {
   buildLookupMap,
   extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
+  normalizeAutoSessionName,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';

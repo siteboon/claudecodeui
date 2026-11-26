@@ -1021,6 +1021,125 @@ export function normalizeSessionName(rawValue: string | undefined, fallback: str
   return normalized.slice(0, 120);
 }
 
+/**
+ * Budget for an automatic session title, counted in half-width units: a CJK
+ * character costs two, so the limit reads as eight Chinese characters.
+ *
+ * A sidebar row on a phone fits about that much. Titles derived from a prompt
+ * used to keep the whole first sentence, which pushed every other conversation
+ * off the screen and made them impossible to tell apart.
+ */
+export const SESSION_TITLE_MAX_WIDTH = 16;
+
+/**
+ * Cuts a prompt-derived session title to {@link SESSION_TITLE_MAX_WIDTH} and
+ * marks the cut with an ellipsis.
+ *
+ * Used by the session synchronizers and by app-session creation when they name
+ * a session after user text. Never apply it to a name the user typed through
+ * rename: that value is kept exactly as entered.
+ *
+ * The cut prefers a punctuation or space boundary and never splits an ASCII
+ * word, so a bilingual message keeps readable fragments instead of half a
+ * word. Titles that already fit come back unchanged.
+ */
+export function truncateSessionTitle(
+  rawValue: string,
+  maxWidth: number = SESSION_TITLE_MAX_WIDTH,
+): string {
+  const normalized = (rawValue ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized || measureTitleWidth(normalized) <= maxWidth) {
+    return normalized;
+  }
+
+  // The ellipsis occupies a full CJK slot, so the visible line stays inside
+  // the requested width instead of spilling one character over.
+  const budget = Math.max(1, maxWidth - 2);
+  let width = 0;
+  let end = 0;
+  let lastBreak = 0;
+
+  for (const char of normalized) {
+    const charWidth = isWideTitleCharacter(char) ? 2 : 1;
+    if (width + charWidth > budget) {
+      break;
+    }
+    width += charWidth;
+    end += char.length;
+    if (TITLE_BREAK_CHARACTER.test(char)) {
+      lastBreak = end;
+    }
+  }
+
+  let cut = end;
+  // Only a break near the end of the budget is worth taking. An early one — a
+  // space after the first word of a mixed-language title — would throw away
+  // most of the phrase the reader needs to tell sessions apart.
+  if (lastBreak > 0 && measureTitleWidth(normalized.slice(0, lastBreak)) >= budget * 0.85) {
+    cut = lastBreak;
+  } else {
+    while (cut > 0 && isAsciiWordCharacter(normalized[cut - 1]) && isAsciiWordCharacter(normalized[cut] ?? '')) {
+      cut -= 1;
+    }
+  }
+
+  const head = normalized.slice(0, cut).replace(TITLE_TRAILING_BREAKS, '').trim();
+  return head ? `${head}…` : `${normalized.slice(0, end)}…`;
+}
+
+/**
+ * Normalizes a provider-supplied session title that came from user text.
+ *
+ * The four session synchronizers (Claude, Codex, Cursor, OpenCode) all name
+ * sessions this way. A placeholder such as `Untitled Codex Session` passes
+ * through unchanged — it is a stand-in, not a title, and cutting it would only
+ * make it less readable. Any other value is collapsed and width-limited by
+ * {@link truncateSessionTitle}.
+ */
+export function normalizeAutoSessionName(rawValue: string | undefined, fallback: string): string {
+  const normalized = (rawValue ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized || normalized === fallback) {
+    return fallback;
+  }
+
+  return truncateSessionTitle(normalized);
+}
+
+/** Characters a truncated title may end on, so the ellipsis replaces them rather than following them. */
+const TITLE_BREAK_CHARACTER = /[\s,.:;!?，。：；、！？]/u;
+const TITLE_TRAILING_BREAKS = /[\s,.:;!?，。：；、！？]+$/u;
+
+/**
+ * Reports whether one character renders at double width, which is what makes an
+ * eight-character budget in Chinese equal to sixteen Latin letters.
+ */
+function isWideTitleCharacter(char: string): boolean {
+  const code = char.codePointAt(0) ?? 0;
+  return (
+    (code >= 0x1100 && code <= 0x115f)
+    || (code >= 0x2e80 && code <= 0xa4cf)
+    || (code >= 0xac00 && code <= 0xd7a3)
+    || (code >= 0xf900 && code <= 0xfaff)
+    || (code >= 0xfe30 && code <= 0xfe6f)
+    || (code >= 0xff00 && code <= 0xff60)
+    || (code >= 0xffe0 && code <= 0xffe6)
+  );
+}
+
+/** Counts a title in the same half-width units the truncation budget uses. */
+function measureTitleWidth(text: string): number {
+  let width = 0;
+  for (const char of text) {
+    width += isWideTitleCharacter(char) ? 2 : 1;
+  }
+  return width;
+}
+
+/** Latin letters and digits, the characters a cut must not split in half. */
+function isAsciiWordCharacter(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z0-9]/.test(char);
+}
+
 // ---------------------------
 //----------------- PROVIDER SESSION VALUE NORMALIZATION UTILITIES ------------
 /**

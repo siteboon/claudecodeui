@@ -8,6 +8,7 @@ import {
   extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
+  normalizeAutoSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
@@ -164,9 +165,11 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       sessionName = nameMap.get(parsed.sessionId);
     }
 
+    // These titles come from the transcript's own prompt text, which runs to
+    // whole paragraphs; cutting them here keeps the sidebar readable.
     return {
       ...parsed,
-      sessionName: normalizeSessionName(sessionName, 'Untitled Claude Session'),
+      sessionName: normalizeAutoSessionName(sessionName, 'Untitled Claude Session'),
     };
   }
 

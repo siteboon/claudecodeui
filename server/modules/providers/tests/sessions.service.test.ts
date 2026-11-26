@@ -41,19 +41,30 @@ test('provider session id returns the mapped native id', { concurrency: false },
   });
 });
 
-test('app session names use at most four whole words from the initial message', { concurrency: false }, async () => {
+test('app session names are cut to eight characters of the initial message', { concurrency: false }, async () => {
   await withIsolatedDatabase(() => {
     const result = sessionsService.createAppSession(
       'codex',
       '/tmp/session-name-project',
-      '  supercalifragilisticexpialidocious\nsecond   third fourth fifth  ',
+      '  聊天会话加载延时问题：在有 queue 会话的情况\n需要刷新才能看到  ',
     );
 
-    assert.equal(result.sessionName, 'supercalifragilisticexpialidocious second third fourth');
-    assert.equal(
-      sessionsDb.getSessionById(result.sessionId)?.custom_name,
-      'supercalifragilisticexpialidocious second third fourth',
+    // A Chinese prompt has no spaces, so word-counting used to keep the whole
+    // sentence; the width budget applies to every language alike.
+    assert.equal(result.sessionName, '聊天会话加载延…');
+    assert.equal(sessionsDb.getSessionById(result.sessionId)?.custom_name, '聊天会话加载延…');
+  });
+});
+
+test('a latin initial message keeps whole words inside the same width', { concurrency: false }, async () => {
+  await withIsolatedDatabase(() => {
+    const result = sessionsService.createAppSession(
+      'codex',
+      '/tmp/session-name-project',
+      'investigate the streaming regression before the release',
     );
+
+    assert.equal(result.sessionName, 'investigate…');
   });
 });
 

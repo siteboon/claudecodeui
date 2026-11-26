@@ -9,6 +9,7 @@ import {
   getOpenCodeDatabasePath,
   normalizeProviderTimestamp,
   normalizeSessionName,
+  normalizeAutoSessionName,
   readJsonRecord,
   readOptionalString,
   unwrapJsonStringLiteral,
@@ -241,7 +242,10 @@ export class OpenCodeSessionSynchronizer implements IProviderSessionSynchronizer
     if (existingName && existingName !== fallbackTitle) {
       nextName = existingName;
     } else {
-      nextName = readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId);
+      nextName = normalizeAutoSessionName(
+        readOptionalString(row.title) ?? this.readFirstUserText(db, sessionId),
+        fallbackTitle,
+      );
     }
 
     // OpenCode stores every session in one shared sqlite database, so jsonl_path

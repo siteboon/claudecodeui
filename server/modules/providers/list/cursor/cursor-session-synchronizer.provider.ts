@@ -9,6 +9,7 @@ import {
   extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
   normalizeSessionName,
+  normalizeAutoSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
@@ -151,7 +152,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       return {
         sessionId,
         projectPath,
-        sessionName: normalizeSessionName(firstLine, 'Untitled Cursor Session'),
+        sessionName: normalizeAutoSessionName(firstLine, 'Untitled Cursor Session'),
       };
     });
   }
