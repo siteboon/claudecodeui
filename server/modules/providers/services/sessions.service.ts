@@ -7,6 +7,7 @@ import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/i
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
+import { scheduleSessionTitleGeneration } from '@/modules/providers/services/session-title.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -482,6 +483,15 @@ export const sessionsService = {
     const sessionId = randomUUID();
     const sessionName = buildCloudCliSessionName(initialMessage);
     sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath, sessionName);
+    // The truncated name is what the sidebar shows this instant; the model's
+    // own title replaces it moments later, once it has read the message.
+    scheduleSessionTitleGeneration({
+      sessionId,
+      provider,
+      projectPath: normalizedProjectPath,
+      firstMessage: initialMessage,
+      initialName: sessionName,
+    });
 
     return {
       sessionId,

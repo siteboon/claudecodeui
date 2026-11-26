@@ -41,7 +41,7 @@ test('provider session id returns the mapped native id', { concurrency: false },
   });
 });
 
-test('app session names are cut to eight characters of the initial message', { concurrency: false }, async () => {
+test('app session names are cut to the shared width budget', { concurrency: false }, async () => {
   await withIsolatedDatabase(() => {
     const result = sessionsService.createAppSession(
       'codex',
@@ -51,8 +51,8 @@ test('app session names are cut to eight characters of the initial message', { c
 
     // A Chinese prompt has no spaces, so word-counting used to keep the whole
     // sentence; the width budget applies to every language alike.
-    assert.equal(result.sessionName, '聊天会话加载延…');
-    assert.equal(sessionsDb.getSessionById(result.sessionId)?.custom_name, '聊天会话加载延…');
+    assert.equal(result.sessionName, '聊天会话加载延时问题：在有…');
+    assert.equal(sessionsDb.getSessionById(result.sessionId)?.custom_name, '聊天会话加载延时问题：在有…');
   });
 });
 
@@ -64,7 +64,7 @@ test('a latin initial message keeps whole words inside the same width', { concur
       'investigate the streaming regression before the release',
     );
 
-    assert.equal(result.sessionName, 'investigate…');
+    assert.equal(result.sessionName, 'investigate the streaming…');
   });
 });
 
