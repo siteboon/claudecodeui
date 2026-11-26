@@ -61,6 +61,7 @@ export function ActionMenu({
 }: ActionMenuProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [portalPosition, setPortalPosition] = React.useState<{ top: number; left: number } | null>(null);
+  const [insideDialog, setInsideDialog] = React.useState(false);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
@@ -79,6 +80,11 @@ export function ActionMenu({
     }
     onOpenChange?.(open);
   }, [onOpenChange]);
+
+  // A portal menu inside the Settings dialog (z-[9999]) must stack above it.
+  React.useLayoutEffect(() => {
+    setInsideDialog(Boolean(rootRef.current?.closest('[role="dialog"]')));
+  }, []);
 
   React.useEffect(() => {
     if (!isOpen) {
@@ -188,7 +194,7 @@ export function ActionMenu({
       tabIndex={-1}
       data-escape-layer
       className={cn(
-        portal ? 'fixed z-[70]' : 'absolute top-full z-50 mt-2',
+        portal ? (insideDialog ? 'fixed z-[10000]' : 'fixed z-[70]') : 'absolute top-full z-50 mt-2',
         'min-w-[220px] rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg',
         'animate-in fade-in-0 zoom-in-95',
         !portal && (align === 'right' ? 'right-0' : 'left-0'),
