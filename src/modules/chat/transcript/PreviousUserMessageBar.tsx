@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp } from 'lucide-react';
+import { History } from 'lucide-react';
 
 import type { ChatMessage } from '@/shared/types';
+import { isUserPromptMessage } from '@/shared/utils';
 
 /** A row counts as scrolled past once its bottom clears the viewport top by this much, which keeps the bar from flickering at the boundary. */
 const PAST_TOP_EDGE_TOLERANCE_PX = 4;
@@ -17,15 +18,27 @@ type PreviousUserMessageBarProps = {
   /** Every loaded row of the session, in transcript order; only rows currently in the DOM can be scrolled past. */
   messages: ChatMessage[];
   /**
+   * The session's newest prompt read from the transcript when no loaded row is
+   * one. A long agent turn can push the prompt that started it past the first
+   * page, and the bar still has to name something.
+   */
+  latestUserPrompt: ChatMessage | null;
+  /**
    * Brings a row into view. Owned by the session state because the row may sit
    * outside the render window, so it takes more than an element lookup.
    */
   onReveal: (message: ChatMessage) => void;
 };
 
-/** A turn the user actually sent — not a tool call echo or a side-question aside. */
-function isUserPrompt(message: ChatMessage): boolean {
-  return message.type === 'user' && !message.sideQuestion;
+/** The newest prompt among the loaded rows — what the bar shows while that turn is still on screen. */
+function findNewestLoadedPrompt(messages: ChatMessage[]): ChatMessage | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (isUserPromptMessage(messages[index])) {
+      return messages[index];
+    }
+  }
+
+  return null;
 }
 
 /** The bar's one line of plain text; an attachment-only turn is named instead. */
@@ -61,7 +74,7 @@ function findPreviousUserPrompt(
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (!isUserPrompt(message)) {
+    if (!isUserPromptMessage(message)) {
       continue;
     }
     const row = rowsByTimestamp.get(String(message.timestamp));
@@ -80,16 +93,20 @@ function findPreviousUserPrompt(
  * Rendered by chat's ChatInterface above ChatMessagesPane: one pinned line
  * naming the user message whose turn is above the viewport, which clicking
  * scrolls back to. Repeated clicks walk up the conversation one prompt at a
- * time instead of scrolling and hunting for where a turn started.
+ * time instead of scrolling and hunting for where a turn started. When no
+ * prompt has scrolled away yet it names the newest one, so the line is there
+ * from the moment a session opens instead of only after some scrolling.
  */
 export const PreviousUserMessageBar = memo(({
   scrollContainerRef,
   messages,
+  latestUserPrompt,
   onReveal,
 }: PreviousUserMessageBarProps) => {
   const { t } = useTranslation('chat');
   // The prompt currently scrolled past; kept as state because the bar renders from it and must follow the viewport.
   const [previousPrompt, setPreviousPrompt] = useState<ChatMessage | null>(null);
+  const newestLoadedPrompt = useMemo(() => findNewestLoadedPrompt(messages), [messages]);
 
   const measure = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -137,22 +154,26 @@ export const PreviousUserMessageBar = memo(({
     };
   }, [measure, scrollContainerRef]);
 
-  if (!previousPrompt) {
+  // The scrolled-past turn wins while there is one; otherwise the newest prompt
+  // keeps the bar visible even before it scrolls away, including when that
+  // prompt was never part of the loaded page.
+  const prompt = previousPrompt ?? newestLoadedPrompt ?? latestUserPrompt;
+  if (!prompt) {
     return null;
   }
 
-  const preview = readPreview(previousPrompt, t('previousMessage.attachmentsOnly'));
+  const preview = readPreview(prompt, t('previousMessage.attachmentsOnly'));
   const jumpLabel = t('previousMessage.jump');
 
   return (
     <div className="flex flex-shrink-0 justify-center px-4 pt-2">
       <button
         type="button"
-        onClick={() => onReveal(previousPrompt)}
+        onClick={() => onReveal(prompt)}
         title={jumpLabel}
         className="chat-content-width flex w-full min-w-0 items-center gap-2 rounded-r-md border-l-2 border-blue-500/60 bg-muted/25 px-3 py-1.5 text-left transition-colors hover:bg-muted/40 dark:bg-muted/10 dark:hover:bg-muted/20"
       >
-        <ArrowUp className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-hidden />
+        <History className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-hidden />
         <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-blue-600 text-[10px] font-medium text-white">
           U
         </span>

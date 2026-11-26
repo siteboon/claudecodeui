@@ -14,6 +14,8 @@ import { readSelectedProvider } from '@/shared/selectedProvider';
 import type { SearchTarget } from '@/modules/chat/utils/searchTargetLocator';
 import { sideQuestionStore, useSideQuestions } from '@/modules/chat/hooks/useSideQuestions';
 import { mergeSideQuestions } from '@/modules/chat/utils/sideQuestions';
+import { useLatestUserPrompt } from '@/modules/chat/hooks/useLatestUserPrompt';
+import { isUserPromptMessage } from '@/shared/utils';
 
 const INITIAL_VISIBLE_MESSAGES = 100;
 
@@ -433,6 +435,19 @@ export function useChatSessionState({
       failedText: t('sideQuestion.failed'),
     });
   }, [storeMessages, pendingUserMessage, sideQuestions, hasMoreMessages, t]);
+
+  // Whether the loaded page already holds a prompt decides if the bar needs the
+  // transcript peek at all: a page with one makes the newest loaded prompt the
+  // answer.
+  const hasLoadedUserPrompt = useMemo(() => chatMessages.some(isUserPromptMessage), [chatMessages]);
+  // The prompt the bar falls back to when a long turn has pushed every loaded
+  // user row past the tail page. Read from the server, never rendered here.
+  const latestUserPrompt = useLatestUserPrompt({
+    sessionId: activeSessionId,
+    isActive,
+    hasLoadedUserPrompt,
+    totalMessages,
+  });
 
   /* ---------------------------------------------------------------- */
   /*  addMessage                                                       */
@@ -1161,6 +1176,30 @@ export function useChatSessionState({
     requestAnimationFrame(() => attempt(10));
   }, [chatMessages]);
 
+  /**
+   * Brings one of the session's user prompts into view. A row the client holds
+   * scrolls directly; a prompt that lives past the loaded page goes through the
+   * search jump, which loads the transcript and flashes where it landed.
+   */
+  const revealUserPrompt = useCallback((prompt: ChatMessage) => {
+    const loaded = chatMessages.indexOf(prompt) >= 0
+      ? prompt
+      : chatMessages.find(
+        (message) => isUserPromptMessage(message) && String(message.timestamp) === String(prompt.timestamp),
+      );
+    if (loaded) {
+      revealMessage(loaded);
+      return;
+    }
+
+    // Marks the jump as in flight so the automatic scroll-to-bottom stays out
+    // of its way while the whole transcript is fetched and rendered.
+    searchScrollActiveRef.current = true;
+    // The timestamp is exact and already on the row, while the prompt's text can
+    // reappear earlier in the transcript (a compact summary quotes it), so the
+    // jump resolves by the stronger key only.
+    setSearchTarget({ timestamp: String(prompt.timestamp) });
+  }, [chatMessages, revealMessage]);
   return {
     chatMessages,
     addMessage,
@@ -1181,6 +1220,8 @@ export function useChatSessionState({
     visibleMessages,
     loadEarlierMessages,
     revealMessage,
+    latestUserPrompt,
+    revealUserPrompt,
     loadAllMessages,
     loadFullTranscript,
     allMessagesLoaded,

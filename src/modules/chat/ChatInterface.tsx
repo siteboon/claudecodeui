@@ -154,6 +154,8 @@ function ChatInterface({
     visibleMessages,
     loadEarlierMessages,
     revealMessage,
+    latestUserPrompt,
+    revealUserPrompt,
     loadAllMessages,
     loadFullTranscript,
     allMessagesLoaded,
@@ -504,7 +506,8 @@ function ChatInterface({
         <PreviousUserMessageBar
           scrollContainerRef={scrollContainerRef}
           messages={chatMessages}
-          onReveal={revealMessage}
+          latestUserPrompt={latestUserPrompt}
+          onReveal={revealUserPrompt}
         />
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>

@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
+import type { ChatMessage, Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -260,6 +260,31 @@ export const getPageTitle = (
  */
 export const isSkillCommand = (command: SlashCommand): boolean =>
   command.type === 'skill' || command.metadata?.type === 'skill';
+
+// ---------------------------
+
+//----------------- CHAT TRANSCRIPT ------------
+
+/**
+ * The fixed opening sentence of the summary row a continued conversation starts
+ * with. The CLI delivers that summary through the user turn, so it looks like a
+ * prompt even though nobody typed it.
+ */
+const CONTINUED_SESSION_PREFIX = 'This session is being continued from a previous conversation';
+
+/**
+ * True for a turn the person actually typed, as opposed to the aside half of a
+ * side question, a slash command the transcript draws as a divider, or the
+ * compaction summary that opens a continued session. The previous-message bar
+ * and the session hook that feeds its transcript fallback both read it, so the
+ * two agree on what counts as a prompt.
+ */
+export const isUserPromptMessage = (message: ChatMessage): boolean =>
+  message.type === 'user'
+  && !message.sideQuestion
+  && !message.isCompactSummary
+  && !message.isLocalCommand
+  && !String(message.content ?? '').trim().startsWith(CONTINUED_SESSION_PREFIX);
 
 // ---------------------------
 

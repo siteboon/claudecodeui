@@ -8,9 +8,10 @@ import type { ChatMessage } from '@/shared/types';
 
 /**
  * The bar names the prompt whose turn the reader is inside: the newest user
- * row that has scrolled completely above the transcript's top edge. These
- * cases pin that choice, the jump it offers, and the cases it must stay out of
- * (a prompt still on screen, a side-question aside).
+ * row that has scrolled completely above the transcript's top edge, else the
+ * newest prompt the loaded rows hold, else the one read from the transcript
+ * when a long turn pushed every prompt past the first page. These cases pin
+ * that choice, the jump it offers, and the asides it must never name.
  */
 
 const CONTAINER_TOP = 100;
@@ -104,6 +105,7 @@ describe('the previous user message bar', () => {
       <PreviousUserMessageBar
         scrollContainerRef={{ current: container }}
         messages={messages}
+        latestUserPrompt={null}
         onReveal={onReveal}
       />,
     );
@@ -116,21 +118,56 @@ describe('the previous user message bar', () => {
     expect(onReveal).toHaveBeenCalledWith(messages[0]);
   });
 
-  it('stays out of the way while every prompt is still on screen', () => {
+  it('keeps the newest prompt in reach while it is still on screen, and jumps to it', () => {
     const { container } = makeContainer([
       { timestamp: 't1', bottom: 300 },
       { timestamp: 't2', bottom: 700 },
     ]);
+    const messages = [userMessage('t1', '还在屏幕里'), assistantMessage('t2')];
+    const onReveal = vi.fn();
 
     render(
       <PreviousUserMessageBar
         scrollContainerRef={{ current: container }}
-        messages={[userMessage('t1', '还在屏幕里'), assistantMessage('t2')]}
-        onReveal={() => {}}
+        // An older transcript read must lose to the prompt the reader can see.
+        messages={messages}
+        latestUserPrompt={userMessage('t0', '更早的提问')}
+        onReveal={onReveal}
       />,
     );
 
-    expect(screen.queryByTitle('Jump to the previous message you sent')).toBeNull();
+    const bar = screen.getByTitle('Jump to the previous message you sent');
+    expect(bar.textContent).toContain('还在屏幕里');
+    expect(bar.textContent).not.toContain('更早的提问');
+
+    fireEvent.click(bar);
+    expect(onReveal).toHaveBeenCalledWith(messages[0]);
+  });
+
+  it('falls back to the prompt read from the transcript when no loaded row is one', () => {
+    const { container } = makeContainer([
+      { timestamp: 't1', bottom: 300 },
+      { timestamp: 't2', bottom: 700 },
+    ]);
+    // A long turn: the tail page holds only this turn's assistant and tool rows.
+    const messages = [assistantMessage('t1'), assistantMessage('t2')];
+    const transcriptPrompt = userMessage('t0', '这一轮开始时我提的问题');
+    const onReveal = vi.fn();
+
+    render(
+      <PreviousUserMessageBar
+        scrollContainerRef={{ current: container }}
+        messages={messages}
+        latestUserPrompt={transcriptPrompt}
+        onReveal={onReveal}
+      />,
+    );
+
+    const bar = screen.getByTitle('Jump to the previous message you sent');
+    expect(bar.textContent).toContain('这一轮开始时我提的问题');
+
+    fireEvent.click(bar);
+    expect(onReveal).toHaveBeenCalledWith(transcriptPrompt);
   });
 
   it('moves to the earlier prompt once the current one scrolls past the top', async () => {
@@ -151,6 +188,7 @@ describe('the previous user message bar', () => {
       <PreviousUserMessageBar
         scrollContainerRef={{ current: container }}
         messages={messages}
+        latestUserPrompt={null}
         onReveal={() => {}}
       />,
     );
@@ -164,6 +202,57 @@ describe('the previous user message bar', () => {
     });
 
     expect(screen.getByTitle('Jump to the previous message you sent').textContent).toContain('较新的一条');
+  });
+
+  it('never names the compaction summary that opens a continued session', () => {
+    const { container } = makeContainer([
+      { timestamp: 't1', bottom: 300 },
+      { timestamp: 't2', bottom: 500 },
+      { timestamp: 't3', bottom: 700 },
+    ]);
+    const messages = [
+      userMessage('t1', '真正的问题'),
+      assistantMessage('t2'),
+      // The CLI sends the continued-session summary through the user turn, so
+      // it arrives typed as one even though nobody wrote it.
+      userMessage('t3', 'This session is being continued from a previous conversation that ran out of context.'),
+    ];
+
+    render(
+      <PreviousUserMessageBar
+        scrollContainerRef={{ current: container }}
+        messages={messages}
+        latestUserPrompt={null}
+        onReveal={() => {}}
+      />,
+    );
+
+    expect(screen.getByTitle('Jump to the previous message you sent').textContent).toContain('真正的问题');
+    expect(screen.getByTitle('Jump to the previous message you sent').textContent).not.toContain('continued from');
+  });
+
+  it('never names a slash command as the session prompt', () => {
+    const { container } = makeContainer([
+      { timestamp: 't1', bottom: 300 },
+      { timestamp: 't2', bottom: 600 },
+    ]);
+    const messages = [
+      userMessage('t1', '真正的提问'),
+      assistantMessage('t2'),
+      userMessage('t3', '/compact', { isLocalCommand: true, commandName: 'compact' }),
+    ];
+
+    render(
+      <PreviousUserMessageBar
+        scrollContainerRef={{ current: container }}
+        messages={messages}
+        latestUserPrompt={null}
+        onReveal={() => {}}
+      />,
+    );
+
+    expect(screen.getByTitle('Jump to the previous message you sent').textContent).toContain('真正的提问');
+    expect(screen.getByTitle('Jump to the previous message you sent').textContent).not.toContain('/compact');
   });
 
   it('never offers a side question as the session prompt', () => {
@@ -182,6 +271,7 @@ describe('the previous user message bar', () => {
       <PreviousUserMessageBar
         scrollContainerRef={{ current: container }}
         messages={messages}
+        latestUserPrompt={null}
         onReveal={() => {}}
       />,
     );
@@ -197,6 +287,7 @@ describe('the previous user message bar', () => {
       <PreviousUserMessageBar
         scrollContainerRef={{ current: container }}
         messages={[userMessage('t1', '', { files: [{ name: 'spec.pdf' }] })]}
+        latestUserPrompt={null}
         onReveal={() => {}}
       />,
     );
