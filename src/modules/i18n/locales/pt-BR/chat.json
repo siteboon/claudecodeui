@@ -171,7 +171,8 @@
       "willSend": "Enviará quando isto terminar",
       "edit": "Editar mensagem enfileirada",
       "delete": "Excluir mensagem enfileirada"
-    }
+    },
+    "routeSessionUnresolved": "Esta conversa ainda está carregando. Aguarde um momento ou reabra-a na barra lateral e envie novamente."
   },
   "composer": {
     "reasoning": "Raciocínio",

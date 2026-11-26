@@ -143,7 +143,8 @@
     "queue": {
       "append": "Aggiungi al messaggio in coda",
       "notCombinable": "Impossibile mettere in coda il messaggio: un comando con / viene eseguito da solo, quindi non può essere unito al messaggio in coda. Invialo dopo che il messaggio in coda è stato inviato."
-    }
+    },
+    "routeSessionUnresolved": "Questa conversazione è ancora in caricamento. Attendi un momento o riaprila dalla barra laterale, poi invia di nuovo."
   },
   "providerSelection": {
     "title": "Scegli il tuo assistente AI",

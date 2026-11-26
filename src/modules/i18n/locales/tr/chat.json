@@ -195,7 +195,8 @@
       "willRead": "{{provider}} bunu bir sonraki araç çağrısında okuyacak",
       "attachments_one": "{{count}} dosya eklendi",
       "attachments_other": "{{count}} dosya eklendi"
-    }
+    },
+    "routeSessionUnresolved": "Bu konuşma hâlâ yükleniyor. Kısa bir süre bekleyin veya kenar çubuğundan yeniden açıp tekrar gönderin."
   },
   "composer": {
     "reasoning": "Düşünme",

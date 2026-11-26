@@ -71,6 +71,17 @@ type UseChatComposerStateArgs = {
    * /session/:id and records it as the current session.
    */
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
+  /**
+   * The session id the route names, when there is one.
+   *
+   * A `/session/<id>` URL is the user saying which conversation this is. Until
+   * that id is resolved into `selectedSession`, the composer has no session to
+   * send to, and treating that gap as "brand-new chat" allocated a second
+   * session and sent the same message into it, leaving the conversation the
+   * user was looking at untouched (two sessions, one task). Sending is refused
+   * while the route names a session this view has not bound yet.
+   */
+  routeSessionId?: string | null;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
   /** Runs the `/clear` command: clears the open session's context. */
@@ -259,6 +270,7 @@ export function useChatComposerState({
   addMessage,
   setIsUserScrolledUp,
   setPendingPermissionRequests,
+  routeSessionId = null,
 }: UseChatComposerStateArgs) {
   const { t } = useTranslation('chat');
   // The composer text together with the chat scope it belongs to. They are one
@@ -1166,6 +1178,33 @@ export function useChatComposerState({
         }
       }
 
+      // The route names a conversation this view has not bound yet, or names one
+      // while the view still holds another. Either way the send below would land
+      // in the wrong chat — including the queue and steer paths taken while a
+      // turn is running. Refuse before those branches, not after them.
+      const boundSessionId = selectedSession?.id || currentSessionId || null;
+      if (routeSessionId && boundSessionId !== routeSessionId) {
+        if (!boundSessionId) {
+          // The scope is about to become the routed session, and that swap
+          // replaces the composer with that session's saved draft. Park the
+          // refused text there so the refusal does not eat what was typed.
+          const parked = readDraftText(routeSessionId);
+          if (!parked.trim()) {
+            writeDraftText(routeSessionId, currentInput);
+          } else if (!parked.includes(currentInput)) {
+            writeDraftText(routeSessionId, `${parked}
+
+${currentInput}`);
+          }
+        }
+        addMessage({
+          type: 'error',
+          content: t('input.routeSessionUnresolved'),
+          timestamp: new Date(),
+        });
+        return;
+      }
+
       // A turn is already in flight: stash this message instead of sending it.
       // Upload attached files now so the queued record contains durable image
       // descriptors that can be sent even if another session is open later.
@@ -1282,7 +1321,7 @@ export function useChatComposerState({
       // BEFORE the first websocket send: brand-new chats allocate one here
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
-      let targetSessionId = selectedSession?.id || currentSessionId || null;
+      let targetSessionId = boundSessionId;
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
@@ -1454,6 +1493,7 @@ export function useChatComposerState({
       queueMessage,
       recordSentMessage,
       resetCommandMenuState,
+      routeSessionId,
       scrollToBottom,
       selectedProject,
       sendMessage,

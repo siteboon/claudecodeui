@@ -185,7 +185,8 @@
       "willSend": "Odešle se po dokončení",
       "edit": "Upravit zprávu ve frontě",
       "delete": "Smazat zprávu ve frontě"
-    }
+    },
+    "routeSessionUnresolved": "Tato konverzace se ještě načítá. Chvíli počkejte, nebo ji znovu otevřete v postranním panelu a odešlete znovu."
   },
   "composer": {
     "reasoning": "Uvažování",

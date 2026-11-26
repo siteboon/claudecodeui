@@ -176,7 +176,8 @@
       "willSend": "Se enviará cuando esto termine",
       "edit": "Editar mensaje en cola",
       "delete": "Eliminar mensaje en cola"
-    }
+    },
+    "routeSessionUnresolved": "Esta conversación todavía se está cargando. Espera un momento o vuelve a abrirla desde la barra lateral y envía de nuevo."
   },
   "composer": {
     "reasoning": "Razonamiento",

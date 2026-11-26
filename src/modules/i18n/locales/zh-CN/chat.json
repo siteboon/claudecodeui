@@ -152,7 +152,8 @@
       "willSend": "将在当前完成后发送",
       "edit": "编辑排队消息",
       "delete": "删除排队消息"
-    }
+    },
+    "routeSessionUnresolved": "这个对话还在加载中。请稍等一下，或从侧边栏重新打开它，然后再发送。"
   },
   "providerSelection": {
     "title": "选择您的 AI 助手",
