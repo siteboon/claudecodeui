@@ -122,9 +122,9 @@ export default function PluginToolRenderer({
 
   // Push every prop change (streamed input, the result arriving, theme, project) to the mounted renderer. A renderer
   // whose update throws is released and the host rendering comes back.
+  // Keyed on the exact values handed to the plugin (context.project included), so nothing it sees can change silently.
   const contextKey = JSON.stringify([
-    toolInput, toolResult?.content, toolResult?.isError, status, isDarkMode, sessionId,
-    selectedProject?.projectId ?? null, selectedProject?.fullPath ?? selectedProject?.path ?? null,
+    toolInput, toolResult?.content, toolResult?.isError, status, isDarkMode, sessionId, context.project,
   ]);
   useEffect(() => {
     if (state !== 'ready') return;
