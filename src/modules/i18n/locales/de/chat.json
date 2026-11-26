@@ -264,6 +264,11 @@
   "tasks": {
     "nextTaskPrompt": "Nächste Aufgabe starten"
   },
+  "previousMessage": {
+    "label": "Vorherige Nachricht",
+    "jump": "Zur vorherigen gesendeten Nachricht springen",
+    "attachmentsOnly": "Nachricht mit Anhang"
+  },
   "message": {
     "editAndResend": "Bearbeiten und erneut senden",
     "forkFromHere": "Ab hier verzweigen",

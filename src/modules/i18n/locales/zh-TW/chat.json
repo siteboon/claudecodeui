@@ -277,6 +277,11 @@
   "tasks": {
     "nextTaskPrompt": "開始下一個任務"
   },
+  "previousMessage": {
+    "label": "上一則訊息",
+    "jump": "跳轉到你上一則傳送的訊息",
+    "attachmentsOnly": "附件訊息"
+  },
   "message": {
     "editAndResend": "編輯並重新傳送",
     "forkFromHere": "從此處分支",

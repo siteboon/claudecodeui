@@ -247,6 +247,11 @@
   "tasks": {
     "nextTaskPrompt": "Inizia l'attività successiva"
   },
+  "previousMessage": {
+    "label": "Messaggio precedente",
+    "jump": "Vai al messaggio precedente che hai inviato",
+    "attachmentsOnly": "Messaggio con allegati"
+  },
   "message": {
     "editAndResend": "Modifica e reinvia",
     "forkFromHere": "Dirama da qui",

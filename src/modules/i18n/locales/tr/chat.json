@@ -371,6 +371,11 @@
   "tasks": {
     "nextTaskPrompt": "Sonraki görevi başlat"
   },
+  "previousMessage": {
+    "label": "Önceki mesaj",
+    "jump": "Daha önce gönderdiğiniz mesaja git",
+    "attachmentsOnly": "Ek içeren mesaj"
+  },
   "message": {
     "editAndResend": "Düzenle ve yeniden gönder",
     "forkFromHere": "Buradan çatalla",

@@ -307,6 +307,11 @@
   "tasks": {
     "nextTaskPrompt": "Iniciar a próxima tarefa"
   },
+  "previousMessage": {
+    "label": "Mensagem anterior",
+    "jump": "Ir para a mensagem anterior que você enviou",
+    "attachmentsOnly": "Mensagem com anexos"
+  },
   "message": {
     "editAndResend": "Editar e reenviar",
     "forkFromHere": "Bifurcar a partir daqui",

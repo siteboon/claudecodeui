@@ -288,6 +288,11 @@
   "tasks": {
     "nextTaskPrompt": "Mulai tugas berikutnya"
   },
+  "previousMessage": {
+    "label": "Pesan sebelumnya",
+    "jump": "Lompat ke pesan sebelumnya yang Anda kirim",
+    "attachmentsOnly": "Pesan dengan lampiran"
+  },
   "message": {
     "editAndResend": "Edit dan kirim ulang",
     "forkFromHere": "Fork dari sini",

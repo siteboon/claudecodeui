@@ -54,6 +54,10 @@ vi.mock('@/modules/chat/hooks/useChatSessionState', () => ({
     currentSessionId: harness.sessionId,
     setCurrentSessionId: () => {},
     requestLatestMessages: async () => {},
+    // ChatInterface mounts the previous-prompt bar above the (mocked) pane, so
+    // the state it reads from this hook has to exist even when it finds nothing.
+    scrollContainerRef: { current: null },
+    revealMessage: () => {},
   }),
 }));
 vi.mock('@/modules/chat/hooks/useChatRealtimeHandlers', () => ({ useChatRealtimeHandlers: () => {} }));

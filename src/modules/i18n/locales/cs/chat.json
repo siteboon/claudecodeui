@@ -329,6 +329,11 @@
   "tasks": {
     "nextTaskPrompt": "Začněte další úkol"
   },
+  "previousMessage": {
+    "label": "Předchozí zpráva",
+    "jump": "Přejít na předchozí odeslanou zprávu",
+    "attachmentsOnly": "Zpráva s přílohou"
+  },
   "message": {
     "editAndResend": "Upravit a znovu odeslat",
     "forkFromHere": "Rozvětvit odsud"

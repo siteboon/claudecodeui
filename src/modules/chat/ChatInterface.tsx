@@ -28,6 +28,7 @@ import {
   useSessionProtectionActions,
 } from '@/shared/context/SessionProtectionContext';
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
+import { PreviousUserMessageBar } from '@/modules/chat/transcript/PreviousUserMessageBar';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
@@ -499,6 +500,12 @@ function ChatInterface({
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full min-h-0 flex-col">
+        {/* Sits above the transcript so a prompt that scrolled away stays one click from reach. */}
+        <PreviousUserMessageBar
+          scrollContainerRef={scrollContainerRef}
+          messages={chatMessages}
+          onReveal={revealMessage}
+        />
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>
             <ChatMessagesPane

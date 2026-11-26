@@ -378,6 +378,11 @@
   "tasks": {
     "nextTaskPrompt": "Start the next task"
   },
+  "previousMessage": {
+    "label": "Previous message",
+    "jump": "Jump to the previous message you sent",
+    "attachmentsOnly": "Attachment message"
+  },
   "message": {
     "editAndResend": "Edit and resend",
     "forkFromHere": "Fork from here",
