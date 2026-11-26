@@ -41,8 +41,11 @@ export function usePluginProjectActions():
       return { ok: false, error: readApiErrorMessage(body) ?? `Request failed (${response.status})` };
     }
     // Same local cleanup as the sidebar: drop it (leaving it first if it is selected), then resync.
-    current.removeProject?.(project.projectId);
-    await current.refresh();
+    // Read the workspace again: the selection may have changed while the request was pending, and the sidebar's
+    // cleanup callback compares against the selection it was created with.
+    const latest = workspaceRef.current ?? current;
+    latest.removeProject?.(project.projectId);
+    await latest.refresh();
     return { ok: true };
   }, []);
 
@@ -73,8 +76,9 @@ export function usePluginSessionActions():
     }
     // Remove it locally before refreshing: the refresh merges loaded session pages and would otherwise put an
     // archived or deleted session back. This also leaves it if it was the selected session.
-    current.removeSession?.(sessionId);
-    await current.refresh();
+    const latest = workspaceRef.current ?? current;
+    latest.removeSession?.(sessionId);
+    await latest.refresh();
     return { ok: true };
   }, []);
 

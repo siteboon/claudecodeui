@@ -91,3 +91,34 @@ test('successful actions drop the target locally before refreshing, so a refresh
   await sessions.current!('s-3', 'delete');
   assert.deepEqual(order, [], 'nothing is removed locally when the request fails');
 });
+
+test('cleanup after a pending request uses the latest workspace callbacks (selection may have changed)', async () => {
+  const calls: string[] = [];
+  const makeWorkspace = (tag: string) => ({
+    projects: [{ projectId: 'p-1', fullPath: '/src/app-worktrees/w1', worktreeOf: '/src/app' }],
+    refresh: vi.fn(async () => { calls.push(`${tag}:refresh`); }),
+    removeProject: (id: string) => calls.push(`${tag}:removeProject:${id}`),
+    removeSession: (id: string) => calls.push(`${tag}:removeSession:${id}`),
+  });
+  let resolveProject!: (v: unknown) => void;
+  let resolveSession!: (v: unknown) => void;
+  deleteProject.mockReturnValue(new Promise((r) => { resolveProject = r; }));
+  deleteSession.mockReturnValue(new Promise((r) => { resolveSession = r; }));
+
+  workspace = makeWorkspace('before');
+  const projectHook = renderHook(() => usePluginProjectActions());
+  const sessionHook = renderHook(() => usePluginSessionActions());
+  const projectDone = projectHook.result.current!('/src/app-worktrees/w1', 'delete');
+  const sessionDone = sessionHook.result.current!('s-1', 'delete');
+
+  // The user selects something else while both requests are in flight: the hooks re-render with new callbacks.
+  workspace = makeWorkspace('after');
+  projectHook.rerender();
+  sessionHook.rerender();
+  resolveProject({ ok: true });
+  resolveSession({ ok: true });
+  await projectDone;
+  await sessionDone;
+
+  assert.deepEqual(calls, ['after:removeProject:p-1', 'after:refresh', 'after:removeSession:s-1', 'after:refresh']);
+});
