@@ -1750,9 +1750,16 @@ async function queryClaudeSDK(
       // Extract and send token budget updates from assistant usage payloads,
       // falling back to the turn's cumulative bill only for SDK builds that
       // report no per-assistant usage at all.
-      let tokenBudgetData = extractCompactTokenBudget(message, reportedContextWindow)
+      const compactBudget = extractCompactTokenBudget(message, reportedContextWindow);
+      let tokenBudgetData = compactBudget
         || extractTokenBudget(message, reportedContextWindow)
         || (assistantBudgetSent ? null : extractCumulativeTokenBudget(message, reportedContextWindow));
+      if (compactBudget) {
+        // The boundary states the context size right after compaction. A
+        // `result` later in the same stream carries billed usage, which can be
+        // far larger — it must not replace this reading.
+        assistantBudgetSent = true;
+      }
       if (
         !tokenBudgetData
         && turnContextWindow
