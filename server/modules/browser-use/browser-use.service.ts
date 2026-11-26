@@ -64,7 +64,7 @@ type RuntimeReadiness = {
   playwright: any | null;
   playwrightInstalled: boolean;
   chromiumInstalled: boolean;
-  chromiumExecutablePath: string | null;
+  chromiumExecutableOverride: string | null;
   installInProgress: boolean;
   installMessage: string | null;
 };
@@ -150,6 +150,9 @@ function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadine
   }
 
   if (!readiness.chromiumInstalled) {
+    if (readiness.chromiumExecutableOverride) {
+      return INVALID_CHROMIUM_OVERRIDE_MESSAGE;
+    }
     return 'Playwright is installed, but Chromium is missing. Install the Chromium runtime to continue.';
   }
 
@@ -210,22 +213,45 @@ function getProfilePath(profileName: string): string {
   return path.join(PROFILE_ROOT, safeName);
 }
 
+const INVALID_CHROMIUM_OVERRIDE_MESSAGE = 'CLOUDCLI_BROWSER_USE_CHROMIUM_PATH must point to an executable Chromium file using an absolute path.';
+
+function getChromiumExecutableOverride(): string | null {
+  return process.env.CLOUDCLI_BROWSER_USE_CHROMIUM_PATH?.trim() || null;
+}
+
+function isExecutableFile(executablePath: string): boolean {
+  try {
+    if (!path.isAbsolute(executablePath) || !fs.statSync(executablePath).isFile()) {
+      return false;
+    }
+    fs.accessSync(executablePath, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function probeRuntime(): RuntimeProbe {
   const playwright = getPlaywright();
+  const chromiumExecutableOverride = getChromiumExecutableOverride();
   const readiness: RuntimeProbe = {
     playwright,
     playwrightInstalled: Boolean(playwright),
     chromiumInstalled: false,
-    chromiumExecutablePath: null,
+    chromiumExecutableOverride,
   };
 
   if (!playwright) {
     return readiness;
   }
 
+  if (chromiumExecutableOverride) {
+    readiness.chromiumInstalled = isExecutableFile(chromiumExecutableOverride);
+    return readiness;
+  }
+
   try {
     const executablePath = playwright.chromium.executablePath();
-    readiness.chromiumExecutablePath = executablePath;
     readiness.chromiumInstalled = Boolean(executablePath && fs.existsSync(executablePath));
   } catch {
     readiness.chromiumInstalled = false;
@@ -319,8 +345,23 @@ async function installRuntime(): Promise<{ success: boolean; message: string }> 
   runtimeProbeCache = null;
   installPromise = (async () => {
     try {
-      lastInstallMessage = 'Installing Playwright package...';
-      await runCommand(npmCommand, ['install', '--no-save', '--no-package-lock', 'playwright']);
+      const executableOverride = getChromiumExecutableOverride();
+      if (executableOverride && !isExecutableFile(executableOverride)) {
+        throw new Error(INVALID_CHROMIUM_OVERRIDE_MESSAGE);
+      }
+
+      if (!executableOverride || !getPlaywright()) {
+        lastInstallMessage = 'Installing Playwright package...';
+        await runCommand(npmCommand, ['install', '--no-save', '--no-package-lock', 'playwright']);
+      }
+
+      if (executableOverride) {
+        if (!getPlaywright()) {
+          throw new Error('Playwright is not available after installation.');
+        }
+        lastInstallMessage = 'Browser runtime is configured to use system Chromium.';
+        return { success: true, message: lastInstallMessage };
+      }
 
       if (process.platform === 'linux') {
         lastInstallMessage = 'Installing Chromium system dependencies...';
@@ -607,6 +648,7 @@ export const browserUseService = {
     const launchOptions = {
       headless: true,
       args: ['--disable-dev-shm-usage'],
+      ...(readiness.chromiumExecutableOverride ? { executablePath: readiness.chromiumExecutableOverride } : {}),
     };
     const contextOptions = {
       viewport: { width: 1440, height: 900 },

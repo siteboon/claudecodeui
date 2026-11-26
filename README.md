@@ -68,6 +68,8 @@
 
 ## Quick Start
 
+For self-hosted Browser Use with an existing Chromium installation, set `CLOUDCLI_BROWSER_USE_CHROMIUM_PATH` to the absolute path of the executable in the server environment. See [System Chromium](features.md#system-chromium).
+
 ### CloudCLI Cloud (Recommended)
 
 The fastest way to get started — no local setup required. Get a fully managed, containerized development environment accessible from the web, mobile app, API, or your favorite IDE.
