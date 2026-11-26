@@ -54,16 +54,27 @@ export default function PluginToolRenderer({
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
 
+  const releaseHandle = () => {
+    const handle = handleRef.current;
+    handleRef.current = null;
+    try { handle?.destroy?.(); } catch { /* plugin error — ignore */ }
+  };
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return undefined;
     let active = true;
+    // Show the host rendering until this renderer is ready, and give it a node of its own so a renderer that
+    // finishes late can never write into, or clear, the output of the one that replaced it.
+    setState('loading');
+    const mountNode = document.createElement('div');
+    container.appendChild(mountNode);
     (async () => {
       try {
         const mod = await loadToolRendererModule(plugin.name, plugin.entry);
         if (!active) return;
         if (typeof mod.renderTool !== 'function') throw new Error('plugin module has no renderTool export');
-        const handle = await mod.renderTool(container, contextRef.current, {
+        const handle = await mod.renderTool(mountNode, contextRef.current, {
           async rpc(method, path, body) {
             const res = await api.plugins.rpc(plugin.name, method, path, body);
             if (!res.ok) throw new Error(`RPC error ${res.status}`);
@@ -84,18 +95,27 @@ export default function PluginToolRenderer({
     })();
     return () => {
       active = false;
-      try { handleRef.current?.destroy?.(); } catch { /* plugin error — ignore */ }
-      handleRef.current = null;
-      container.replaceChildren();
+      releaseHandle();
+      mountNode.remove();
     };
-  }, [plugin.name, plugin.entry, toolName]);
+  }, [plugin.name, plugin.entry, plugin.version, toolName]);
 
-  // Push every prop change (streamed input, the result arriving, theme) to the mounted renderer.
-  const contextKey = JSON.stringify([toolInput, toolResult?.content, toolResult?.isError, status, isDarkMode, sessionId]);
+  // Push every prop change (streamed input, the result arriving, theme, project) to the mounted renderer. A renderer
+  // whose update throws is released and the host rendering comes back.
+  const contextKey = JSON.stringify([
+    toolInput, toolResult?.content, toolResult?.isError, status, isDarkMode, sessionId,
+    selectedProject?.projectId ?? null, selectedProject?.fullPath ?? selectedProject?.path ?? null,
+  ]);
   useEffect(() => {
     if (state !== 'ready') return;
-    try { handleRef.current?.update?.(contextRef.current); } catch { /* plugin error — ignore */ }
-  }, [contextKey, state]);
+    try {
+      handleRef.current?.update?.(contextRef.current);
+    } catch (error) {
+      console.error(`[Plugin:${plugin.name}] renderTool update failed for ${toolName}:`, error);
+      releaseHandle();
+      setState('failed');
+    }
+  }, [contextKey, state, plugin.name, toolName]);
 
   return (
     <>
