@@ -81,13 +81,58 @@ const removeRequest = (
   return next;
 };
 
+/** Builds the state from a snapshot frame, ignoring anything malformed. */
+const readSnapshot = (event: ServerEvent): PendingBySession => {
+  const next = new Map<string, Set<string>>();
+  const sessions = Array.isArray(event.sessions) ? event.sessions : [];
+
+  for (const entry of sessions) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const { sessionId, requestId } = entry as { sessionId?: unknown; requestId?: unknown };
+    if (typeof sessionId !== 'string' || !sessionId) {
+      continue;
+    }
+    if (typeof requestId !== 'string' || !requestId) {
+      continue;
+    }
+    const requests = next.get(sessionId) ?? new Set<string>();
+    requests.add(requestId);
+    next.set(sessionId, requests);
+  }
+
+  return next;
+};
+
 export function PermissionAttentionProvider({ children }: { children: ReactNode }) {
-  const { subscribe } = useWebSocket();
+  const { subscribe, sendMessage, connectionStatus } = useWebSocket();
   const [pendingBySession, setPendingBySession] = useState<PendingBySession>(() => new Map());
+
+  // The announcements are deltas, so a set collected only from them is wrong in
+  // both directions after a reconnect: requests raised while the socket was
+  // down were never heard (no marker, no alert) and requests answered then kept
+  // their marker until a reload. Ask for the current state on every handshake —
+  // the first one included, since requests can predate this page load — and let
+  // the frame below replace what the deltas built.
+  useEffect(() => {
+    if (connectionStatus === 'connected') {
+      sendMessage({ type: 'chat.attention-snapshot' });
+    }
+  }, [connectionStatus, sendMessage]);
 
   useEffect(() => {
     return subscribe((event: ServerEvent) => {
       const kind = event.kind;
+
+      if (kind === 'permission_attention_snapshot') {
+        // Replace, never merge: requests missing from it were answered while
+        // this client was away (or ended with their run) and must not linger.
+        // No alert here — the user is looking at the page the snapshot lands on.
+        setPendingBySession(readSnapshot(event));
+        return;
+      }
+
       const sessionId = typeof event.sessionId === 'string' ? event.sessionId : '';
       if (!sessionId) {
         return;

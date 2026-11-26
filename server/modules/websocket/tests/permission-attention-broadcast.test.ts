@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { broadcastPermissionAttention } from '@/modules/websocket/services/permission-attention-broadcast.service.js';
+import {
+  broadcastPermissionAttention,
+  permissionAttentionSnapshot,
+} from '@/modules/websocket/services/permission-attention-broadcast.service.js';
 import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
 import type { NormalizedMessage } from '@/shared/types.js';
 
@@ -104,4 +107,50 @@ test('a provider event without a session id is not announced', () => {
 
     assert.deepEqual(connection.frames, []);
   });
+});
+
+/**
+ * The deltas only reach clients that were connected when they were sent. A
+ * client that reconnects asks for this snapshot and replaces its state with it,
+ * so the registry has to be the truth the deltas describe — kept up to date
+ * before each frame goes out.
+ */
+const snapshotFor = (sessionId: string): Array<Record<string, unknown>> => {
+  const frame = JSON.parse(permissionAttentionSnapshot()) as { sessions: Array<Record<string, unknown>> };
+  return frame.sessions.filter((entry) => entry.sessionId === sessionId);
+};
+
+test('the snapshot lists what is waiting right now', () => {
+  withConnection(() => {
+    broadcastPermissionAttention(message({ sessionId: 'snap-1', requestId: 'r1', toolName: 'Bash' }));
+    broadcastPermissionAttention(message({ sessionId: 'snap-1', requestId: 'r2' }));
+
+    assert.deepEqual(
+      snapshotFor('snap-1').map((entry) => [entry.requestId, entry.toolName]),
+      [['r1', 'Bash'], ['r2', null]],
+    );
+  });
+});
+
+test('the snapshot drops requests that were answered or whose run ended', () => {
+  withConnection(() => {
+    broadcastPermissionAttention(message({ sessionId: 'snap-2', requestId: 'r1' }));
+    broadcastPermissionAttention(message({ sessionId: 'snap-2', requestId: 'r2' }));
+
+    broadcastPermissionAttention(message({ kind: 'permission_resolved', sessionId: 'snap-2', requestId: 'r1' }));
+    assert.deepEqual(snapshotFor('snap-2').map((entry) => entry.requestId), ['r2']);
+
+    broadcastPermissionAttention(message({ kind: 'complete', sessionId: 'snap-2' }));
+    assert.deepEqual(snapshotFor('snap-2'), [], 'a finished run stops waiting for everything it raised');
+  });
+});
+
+test('a request raised before any client connected is in the first snapshot', () => {
+  // No connection is registered for the raise: the announcement is lost, and
+  // only the snapshot can tell a client that arrives later.
+  broadcastPermissionAttention(message({ sessionId: 'snap-3', requestId: 'late' }));
+
+  assert.deepEqual(snapshotFor('snap-3').map((entry) => entry.requestId), ['late']);
+
+  broadcastPermissionAttention(message({ kind: 'permission_cancelled', sessionId: 'snap-3', requestId: 'late' }));
 });
