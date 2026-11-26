@@ -141,6 +141,7 @@ function getStatusDot(status: BrowserUseSession['status']): string {
 }
 
 const PROMPT_KEYS = ['browserUse.prompt1', 'browserUse.prompt2'];
+const SESSION_REFRESH_INTERVAL_MS = 5_000;
 
 /** Used by the project-workspace module to render the Browser tab's session list and live preview. */
 export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUsePanelProps) {
@@ -156,12 +157,11 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedSession = useMemo(
-    () => sessions.find((session) => session.id === selectedSessionId) || sessions[0] || null,
-    [selectedSessionId, sessions],
-  );
-
-  const activeSessions = sessions.filter((session) => session.status === 'ready');
+  const activeSessions = useMemo(() => sessions.filter((session) => session.status === 'ready'), [sessions]);
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId)
+    ?? activeSessions[0]
+    ?? sessions[0]
+    ?? null;
   const needsBrowserBinaries = Boolean(status?.enabled && (!status.playwrightInstalled || !status.chromiumInstalled));
   const runtimeLabel = !status?.enabled
     ? t('browserUse.runtimeDisabled')
@@ -189,14 +189,8 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
       ]);
       const statusData = await readApiJson<{ data: BrowserUseStatus }>(statusResponse);
       const sessionsData = await readApiJson<{ data: { sessions: BrowserUseSession[] } }>(sessionsResponse);
-      const nextSessions = sessionsData.data.sessions;
       setStatus(statusData.data);
-      setSessions(nextSessions);
-      setSelectedSessionId((current) => (
-        current && nextSessions.some((session) => session.id === current)
-          ? current
-          : nextSessions[0]?.id || null
-      ));
+      setSessions(sessionsData.data.sessions);
       setError(null);
     } catch (err) {
       setError(localizeApiError(err, 'browserUse.loadFailed', t));
@@ -209,6 +203,10 @@ export default function BrowserUsePanel({ isVisible, onShowSettings }: BrowserUs
   useEffect(() => {
     if (!isVisible) return;
     void refresh();
+    const timer = window.setInterval(() => {
+      if (!document.hidden) void refresh();
+    }, SESSION_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
   }, [isVisible, refresh]);
 
   const runAction = useCallback(async (action: () => Promise<void>) => {
