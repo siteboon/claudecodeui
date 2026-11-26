@@ -80,11 +80,18 @@ test('changing the selected project pushes an update to the renderer', async () 
 
 test('a replaced renderer gets its own node, so a late one cannot touch the new output', async () => {
   let releaseFirst: (() => void) | null = null;
+  let lateDestroyedAfterFresh: boolean | null = null;
   const nodes: HTMLElement[] = [];
   renderTool.mockImplementation((node: HTMLElement) => {
     nodes.push(node);
     if (nodes.length === 1) {
-      return new Promise((resolve) => { releaseFirst = () => { node.textContent = 'stale'; resolve({}); }; });
+      // The late renderer hands back a destroy() that wipes "its" node, as a careless plugin might.
+      return new Promise((resolve) => {
+        releaseFirst = () => {
+          node.textContent = 'stale';
+          resolve({ destroy: () => { lateDestroyedAfterFresh = /fresh/.test(container.textContent ?? ''); node.replaceChildren(); } });
+        };
+      });
     }
     node.textContent = 'fresh';
     return {};
@@ -99,6 +106,8 @@ test('a replaced renderer gets its own node, so a late one cannot touch the new 
   await act(async () => { rerender(view('mcp__p__two')); });
   await waitFor(() => screen.getByText('fresh'));
   await act(async () => { releaseFirst?.(); });
+  // The late handle is destroyed as soon as it arrives, after the replacement is showing, and cannot touch it.
+  assert.equal(lateDestroyedAfterFresh, true);
   assert.notEqual(nodes[0], nodes[1]);
   assert.equal(nodes[0].isConnected, false);
   assert.match(container.textContent ?? '', /fresh/);
