@@ -260,3 +260,46 @@ test('history leaves the CLI\'s own queued notes out', () => {
 
   assert.deepEqual(sessions.normalizeMessage(row, SESSION_ID), []);
 });
+
+test('history leaves harness deliveries such as subagent hand-backs out (#1844)', () => {
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  const handback = {
+    type: 'attachment',
+    uuid: 'e139107b-b147-4d5f-a964-c9fee073c353',
+    timestamp: '2026-11-07T11:41:08.552Z',
+    attachment: {
+      type: 'queued_command',
+      commandMode: 'prompt',
+      isMeta: true,
+      origin: { kind: 'peer', name: 'general-purpose', handback: true },
+      prompt: '<agent-message from="a1">\n[Subagent hand-back] done',
+      source_uuid: 'f139107b-b147-4d5f-a964-c9fee073c353',
+    },
+  };
+  const crossSession = {
+    type: 'attachment',
+    uuid: 'a239107b-b147-4d5f-a964-c9fee073c353',
+    timestamp: '2026-11-07T11:41:09.552Z',
+    attachment: {
+      type: 'queued_command',
+      commandMode: 'prompt',
+      isMeta: true,
+      prompt: '<cross-session-message from="s2">[Cross-session delivery] hi</cross-session-message>',
+    },
+  };
+  const originOnly = {
+    type: 'attachment',
+    uuid: 'b239107b-b147-4d5f-a964-c9fee073c353',
+    timestamp: '2026-11-07T11:41:10.552Z',
+    attachment: {
+      type: 'queued_command',
+      commandMode: 'prompt',
+      origin: { kind: 'peer', name: 'general-purpose' },
+      prompt: '<agent-message from="a2">update</agent-message>',
+    },
+  };
+
+  assert.deepEqual(sessions.normalizeMessage(handback, SESSION_ID), []);
+  assert.deepEqual(sessions.normalizeMessage(crossSession, SESSION_ID), []);
+  assert.deepEqual(sessions.normalizeMessage(originOnly, SESSION_ID), []);
+});
