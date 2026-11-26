@@ -63,3 +63,10 @@ export function loadToolRendererModule(pluginName: string, entry: string): Promi
   }
   return pending;
 }
+
+/** Drops a plugin's cached renderer module, e.g. after it was updated, so the next row loads the new code. */
+export function invalidateToolRendererModules(pluginName: string): void {
+  for (const key of [...modules.keys()]) {
+    if (key.startsWith(`${pluginName}:`)) modules.delete(key);
+  }
+}
