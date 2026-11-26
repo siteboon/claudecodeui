@@ -104,3 +104,42 @@ test('a replaced renderer gets its own node, so a late one cannot touch the new 
   assert.match(container.textContent ?? '', /fresh/);
   assert.doesNotMatch(container.textContent ?? '', /stale/);
 });
+
+test('a stale renderer destroying its own node leaves the replacement intact', async () => {
+  const nodes: HTMLElement[] = [];
+  renderTool.mockImplementation((node: HTMLElement) => {
+    nodes.push(node);
+    node.textContent = nodes.length === 1 ? 'old' : 'fresh';
+    // A destroy that wipes "its" output, as a careless plugin might.
+    return { destroy: () => { node.replaceChildren(); node.textContent = ''; } };
+  });
+  const view = (toolName: string) => (
+    <MemoryRouter>
+      <PluginToolRenderer plugin={plugin} toolName={toolName} toolInput={{}} status="completed" fallback={<span>host</span>} />
+    </MemoryRouter>
+  );
+  const { rerender, container } = render(view('mcp__p__one'));
+  await waitFor(() => assert.equal(screen.queryByText('old') === null, false, 'first renderer not shown'));
+  await act(async () => { rerender(view('mcp__p__two')); });
+  await waitFor(() => assert.equal(screen.queryByText('fresh') === null, false, 'replacement not shown'));
+  assert.match(container.textContent ?? '', /fresh/);
+  assert.equal(nodes[0].isConnected, false);
+});
+
+test('a project path change with an empty fullPath still updates the renderer', async () => {
+  const update = vi.fn();
+  renderTool.mockImplementation(() => ({ update }));
+  const view = (path: string) => (
+    <MemoryRouter>
+      <PluginToolRenderer plugin={plugin} toolName="mcp__p__x" toolInput={{}} status="completed"
+        selectedProject={{ projectId: 'same', displayName: 'same', fullPath: '', path }} fallback={<span>host</span>} />
+    </MemoryRouter>
+  );
+  const { rerender } = render(view('/a'));
+  await waitFor(() => assert.equal(renderTool.mock.calls.length, 1));
+  await waitFor(() => assert.equal(screen.queryByText('host') === null, true, 'host row still shown'));
+  const before = update.mock.calls.length;
+  await act(async () => { rerender(view('/b')); });
+  await waitFor(() => assert.ok(update.mock.calls.length > before, 'update not called'));
+  assert.equal(update.mock.calls.at(-1)?.[0].project.path, '/b');
+});

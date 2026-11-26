@@ -50,7 +50,11 @@ export function loadToolRendererModule(pluginName: string, entry: string): Promi
         URL.revokeObjectURL(blobUrl);
       }
     })();
-    pending.catch(() => modules.delete(key)); // let a later row retry after a failure
+    // Let a later row retry after a failure, but never drop a newer load that replaced this one after an
+    // invalidation.
+    pending.catch(() => {
+      if (modules.get(key) === pending) modules.delete(key);
+    });
     modules.set(key, pending);
   }
   return pending;
