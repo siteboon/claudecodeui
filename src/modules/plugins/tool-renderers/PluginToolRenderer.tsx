@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/shared/api';
 import type { Plugin, Project } from '@/shared/types';
 import { useTheme } from '@/shared/context/ThemeContext';
+import { usePluginProjectActions, usePluginSessionActions } from '@/modules/plugins/usePluginProjectActions';
 import {
   loadToolRendererModule,
   type PluginToolContext,
@@ -53,6 +54,21 @@ export default function PluginToolRenderer({
   contextRef.current = context;
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
+  const projectActions = usePluginProjectActions();
+  const projectActionsRef = useRef(projectActions);
+  projectActionsRef.current = projectActions;
+  const runProjectAction = async (projectPath: string, action: 'archive' | 'delete') => {
+    const run = projectActionsRef.current;
+    return run ? run(projectPath, action) : { ok: false as const, error: 'Project actions are not available here' };
+  };
+  const runProjectActionRef = useRef(runProjectAction);
+  const sessionActions = usePluginSessionActions();
+  const sessionActionsRef = useRef(sessionActions);
+  sessionActionsRef.current = sessionActions;
+  const runSessionActionRef = useRef(async (sessionId: string, action: 'archive' | 'delete') => {
+    const run = sessionActionsRef.current;
+    return run ? run(sessionId, action) : { ok: false as const, error: 'Session actions are not available here' };
+  });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -70,6 +86,10 @@ export default function PluginToolRenderer({
             return res.json();
           },
           openSession: (id) => navigateRef.current(`/session/${encodeURIComponent(id)}`),
+          archiveProject: (projectPath) => runProjectActionRef.current(projectPath, 'archive'),
+          deleteProject: (projectPath) => runProjectActionRef.current(projectPath, 'delete'),
+          archiveSession: (sessionId) => runSessionActionRef.current(sessionId, 'archive'),
+          deleteSession: (sessionId) => runSessionActionRef.current(sessionId, 'delete'),
         });
         if (!active) {
           handle?.destroy?.();

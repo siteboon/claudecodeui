@@ -191,3 +191,17 @@ export function useProjectActiveSessionState(): ProjectActiveSessionState {
     'useProjectActiveSessionState',
   );
 }
+
+/**
+ * The project list and a silent refresh for components that can also render outside the workspace (plugin hosts in
+ * exports or tests): null there instead of throwing like the hooks above.
+ */
+export function useOptionalProjectActions(): {
+  projects: ProjectsState['sidebarSharedProps']['projects'];
+  refresh: ProjectsState['refreshProjectsSilently'];
+} | null {
+  const sidebar = useContext(ProjectSidebarContext);
+  const main = useContext(ProjectMainContext);
+  if (!sidebar || !main) return null;
+  return { projects: sidebar.sidebarSharedProps.projects, refresh: main.refreshProjectsSilently };
+}
