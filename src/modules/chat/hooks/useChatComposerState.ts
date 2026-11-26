@@ -397,6 +397,13 @@ export function useChatComposerState({
   // renders: a refusal can follow an acceptance before React re-renders.
   // Written only through `updatePendingSteers` below, with the state.
   const pendingSteersRef = useRef(pendingSteers);
+  /**
+   * Steers dropped from the visible list because the user switched away from
+   * their session, kept until the server settles them. A refusal still has to
+   * reach the queue of the chat it was sent into, even though that chat is no
+   * longer on screen; without this the message was simply lost.
+   */
+  const detachedSteersRef = useRef(new Map<string, PendingSteer>());
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -1052,17 +1059,21 @@ export function useChatComposerState({
    */
   const handleSteerOutcome = useCallback(
     (_sessionId: string, messageId: string, outcome: SteerOutcome) => {
+      const detachedSteer = detachedSteersRef.current.get(messageId);
       if (outcome === 'delivered') {
+        detachedSteersRef.current.delete(messageId);
         if (pendingSteersRef.current.some((steer) => isEchoOfSteer(messageId, steer.messageId))) {
           updatePendingSteers((current) => current.filter((steer) => !isEchoOfSteer(messageId, steer.messageId)));
         }
         return;
       }
 
-      const steer = pendingSteersRef.current.find((candidate) => candidate.messageId === messageId);
+      const steer = pendingSteersRef.current.find((candidate) => candidate.messageId === messageId)
+        ?? detachedSteer;
       if (!steer) {
         return;
       }
+      detachedSteersRef.current.delete(messageId);
       if (outcome === 'accepted') {
         updatePendingSteers((current) => current.map((candidate) => (
           candidate.messageId === messageId ? { ...candidate, status: 'accepted' } : candidate
@@ -1112,11 +1123,25 @@ export function useChatComposerState({
   }, [isLoading, sessionKey, setInput, updatePendingSteers]);
 
   // Cards belong to the session they were sent into; switching away drops
-  // them (the messages themselves are already the run's, on the server).
+  // them (the messages themselves are already the run's, on the server). The
+  // dropped ones stay reachable until they settle — see `detachedSteersRef`.
   useEffect(() => {
-    if (pendingSteersRef.current.some((steer) => steer.sessionKey !== sessionKey)) {
-      updatePendingSteers((current) => current.filter((steer) => steer.sessionKey === sessionKey));
+    const detached = pendingSteersRef.current.filter((steer) => steer.sessionKey !== sessionKey);
+    if (detached.length === 0) {
+      return;
     }
+    for (const steer of detached) {
+      detachedSteersRef.current.set(steer.messageId, steer);
+    }
+    // Bounded: a long-lived composer must not accumulate every steer it sent.
+    while (detachedSteersRef.current.size > 20) {
+      const oldest = detachedSteersRef.current.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      detachedSteersRef.current.delete(oldest);
+    }
+    updatePendingSteers((current) => current.filter((steer) => steer.sessionKey === sessionKey));
   }, [sessionKey, updatePendingSteers]);
 
   // Only the open session's cards are shown.

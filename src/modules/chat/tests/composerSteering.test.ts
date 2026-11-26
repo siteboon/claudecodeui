@@ -53,15 +53,15 @@ const fakeServer = async (url: RequestInfo | URL, init?: RequestInit): Promise<R
   return json([]);
 };
 
-type Props = { isLoading: boolean; supportsSteering: boolean };
+type Props = { isLoading: boolean; supportsSteering: boolean; session: ProjectSession };
 
 const render = (initialProps: Partial<Props> = {}) => {
   const sent: Array<Record<string, unknown>> = [];
   const view = renderHook(
-    ({ isLoading, supportsSteering }: Props) => useChatComposerState({
+    ({ isLoading, supportsSteering, session }: Props) => useChatComposerState({
       selectedProject: PROJECT,
-      selectedSession: SESSION,
-      currentSessionId: SESSION.id ?? null,
+      selectedSession: session,
+      currentSessionId: session.id ?? null,
       provider: 'claude',
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
@@ -78,7 +78,7 @@ const render = (initialProps: Partial<Props> = {}) => {
       setIsUserScrolledUp: () => undefined,
       setPendingPermissionRequests: () => undefined,
     }),
-    { initialProps: { isLoading: true, supportsSteering: true, ...initialProps } },
+    { initialProps: { isLoading: true, supportsSteering: true, session: SESSION, ...initialProps } },
   );
   return { view, sent };
 };
@@ -182,6 +182,25 @@ test('a steer refused because the turn had ended is queued as the next turn, lea
   assert.equal(view.result.current.input, 'half-typed', 'the composer is not touched');
 });
 
+test('a steer refused after the user switched sessions still reaches its own chat', async () => {
+  const { view, sent } = render();
+  await steer(view, 'one more thing');
+  const messageId = String(steerFrames(sent)[0].messageId);
+
+  // The user opens another conversation before the server's verdict arrives;
+  // the card belongs to the chat left behind and is no longer rendered.
+  view.rerender({ isLoading: true, supportsSteering: true, session: { id: 'session-2' } });
+  await act(async () => { await Promise.resolve(); });
+  assert.deepEqual(view.result.current.pendingSteers, []);
+
+  await act(async () => {
+    view.result.current.handleSteerOutcome('session-1', messageId, 'refused');
+  });
+  // The refused message is queued for the chat it was meant for, not dropped.
+  await vi.waitFor(() => assert.equal(queued.get('session-1')?.content, 'one more thing'));
+  assert.equal(queued.get('session-2'), undefined, 'nothing leaks into the chat now on screen');
+});
+
 test('a run that ends with an accepted message unread puts it back in the composer', async () => {
   const { view, sent } = render();
   await steer(view, 'stop after this file');
@@ -190,7 +209,7 @@ test('a run that ends with an accepted message unread puts it back in the compos
   await act(async () => { view.result.current.setInput('typed since'); });
 
   // The user pressed stop before the agent reached a tool call.
-  view.rerender({ isLoading: false, supportsSteering: true });
+  view.rerender({ isLoading: false, supportsSteering: true, session: SESSION });
 
   assert.deepEqual(view.result.current.pendingSteers, []);
   assert.equal(view.result.current.input, 'stop after this file\n\ntyped since');
@@ -204,7 +223,7 @@ test('a message the agent read before the run ended is not restored', async () =
   act(() => view.result.current.handleSteerOutcome('session-1', messageId, 'accepted'));
   act(() => view.result.current.handleSteerOutcome('session-1', messageId, 'delivered'));
 
-  view.rerender({ isLoading: false, supportsSteering: true });
+  view.rerender({ isLoading: false, supportsSteering: true, session: SESSION });
 
   assert.equal(view.result.current.input, '');
 });
