@@ -6,7 +6,13 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import { i18n } from '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
 import { resetChatDrafts } from '@/shared/chatDrafts';
-import type { PermissionMode, Project, ProjectSession } from '@/shared/types';
+import type { PermissionMode, Project, ProjectSession, SlashCommand } from '@/shared/types';
+
+// One custom command, so `/deploy` reaches the expanded-body re-submit path
+// instead of the ordinary send (the composer is handed this list by the app).
+const PROJECT_COMMANDS: SlashCommand[] = [
+  { name: '/deploy', description: 'Deploy', namespace: 'custom', type: 'custom' },
+];
 
 /**
  * Steering: while a turn runs, the send menu's Steer row sends the message
@@ -50,15 +56,24 @@ const fakeServer = async (url: RequestInfo | URL, init?: RequestInit): Promise<R
   if (path.endsWith('/api/user/drafts') && method === 'GET') {
     return json({ success: true, drafts: [] });
   }
+  if (path.includes('/api/commands/execute')) {
+    // A custom command's expanded body, as the server returns it.
+    return json({ type: 'custom', content: 'expanded body text' });
+  }
   return json([]);
 };
 
-type Props = { isLoading: boolean; supportsSteering: boolean; session: ProjectSession };
+type Props = {
+  isLoading: boolean;
+  supportsSteering: boolean;
+  session: ProjectSession;
+  model?: string;
+};
 
 const render = (initialProps: Partial<Props> = {}) => {
   const sent: Array<Record<string, unknown>> = [];
   const view = renderHook(
-    ({ isLoading, supportsSteering, session }: Props) => useChatComposerState({
+    ({ isLoading, supportsSteering, session, model }: Props) => useChatComposerState({
       selectedProject: PROJECT,
       selectedSession: session,
       currentSessionId: session.id ?? null,
@@ -66,7 +81,7 @@ const render = (initialProps: Partial<Props> = {}) => {
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
       resolvePermissionModeForProvider: () => 'default' as PermissionMode,
-      currentProviderModel: 'model-1',
+      currentProviderModel: model ?? 'model-1',
       currentProviderEffort: 'medium',
       isLoading,
       canAbortSession: true,
@@ -281,6 +296,60 @@ test('a slash command is a turn of its own, so Steer queues it', async () => {
 
   assert.equal(steerFrames(sent).length, 0);
   assert.equal(queued.get('session-1')?.content, '/compact');
+});
+
+test('a steer refused after switching chats queues under the settings it was written with', async () => {
+  const { view, sent } = render({ model: 'model-a' });
+  await steer(view, 'one more thing');
+  const messageId = String(steerFrames(sent)[0].messageId);
+
+  // The user moves to a chat with a different model before the verdict.
+  view.rerender({ isLoading: true, supportsSteering: true, session: { id: 'session-2' }, model: 'model-b' });
+  await act(async () => { await Promise.resolve(); });
+
+  await act(async () => {
+    view.result.current.handleSteerOutcome('session-1', messageId, 'refused');
+  });
+  await vi.waitFor(() => assert.equal(queued.get('session-1')?.content, 'one more thing'));
+  assert.equal(
+    queued.get('session-1')?.options?.model,
+    'model-a',
+    'the chat now on screen must not lend its model to the message it never saw',
+  );
+});
+
+test('an accepted steer whose run ended while another chat was open comes back on return', async () => {
+  const { view, sent } = render();
+  await steer(view, 'stop after this file');
+  const messageId = String(steerFrames(sent)[0].messageId);
+
+  // The user leaves before the verdict; the card is detached, not dropped.
+  view.rerender({ isLoading: true, supportsSteering: true, session: { id: 'session-2' } });
+  await act(async () => { await Promise.resolve(); });
+  act(() => view.result.current.handleSteerOutcome('session-1', messageId, 'accepted'));
+
+  // The run ends while the other chat is open: nothing lands in that composer.
+  view.rerender({ isLoading: false, supportsSteering: true, session: { id: 'session-2' } });
+  assert.equal(view.result.current.input, '', 'the chat on screen keeps its own text');
+
+  // Back to the chat it was written for, now idle: it goes back into the composer.
+  view.rerender({ isLoading: false, supportsSteering: true, session: SESSION });
+  assert.equal(view.result.current.input, 'stop after this file');
+});
+
+test('a custom command waits as the next turn instead of steering its expanded body', async () => {
+  const { view, sent } = render();
+
+  // Picking a custom command from the slash menu runs it even mid-turn; its
+  // expanded body is then re-submitted on the next tick, without the "/".
+  await act(async () => {
+    view.result.current.setInput('/deploy now');
+    view.result.current.handleCommandSelect(PROJECT_COMMANDS[0], 0, false);
+  });
+  await vi.waitFor(() => assert.equal(queued.get('session-1')?.content, 'expanded body text'));
+
+  assert.equal(steerFrames(sent).length, 0, 'a command is a turn of its own');
+  assert.equal(sent.filter((frame) => frame.type === 'chat.send').length, 0);
 });
 
 test('Steer chosen just as the turn ended sends the message as the next turn', async () => {

@@ -860,6 +860,8 @@ export type PendingSteer = {
   attachments: File[];
   /** Descriptors uploaded before it was sent, reused if it has to be queued instead. */
   uploadedAttachments: unknown[];
+  /** The provider settings it was composed under, reused if it has to be queued instead. */
+  options: QueuedSendOptions;
   status: 'sending' | 'accepted';
 };
 

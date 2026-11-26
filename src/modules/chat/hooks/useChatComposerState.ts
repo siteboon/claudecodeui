@@ -121,6 +121,13 @@ type SubmitOptions = {
    * Falls through to the ordinary send when no turn is running any more.
    */
   steerIntoTurn?: boolean;
+  /**
+   * Stands in for "this is a command, not a message to steer": set when a
+   * custom command's expanded body is re-submitted. The body no longer starts
+   * with "/", so without this it would be steered into a running turn, while
+   * running the command itself always waits as its own turn.
+   */
+  queueBehindRunningTurn?: boolean;
 };
 
 const createFakeSubmitEvent = () => {
@@ -502,7 +509,12 @@ export function useChatComposerState({
     // The expanded body is the message itself: it skips slash-command interception.
     setTimeout(() => {
       if (handleSubmitRef.current) {
-        handleSubmitRef.current(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
+        handleSubmitRef.current(createFakeSubmitEvent(), undefined, {
+          skipCommandInterception: true,
+          // The body is a command's own text: it waits as the next turn even
+          // though it no longer opens with "/".
+          queueBehindRunningTurn: true,
+        });
       }
     }, 0);
   }, [addMessage]);
@@ -1011,7 +1023,15 @@ export function useChatComposerState({
   // composer at once, as a sent message does, and waits as a card until the
   // agent reads it. Attachments must already be uploaded.
   const steerIntoRunningTurn = useCallback(
-    (message: { content: string; attachments: File[]; uploadedAttachments: unknown[] }, steerSessionKey: string) => {
+    (
+      message: {
+        content: string;
+        attachments: File[];
+        uploadedAttachments: unknown[];
+        options: QueuedSendOptions;
+      },
+      steerSessionKey: string,
+    ) => {
       const messageId = createSteerMessageId();
       updatePendingSteers((current) => [...current, {
         messageId,
@@ -1019,6 +1039,10 @@ export function useChatComposerState({
         content: message.content,
         attachments: message.attachments,
         uploadedAttachments: message.uploadedAttachments,
+        // Kept with the message: a refusal can be handled after the user has
+        // switched chats, and the settings to queue it under are the ones it
+        // was written with, not whatever that other chat has.
+        options: message.options,
         status: 'sending',
       }]);
       sendMessage({
@@ -1073,46 +1097,63 @@ export function useChatComposerState({
       if (!steer) {
         return;
       }
-      detachedSteersRef.current.delete(messageId);
+
       if (outcome === 'accepted') {
         updatePendingSteers((current) => current.map((candidate) => (
           candidate.messageId === messageId ? { ...candidate, status: 'accepted' } : candidate
         )));
+        // A steer the user has already switched away from stays in the
+        // detached map until it is delivered or the run ends: if that run
+        // stops before the agent reads it, this is the only record left to put
+        // the text back when the user returns to that chat.
+        if (detachedSteer) {
+          detachedSteersRef.current.set(messageId, { ...detachedSteer, status: 'accepted' });
+        }
         return;
       }
 
       // Refused: the turn had already ended when it arrived. The user meant it
       // for this conversation now, so it goes out as the next turn — the
       // queue sends it as soon as the session is idle, which it about is.
+      // Queued under the settings it was written with, even when another chat
+      // with other settings is on screen by now.
+      detachedSteersRef.current.delete(messageId);
       updatePendingSteers((current) => current.filter((candidate) => candidate.messageId !== messageId));
       void queueMessage({
         content: steer.content,
         attachments: steer.attachments,
         uploadedAttachments: steer.uploadedAttachments,
-        options: buildSendOptions(steer.content),
+        options: steer.options,
       }, steer.sessionKey, { fromComposer: false });
     },
-    [buildSendOptions, queueMessage, updatePendingSteers],
+    [queueMessage, updatePendingSteers],
   );
 
   // The run ended with a steered message the server took but the agent never
   // read — the user stopped the run, or it failed. Nothing will send it now,
   // so it goes back into the composer (ahead of anything typed since) rather
   // than vanishing or being sent behind the user's back after a stop.
-  const wasLoadingRef = useRef(isLoading);
+  //
+  // This covers the chat the user left behind too: an accepted steer whose
+  // card was detached stays in `detachedSteersRef`, and it is put back only
+  // when its own chat is open and idle — returning to it after the run ended,
+  // or being there when it ends. A chat that is still running may yet read it.
   useEffect(() => {
-    const wasLoading = wasLoadingRef.current;
-    wasLoadingRef.current = isLoading;
-    if (!wasLoading || isLoading || !sessionKey) {
+    if (isLoading || !sessionKey) {
       return;
     }
-    const unread = pendingSteersRef.current.filter(
-      (steer) => steer.sessionKey === sessionKey && steer.status === 'accepted',
-    );
+    const unread = [
+      ...pendingSteersRef.current,
+      ...detachedSteersRef.current.values(),
+    ].filter((steer) => steer.sessionKey === sessionKey && steer.status === 'accepted');
     if (unread.length === 0) {
       return;
     }
-    updatePendingSteers((current) => current.filter((steer) => !unread.includes(steer)));
+    const restoredIds = new Set(unread.map((steer) => steer.messageId));
+    for (const steer of unread) {
+      detachedSteersRef.current.delete(steer.messageId);
+    }
+    updatePendingSteers((current) => current.filter((steer) => !restoredIds.has(steer.messageId)));
     const restored = [...unread.map((steer) => steer.content), inputValueRef.current]
       .filter((part) => part.trim())
       .join('\n\n');
@@ -1211,6 +1252,7 @@ export function useChatComposerState({
         const steersIntoTurn = supportsSteering
           && Boolean(sessionKey)
           && !currentInput.trimStart().startsWith('/')
+          && submitOptions?.queueBehindRunningTurn !== true
           && (submitOptions?.steerIntoTurn === true
             || submitOptions?.presetBackgroundChoice !== 'queue');
         const queuedOptions = buildSendOptions(currentInput);
@@ -1234,6 +1276,7 @@ export function useChatComposerState({
             content: currentInput,
             attachments: currentAttachments,
             uploadedAttachments,
+            options: queuedOptions,
           }, queuedSessionKey);
           return;
         }
