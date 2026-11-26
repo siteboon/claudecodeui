@@ -4,7 +4,8 @@
     "account": "Compte",
     "permissions": "Permissions",
     "mcpServers": "Serveurs MCP",
-    "appearance": "Apparence"
+    "appearance": "Apparence",
+    "defaults": "Valeurs par défaut"
   },
   "account": {
     "title": "Compte",
@@ -197,6 +198,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Disposition du chat",
+      "label": "Mode compact",
+      "description": "Masquer l'en-tête du chat et conserver une petite barre de saisie flottante."
+    },
     "darkMode": {
       "label": "Mode sombre",
       "description": "Basculer entre les thèmes clair et sombre"
@@ -455,7 +461,20 @@
       "button": "Se connecter",
       "reLoginButton": "Se reconnecter"
     },
-    "error": "Erreur : {{error}}"
+    "error": "Erreur : {{error}}",
+    "defaults": {
+      "title": "Valeurs par défaut des nouvelles sessions",
+      "description": "Choisissez le modèle et l'effort de raisonnement des nouvelles sessions. Les sessions existantes conservent leur choix.",
+      "model": "Modèle par défaut",
+      "modelDescription": "Utilisé lorsqu'une nouvelle session est créée sans choisir de modèle.",
+      "followProviderDefault": "Par défaut du fournisseur",
+      "effort": "Effort de raisonnement par défaut",
+      "effortDescription": "Un effort plus élevé fait réfléchir le modèle plus longtemps avant de répondre.",
+      "followModelDefault": "Par défaut du modèle",
+      "loading": "Chargement…",
+      "noEffortSupport": "Non pris en charge par ce fournisseur",
+      "loadError": "Impossible de charger les modèles du fournisseur. Rouvrez les paramètres pour réessayer."
+    }
   },
   "permissions": {
     "title": "Paramètres de permission",

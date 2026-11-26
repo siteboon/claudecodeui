@@ -1,7 +1,8 @@
-import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, McpProject, SkillsProject } from '@/shared/types';
+import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ChatDefaultsState, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, McpProject, SkillsProject } from '@/shared/types';
 import { McpServers } from '@/modules/mcp';
 import { ProviderSkills } from '@/modules/skills';
 import AccountContent from '@/modules/settings/tabs/agents-settings/sections/content/AccountContent';
+import ChatDefaultsContent from '@/modules/settings/tabs/agents-settings/sections/content/ChatDefaultsContent';
 import PermissionsContent from '@/modules/settings/tabs/agents-settings/sections/content/PermissionsContent';
 
 type AgentCategoryContentSectionProps = {
@@ -14,6 +15,8 @@ type AgentCategoryContentSectionProps = {
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
+  chatDefaults: ChatDefaultsState;
+  onChatDefaultsChange: (value: ChatDefaultsState) => void;
   projects: AgentSettingsProject[];
 };
 
@@ -28,6 +31,8 @@ export default function AgentCategoryContentSection({
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  chatDefaults,
+  onChatDefaultsChange,
   projects,
 }: AgentCategoryContentSectionProps) {
   return (
@@ -37,6 +42,14 @@ export default function AgentCategoryContentSection({
           agent={selectedAgent}
           authStatus={agentContextById[selectedAgent].authStatus}
           onLogin={agentContextById[selectedAgent].onLogin}
+        />
+      )}
+
+      {selectedCategory === 'defaults' && (
+        <ChatDefaultsContent
+          agent={selectedAgent}
+          defaults={chatDefaults}
+          onDefaultsChange={onChatDefaultsChange}
         />
       )}
 

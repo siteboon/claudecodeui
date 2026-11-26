@@ -5,12 +5,16 @@ import type { PendingPermissionRequest, PermissionMode,
   ProjectSession,
   LLMProvider,
   Project,
+  ChatDefaultsState,
   CustomProviderModelInput,
   ProviderModelActions,
   ProviderModelOption,
+  ProviderModelsApiResponse,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
 import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
+import { readUserPreference, subscribeToUserPreferences } from '@/shared/userSettings';
+import { normalizeChatDefaults } from '@/shared/utils';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
   // Superset used only before the model catalog loads; `ultracode` belongs to the
@@ -85,13 +89,6 @@ type UseChatProviderStateArgs = {
   selectedProject: Project | null;
 };
 
-type ProviderModelsApiResponse = {
-  success?: boolean;
-  data?: {
-    models?: ProviderModelsDefinition;
-  };
-};
-
 type ProviderModelMutationApiResponse = {
   success?: boolean;
   data?: {
@@ -130,6 +127,11 @@ const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): strin
   `${provider}:${sessionId}`
 );
 
+/** Reads the new-session defaults saved on the settings page from the preferences mirror. */
+function readChatDefaults(): ChatDefaultsState {
+  return normalizeChatDefaults(readUserPreference<unknown>('chatDefaults', {}));
+}
+
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
@@ -141,15 +143,32 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   // must restore the model that provider was last used with, and the catalogue
   // that validates them arrives asynchronously per provider.
   const [providerModels, setProviderModels] = useState<Record<LLMProvider, string>>(() => {
+    // The saved default wins over the last manual pick: it is the answer for
+    // "what should a new chat start with", while localStorage only remembers
+    // what the composer last showed.
+    const storedDefaults = readChatDefaults();
     return PROVIDERS.reduce<Record<LLMProvider, string>>((acc, targetProvider) => {
-      acc[targetProvider] = localStorage.getItem(providerModelStorageKey(targetProvider))
+      const model = storedDefaults[targetProvider]?.model;
+      if (model) {
+        // Keep the catalog reconciliation from restoring a stale manual pick.
+        localStorage.setItem(providerModelStorageKey(targetProvider), model);
+      }
+      acc[targetProvider] = model
+        || localStorage.getItem(providerModelStorageKey(targetProvider))
         || FALLBACK_DEFAULT_MODEL[targetProvider];
       return acc;
     }, {} as Record<LLMProvider, string>);
   });
   const [providerEfforts, setProviderEfforts] = useState<Partial<Record<LLMProvider, string>>>(() => {
+    const storedDefaults = readChatDefaults();
     return PROVIDERS.reduce<Partial<Record<LLMProvider, string>>>((acc, targetProvider) => {
-      acc[targetProvider] = localStorage.getItem(`${targetProvider}-effort`) || DEFAULT_EFFORT_VALUE;
+      const effort = storedDefaults[targetProvider]?.effort;
+      if (effort) {
+        localStorage.setItem(`${targetProvider}-effort`, effort);
+      }
+      acc[targetProvider] = effort
+        || localStorage.getItem(`${targetProvider}-effort`)
+        || DEFAULT_EFFORT_VALUE;
       return acc;
     }, {});
   });
@@ -399,6 +418,71 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       setProviderEfforts((previous) => ({ ...previous, ...nextEfforts }));
     }
   }, [providerEfforts, providerModels, reconcileStoredEffort]);
+
+  /**
+   * Applies the settings page's new-session defaults to the composer. Only
+   * fields the user actually configured are touched, so an unset default keeps
+   * the previous "remember my last pick" behaviour.
+   */
+  const applyStoredChatDefaults = useCallback(() => {
+    const storedDefaults = readChatDefaults();
+
+    // The catalog reconciliation below trusts localStorage over the current
+    // state, so mirror the defaults there too or it would restore the model the
+    // user picked in a previous chat.
+    for (const targetProvider of PROVIDERS) {
+      const model = storedDefaults[targetProvider]?.model;
+      if (model) {
+        localStorage.setItem(providerModelStorageKey(targetProvider), model);
+      }
+      const effort = storedDefaults[targetProvider]?.effort;
+      if (effort) {
+        localStorage.setItem(`${targetProvider}-effort`, effort);
+      }
+    }
+
+    setProviderModels((previous) => {
+      let changed = false;
+      const next = { ...previous };
+      for (const targetProvider of PROVIDERS) {
+        const model = storedDefaults[targetProvider]?.model;
+        if (model && model !== previous[targetProvider]) {
+          next[targetProvider] = model;
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+
+    setProviderEfforts((previous) => {
+      let changed = false;
+      const next = { ...previous };
+      for (const targetProvider of PROVIDERS) {
+        const effort = storedDefaults[targetProvider]?.effort;
+        if (effort && effort !== previous[targetProvider]) {
+          next[targetProvider] = effort;
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, []);
+
+  // A new chat has no stored selection, so it starts from the saved defaults.
+  // Re-applying when the preferences change covers the settings dialog being
+  // edited while this blank composer stays mounted.
+  useEffect(() => {
+    if (selectedSession?.id) {
+      return;
+    }
+
+    applyStoredChatDefaults();
+    return subscribeToUserPreferences(() => {
+      if (!selectedSession?.id) {
+        applyStoredChatDefaults();
+      }
+    });
+  }, [selectedSession?.id, applyStoredChatDefaults]);
 
   useEffect(() => {
     const validModes = getPermissionModesForProvider(provider);

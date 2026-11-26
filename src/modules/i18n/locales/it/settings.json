@@ -4,7 +4,8 @@
     "account": "Account",
     "permissions": "Permessi",
     "mcpServers": "Server MCP",
-    "appearance": "Aspetto"
+    "appearance": "Aspetto",
+    "defaults": "Predefiniti"
   },
   "account": {
     "title": "Account",
@@ -197,6 +198,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Layout della chat",
+      "label": "Modalità compatta",
+      "description": "Nascondi l'intestazione della chat e mantieni una piccola barra di immissione flottante."
+    },
     "darkMode": {
       "label": "Modalità scura",
       "description": "Alterna tra tema chiaro e scuro"
@@ -447,7 +453,20 @@
       "button": "Accedi",
       "reLoginButton": "Ri-accedi"
     },
-    "error": "Errore: {{error}}"
+    "error": "Errore: {{error}}",
+    "defaults": {
+      "title": "Predefiniti per le nuove sessioni",
+      "description": "Scegli il modello e lo sforzo di ragionamento con cui inizia una nuova sessione. Le sessioni esistenti mantengono la propria scelta.",
+      "model": "Modello predefinito",
+      "modelDescription": "Usato quando una nuova sessione viene creata senza scegliere un modello.",
+      "followProviderDefault": "Predefinito del provider",
+      "effort": "Sforzo di ragionamento predefinito",
+      "effortDescription": "Uno sforzo maggiore fa riflettere il modello più a lungo prima di rispondere.",
+      "followModelDefault": "Predefinito del modello",
+      "loading": "Caricamento…",
+      "noEffortSupport": "Non supportato da questo provider",
+      "loadError": "Impossibile caricare i modelli del provider. Riapri le impostazioni per riprovare."
+    }
   },
   "permissions": {
     "title": "Impostazioni permessi",

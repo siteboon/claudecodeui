@@ -5,7 +5,8 @@
     "permissions": "권한",
     "mcpServers": "MCP 서버",
     "skills": "스킬",
-    "appearance": "외관"
+    "appearance": "외관",
+    "defaults": "기본값"
   },
   "account": {
     "title": "계정",
@@ -223,6 +224,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "채팅 레이아웃",
+      "label": "간소화 모드",
+      "description": "채팅 헤더를 숨기고 작은 플로팅 입력창만 유지합니다."
+    },
     "darkMode": {
       "label": "다크 모드",
       "description": "라이트/다크 테마 전환"
@@ -476,7 +482,20 @@
       "button": "로그인",
       "reLoginButton": "재로그인"
     },
-    "error": "오류: {{error}}"
+    "error": "오류: {{error}}",
+    "defaults": {
+      "title": "새 세션 기본값",
+      "description": "새 세션이 시작할 모델과 추론 강도를 선택하세요. 기존 세션은 각자의 선택을 유지합니다.",
+      "model": "기본 모델",
+      "modelDescription": "모델을 선택하지 않고 새 세션을 만들 때 사용합니다.",
+      "followProviderDefault": "공급자 기본값",
+      "effort": "기본 추론 강도",
+      "effortDescription": "강도가 높을수록 모델이 답변 전에 더 오래 생각합니다.",
+      "followModelDefault": "모델 기본값",
+      "loading": "불러오는 중…",
+      "noEffortSupport": "이 공급자에서는 지원되지 않습니다",
+      "loadError": "공급자 모델을 불러오지 못했습니다. 설정을 다시 열어 주세요."
+    }
   },
   "permissions": {
     "title": "권한 설정",

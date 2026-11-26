@@ -4,7 +4,8 @@
     "account": "アカウント",
     "permissions": "権限",
     "mcpServers": "MCPサーバー",
-    "appearance": "外観"
+    "appearance": "外観",
+    "defaults": "デフォルト"
   },
   "account": {
     "title": "アカウント",
@@ -197,6 +198,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "チャットレイアウト",
+      "label": "コンパクトモード",
+      "description": "チャットヘッダーを非表示にし、コンパクトなフローティング入力欄のみを表示します。"
+    },
     "darkMode": {
       "label": "ダークモード",
       "description": "ライトテーマとダークテーマを切り替えます"
@@ -447,7 +453,20 @@
       "button": "ログイン",
       "reLoginButton": "再ログイン"
     },
-    "error": "エラー: {{error}}"
+    "error": "エラー: {{error}}",
+    "defaults": {
+      "title": "新しいセッションのデフォルト",
+      "description": "新しいセッションを開始するときのモデルと思考の強さを設定します。既存のセッションはそれぞれの選択を保持します。",
+      "model": "デフォルトモデル",
+      "modelDescription": "モデルを選ばずに新しいセッションを作成したときに使用します。",
+      "followProviderDefault": "プロバイダーのデフォルト",
+      "effort": "デフォルトの思考の強さ",
+      "effortDescription": "強さを上げるほど、モデルは回答前により長く考えます。",
+      "followModelDefault": "モデルのデフォルト",
+      "loading": "読み込み中…",
+      "noEffortSupport": "このプロバイダーでは未対応です",
+      "loadError": "プロバイダーのモデルを読み込めませんでした。設定を開き直してください。"
+    }
   },
   "permissions": {
     "title": "権限設定",

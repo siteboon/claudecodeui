@@ -59,6 +59,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     setCursorPermissions,
     codexPermissionMode,
     setCodexPermissionMode,
+    chatDefaults,
+    setChatDefaults,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,
@@ -244,6 +246,8 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   onCursorPermissionsChange={setCursorPermissions}
                   codexPermissionMode={codexPermissionMode}
                   onCodexPermissionModeChange={setCodexPermissionMode}
+                  chatDefaults={chatDefaults}
+                  onChatDefaultsChange={setChatDefaults}
                   projects={projects}
                 />
               )}

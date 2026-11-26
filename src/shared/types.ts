@@ -37,6 +37,14 @@ export type ProviderModelsDefinition = {
   CUSTOM_MODELS_ONLY?: boolean;
 };
 
+/** Response envelope of `/api/providers/:provider/models`, shared by the chat composer and the agent settings tab. */
+export type ProviderModelsApiResponse = {
+  success?: boolean;
+  data?: {
+    models?: ProviderModelsDefinition;
+  };
+};
+
 /**
  * User-supplied fields for creating or editing a custom provider model entry.
  * `effort` lists the reasoning-effort levels the model accepts; omit it to keep
@@ -1506,7 +1514,20 @@ export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'voice' 
 export type AgentProvider = LLMProvider;
 
 /** One category of per-agent configuration in the agents settings tab (account, permissions, MCP servers or skills); use it to key which panel the tab renders. */
-export type AgentCategory = 'account' | 'permissions' | 'mcp' | 'skills';
+export type AgentCategory = 'account' | 'defaults' | 'permissions' | 'mcp' | 'skills';
+
+/**
+ * The model and reasoning effort a new chat session starts with, keyed by
+ * provider. Both fields are optional: an absent field means "follow the
+ * provider's own default", which is the behaviour before this setting existed.
+ * Stored as the `chatDefaults` user preference and consumed by the composer
+ * for new sessions and by the chat gateway for clients that do not send an
+ * explicit choice.
+ */
+export type ChatDefaultsState = Partial<Record<AgentProvider, {
+  model?: string;
+  effort?: string;
+}>>;
 
 /** How much Codex may do without asking, from prompting on every edit to bypassing permission checks entirely; persisted as the Codex agent's permission setting. */
 export type CodexPermissionMode = 'default' | 'acceptEdits' | 'bypassPermissions';

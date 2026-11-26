@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
-import { sessionsDb } from '@/modules/database/index.js';
+import { sessionsDb, userPreferencesDb } from '@/modules/database/index.js';
 import {
   MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION,
   providerCapabilitiesService,
@@ -95,7 +95,85 @@ export type ProviderRuntimeGateway = SideQuestionRuntime & {
 type ChatWebSocketDependencies = {
   /** Central dispatcher for every provider SDK/CLI runtime. */
   runtime: ProviderRuntimeGateway;
+  /**
+   * Reads the new-session model/effort defaults the user saved in the settings
+   * page. Defaults to the auth.db copy; tests inject their own reader.
+   */
+  readChatDefaults?: (userId: number, provider: LLMProvider) => unknown;
 };
+
+/** Where the settings page stores the per-provider new-session defaults. */
+const CHAT_DEFAULTS_PREFERENCE_KEY = 'chatDefaults';
+
+/** The model/effort a turn runs with after applying the saved defaults. */
+type ResolvedChatDefaults = {
+  model: string | null;
+  effort: string | null;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+);
+
+const readNonEmptyString = (value: unknown): string | null => (
+  typeof value === 'string' && value.trim() ? value.trim() : null
+);
+
+function readStoredChatDefaults(userId: number, provider: LLMProvider): unknown {
+  void provider;
+  return userPreferencesDb.getPreferences(userId)[CHAT_DEFAULTS_PREFERENCE_KEY] ?? null;
+}
+
+/**
+ * The settings page's "new session defaults" are the user's standing answer
+ * for how a turn runs when the client leaves the choice open. A browser sends
+ * its composer value on every turn, but scripts and other clients often send
+ * nothing (or the literal `default`), and those turns used to fall through to
+ * the provider CLI's own default — which is no reasoning effort at all.
+ *
+ * An explicit client value always wins; `default` is treated as "unspecified"
+ * because that is what the composer's first choice means. The stored value is
+ * applied per provider, so switching the provider in the settings page does
+ * not leak one provider's effort level into another.
+ */
+function resolveChatDefaults(
+  provider: LLMProvider,
+  userId: string | number | null,
+  clientOptions: AnyRecord,
+  dependencies: ChatWebSocketDependencies,
+): ResolvedChatDefaults {
+  const empty: ResolvedChatDefaults = { model: null, effort: null };
+
+  const numericUserId = typeof userId === 'number' ? userId : Number(userId);
+  if (!Number.isInteger(numericUserId) || numericUserId <= 0) {
+    return empty;
+  }
+
+  const read = dependencies.readChatDefaults ?? readStoredChatDefaults;
+  let stored: unknown;
+  try {
+    stored = read(numericUserId, provider);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[Chat] Could not read stored chat defaults: ${message}`);
+    return empty;
+  }
+
+  const providerDefaults = isRecord(stored) && isRecord(stored[provider]) ? stored[provider] : null;
+  if (!providerDefaults) {
+    return empty;
+  }
+
+  const isUnspecified = (value: unknown): boolean => {
+    const normalized = readNonEmptyString(value);
+    return normalized === null || normalized === 'default';
+  };
+
+  return {
+    model: isUnspecified(clientOptions.model) ? readNonEmptyString(providerDefaults.model) : null,
+    effort: isUnspecified(clientOptions.effort) ? readNonEmptyString(providerDefaults.effort) : null,
+  };
+}
 
 /**
  * Extracts the authenticated request user id in the formats currently produced
@@ -273,14 +351,26 @@ async function dispatchRun(
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
 
+  // Fall back to the settings page's new-session defaults when the client
+  // left the choice open (absent, empty, or the composer's `default`).
+  const chatDefaults = resolveChatDefaults(provider, userId, clientOptions, dependencies);
+
   // Record what this turn runs with so reopening the session later restores the
   // same model and reasoning effort, and so the resume path has a
-  // session-scoped model answer to use.
-  if (typeof clientOptions.model === 'string' && clientOptions.model.trim()) {
-    providerModelsService.setSessionModel(provider, sessionId, clientOptions.model);
+  // session-scoped model answer to use. The saved default is recorded too:
+  // otherwise the next open would show "Default" for a turn that actually ran
+  // with the user's configured effort.
+  const recordedModel = typeof clientOptions.model === 'string' && clientOptions.model.trim()
+    ? clientOptions.model
+    : chatDefaults.model;
+  if (recordedModel) {
+    providerModelsService.setSessionModel(provider, sessionId, recordedModel);
   }
-  if (typeof clientOptions.effort === 'string' && clientOptions.effort.trim()) {
-    providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
+  const recordedEffort = typeof clientOptions.effort === 'string' && clientOptions.effort.trim()
+    ? clientOptions.effort
+    : chatDefaults.effort;
+  if (recordedEffort) {
+    providerModelsService.setSessionEffort(provider, sessionId, recordedEffort);
   }
 
   const uniqueAttachments = readVerifiedAttachments(clientOptions);
@@ -293,6 +383,8 @@ async function dispatchRun(
   // app session id.
   const runtimeOptions: AnyRecord = {
     ...clientOptions,
+    ...(chatDefaults.model ? { model: chatDefaults.model } : {}),
+    ...(chatDefaults.effort ? { effort: chatDefaults.effort } : {}),
     ...extraRuntimeOptions,
     // Attachments are re-validated server-side: only direct children of the
     // global upload store may reach provider runtimes or their file tools.
