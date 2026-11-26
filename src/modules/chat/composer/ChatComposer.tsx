@@ -304,8 +304,11 @@ export default function ChatComposer({
   return (
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
       {!hasPendingPermissions && (
-        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] chat-content-width -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
-          <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+        // Resolve the width inside the shell's padding, just like the composer below.
+        <div className="relative mx-auto chat-content-width">
+          <div className="pointer-events-none absolute inset-x-0 bottom-full z-10 translate-y-px">
+            <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+          </div>
         </div>
       )}
 
