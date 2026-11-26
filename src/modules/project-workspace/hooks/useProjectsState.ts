@@ -1107,7 +1107,7 @@ export function useProjectsState({
     (sessionIdToDelete: string) => {
       clearSessionAttention(sessionIdToDelete);
 
-      if (selectedSession?.id === sessionIdToDelete) {
+      if (selectedSessionRef.current?.id === sessionIdToDelete) {
         setSelectedSession(null);
         navigate('/');
       }
@@ -1116,7 +1116,7 @@ export function useProjectsState({
         prevProjects.map((project) => removeSessionFromProject(project, sessionIdToDelete)),
       );
     },
-    [clearSessionAttention, navigate, selectedSession?.id],
+    [clearSessionAttention, navigate],
   );
 
   const handleSidebarRefresh = useCallback(async () => {
@@ -1264,9 +1264,11 @@ export function useProjectsState({
 
   // `projectId` is the DB identifier passed from the sidebar's delete flow
   // after the migration away from folder-derived project names.
+  // Both delete handlers compare against the selection *now* (refs), not the one they were created with: callers such
+  // as plugin UIs may hold a callback across an await and even outlive their own mount.
   const handleProjectDelete = useCallback(
     (projectId: string) => {
-      if (selectedProject?.projectId === projectId) {
+      if (selectedProjectRef.current?.projectId === projectId) {
         setSelectedProject(null);
         setSelectedSession(null);
         navigate('/');
@@ -1274,7 +1276,7 @@ export function useProjectsState({
 
       setProjects((prevProjects) => prevProjects.filter((project) => project.projectId !== projectId));
     },
-    [navigate, selectedProject?.projectId],
+    [navigate],
   );
 
   const sidebarSharedProps = useMemo(

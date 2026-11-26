@@ -122,3 +122,21 @@ test('cleanup after a pending request uses the latest workspace callbacks (selec
 
   assert.deepEqual(calls, ['after:removeProject:p-1', 'after:refresh', 'after:removeSession:s-1', 'after:refresh']);
 });
+
+test('a request that rejects (network failure) yields an error result, not an exception', async () => {
+  const removeProject = vi.fn();
+  const removeSession = vi.fn();
+  workspace = {
+    projects: [{ projectId: 'p-1', fullPath: '/src/app-worktrees/w1', worktreeOf: '/src/app' }],
+    refresh: vi.fn(async () => undefined),
+    removeProject,
+    removeSession,
+  };
+  deleteProject.mockRejectedValue(new TypeError('Failed to fetch'));
+  deleteSession.mockRejectedValue(new TypeError('Failed to fetch'));
+  const projects = renderHook(() => usePluginProjectActions()).result;
+  const sessions = renderHook(() => usePluginSessionActions()).result;
+  assert.deepEqual(await projects.current!('/src/app-worktrees/w1', 'delete'), { ok: false, error: 'Failed to fetch' });
+  assert.deepEqual(await sessions.current!('s-1', 'delete'), { ok: false, error: 'Failed to fetch' });
+  assert.equal(removeProject.mock.calls.length + removeSession.mock.calls.length, 0, 'nothing removed locally');
+});

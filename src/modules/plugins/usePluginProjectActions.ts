@@ -35,7 +35,13 @@ export function usePluginProjectActions():
     if (typeof project.worktreeOf !== 'string' || !project.worktreeOf) {
       return { ok: false, error: `${projectPath} is not a git worktree project; plugins can only archive or delete worktree projects` };
     }
-    const response = await api.deleteProject(project.projectId, action === 'delete');
+    let response: Response;
+    try {
+      response = await api.deleteProject(project.projectId, action === 'delete');
+    } catch (error) {
+      // A transport failure (offline, connection reset) is still a result, never a rejection; no automatic retry.
+      return { ok: false, error: error instanceof Error ? error.message : 'Request failed' };
+    }
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       return { ok: false, error: readApiErrorMessage(body) ?? `Request failed (${response.status})` };
@@ -69,7 +75,12 @@ export function usePluginSessionActions():
     const current = workspaceRef.current;
     if (!current) return { ok: false, error: 'Session actions are only available inside a project workspace' };
     if (typeof sessionId !== 'string' || !sessionId) return { ok: false, error: 'sessionId is required' };
-    const response = await api.deleteSession(sessionId, action === 'delete');
+    let response: Response;
+    try {
+      response = await api.deleteSession(sessionId, action === 'delete');
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : 'Request failed' };
+    }
     if (!response.ok) {
       const body = await response.json().catch(() => null);
       return { ok: false, error: readApiErrorMessage(body) ?? `Request failed (${response.status})` };
