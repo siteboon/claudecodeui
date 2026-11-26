@@ -4,7 +4,7 @@ import type { Project, SidebarProjectListProps } from '@/shared/types';
 import { getPageTitle } from '@/shared/utils';
 import SidebarProjectItem from '@/modules/sidebar/SidebarProjectItem';
 import SidebarProjectsState from '@/modules/sidebar/SidebarProjectsState';
-import { groupWorktreeProjects } from '@/modules/sidebar/utils/projectWorktreeGroups';
+import { groupWorktreeProjects, shouldShowWorktrees } from '@/modules/sidebar/utils/projectWorktreeGroups';
 
 
 /** Rendered by SidebarContent to list the filtered projects, delegating each row to SidebarProjectItem. */
@@ -148,11 +148,9 @@ export default function SidebarProjectList({
           ? state
           : groups.map(({ project, worktrees }) => {
               // Worktree projects (CloudCLI or agent worktrees of this repository) sit under their
-              // repository instead of crowding the top level. They show while the repository is
-              // expanded, or whenever one of them is the selected project so the selection never hides.
-              const showWorktrees = worktrees.length > 0 && (
-                isProjectExpanded(project.projectId)
-                || worktrees.some((worktree) => worktree.projectId === selectedProject?.projectId)
+              // repository instead of crowding the top level.
+              const showWorktrees = shouldShowWorktrees(
+                project.projectId, worktrees, isProjectExpanded, selectedProject?.projectId,
               );
               return (
                 <div key={project.projectId}>

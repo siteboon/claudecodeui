@@ -43,3 +43,19 @@ export function groupWorktreeProjects(projects: Project[]): ProjectWorktreeGroup
   }
   return ordered;
 }
+
+/**
+ * Whether a repository's worktree rows are visible: while the repository is expanded, while any of its worktrees is
+ * expanded (the compact layout keeps a single expanded project, so expanding a worktree collapses its repository), or
+ * while one of them is the selected project, so the selection never hides.
+ */
+export function shouldShowWorktrees(
+  repositoryId: string,
+  worktrees: Project[],
+  isProjectExpanded: (projectId: string) => boolean,
+  selectedProjectId: string | null | undefined,
+): boolean {
+  if (worktrees.length === 0) return false;
+  return isProjectExpanded(repositoryId)
+    || worktrees.some((worktree) => isProjectExpanded(worktree.projectId) || worktree.projectId === selectedProjectId);
+}

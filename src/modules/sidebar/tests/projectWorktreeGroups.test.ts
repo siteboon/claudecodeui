@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import type { Project } from '@/shared/types';
-import { groupWorktreeProjects } from '@/modules/sidebar/utils/projectWorktreeGroups';
+import { groupWorktreeProjects, shouldShowWorktrees } from '@/modules/sidebar/utils/projectWorktreeGroups';
 
 const project = (id: string, fullPath: string, worktreeOf: string | null = null): Project => ({
   projectId: id, displayName: id, fullPath, worktreeOf,
@@ -31,4 +31,15 @@ test('nesting is one level deep and never self-referential', () => {
     project('wt-of-wt', '/wt2', '/wt'),
     project('self', '/self', '/self'),
   ]), [['app', ['wt']], ['wt-of-wt', []], ['self', []]]);
+});
+
+test('worktree rows stay visible while a worktree itself is expanded (compact single-expansion layout)', () => {
+  const worktrees = [project('wt', '/src/app-worktrees/a', '/src/app')];
+  // Compact layout: expanding the worktree replaces the expansion set, collapsing the repository.
+  const onlyWorktreeExpanded = (id: string) => id === 'wt';
+  assert.equal(shouldShowWorktrees('app', worktrees, onlyWorktreeExpanded, null), true);
+  assert.equal(shouldShowWorktrees('app', worktrees, (id) => id === 'app', null), true);
+  assert.equal(shouldShowWorktrees('app', worktrees, () => false, 'wt'), true);
+  assert.equal(shouldShowWorktrees('app', worktrees, () => false, 'other'), false);
+  assert.equal(shouldShowWorktrees('app', [], () => true, null), false);
 });
