@@ -491,7 +491,8 @@ test('Agent route maps permissionMode per provider and rejects modes a provider 
       body: JSON.stringify({ projectPath: '/home/test/project', message: 'Run', stream: false, ...body }),
     });
     assert.equal((await post({ provider: 'codex', permissionMode: 'acceptEdits' })).status, 200);
-    for (const [provider, permissionMode] of [['codex', 'plan'], ['cursor', 'default'], ['claude', 'yolo'], ['claude', 42]]) {
+    // Codex `default` is refused: the Codex runtime cannot surface approval requests, so none could be answered.
+    for (const [provider, permissionMode] of [['codex', 'default'], ['codex', 'plan'], ['cursor', 'default'], ['claude', 'yolo'], ['claude', 42]]) {
       const response = await post({ provider, permissionMode });
       assert.equal(response.status, 400, `${provider}/${String(permissionMode)}`);
       assert.match(((await response.json()) as { error: string }).error, /permissionMode must be one of/);
@@ -504,6 +505,7 @@ test('Agent capabilities list the permission modes per provider behind the same 
   await withAgentServer(createDependencies(), async (baseUrl) => {
     const body = await (await fetch(`${baseUrl}/api/agent/capabilities`)).json() as { permissionModes: Record<string, string[]> };
     assert.deepEqual(body.permissionModes.cursor, ['bypassPermissions']);
+    assert.deepEqual(body.permissionModes.codex, ['bypassPermissions', 'acceptEdits']);
     assert.ok(body.permissionModes.claude.includes('acceptEdits'));
   });
   await withAgentServer(createDependencies({ platformMode: false }), async (baseUrl) => {

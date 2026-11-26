@@ -12,16 +12,19 @@ const AGENT_RUN_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode'];
 
 /**
  * Permission modes an Agent API caller may ask for, per provider. The first entry is what a request that names
- * none gets, which keeps the route's historical behaviour (agent runs bypass permissions). The others leave the
- * run's tool approvals to the person watching the session, as a chat turn would:
- *   - claude: `default` asks for every edit and command, `acceptEdits` only for commands, `plan` only plans;
- *   - codex: both run in the `workspace-write` sandbox; `default` may ask, `acceptEdits` never asks;
- *   - opencode: `default` asks;
+ * none gets, which keeps the route's historical behaviour (agent runs bypass permissions). Only modes the runtime
+ * can actually honour are listed:
+ *   - claude: `default` asks for every edit and command, `acceptEdits` only for commands (requests show in the
+ *     session's tab, as in a chat turn); `plan` only plans;
+ *   - codex: `acceptEdits` runs in the `workspace-write` sandbox without approval requests. Codex `default` is not
+ *     offered: the Codex runtime cannot surface approval requests (see mapPermissionModeToCodexOptions), so a
+ *     request for approval could never be answered;
+ *   - opencode: `default` asks in the session's tab;
  *   - cursor: its CLI cannot ask, so bypass is the only mode.
  */
 export const AGENT_PERMISSION_MODES: Readonly<Record<string, readonly string[]>> = {
   claude: ['bypassPermissions', 'default', 'acceptEdits', 'plan'],
-  codex: ['bypassPermissions', 'default', 'acceptEdits'],
+  codex: ['bypassPermissions', 'acceptEdits'],
   opencode: ['bypassPermissions', 'default'],
   cursor: ['bypassPermissions'],
 };
@@ -683,9 +686,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
    * @param {string} permissionMode - (Optional) How the run's tool calls are approved. Default: "bypassPermissions".
    *                                   Allowed per provider (see GET /api/agent/capabilities):
    *                                   claude: bypassPermissions | default | acceptEdits | plan
-   *                                   codex: bypassPermissions | default | acceptEdits (workspace-write sandbox)
+   *                                   codex: bypassPermissions | acceptEdits (workspace-write sandbox, never asks)
    *                                   opencode: bypassPermissions | default;  cursor: bypassPermissions
-   *                                   Any mode other than bypass shows approval requests in the session's tab.
+   *                                   Claude default/acceptEdits and OpenCode default show approval requests in
+   *                                   the session's tab.
    *
    * @param {boolean} unattended - (Optional) Whether nobody will answer the run's MCP elicitation forms.
    *                              Claude only. Default: true

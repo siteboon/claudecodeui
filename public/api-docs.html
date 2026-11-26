@@ -556,7 +556,7 @@
                                         <td><code>permissionMode</code></td>
                                         <td>string</td>
                                         <td><span class="badge badge-optional">Optional</span></td>
-                                        <td>How the run's tool calls are approved (default: <code>bypassPermissions</code>). Claude: <code>bypassPermissions</code>, <code>default</code>, <code>acceptEdits</code>, <code>plan</code>. Codex: <code>bypassPermissions</code>, <code>default</code>, <code>acceptEdits</code> (both sandboxed to the workspace). OpenCode: <code>bypassPermissions</code>, <code>default</code>. Cursor: <code>bypassPermissions</code> only. Any other mode shows approval requests in the session's tab. <code>GET /api/agent/capabilities</code> lists what this server accepts.</td>
+                                        <td>How the run's tool calls are approved (default: <code>bypassPermissions</code>). Claude: <code>bypassPermissions</code>, <code>default</code>, <code>acceptEdits</code>, <code>plan</code>. Codex: <code>bypassPermissions</code>, <code>acceptEdits</code> (runs sandboxed to the workspace without approval requests). OpenCode: <code>bypassPermissions</code>, <code>default</code>. Cursor: <code>bypassPermissions</code> only. Claude <code>default</code>/<code>acceptEdits</code> and OpenCode <code>default</code> show approval requests in the session's tab. <code>GET /api/agent/capabilities</code> lists what this server accepts.</td>
                                     </tr>
                                     <tr>
                                         <td><code>cleanup</code></td>
