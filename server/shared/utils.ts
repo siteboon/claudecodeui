@@ -1023,13 +1023,14 @@ export function normalizeSessionName(rawValue: string | undefined, fallback: str
 
 /**
  * Budget for an automatic session title, counted in half-width units: a CJK
- * character costs two, so the limit reads as sixteen Chinese characters.
+ * character costs two, so the limit is eight Chinese characters or sixteen
+ * Latin ones.
  *
  * A sidebar row on a phone fits about that much. Titles derived from a prompt
  * used to keep the whole first sentence, which pushed every other conversation
  * off the screen and made them impossible to tell apart.
  */
-export const SESSION_TITLE_MAX_WIDTH = 32;
+export const SESSION_TITLE_MAX_WIDTH = 16;
 
 /**
  * Cuts a prompt-derived session title to {@link SESSION_TITLE_MAX_WIDTH} and

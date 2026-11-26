@@ -6,8 +6,8 @@ import { SESSION_TITLE_MAX_WIDTH, truncateSessionTitle } from '@/shared/utils.js
 /**
  * Session titles come from user text, and a Chinese prompt has no spaces: the
  * old word-count cut kept the whole first sentence and filled the sidebar row.
- * The budget is measured in half-width units, so sixteen Chinese characters and
- * thirty-two Latin letters both fit.
+ * The budget is measured in half-width units, so eight Chinese characters or
+ * sixteen Latin letters both fit.
  */
 
 test('a title that already fits is returned untouched', () => {
@@ -15,13 +15,12 @@ test('a title that already fits is returned untouched', () => {
   assert.equal(truncateSessionTitle('super-agent2'), 'super-agent2');
 });
 
-test('a Chinese sentence is cut to the width budget plus an ellipsis', () => {
+test('a Chinese sentence is cut to eight characters plus an ellipsis', () => {
   const cut = truncateSessionTitle('聊天会话加载延时问题：在有 queue 会话的情况');
 
-  assert.equal(cut, '聊天会话加载延时问题：在有…');
-  // Thirteen full-width characters plus the ellipsis fit the budget with room
-  // to spare, because the cut lands on a word boundary just below it.
-  assert.equal([...cut].length, 14);
+  assert.equal(cut, '聊天会话加载延…');
+  // Seven full-width characters plus the ellipsis stay inside the budget.
+  assert.equal([...cut].length, 8);
 });
 
 test('whitespace is collapsed and the ends trimmed', () => {
@@ -34,29 +33,27 @@ test('empty input stays empty so the caller can apply its own fallback', () => {
 });
 
 test('an early comma does not swallow the rest of the title', () => {
-  // Breaking at the comma would leave ten units on screen out of a thirty-unit
-  // budget, so the cut runs on to the character boundary instead.
-  const cut = truncateSessionTitle('先看日志，再决定要不要改这里的实现细节，然后跑测试');
-
-  assert.equal(cut, '先看日志，再决定要不要改这里的…');
+  // Breaking at the comma would leave five characters on screen out of a
+  // fourteen-unit budget, so the cut runs on to the character boundary.
+  assert.equal(truncateSessionTitle('先看日志，再决定要不要改这里'), '先看日志，再决…');
 });
 
 test('a break near the end of the budget is taken', () => {
   // The comma lands just inside the budget, so the title ends on the phrase
   // rather than a dangling character.
-  assert.equal(truncateSessionTitle('一二三四五六七八九十甲乙丙，丁戊己庚辛'), '一二三四五六七八九十甲乙丙…');
+  assert.equal(truncateSessionTitle('一二三四五，六七八九十'), '一二三四五…');
 });
 
 test('a latin word is never split in half', () => {
-  // The whole word survives even though the budget would have cut inside the
-  // next one, and the space in front of the ellipsis is dropped.
-  assert.equal(truncateSessionTitle('investigate the streaming regression'), 'investigate the streaming…');
+  // The whole word survives even though the budget would have cut inside it,
+  // and the space in front of the ellipsis is dropped.
+  assert.equal(truncateSessionTitle('investigate the streaming regression'), 'investigate…');
 });
 
 test('an unbreakable latin word falls back to a hard cut', () => {
-  assert.equal(truncateSessionTitle('supercalifragilisticexpialidocious'), 'supercalifragilisticexpialidoc…');
+  assert.equal(truncateSessionTitle('supercalifragilisticexpialidocious'), 'supercalifragi…');
 });
 
-test('the documented budget is sixteen double-width characters', () => {
-  assert.equal(SESSION_TITLE_MAX_WIDTH, 32);
+test('the documented budget is eight double-width characters', () => {
+  assert.equal(SESSION_TITLE_MAX_WIDTH, 16);
 });
