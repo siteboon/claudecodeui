@@ -1288,11 +1288,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     // read it — under the id it was sent with (`source_uuid`), which is the id
     // the live echo carried, so the two reconcile into one bubble.
     // `commandMode` other than `prompt` (task notifications and the like) is
-    // the CLI talking to itself, not the user.
+    // the CLI talking to itself, not the user. So are harness deliveries that
+    // reuse `commandMode: 'prompt'` — subagent hand-backs and cross-session
+    // messages — which Claude Code marks with `isMeta` and/or an `origin`.
     if (raw.type === 'attachment') {
       const attachment = readObjectRecord(raw.attachment);
       const commandMode = attachment?.commandMode ?? 'prompt';
-      if (attachment?.type === 'queued_command' && commandMode === 'prompt' && attachment.prompt) {
+      const isHarnessDelivery = attachment?.isMeta === true || attachment?.origin != null;
+      if (attachment?.type === 'queued_command' && commandMode === 'prompt' && !isHarnessDelivery && attachment.prompt) {
         return this.normalizeMessageRows({
           type: 'user',
           uuid: typeof attachment.source_uuid === 'string' && attachment.source_uuid ? attachment.source_uuid : baseId,
