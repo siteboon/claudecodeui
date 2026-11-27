@@ -151,7 +151,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
 
     return {
       ...parsed,
-      sessionName: normalizeSessionName(sessionName, 'Untitled Codex Session'),
+      sessionName: normalizeAutoSessionName(sessionName, 'Untitled Codex Session'),
     };
   }
 
