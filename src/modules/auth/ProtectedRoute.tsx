@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { IS_PLATFORM } from '@/shared/utils';
+import { disableAuth, trustLocalAuthBypass } from '@/shared/utils';
 import { useAuth } from '@/modules/auth/context/AuthContext';
 import { Onboarding } from '@/modules/onboarding';
 import AuthLoadingScreen from '@/modules/auth/AuthLoadingScreen';
@@ -19,7 +19,9 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <AuthLoadingScreen />;
   }
 
-  if (IS_PLATFORM) {
+  if (trustLocalAuthBypass) {
+    if (disableAuth) return <>{children}</>;
+
     if (!hasCompletedOnboarding) {
       return <Onboarding onComplete={refreshOnboardingStatus} />;
     }

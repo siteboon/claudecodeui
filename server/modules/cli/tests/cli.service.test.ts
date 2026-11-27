@@ -86,3 +86,21 @@ test('returns a failure code for an unknown command without exiting the process'
   assert.equal(exitCode, 1);
   assert.match(harness.errorMessages[0], /Unknown command: unknown/);
 });
+
+test('status resolves effective bypass from the injected environment', async () => {
+  for (const [environment, expected] of [
+    [{}, false],
+    [{ DISABLE_AUTH: 'true' }, true],
+    [{ VITE_DISABLE_AUTH: 'true' }, true],
+    [{ VITE_IS_PLATFORM: 'true' }, true],
+    [{ DISABLE_AUTH: 'false', VITE_DISABLE_AUTH: 'false' }, false],
+  ] as const) {
+    const harness = createHarness();
+    Object.assign(harness.environment, environment);
+    assert.equal(await harness.service.run(['status']), 0);
+    assert.ok(harness.logMessages.some(line => line.includes('TRUST_LOCAL_AUTH_BYPASS:') && line.includes(String(expected))));
+  }
+  const harness = createHarness();
+  Object.assign(harness.environment, { DISABLE_AUTH: 'true', VITE_DISABLE_AUTH: 'false' });
+  await assert.rejects(harness.service.run(['status']), /must match/);
+});

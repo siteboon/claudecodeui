@@ -8,6 +8,7 @@ type AuthUser = {
 type AuthLoginUser = AuthUser & { password_hash: string };
 
 type AuthDependencies = {
+  localAuthBypass?: { getUser(): AuthUser | undefined };
   users: {
     hasUsers(): boolean;
     createUser(username: string, passwordHash: string): AuthUser;
@@ -40,8 +41,21 @@ function isUniqueConstraintError(error: unknown): boolean {
  * transaction, and token dependencies.
  */
 export function createAuthService(dependencies: AuthDependencies) {
+  const requireBypassUser = () => {
+    const user = dependencies.localAuthBypass?.getUser();
+    if (!user) {
+      throw new AppError('DISABLE_AUTH requires an existing local user. Set both DISABLE_AUTH=false and VITE_DISABLE_AUTH=false, rebuild the frontend, and restart CloudCLI to complete setup. Re-enable bypass only after setup.', {
+        code: 'AUTH_BYPASS_USER_REQUIRED',
+        statusCode: 503,
+      });
+    }
+    return user;
+  };
   return {
     getStatus() {
+      if (dependencies.localAuthBypass) {
+        return { needsSetup: false, isAuthenticated: true, user: requireBypassUser() };
+      }
       return {
         needsSetup: !dependencies.users.hasUsers(),
         isAuthenticated: false,
@@ -49,6 +63,8 @@ export function createAuthService(dependencies: AuthDependencies) {
     },
 
     async register(usernameInput: unknown, passwordInput: unknown) {
+      // Refuse first-user creation while upstream authentication bypass is enabled.
+      if (dependencies.localAuthBypass) requireBypassUser();
       const username = typeof usernameInput === 'string' ? usernameInput : '';
       const password = typeof passwordInput === 'string' ? passwordInput : '';
 

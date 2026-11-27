@@ -35,6 +35,11 @@ function createDependencies(overrides: Partial<UserDependencies> = {}): UserDepe
   };
 }
 
+test('local bypass skips onboarding while normal mode preserves the stored status', () => {
+  assert.equal(createUserService(createDependencies()).getOnboardingStatus(1).hasCompletedOnboarding, false);
+  assert.equal(createUserService(createDependencies({ disableAuth: true })).getOnboardingStatus(1).hasCompletedOnboarding, true);
+});
+
 test('getGitConfig imports system configuration when the repository is empty', async () => {
   const updates: unknown[][] = [];
   const service = createUserService(createDependencies({

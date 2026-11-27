@@ -16,8 +16,9 @@ import { AUTH_SESSION_EXPIRED_EVENT, AUTH_TOKEN_REFRESHED_EVENT } from '@/shared
  * workspace has VITE_IS_PLATFORM=true, CI does not.
  */
 
-const loadFetch = async (isPlatform: boolean) => {
+const loadFetch = async (isPlatform: boolean, disableAuth = false) => {
   vi.stubEnv('VITE_IS_PLATFORM', isPlatform ? 'true' : 'false');
+  vi.stubEnv('VITE_DISABLE_AUTH', disableAuth ? 'true' : 'false');
   vi.resetModules();
   return (await import('@/shared/api')).authenticatedFetch;
 };
@@ -81,6 +82,13 @@ test('platform builds send no bearer token, because the session is a cookie', as
 
   await (await loadFetch(true))('/api/projects');
 
+  assert.equal('Authorization' in sentHeaders(), false);
+});
+
+test('local bypass omits bearer credentials with a stored token', async () => {
+  localStorage.setItem('auth-token', liveToken());
+  respondWith();
+  await (await loadFetch(false, true))('/api/projects');
   assert.equal('Authorization' in sentHeaders(), false);
 });
 

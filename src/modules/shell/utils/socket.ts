@@ -1,4 +1,4 @@
-import { IS_PLATFORM } from '@/shared/utils';
+import { trustLocalAuthBypass } from '@/shared/utils';
 import { getStoredAuthToken } from '@/shared/authToken';
 
 type ShellInitMessage = {
@@ -45,7 +45,7 @@ type ShellIncomingMessage =
 export function getShellWebSocketUrl(): string | null {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-  if (IS_PLATFORM) {
+  if (trustLocalAuthBypass) {
     return `${protocol}//${window.location.host}/shell`;
   }
 
