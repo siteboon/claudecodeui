@@ -314,6 +314,44 @@ const upsertSessionIntoProject = (project: Project, event: SessionUpsertedEvent)
   return next;
 };
 
+/** Applies one `session_upserted` delta to the project list. */
+const applySessionUpsert = (previousProjects: Project[], upsert: SessionUpsertedEvent): Project[] => {
+  const targetProjectId = upsert.project?.projectId;
+  const existingProject = previousProjects.find((project) =>
+    targetProjectId ? project.projectId === targetProjectId : getProjectSessions(project).some((session) => session.id === upsert.sessionId),
+  );
+
+  if (!existingProject) {
+    // First session of a project this client has never seen: create the
+    // project entry from the event payload.
+    if (!upsert.project) {
+      return previousProjects;
+    }
+
+    const newProject: Project = {
+      projectId: upsert.project.projectId,
+      path: upsert.project.path,
+      fullPath: upsert.project.fullPath,
+      displayName: upsert.project.displayName,
+      isStarred: upsert.project.isStarred,
+      sessions: [],
+      sessionMeta: { hasMore: false, total: 0 },
+    } as Project;
+
+    return [...previousProjects, upsertSessionIntoProject(newProject, upsert)];
+  }
+
+  const updatedProject = upsertSessionIntoProject(existingProject, upsert);
+  if (updatedProject === existingProject) {
+    return previousProjects;
+  }
+
+  return previousProjects.map((project) =>
+    project.projectId === existingProject.projectId ? updatedProject : project,
+  );
+};
+
+
 const projectFromRegistration = (project: Project): Project => ({
   projectId: project.projectId,
   path: project.path || project.fullPath,
@@ -482,6 +520,30 @@ export function useProjectsState({
    * same payload — the workspace header and document title.
    */
   const projectsRequestIdRef = useRef(0);
+  // Every applied `session_upserted`, numbered. A list requested before an
+  // upsert and answered after it replays the newer ones before it is written,
+  // so it cannot put back what the upsert replaced.
+  const upsertGenerationRef = useRef(0);
+  const upsertLogRef = useRef<{ generation: number; upsert: SessionUpsertedEvent }[]>([]);
+  // The log is only needed while a list request is out.
+  const listRequestsInFlightRef = useRef(0);
+  const startListRequest = useCallback(() => {
+    listRequestsInFlightRef.current += 1;
+    return upsertGenerationRef.current;
+  }, []);
+  const endListRequest = useCallback(() => {
+    listRequestsInFlightRef.current -= 1;
+    if (listRequestsInFlightRef.current === 0) upsertLogRef.current = [];
+  }, []);
+  // A local rename or delete is newer than any logged upsert of that session or project.
+  const forgetUpserts = useCallback((matches: (upsert: SessionUpsertedEvent) => boolean) => {
+    upsertLogRef.current = upsertLogRef.current.filter((entry) => !matches(entry.upsert));
+  }, []);
+  // Reads the log now: a `setProjects` updater runs later, after `endListRequest` may have cleared it.
+  const replayUpsertsSince = useCallback((generation: number) => {
+    const entries = upsertLogRef.current.filter((entry) => entry.generation > generation);
+    return (list: Project[]) => entries.reduce((projects, entry) => applySessionUpsert(projects, entry.upsert), list);
+  }, []);
 
   useEffect(() => {
     sessionLookupRef.current = null;
@@ -529,6 +591,7 @@ export function useProjectsState({
     // loading flag is only ever cleared by the response that actually wrote
     // `projects`.
     const requestId = (projectsRequestIdRef.current += 1);
+    const upsertGeneration = startListRequest();
 
     try {
       if (showLoadingState) {
@@ -541,9 +604,10 @@ export function useProjectsState({
         return;
       }
 
+      const replayUpserts = replayUpsertsSince(upsertGeneration);
       setProjects((prevProjects) => {
         const projectsWithTaskMaster = mergeTaskMasterCache(projectData, prevProjects);
-        const mergedProjects = mergeExpandedSessionPages(prevProjects, projectsWithTaskMaster);
+        const mergedProjects = replayUpserts(mergeExpandedSessionPages(prevProjects, projectsWithTaskMaster));
 
         if (prevProjects.length === 0) {
           return mergedProjects;
@@ -576,6 +640,7 @@ export function useProjectsState({
     } catch (error) {
       console.error('Error fetching projects:', error);
     } finally {
+      endListRequest();
       // Only the newest request clears the flag, and it clears it whether or not
       // it asked for the spinner, because by now it has written the list.
       //
@@ -590,7 +655,7 @@ export function useProjectsState({
         setIsLoadingProjects(false);
       }
     }
-  }, []);
+  }, [endListRequest, replayUpsertsSince, startListRequest]);
 
   const refreshProjectsSilently = useCallback(async () => {
     // Keep chat view stable while still syncing sidebar/session metadata in background.
@@ -811,41 +876,13 @@ export function useProjectsState({
         markSessionAttention(upsert.sessionId);
       }
 
-      setProjects((previousProjects) => {
-        const targetProjectId = upsert.project?.projectId;
-        const existingProject = previousProjects.find((project) =>
-          targetProjectId ? project.projectId === targetProjectId : getProjectSessions(project).some((session) => session.id === upsert.sessionId),
-        );
-
-        if (!existingProject) {
-          // First session of a project this client has never seen: create the
-          // project entry from the event payload.
-          if (!upsert.project) {
-            return previousProjects;
-          }
-
-          const newProject: Project = {
-            projectId: upsert.project.projectId,
-            path: upsert.project.path,
-            fullPath: upsert.project.fullPath,
-            displayName: upsert.project.displayName,
-            isStarred: upsert.project.isStarred,
-            sessions: [],
-            sessionMeta: { hasMore: false, total: 0 },
-          } as Project;
-
-          return [...previousProjects, upsertSessionIntoProject(newProject, upsert)];
-        }
-
-        const updatedProject = upsertSessionIntoProject(existingProject, upsert);
-        if (updatedProject === existingProject) {
-          return previousProjects;
-        }
-
-        return previousProjects.map((project) =>
-          project.projectId === existingProject.projectId ? updatedProject : project,
-        );
-      });
+      upsertGenerationRef.current += 1;
+      if (listRequestsInFlightRef.current > 0) {
+        upsertLogRef.current.push({ generation: upsertGenerationRef.current, upsert });
+        // shortcut: a list request that hangs past 500 upserts can land stale; add a fetch timeout if that shows up.
+        if (upsertLogRef.current.length > 500) upsertLogRef.current.shift();
+      }
+      setProjects((previousProjects) => applySessionUpsert(previousProjects, upsert));
 
       // Session-list changes belong to the sidebar's `projects` collection.
       // Only propagate workspace metadata changes to the selected project so
@@ -1101,19 +1138,23 @@ export function useProjectsState({
         navigate('/');
       }
 
+      forgetUpserts((upsert) => getSessionAliasIds(upsert).has(sessionIdToDelete));
       setProjects((prevProjects) =>
         prevProjects.map((project) => removeSessionFromProject(project, sessionIdToDelete)),
       );
     },
-    [clearSessionAttention, navigate, selectedSession?.id],
+    [clearSessionAttention, forgetUpserts, navigate, selectedSession?.id],
   );
 
   const handleSidebarRefresh = useCallback(async () => {
+    const upsertGeneration = startListRequest();
     try {
       const response = await api.projects();
       const freshProjects = (await response.json()) as Project[];
       const projectsWithTaskMaster = mergeTaskMasterCache(freshProjects, projects);
-      const mergedProjects = mergeExpandedSessionPages(projects, projectsWithTaskMaster);
+      const mergedProjects = replayUpsertsSince(upsertGeneration)(
+        mergeExpandedSessionPages(projects, projectsWithTaskMaster),
+      );
 
       setProjects((prevProjects) =>
         projectsHaveChanges(prevProjects, mergedProjects) ? mergedProjects : prevProjects,
@@ -1155,8 +1196,10 @@ export function useProjectsState({
       }
     } catch (error) {
       console.error('Error refreshing sidebar:', error);
+    } finally {
+      endListRequest();
     }
-  }, [projects, selectedProject, selectedSession]);
+  }, [endListRequest, projects, replayUpsertsSince, selectedProject, selectedSession, startListRequest]);
 
   /**
    * Persists a new title for one session and writes it onto both local copies
@@ -1181,6 +1224,7 @@ export function useProjectsState({
       console.error('[Workspace] Failed to rename session:', response.status);
       return false;
     }
+    forgetUpserts((upsert) => getSessionAliasIds(upsert).has(sessionIdToRename));
 
     setProjects((previousProjects) => {
       let changed = false;
@@ -1207,7 +1251,7 @@ export function useProjectsState({
     });
 
     return true;
-  }, []);
+  }, [forgetUpserts]);
 
   const loadMoreProjectSessions = useCallback(async (projectId: string) => {
     const project = projects.find((candidate) => candidate.projectId === projectId);
@@ -1261,9 +1305,10 @@ export function useProjectsState({
         navigate('/');
       }
 
+      forgetUpserts((upsert) => upsert.project?.projectId === projectId);
       setProjects((prevProjects) => prevProjects.filter((project) => project.projectId !== projectId));
     },
-    [navigate, selectedProject?.projectId],
+    [forgetUpserts, navigate, selectedProject?.projectId],
   );
 
   const sidebarSharedProps = useMemo(
