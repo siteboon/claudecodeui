@@ -275,6 +275,62 @@ test('search and archived views do not show unrelated pinned shortcuts', async (
   assert.equal(Boolean(screen.queryByTestId('pinned-sessions-section')), false);
 });
 
+test('title and message search results share the same pin without opening the conversation', async () => {
+  const props = contentProps('conversations');
+  const open = vi.fn();
+  const match = { role: 'user', snippet: 'A matched message', highlights: [], timestamp: '2026-10-23T11:00:00Z' };
+  const result = { ...conversation('off-page'), projectId: null };
+  props.onConversationResultClick = open;
+  props.searchFilter = 'matched';
+  props.conversationResults = {
+    query: props.searchFilter,
+    titleResults: [result],
+    results: [{
+      projectId: result.projectId,
+      projectName: 'one',
+      projectDisplayName: result.projectDisplayName,
+      sessions: [{ sessionId: result.sessionId, provider: result.provider, sessionSummary: result.sessionTitle, matches: [match] }],
+    }],
+    totalMatches: 1,
+  };
+  mocks.save.mockResolvedValueOnce(response([A, result])).mockResolvedValueOnce(response([A]));
+
+  const { rerender } = render(<SessionPinsProvider projects={PROJECTS}><SidebarContent {...props} isMobile /></SessionPinsProvider>);
+  const titles = within(screen.getByRole('region', { name: 'Session' }));
+  const messages = within(screen.getByRole('region', { name: 'Conversation contents' }));
+  const pinName = `Pin session: ${result.sessionTitle}`;
+  const unpinName = `Unpin session: ${result.sessionTitle}`;
+  const messagePin = messages.getByRole('button', { name: pinName });
+  await waitFor(() => assert.equal(messagePin.hasAttribute('disabled'), false));
+  assert.equal(titles.getByRole('button', { name: pinName }).getAttribute('aria-pressed'), 'false');
+
+  fireEvent.click(messagePin);
+  const titleUnpin = await titles.findByRole('button', { name: unpinName });
+  assert.equal(messages.getByRole('button', { name: unpinName }).getAttribute('aria-pressed'), 'true');
+  assert.equal(screen.queryByTestId('pinned-sessions-section'), null);
+  assert.equal(open.mock.calls.length, 0);
+
+  fireEvent.click(messages.getByText(match.snippet));
+  fireEvent.click(titles.getByText(result.sessionTitle));
+  assert.deepEqual(open.mock.calls, [
+    [null, result.sessionId, result.provider, match.timestamp, match.snippet],
+    [null, result.sessionId, result.provider],
+  ]);
+
+  fireEvent.click(titleUnpin);
+  await messages.findByRole('button', { name: pinName });
+  assert.equal(titles.getByRole('button', { name: pinName }).getAttribute('aria-pressed'), 'false');
+  assert.equal(open.mock.calls.length, 2);
+  assert.deepEqual(mocks.save.mock.calls.map(([id, pinned]) => [id, pinned]), [
+    [result.sessionId, true], [result.sessionId, false],
+  ]);
+
+  rerender(<SessionPinsProvider projects={PROJECTS}><SidebarContent {...props} searchFilter="" isMobile /></SessionPinsProvider>);
+  const pinned = within(screen.getByTestId('pinned-sessions-section'));
+  assert.ok(pinned.getByText(A.sessionTitle));
+  assert.equal(pinned.queryByText(result.sessionTitle), null);
+});
+
 test('pins outside the loaded recent page still render; loading older conversations keeps its pagination callback', async () => {
   const props = contentProps('conversations');
   props.recentConversations = [B];
