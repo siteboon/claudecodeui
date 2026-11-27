@@ -1,115 +1,81 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
-import type { Project,FileTreeNode } from '@/shared/types';
+import type { Project, FileTreeNode } from '@/shared/types';
 
-type UseFileTreeDataResult = {
-  files: FileTreeNode[];
-  loading: boolean;
-  error: string | null;
-  refreshFiles: () => void;
+type DirectoryPage = {
+  entries: FileTreeNode[]; nextCursor: string | null; cursor: string;
+  previous: string[]; loading: boolean; error: string | null;
 };
 
-const DEFAULT_LOAD_ERROR = 'Unable to load the file tree for this project.';
+/** FileTree owns this cache: one bounded page per visited folder, reset on refresh/project change. */
+export function useFileTreeData(selectedProject: Project | null) {
+  // Retain only requested directory pages, their navigation history and request feedback.
+  const [pages, setPages] = useState<Record<string, DirectoryPage>>({});
+  // Invalidates all pages after file mutations or a manual refresh.
+  const [revision, setRevision] = useState(0);
+  const generation = useRef(0);
+  const pending = useRef(new Map<string, AbortController>());
+  const cache = useRef<Record<string, DirectoryPage>>({});
+  const projectId = selectedProject?.projectId;
 
-// The API reports refusals such as FILE_TREE_TOO_LARGE as { error: message }.
-// Surfacing that message tells the user why the tree is missing and what to do
-// about it, instead of leaving them with an unexplained empty tree.
-function readResponseErrorMessage(responseBody: string): string | null {
-  try {
-    const parsedBody = JSON.parse(responseBody) as unknown;
-    const message = typeof parsedBody === 'object' && parsedBody !== null && 'error' in parsedBody
-      ? (parsedBody as { error: unknown }).error
-      : null;
-    return typeof message === 'string' && message.trim() ? message : null;
-  } catch {
-    return null;
-  }
-}
-
-export function useFileTreeData(selectedProject: Project | null): UseFileTreeDataResult {
-  const [files, setFiles] = useState<FileTreeNode[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  const refreshFiles = useCallback(() => {
-    setRefreshKey((prev) => prev + 1);
-  }, []);
+  const loadDirectory = useCallback(async (directory = '', direction: 'initial' | 'next' | 'previous' | 'retry' = 'initial') => {
+    if (!projectId || pending.current.has(directory)) return;
+    const old = cache.current[directory];
+    if (direction === 'initial' && old) return;
+    if (direction === 'next' && !old?.nextCursor) return;
+    if (direction === 'previous' && !old?.previous.length) return;
+    const previous = direction === 'next' ? [...(old?.previous ?? []), old?.cursor ?? '']
+      : direction === 'previous' ? old!.previous.slice(0, -1) : [];
+    const cursor = direction === 'next' ? old!.nextCursor!
+      : direction === 'previous' ? old!.previous[old!.previous.length - 1] : '';
+    const controller = new AbortController();
+    const currentGeneration = generation.current;
+    pending.current.set(directory, controller);
+    const update = (page: DirectoryPage) => {
+      if (currentGeneration !== generation.current) return;
+      cache.current = { ...cache.current, [directory]: page };
+      setPages(cache.current);
+    };
+    update({ entries: old?.entries ?? [], nextCursor: old?.nextCursor ?? null,
+      cursor: old?.cursor ?? '', previous: old?.previous ?? [], loading: true, error: null });
+    try {
+      const response = await api.getDirectoryPage(projectId, directory, cursor, { signal: controller.signal });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Unable to load folder');
+      update({ entries: body.entries, nextCursor: body.nextCursor, cursor, previous, loading: false, error: null });
+    } catch (error) {
+      if (!controller.signal.aborted) update({ entries: old?.entries ?? [], nextCursor: old?.nextCursor ?? null,
+        cursor: old?.cursor ?? '', previous: old?.previous ?? [], loading: false,
+        error: error instanceof Error ? error.message : 'Unable to load folder' });
+    } finally {
+      if (currentGeneration === generation.current) pending.current.delete(directory);
+    }
+  }, [projectId]);
 
   useEffect(() => {
-    // File-tree requests use the DB projectId; the backend resolves it to the
-    // project's absolute path through the projects table.
-    const projectId = selectedProject?.projectId;
-
-    if (!projectId) {
-      setFiles([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
-    // Abort previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    abortControllerRef.current = new AbortController();
-
-    // Track mount state so aborted or late responses do not enqueue stale state updates.
-    let isActive = true;
-
-    const fetchFiles = async () => {
-      if (isActive) {
-        setLoading(true);
-        setError(null);
-      }
-      try {
-        const response = await api.getFiles(projectId, { signal: abortControllerRef.current!.signal });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('File fetch failed:', response.status, errorText);
-          if (isActive) {
-            setFiles([]);
-            setError(readResponseErrorMessage(errorText) ?? DEFAULT_LOAD_ERROR);
-          }
-          return;
-        }
-
-        const data = (await response.json()) as FileTreeNode[];
-        if (isActive) {
-          setFiles(data);
-        }
-      } catch (error) {
-        if ((error as { name?: string }).name === 'AbortError') {
-          return;
-        }
-
-        console.error('Error fetching files:', error);
-        if (isActive) {
-          setFiles([]);
-          setError(DEFAULT_LOAD_ERROR);
-        }
-      } finally {
-        if (isActive) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void fetchFiles();
-
+    const requests = pending.current;
+    generation.current += 1;
+    for (const request of requests.values()) request.abort();
+    requests.clear();
+    cache.current = {};
+    setPages({});
+    void loadDirectory();
     return () => {
-      isActive = false;
-      abortControllerRef.current?.abort();
+      generation.current += 1;
+      for (const request of requests.values()) request.abort();
+      requests.clear();
     };
-  }, [selectedProject?.projectId, refreshKey]);
+  }, [loadDirectory, revision]);
 
-  return {
-    files,
-    loading,
-    error,
-    refreshFiles,
-  };
+  const files = useMemo(() => {
+    const attach = (entries: FileTreeNode[]): FileTreeNode[] => entries.map(entry => ({ ...entry,
+      ...(entry.type === 'directory' && pages[entry.path] ? { children: attach(pages[entry.path].entries) } : {}),
+    }));
+    return attach(pages['']?.entries ?? []);
+  }, [pages]);
+  const refreshFiles = useCallback(() => setRevision(value => value + 1), []);
+  return { files, pages, loadDirectory, refreshFiles,
+    loading: Boolean(projectId && (!pages[''] || (pages[''].loading && !pages[''].entries.length))),
+    error: pages['']?.error ?? null };
 }

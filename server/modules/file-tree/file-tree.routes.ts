@@ -161,6 +161,20 @@ export function createFileTreeRouter(
     response.json(await services.saveTextFile(readProjectId(request), filePath, body.content));
   }, logger));
 
+  router.get('/projects/:projectId/directory', createRouteHandler(async (request, response) => {
+    for (const key of ['path', 'cursor', 'limit', 'respectGitignore']) {
+      if (request.query[key] !== undefined && typeof request.query[key] !== 'string') {
+        throw new AppError('Invalid directory query', { statusCode: 400, code: 'INVALID_DIRECTORY_QUERY' });
+      }
+    }
+    response.json(await services.listProjectDirectory(readProjectId(request), {
+      path: readOptionalString(request.query.path) ?? undefined,
+      cursor: readOptionalString(request.query.cursor) ?? undefined,
+      limit: request.query.limit === undefined ? undefined : Number(request.query.limit),
+      respectGitignore: request.query.respectGitignore === 'true',
+    }));
+  }, logger));
+
   router.get('/projects/:projectId/files', createRouteHandler(async (request, response) => {
     response.json(await services.listProjectFiles(readProjectId(request), {
       respectGitignore: request.query.respectGitignore === 'true',

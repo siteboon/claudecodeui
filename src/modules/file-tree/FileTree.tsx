@@ -13,7 +13,6 @@ import { useFileTreeViewMode } from '@/modules/file-tree/hooks/useFileTreeViewMo
 import { useFileTreeUpload } from '@/modules/file-tree/hooks/useFileTreeUpload';
 import type { DirectoryRevealRequest, FileTreeImageSelection, FileTreeNode,Project } from '@/shared/types';
 import { formatFileSize, formatRelativeTime, isImageFile } from '@/modules/file-tree/utils/fileTreeUtils';
-import { directoryRevealPaths } from '@/modules/file-tree/utils/revealDirectory';
 import { ScrollArea, Input } from '@/shared/ui';
 import FileTreeBody from '@/modules/file-tree/FileTreeBody';
 import FileTreeDetailedColumns from '@/modules/file-tree/FileTreeDetailedColumns';
@@ -52,7 +51,7 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
     }
   }, [toast]);
 
-  const { files, loading, error, refreshFiles } = useFileTreeData(selectedProject);
+  const { files, pages, loadDirectory, loading, error, refreshFiles } = useFileTreeData(selectedProject);
   const { viewMode, changeViewMode } = useFileTreeViewMode();
   const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
@@ -60,25 +59,81 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
     expandDirectories,
   });
 
+  // Refreshes and search expansion must also load directories already marked open.
+  useEffect(() => {
+    const visit = (nodes: FileTreeNode[]) => nodes.forEach(node => {
+      if (node.type === 'directory' && expandedDirs.has(node.path)) {
+        void loadDirectory(node.path);
+        if (node.children) visit(node.children);
+      }
+    });
+    visit(files);
+  }, [files, expandedDirs, loadDirectory]);
+
+  const renderDirectoryPage = (directory: string) => {
+    const page = pages[directory];
+    if (!page) return null;
+    return <div className="px-3 text-xs text-muted-foreground" aria-live="polite">
+      {page.loading && <span>{t('fileTree.loadingFolder')}</span>}
+      {page.error && <span role="alert">{page.error} <button className="underline" onClick={() => void loadDirectory(directory, 'retry')}>{t('fileTree.reloadFolder')}</button></span>}
+      {!page.loading && !page.error && page.entries.length === 0 && <span>{t('fileTree.emptyFolder')}</span>}
+      {page.previous.length > 0 && <button disabled={page.loading} className="mr-3 underline" onClick={() => void loadDirectory(directory, 'previous')}>{t('fileTree.previousPage')}</button>}
+      {page.nextCursor && <button disabled={page.loading} className="underline" onClick={() => void loadDirectory(directory, 'next')}>{t('fileTree.nextPage')}</button>}
+    </div>;
+  };
+
   // The reveal request already served, so a later tree refresh does not fold
   // the folders open again over a collapse the user has since made.
   const revealedRef = useRef<DirectoryRevealRequest | null>(null);
+  // Each reference starts scanning its ancestors from their first page once.
+  const revealScanRef = useRef<{ request: DirectoryRevealRequest | null; directories: Set<string> }>({ request: null, directories: new Set() });
 
-  // Expand every ancestor between the project root and the requested folder.
-  // A request that arrives before the tree finds nothing to expand and is
-  // retried when `files` lands.
+  // Reveal references page through each ancestor instead of requiring a recursive tree.
   useEffect(() => {
-    const projectRoot = selectedProject?.path || selectedProject?.fullPath;
-    if (!revealDirectory || !projectRoot || revealedRef.current === revealDirectory) {
+    const root = (selectedProject?.path || selectedProject?.fullPath || '').replace(/\\/g, '/').replace(/\/+$/, '');
+    if (!revealDirectory || !root || revealedRef.current === revealDirectory) return;
+    let target = revealDirectory.path.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+    if (target.startsWith('/') || /^[A-Za-z]:/.test(target)) {
+      if (!target.startsWith(root + '/')) { revealedRef.current = revealDirectory; return; }
+      target = target.slice(root.length + 1);
+    }
+    const segments = target.split('/').filter(Boolean);
+    if (segments.some(segment => segment === '..' || segment === '.')) {
+      revealedRef.current = revealDirectory;
       return;
     }
-    const paths = directoryRevealPaths(files, projectRoot, revealDirectory.path);
-    if (paths.length === 0) {
-      return;
+    if (revealScanRef.current.request !== revealDirectory) {
+      revealScanRef.current = { request: revealDirectory, directories: new Set() };
     }
+    let directory = '';
+    const expand: string[] = [];
+    for (const segment of segments) {
+      const page = pages[directory];
+      if (!page) { void loadDirectory(directory); return; }
+      if (page.loading) return;
+      if (page.error) { revealedRef.current = revealDirectory; return; }
+      if (!revealScanRef.current.directories.has(directory)) {
+        revealScanRef.current.directories.add(directory);
+        if (page.cursor) { void loadDirectory(directory, 'retry'); return; }
+      }
+      const child = page.entries.find(entry => entry.type === 'directory' && entry.name === segment);
+      if (!child) {
+        if (page.nextCursor) { void loadDirectory(directory, 'next'); return; }
+        showToast(t('fileTree.folderReferenceUnavailable'), 'error');
+        revealedRef.current = revealDirectory;
+        return;
+      }
+      directory = child.path;
+      expand.push(directory);
+      if (!pages[directory]) {
+        expandDirectories(expand);
+        void loadDirectory(directory);
+        return;
+      }
+    }
+    expandDirectories(expand);
     revealedRef.current = revealDirectory;
-    expandDirectories(paths);
-  }, [revealDirectory, selectedProject?.path, selectedProject?.fullPath, expandDirectories, files]);
+  }, [revealDirectory, selectedProject?.path, selectedProject?.fullPath, expandDirectories, pages, loadDirectory, showToast, t]);
 
   // File operations
   const operations = useFileTreeOperations({
@@ -143,6 +198,7 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
   const handleItemClick = useCallback(
     (item: FileTreeNode) => {
       if (item.type === 'directory') {
+        void loadDirectory(item.path);
         toggleDirectory(item.path);
         return;
       }
@@ -161,7 +217,7 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
 
       onFileOpen?.(item.path);
     },
-    [onFileOpen, selectedProject, toggleDirectory],
+    [onFileOpen, selectedProject, toggleDirectory, loadDirectory],
   );
 
   const formatRelativeTimeLabel = useCallback(
@@ -225,6 +281,7 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
         uploadProgress={upload.uploadProgress?.progress ?? null}
       />
 
+      <p className="px-3 py-1 text-xs text-muted-foreground">{t('fileTree.loadedSearchHint')}</p>
       <FileTreeUploadProgress upload={upload.uploadProgress} />
 
       {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
@@ -262,7 +319,9 @@ export default function FileTree({ selectedProject, onFileOpen, revealDirectory 
           </div>
         )}
 
+        {renderDirectoryPage('')}
         <FileTreeBody
+          renderDirectoryPage={renderDirectoryPage}
           files={files}
           filteredFiles={filteredFiles}
           error={error}
