@@ -29,7 +29,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
    * Scans ~/.codex/sessions and upserts discovered sessions into DB.
    */
   async synchronize(since?: Date): Promise<number> {
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    const nameMap = await this.readThreadNames();
     const files = await findFilesRecursivelyCreatedAfter(
       path.join(this.codexHome, 'sessions'),
       '.jsonl',
@@ -76,7 +76,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
-    const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
+    const nameMap = await this.readThreadNames();
     const parsed = await this.processSessionFile(filePath, nameMap);
     if (!parsed) {
       return null;
@@ -92,6 +92,16 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
+  }
+
+  /**
+   * Maps each thread id to its current name.
+   *
+   * Codex appends a row to `session_index.jsonl` every time a thread is named
+   * or renamed, so the last row for an id is the name Codex shows now.
+   */
+  private readThreadNames(): Promise<Map<string, string>> {
+    return buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name', { keep: 'last' });
   }
 
   /**
@@ -135,6 +145,19 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
     // ids must be resolved through the provider-id mapping first.
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
+
+    // Codex's own thread name is the current one for a session discovered on
+    // disk, including after a rename there. A session the app created keeps
+    // the title the app gave it.
+    const threadName = nameMap.get(parsed.sessionId);
+    const isAppSession = Boolean(existingSession) && existingSession?.session_id !== parsed.sessionId;
+    if (threadName && !isAppSession) {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(threadName, 'Untitled Codex Session'),
+      };
+    }
+
     const existingSessionName = existingSession?.custom_name;
     if (existingSessionName && existingSessionName !== 'Untitled Codex Session') {
       return {
