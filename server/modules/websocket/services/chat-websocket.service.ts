@@ -127,9 +127,9 @@ const readNonEmptyString = (value: unknown): string | null => (
  * here. That is different from a *recorded* `default`, which is the user's
  * explicit answer for this session and must be preserved.
  */
-const readExplicitOption = (value: unknown): string | null => {
+const readExplicitOption = (value: unknown, explicitDefaults: boolean): string | null => {
   const normalized = readNonEmptyString(value);
-  return normalized === null || normalized === 'default' ? null : normalized;
+  return normalized === 'default' && !explicitDefaults ? null : normalized;
 };
 
 function readStoredChatDefaults(userId: number, provider: LLMProvider): unknown {
@@ -177,10 +177,8 @@ function resolveChatDefaults(
     return empty;
   }
 
-  const isUnspecified = (value: unknown): boolean => {
-    const normalized = readNonEmptyString(value);
-    return normalized === null || normalized === 'default';
-  };
+  const explicitDefaults = clientOptions.explicitModelAndEffort === true;
+  const isUnspecified = (value: unknown): boolean => readExplicitOption(value, explicitDefaults) === null;
 
   return {
     model: isUnspecified(clientOptions.model) ? readNonEmptyString(providerDefaults.model) : null,
@@ -377,8 +375,9 @@ async function dispatchRun(
   const chatDefaults = resolveChatDefaults(provider, userId, clientOptions, dependencies);
   const recordedModel = session.model?.trim() || null;
   const recordedEffort = session.effort?.trim() || null;
-  const resolvedModel = readExplicitOption(clientOptions.model) ?? recordedModel ?? chatDefaults.model;
-  const resolvedEffort = readExplicitOption(clientOptions.effort) ?? recordedEffort ?? chatDefaults.effort;
+  const explicitDefaults = clientOptions.explicitModelAndEffort === true;
+  const resolvedModel = readExplicitOption(clientOptions.model, explicitDefaults) ?? recordedModel ?? chatDefaults.model;
+  const resolvedEffort = readExplicitOption(clientOptions.effort, explicitDefaults) ?? recordedEffort ?? chatDefaults.effort;
 
   const uniqueAttachments = readVerifiedAttachments(clientOptions);
 
