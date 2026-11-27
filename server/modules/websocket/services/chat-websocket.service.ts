@@ -380,21 +380,6 @@ async function dispatchRun(
   const resolvedModel = readExplicitOption(clientOptions.model) ?? recordedModel ?? chatDefaults.model;
   const resolvedEffort = readExplicitOption(clientOptions.effort) ?? recordedEffort ?? chatDefaults.effort;
 
-  // Record what this turn runs with so reopening the session later restores the
-  // same model and reasoning effort, and so the resume path has a
-  // session-scoped model answer to use. The resolved value is recorded rather
-  // than the composer's `default` sentinel: the next open would otherwise show
-  // "Default" for a turn that actually ran with the user's configured effort.
-  // With nothing resolved, the client's own value is kept as before.
-  const modelToRecord = resolvedModel ?? readNonEmptyString(clientOptions.model);
-  if (modelToRecord) {
-    providerModelsService.setSessionModel(provider, sessionId, modelToRecord);
-  }
-  const effortToRecord = resolvedEffort ?? readNonEmptyString(clientOptions.effort);
-  if (effortToRecord) {
-    providerModelsService.setSessionEffort(provider, sessionId, effortToRecord);
-  }
-
   const uniqueAttachments = readVerifiedAttachments(clientOptions);
 
   // The provider runtimes receive the stable app session id. When their
@@ -422,6 +407,15 @@ async function dispatchRun(
 
   let failure: string | null = null;
   try {
+    // Record what this turn runs with so reopening the session later restores the
+    // same model, reasoning effort and permission mode, and so the resume path
+    // has a session-scoped model answer to use. A failed write only costs that
+    // restore, so it never fails the turn.
+    try {
+      providerModelsService.recordSessionSelection(provider, sessionId, runtimeOptions);
+    } catch (error) {
+      console.error('Failed to record the session selection:', error);
+    }
     // Runs only now that the session is reserved, because an edit rewinds the
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the
