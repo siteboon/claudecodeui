@@ -1,12 +1,10 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import {
-  access,
   lstat,
   mkdir,
   readFile,
   readdir,
-  readlink,
   realpath,
   stat,
   writeFile,
@@ -198,18 +196,39 @@ export function errorMessage(error: unknown): string {
 // ---------------------------
 //----------------- WORKSPACE PATH VALIDATION UTILITIES ------------
 /**
- * Root directory that all workspace/project paths must stay under.
- *
- * This is resolved from `WORKSPACES_ROOT` when configured; otherwise it falls
- * back to the current user's home directory.
+ * Default directory used by File Tree and `~` expansion, preserving single-root behavior.
+ * Project paths may also live under additional roots configured via `WORKSPACES_EXTRA_ROOTS`.
+ * Consumed by `file-tree` (default browsing root and `~` expansion) and `WORKSPACE_ROOTS`.
  */
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
+
+// On Windows require an explicit drive letter or full UNC share root so drive-relative paths like `\projects` cannot shift with cwd.
+function isAbsoluteWorkspaceRoot(root: string): boolean {
+  if (!path.isAbsolute(root)) return false;
+  if (process.platform !== 'win32') return true;
+  const normalized = normalizeProjectPath(root);
+  return /^[a-zA-Z]:\\/.test(normalized) || /^\\\\[^\\]+\\[^\\]+(?:\\|$)/.test(normalized);
+}
+
+/**
+ * Combined list of allowed workspace roots (`WORKSPACES_ROOT` plus valid `WORKSPACES_EXTRA_ROOTS` entries).
+ * Consumed by `validateWorkspacePath` (shared validation for `projects` and `file-tree`) and by
+ * `file-tree` for cross-root read-only previews.
+ */
+export const WORKSPACE_ROOTS = [...new Set([
+  WORKSPACES_ROOT,
+  ...(process.env.WORKSPACES_EXTRA_ROOTS || '')
+    .split(path.delimiter)
+    .map((root) => root.trim())
+    .filter(isAbsoluteWorkspaceRoot),
+])];
 
 /**
  * System-critical paths that must never be used as workspace roots.
  *
  * The validation helper blocks these values directly and also blocks paths
  * nested under them (with explicit allow-list exceptions where necessary).
+ * Consumed by `file-tree` (tree recursion guard) and `validateWorkspacePath`.
  */
 export const FORBIDDEN_WORKSPACE_PATHS = [
   // Unix
@@ -268,9 +287,23 @@ const READ_ONLY_ROOTS = [...new Set([
   path.join(os.homedir(), '.claude', 'projects'),
 ])];
 
+function isWithinWorkspaceRoot(targetPath: string, root: string): boolean {
+  // `path.relative` handles platform case/drive rules and avoids prefix collisions such as `projects-other` matching `projects`,
+  // as well as double-separator mismatches on drive roots (`D:\`) and UNC share roots (`\\server\share\`).
+  const relativePath = path.relative(root, targetPath);
+  return relativePath === '' || (
+    !path.isAbsolute(relativePath)
+    && relativePath !== '..'
+    && !relativePath.startsWith(`..${path.sep}`)
+  );
+}
+
 /**
  * Resolves `targetPath` when it lives under one of `roots`, or `null` when it
  * does not.
+ *
+ * Consumed by `file-tree` (workspace-root preview resolution) and
+ * `resolveReadOnlyRootPath`.
  *
  * Symlinks are resolved before the comparison, so a link planted under a root
  * cannot be used to read somewhere else through it. Each root is resolved on
@@ -299,7 +332,7 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
       continue;
     }
 
-    if (resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+    if (isWithinWorkspaceRoot(resolvedPath, resolvedRoot)) {
       return resolvedPath;
     }
   }
@@ -310,6 +343,7 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
 /**
  * Resolves a path that is readable because it lives under a read-only root,
  * or `null` when it does not.
+ * Consumed by `file-tree` for read-only transcript and log previews.
  */
 export function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
   return resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
@@ -373,114 +407,133 @@ export function normalizeProjectPath(inputPath: string): string {
   return normalized.replace(/[\\/]+$/, '');
 }
 
+type ForbiddenWorkspaceRule = {
+  label: string;
+  candidatePaths: string[];
+  allowedSubpaths: string[];
+};
+
+async function expandPolicyPathVariants(policyPath: string): Promise<string[]> {
+  const normalizedPolicyPath = normalizeProjectPath(policyPath);
+  if (!normalizedPolicyPath) {
+    return [];
+  }
+
+  try {
+    const canonicalPolicyPath = normalizeProjectPath(await realpath(normalizedPolicyPath));
+    return canonicalPolicyPath && canonicalPolicyPath !== normalizedPolicyPath
+      ? [normalizedPolicyPath, canonicalPolicyPath]
+      : [normalizedPolicyPath];
+  } catch {
+    return [normalizedPolicyPath];
+  }
+}
+
+async function resolveForbiddenWorkspaceRules(): Promise<ForbiddenWorkspaceRule[]> {
+  const activePolicyPaths = FORBIDDEN_WORKSPACE_PATHS.filter((forbiddenPath) => {
+    if (forbiddenPath === '/') return false;
+    // Do not map Unix system paths onto the active Windows drive letter, or Windows drive paths onto POSIX cwd.
+    if (process.platform === 'win32') return !forbiddenPath.startsWith('/');
+    return !/^[a-zA-Z]:([\\/]|$)/.test(forbiddenPath);
+  });
+
+  const varAllowedSubpaths = activePolicyPaths.includes('/var')
+    ? [...new Set((await Promise.all(['/var/tmp', '/var/folders'].map(expandPolicyPathVariants))).flat())]
+    : [];
+
+  return Promise.all(activePolicyPaths.map(async (forbiddenPath) => {
+    const normalizedPath = normalizeProjectPath(forbiddenPath);
+    const candidatePaths = await expandPolicyPathVariants(forbiddenPath);
+    return {
+      label: forbiddenPath,
+      candidatePaths,
+      allowedSubpaths: normalizedPath === '/var' ? varAllowedSubpaths : [],
+    };
+  }));
+}
+
+function workspaceSystemDirectoryError(
+  targetPath: string,
+  forbiddenRules: ForbiddenWorkspaceRule[],
+): string | undefined {
+  if (targetPath === '/') {
+    return 'Cannot use system-critical directories as workspace locations';
+  }
+
+  for (const rule of forbiddenRules) {
+    if (!rule.candidatePaths.some((candidate) => isWithinWorkspaceRoot(targetPath, candidate))) {
+      continue;
+    }
+    if (rule.allowedSubpaths.some((allowedPath) => isWithinWorkspaceRoot(targetPath, allowedPath))) {
+      continue;
+    }
+    return `Cannot create workspace in system directory: ${rule.label}`;
+  }
+
+  return undefined;
+}
+
+async function resolveWorkspacePath(absolutePath: string): Promise<string> {
+  // New projects may contain multiple uncreated parent directories; resolve realpath from the nearest existing ancestor and re-append missing segments.
+  const missingSegments: string[] = [];
+  let ancestorPath = absolutePath;
+  while (true) {
+    try {
+      const resolvedAncestor = await realpath(ancestorPath);
+      return normalizeProjectPath(path.join(resolvedAncestor, ...missingSegments.reverse()));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      const existingEntry = await lstat(ancestorPath).catch((statError: NodeJS.ErrnoException) => {
+        if (statError.code !== 'ENOENT') throw statError;
+        return null;
+      });
+      // A dangling symlink is not an uncreated directory and must not pass via its link name.
+      if (existingEntry) throw error;
+      const parentPath = path.dirname(ancestorPath);
+      if (parentPath === ancestorPath) throw error;
+      missingSegments.push(path.basename(ancestorPath));
+      ancestorPath = parentPath;
+    }
+  }
+}
+
 /**
- * Validates that a user-supplied workspace path is safe to use.
- *
- * Call this before any filesystem mutation that creates or registers projects.
- * The function resolves symlinks, enforces `WORKSPACES_ROOT` containment, and
- * blocks known system directories.
+ * Shared path validation policy for `projects` (creation/cloning) and `file-tree` (directory browsing/creation).
+ * Resolves real paths for both the target and configured roots (`WORKSPACE_ROOTS`), rejecting escapes,
+ * system-critical paths, and symlink traversals. Environment config must be loaded before calling.
  */
 export async function validateWorkspacePath(requestedPath: string): Promise<WorkspacePathValidationResult> {
   try {
     const normalizedRequestedPath = normalizeProjectPath(requestedPath);
     if (!normalizedRequestedPath) {
-      return {
-        valid: false,
-        error: 'Workspace path is required',
-      };
+      return { valid: false, error: 'Workspace path is required' };
     }
 
+    const forbiddenRules = await resolveForbiddenWorkspaceRules();
     const absolutePath = path.resolve(normalizedRequestedPath);
-    const normalizedPath = normalizeProjectPath(absolutePath);
+    const inputError = workspaceSystemDirectoryError(normalizeProjectPath(absolutePath), forbiddenRules);
+    if (inputError) return { valid: false, error: inputError };
 
-    if (FORBIDDEN_WORKSPACE_PATHS.includes(normalizedPath) || normalizedPath === '/') {
-      return {
-        valid: false,
-        error: 'Cannot use system-critical directories as workspace locations',
-      };
-    }
+    const resolvedPath = await resolveWorkspacePath(absolutePath);
+    const resolvedError = workspaceSystemDirectoryError(resolvedPath, forbiddenRules);
+    if (resolvedError) return { valid: false, error: resolvedError };
 
-    for (const forbiddenPath of FORBIDDEN_WORKSPACE_PATHS) {
-      const normalizedForbiddenPath = normalizeProjectPath(forbiddenPath);
-      if (
-        normalizedPath === normalizedForbiddenPath
-        || normalizedPath.startsWith(`${normalizedForbiddenPath}${path.sep}`)
-      ) {
-        // Allow specific user-writable folders under /var.
-        if (
-          normalizedForbiddenPath === '/var'
-          && (normalizedPath.startsWith('/var/tmp') || normalizedPath.startsWith('/var/folders'))
-        ) {
-          continue;
-        }
-
-        return {
-          valid: false,
-          error: `Cannot create workspace in system directory: ${forbiddenPath}`,
-        };
-      }
-    }
-
-    let resolvedPath = normalizeProjectPath(absolutePath);
-    try {
-      await access(absolutePath);
-      resolvedPath = normalizeProjectPath(await realpath(absolutePath));
-    } catch (error) {
-      const fileError = error as NodeJS.ErrnoException;
-      if (fileError.code !== 'ENOENT') {
-        throw fileError;
-      }
-
-      const parentPath = path.dirname(absolutePath);
+    for (const root of WORKSPACE_ROOTS) {
+      let resolvedRoot: string;
       try {
-        const parentRealPath = await realpath(parentPath);
-        resolvedPath = normalizeProjectPath(path.join(parentRealPath, path.basename(absolutePath)));
-      } catch (parentError) {
-        const parentFileError = parentError as NodeJS.ErrnoException;
-        if (parentFileError.code !== 'ENOENT') {
-          throw parentFileError;
-        }
+        resolvedRoot = normalizeProjectPath(await realpath(root));
+      } catch {
+        // Unmounted or inaccessible extra roots neither block other valid roots nor get created automatically.
+        continue;
       }
-    }
-
-    const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
-    if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-      && resolvedPath !== resolvedWorkspaceRoot
-    ) {
-      return {
-        valid: false,
-        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
-      };
-    }
-
-    try {
-      await access(absolutePath);
-      const pathStats = await lstat(absolutePath);
-      if (pathStats.isSymbolicLink()) {
-        const symlinkTarget = await readlink(absolutePath);
-        const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
-        const realSymlinkPath = await realpath(resolvedSymlinkPath);
-        if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-          && realSymlinkPath !== resolvedWorkspaceRoot
-        ) {
-          return {
-            valid: false,
-            error: 'Symlink target is outside the allowed workspace root',
-          };
-        }
-      }
-    } catch (error) {
-      const fileError = error as NodeJS.ErrnoException;
-      if (fileError.code !== 'ENOENT') {
-        throw fileError;
+      if (isWithinWorkspaceRoot(resolvedPath, resolvedRoot)) {
+        return { valid: true, resolvedPath };
       }
     }
 
     return {
-      valid: true,
-      resolvedPath,
+      valid: false,
+      error: `Workspace path must be within an allowed workspace root: ${WORKSPACE_ROOTS.join(', ')}`,
     };
   } catch (error) {
     return {

@@ -1603,6 +1603,8 @@ export type FileTreeProjectGateway = {
  */
 export type FileTreeWorkspaceGateway = {
   rootPath: string;
+  /** Additional readable workspace roots for File Tree; defaults to rootPath when omitted. */
+  rootPaths?: string[];
   validatePath(candidatePath: string): Promise<WorkspacePathValidationResult>;
   /**
    * Resolves a path readable outside the workspace root — the system temp
