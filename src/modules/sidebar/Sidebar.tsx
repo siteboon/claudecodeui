@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
@@ -76,6 +76,11 @@ function Sidebar({
   const paletteOps = usePaletteOps();
   // 409 返回的项目可能不在当前分页中；刷新到它后再完成用户的打开请求。
   const [pendingExistingProjectId, setPendingExistingProjectId] = useState<string | null>(null);
+  // 等待列表时若用户改变选中项，晚到的结果不能把页面跳回旧目标。
+  const navigationKey = JSON.stringify([selectedProject?.projectId, selectedSession?.id]);
+  const currentNavigationRef = useRef(navigationKey);
+  currentNavigationRef.current = navigationKey;
+  const existingProjectRequestRef = useRef(0);
   // Only membership is rendered here, so subscribing to the full activity map
   // would re-render the whole tree on every provider status frame.
   const activeSessions = useBusySessionIdSet();
@@ -190,11 +195,18 @@ function Sidebar({
       setShowNewProject(false);
       setSearchMode('projects');
       setSearchFilter('');
+      const requestId = ++existingProjectRequestRef.current;
       if (!existingProject) {
-        setPendingExistingProjectId(projectId);
-        void Promise.resolve(paletteOps.refreshProjects()).catch(() => {
-          setPendingExistingProjectId((current) => current === projectId ? null : current);
-        });
+        void (async () => {
+          try {
+            await paletteOps.refreshProjects();
+            if (requestId === existingProjectRequestRef.current && navigationKey === currentNavigationRef.current) {
+              setPendingExistingProjectId(projectId);
+            }
+          } catch {
+            // 保留当前项目，用户可再次尝试打开。
+          }
+        })();
         return;
       }
 
@@ -205,6 +217,7 @@ function Sidebar({
     [
       ensureProjectExpanded,
       handleProjectSelect,
+      navigationKey,
       paletteOps,
       projects,
       setSearchFilter,
@@ -215,9 +228,9 @@ function Sidebar({
 
   useEffect(() => {
     if (!pendingExistingProjectId) return;
+    setPendingExistingProjectId(null);
     const existingProject = projects.find((project) => project.projectId === pendingExistingProjectId);
     if (!existingProject) return;
-    setPendingExistingProjectId(null);
     ensureProjectExpanded(existingProject.projectId);
     handleProjectSelect(existingProject);
   }, [ensureProjectExpanded, handleProjectSelect, pendingExistingProjectId, projects]);
