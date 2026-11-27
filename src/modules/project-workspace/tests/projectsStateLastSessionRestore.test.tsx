@@ -205,8 +205,13 @@ test('opening another chat while the lookup is in flight wins over the restore',
     assert.equal(sessionDetailsResponse.mock.calls.length, 1);
   });
 
+  // 项目加载完后，详情查询仍在进行，主区域应继续等待。
+  assert.equal(view.result.current.isLoadingProjects, false);
+  assert.equal(view.result.current.isRestoringLastSession, true);
+
   // The user picks a conversation before the remembered one comes back.
   await act(async () => { reopen({ sessionId: 'session-2' }); });
+  assert.equal(view.result.current.isRestoringLastSession, false);
   await act(async () => {
     resolveDetails({
       ok: true,

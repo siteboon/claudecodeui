@@ -958,15 +958,17 @@ export function useProjectsState({
    * paginated, so a session missing from them is not proof that it is gone, and
    * navigating to a deleted one would open an empty placeholder instead.
    */
-  const restoreLastSessionAttemptedRef = useRef(false);
+  // 根路由的旧会话还在核实时，主区域保持加载态，避免空白输入框误建新会话。
+  const [restoreFinished, setRestoreFinished] = useState(false);
+  const isRestoringLastSession = !sessionId && !isNewSessionRoute && !restoreFinished;
   useEffect(() => {
-    if (sessionId || isNewSessionRoute || isLoadingProjects || restoreLastSessionAttemptedRef.current) {
+    if (!isRestoringLastSession || isLoadingProjects) {
       return;
     }
 
-    restoreLastSessionAttemptedRef.current = true;
     const lastSession = readLastOpenedSession();
     if (!lastSession) {
+      setRestoreFinished(true);
       return;
     }
 
@@ -989,10 +991,14 @@ export function useProjectsState({
           if (response.status === 404) {
             forgetLastOpenedSession();
           }
+          setRestoreFinished(true);
           return;
         }
       } catch (error) {
-        console.error(`Error restoring the last opened session ${lastSession.sessionId}:`, error);
+        if (!cancelled) {
+          console.error(`Error restoring the last opened session ${lastSession.sessionId}:`, error);
+          setRestoreFinished(true);
+        }
         return;
       }
 
@@ -1002,7 +1008,7 @@ export function useProjectsState({
     return () => {
       cancelled = true;
     };
-  }, [isLoadingProjects, isNewSessionRoute, navigate, sessionId]);
+  }, [isLoadingProjects, isRestoringLastSession, navigate]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -1415,6 +1421,7 @@ export function useProjectsState({
     activeTab,
     sidebarOpen,
     isLoadingProjects,
+    isRestoringLastSession,
     loadingProgress,
     showSettings,
     settingsInitialTab,
