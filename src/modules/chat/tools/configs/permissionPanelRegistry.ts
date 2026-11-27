@@ -15,5 +15,5 @@ export function registerPermissionPanel(
 export function getPermissionPanel(
   toolName: string,
 ): ComponentType<PermissionPanelProps> | null {
-  return registry[toolName] || null;
+  return Object.prototype.hasOwnProperty.call(registry, toolName) ? registry[toolName] : null;
 }
