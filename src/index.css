@@ -783,6 +783,13 @@
     max-width: max(54.25rem, 80%);
   }
 
+  /* On narrow screens, let chat content use the full width instead of leaving large side margins. */
+  @media (max-width: 768px) {
+    .chat-content-width {
+      max-width: 100%;
+    }
+  }
+
   /* Text wrapping improvements */
   .chat-message {
     word-wrap: break-word;

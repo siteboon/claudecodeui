@@ -120,7 +120,8 @@
     "handle": {
       "closePanel": "Close shortcuts panel",
       "openPanel": "Open shortcuts panel"
-    }
+    },
+    "paste": "Paste"
   },
   "mainTabs": {
     "label": "Settings",

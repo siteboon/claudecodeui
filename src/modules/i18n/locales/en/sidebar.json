@@ -65,7 +65,8 @@
     "clearSearch": "Clear search",
     "openCommandPalette": "Open command palette",
     "attentionRequiredIndicator": "Session needs attention",
-    "backgroundWorkIndicator": "Background work running"
+    "backgroundWorkIndicator": "Background work running",
+    "processingSessionIndicator": "Processing session"
   },
   "navigation": {
     "chat": "Chat",
@@ -152,7 +153,11 @@
     "matches_one": "{{count}} match",
     "matches_other": "{{count}} matches",
     "projectsScanned_one": "{{count}} project scanned",
-    "projectsScanned_other": "{{count}} projects scanned"
+    "projectsScanned_other": "{{count}} projects scanned",
+    "runningTooltip": "Running sessions",
+    "archiveOnlyTooltip": "Archive only",
+    "archivedPlaceholder": "Search archived sessions...",
+    "runningPlaceholder": "Search running sessions..."
   },
   "recent": {
     "title": "Recent conversations",
@@ -185,5 +190,25 @@
     "archiveSessions_other": "Archive {{count}} sessions",
     "archiveSessionsNotice_one": "Archive keeps the session out of the active list while preserving its history.",
     "archiveSessionsNotice_other": "Archive keeps the sessions out of the active list while preserving their history."
+  },
+  "running": {
+    "emptyTitle": "No sessions running",
+    "noMatchingSessions": "No running sessions match this search.",
+    "emptyDescription": "Active work will appear here while a provider is processing.",
+    "title": "Running now"
+  },
+  "archived": {
+    "loadingTitle": "Loading archive...",
+    "loadingDescription": "Fetching hidden workspaces and sessions you can restore later.",
+    "noMatchingSessions": "No matching archived items",
+    "emptyTitle": "No archived items",
+    "tryDifferentSearch": "Try a different search term.",
+    "emptyDescription": "Archived workspaces and sessions will appear here when you hide them from the active list.",
+    "title": "Archive",
+    "restoreHint": "Restore items whenever you need them",
+    "restoreProject": "Restore workspace",
+    "restoreAction": "Restore",
+    "restore": "Restore session",
+    "deletePermanently": "Delete permanently"
   }
 }
