@@ -435,6 +435,11 @@ export function useChatProviderState({
       if (nextModel !== currentModel) {
         reconciledModels[targetProvider] = nextModel;
       }
+      const storageKey = providerModelStorageKey(targetProvider);
+      const rememberedModel = localStorage.getItem(storageKey);
+      if (rememberedModel && !catalog.OPTIONS.some((option) => option.value === rememberedModel)) {
+        localStorage.setItem(storageKey, catalog.DEFAULT);
+      }
     }
 
     if (Object.keys(reconciledModels).length > 0) {
