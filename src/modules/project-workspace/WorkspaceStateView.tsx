@@ -25,7 +25,7 @@ export default function WorkspaceStateView({ mode, isMobile, onMenuClick }: Work
       )}
 
       <div className="relative flex flex-1 items-center justify-center">
-        <AttentionToast />
+        <AttentionToast isChatVisible={false} />
         {isLoading ? (
           <div className="text-center text-muted-foreground">
             <div className="mx-auto mb-4 h-10 w-10">

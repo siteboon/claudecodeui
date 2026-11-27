@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict';
 
 import { renderHook } from '@testing-library/react';
-import { test } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 
-import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
+import type * as SharedUtils from '@/shared/utils';
 import type { ServerEvent, ProjectSession, PendingPermissionRequest } from '@/shared/types';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
+
+const playNotificationSound = vi.fn();
+
+vi.mock('@/shared/utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof SharedUtils>()),
+  playNotificationSound,
+}));
+
+const { useChatRealtimeHandlers } = await import('@/modules/chat/hooks/useChatRealtimeHandlers');
 
 /**
  * Answering a permission prompt resolves it over the inbound socket only, but
@@ -18,6 +27,7 @@ import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 const renderHandlers = () => {
   let listener: ((event: ServerEvent) => void) | null = null;
   let pending: PendingPermissionRequest[] = [];
+  const appended: Array<{ sessionId: string; message: unknown }> = [];
 
   renderHook(() => useChatRealtimeHandlers({
     isActive: true,
@@ -38,12 +48,20 @@ const renderHandlers = () => {
     lastSeqRef: { current: new Map() },
     statusCheckSentAtRef: { current: new Map() },
     requestLatestMessages: async () => {},
-    sessionStore: { appendRealtime: () => {} } as unknown as SessionStore,
+    sessionStore: {
+      appendRealtime: (sessionId: string, message: unknown) => {
+        appended.push({ sessionId, message });
+      },
+    } as unknown as SessionStore,
   }));
 
   const dispatch = (event: ServerEvent) => listener?.(event);
-  return { dispatch, getPending: () => pending };
+  return { dispatch, getPending: () => pending, appended };
 };
+
+beforeEach(() => {
+  playNotificationSound.mockClear();
+});
 
 const requestEvent = (requestId: string, seq: number): ServerEvent => ({
   kind: 'permission_request',
@@ -118,4 +136,43 @@ test('a prompt replayed after a refresh keeps the context its panel reads', () =
     { patterns: ['git status'], always: ['git status *'] },
     { patterns: ['src/app.ts'], always: ['*'] },
   ]);
+});
+
+test('permission_request plays sound only for the viewed session, leaving off-screen alerts to PermissionAttentionProvider', () => {
+  const { dispatch } = renderHandlers();
+
+  dispatch({
+    kind: 'permission_request',
+    requestId: 'req-offscreen',
+    toolName: 'AskUserQuestion',
+    input: { questions: [] },
+    sessionId: 'other-session',
+    seq: 1,
+  } as unknown as ServerEvent);
+  assert.equal(playNotificationSound.mock.calls.length, 0);
+
+  dispatch(requestEvent('req-viewed', 2));
+  assert.equal(playNotificationSound.mock.calls.length, 1);
+});
+
+test('attention control frames never reach the transcript store', () => {
+  const { dispatch, appended } = renderHandlers();
+
+  dispatch({
+    kind: 'permission_attention_snapshot',
+    sessions: [{ sessionId: 'other-session', requestId: 'req-1' }],
+  } as unknown as ServerEvent);
+  dispatch({
+    kind: 'permission_attention',
+    sessionId: 'viewed-session',
+    requestId: 'req-2',
+    toolName: 'AskUserQuestion',
+  } as unknown as ServerEvent);
+  dispatch({
+    kind: 'permission_attention_cleared',
+    sessionId: 'viewed-session',
+    requestId: 'req-2',
+  } as unknown as ServerEvent);
+
+  assert.equal(appended.length, 0);
 });

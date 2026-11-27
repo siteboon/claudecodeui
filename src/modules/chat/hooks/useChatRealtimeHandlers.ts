@@ -257,6 +257,10 @@ export function useChatRealtimeHandlers({
         // Sidebar/global events — owned by useProjectsState.
         case 'session_upserted':
         case 'loading_progress':
+        // Owned by PermissionAttentionProvider. Not a transcript row.
+        case 'permission_attention':
+        case 'permission_attention_cleared':
+        case 'permission_attention_snapshot':
         // Owned by useScheduledMessages, which reads the composer banner's
         // list again. Not a transcript row.
         case 'scheduled_messages_changed':
@@ -383,11 +387,14 @@ export function useChatRealtimeHandlers({
 
         case 'permission_request': {
           if (!msg.requestId) break;
-          if (isActionablePermissionRequest({ toolName: msg.toolName })) {
-            void playNotificationSound();
-          }
 
-          if (sid === activeViewSessionId) {
+          if (sid && sid === activeViewSessionId) {
+            // PermissionAttentionProvider owns alerts for off-screen sessions;
+            // only play the inline sound here for the currently viewed session.
+            if (isActionablePermissionRequest({ toolName: msg.toolName })) {
+              void playNotificationSound();
+            }
+
             const previousPendingPermissionRequests = pendingPermissionRequestsRef.current;
             if (!previousPendingPermissionRequests.some((request) => request.requestId === msg.requestId)) {
               const nextPendingPermissionRequests = [...previousPendingPermissionRequests, {

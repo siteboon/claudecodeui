@@ -13,6 +13,21 @@ import {
   useLatestAttentionNotice,
 } from '@/shared/context/PermissionAttentionContext';
 
+type AttentionToastProps = {
+  /**
+   * Whether the route session's chat is actually visible on screen. Defaults to
+   * `true` for standalone `/session/:id` mounts; `WorkspaceMain` passes
+   * `activeTab === 'chat' && !editorExpanded` and `WorkspaceStateView` passes `false`
+   * so prompts hidden behind another tab or an expanded editor still surface here.
+   */
+  isChatVisible?: boolean;
+  /**
+   * Owner callback invoked when `Open` switches back to chat, allowing
+   * `WorkspaceMain` to collapse an expanded editor without discarding its buffer.
+   */
+  onRevealChat?: () => void;
+};
+
 /**
  * Rendered by WorkspaceMain and WorkspaceStateView inside the workspace body
  * container below the header so it never overlaps navigation tabs on narrow screens.
@@ -21,17 +36,22 @@ import {
  * scrolled out of view, in a section the user is not browsing, or inside a
  * closed mobile drawer. A run stopped on a question is blocked until someone
  * answers, so the newest off-screen request also gets a card with a direct way
- * into the conversation. While that session is open on screen the card hides;
- * if the user leaves without answering, it reminds again until the prompt is
- * answered or explicitly dismissed.
+ * into the conversation. While that session is visible on screen the card hides;
+ * if the user leaves or hides chat without answering, it reminds again until the
+ * prompt is answered or explicitly dismissed.
  */
-export default function AttentionToast() {
+export default function AttentionToast({
+  isChatVisible = true,
+  onRevealChat,
+}: AttentionToastProps) {
   const { t } = useTranslation('sidebar');
   const navigate = useNavigate();
   const sessionMatch = useMatch('/session/:sessionId');
   // React Router already decodes route params; decoding again would break `%` ids.
   const viewedSessionId = sessionMatch?.params.sessionId ?? null;
-  const notice = useLatestAttentionNotice(viewedSessionId);
+  // Only hide the route session's prompt while its conversation is actually on screen.
+  const excludedSessionId = isChatVisible ? viewedSessionId : null;
+  const notice = useLatestAttentionNotice(excludedSessionId);
   const awaitingInputSessionIds = useAwaitingInputSessionIdSet();
   const dismissNotice = useDismissAttentionNotice();
   const { setSidebarOpen, sidebarSharedProps } = useProjectSidebarState();
@@ -59,9 +79,10 @@ export default function AttentionToast() {
       return;
     }
     setSidebarOpen(false);
+    onRevealChat?.();
     setActiveTab('chat');
     navigate(`/session/${encodeURIComponent(notice.sessionId)}`);
-  }, [navigate, notice, setActiveTab, setSidebarOpen]);
+  }, [navigate, notice, onRevealChat, setActiveTab, setSidebarOpen]);
 
   if (!notice || !awaitingInputSessionIds.has(notice.sessionId)) {
     return null;
@@ -116,7 +137,7 @@ export default function AttentionToast() {
         <button
           type="button"
           aria-label={dismissLabel}
-          onClick={() => dismissNotice(notice.requestId, viewedSessionId)}
+          onClick={() => dismissNotice(notice.requestId, excludedSessionId)}
           className="-mr-1 -mt-1 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <X className="h-4 w-4" aria-hidden="true" />

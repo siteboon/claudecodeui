@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 
-import { test } from 'vitest';
+import { afterEach, test } from 'vitest';
 
 import type { Project, ProjectSession } from '@/shared/types';
-import { getPageTitle } from '@/shared/utils';
+import {
+  getPageTitle,
+  setPendingAttentionTitleState,
+  showAttentionTitleIndicator,
+  showCompletionTitleIndicator,
+} from '@/shared/utils';
 
 const project: Project = {
   projectId: 'project-1',
@@ -50,4 +55,51 @@ test('falls back to the project title when no session is selected', () => {
 
 test('falls back to the app title when no project or session is selected', () => {
   assert.equal(getPageTitle(null, null), 'CloudCLI UI');
+});
+
+const restoreVisibilityDescriptor = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+const setTabBackgrounded = (backgrounded: boolean) => {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => (backgrounded ? 'hidden' : 'visible'),
+  });
+};
+
+afterEach(() => {
+  setPendingAttentionTitleState(false, { clearActiveIndicator: true });
+  if (restoreVisibilityDescriptor) {
+    Object.defineProperty(document, 'visibilityState', restoreVisibilityDescriptor);
+  } else {
+    delete (document as { visibilityState?: DocumentVisibilityState }).visibilityState;
+  }
+  document.title = '';
+});
+
+test('background completion sets [Done] when no request is waiting, and yields to pending attention', () => {
+  setTabBackgrounded(true);
+  document.title = 'Session B';
+
+  showCompletionTitleIndicator();
+  assert.equal(document.title, '[Done] Session B');
+
+  showAttentionTitleIndicator();
+  assert.equal(document.title, '[Action required] Session B');
+
+  // Another subscribed session finishes while Session B still waits: keep [Action required].
+  setPendingAttentionTitleState(true);
+  showCompletionTitleIndicator();
+  assert.equal(document.title, '[Action required] Session B');
+
+  // Even if the title synced without its prefix while a request still waits, do not report [Done].
+  document.title = 'Session B';
+  showCompletionTitleIndicator();
+  assert.equal(document.title, '[Action required] Session B');
+
+  // Once the waiting request clears, normal completion indicators resume.
+  setPendingAttentionTitleState(false, { clearActiveIndicator: true });
+  assert.equal(document.title, 'Session B');
+
+  showCompletionTitleIndicator();
+  assert.equal(document.title, '[Done] Session B');
 });

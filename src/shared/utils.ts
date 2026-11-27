@@ -261,6 +261,12 @@ const TITLE_INDICATOR_CLEAR_DELAY_MS = 2000;
 
 let clearTimer: number | null = null;
 let returnListenersAttached = false;
+/**
+ * Whether any session currently has an unanswered attention request.
+ * Tracked alongside `document.title` so an unrelated run's completion cue never
+ * replaces an active or still-waiting `[Action required]` tab marker with `[Done]`.
+ */
+let hasPendingAttentionState = false;
 
 /** The indicator currently prefixed to the title, or null when the title is plain. */
 const indicatorPrefixOf = (title: string): string | null => {
@@ -357,6 +363,20 @@ const showTitleIndicator = (indicator: string): void => {
     return;
   }
 
+  const currentPrefix = indicatorPrefixOf(document.title);
+  if (
+    indicator === COMPLETION_TITLE_INDICATOR
+    && (hasPendingAttentionState || currentPrefix === `${ATTENTION_TITLE_INDICATOR} `)
+  ) {
+    // Keep pending attention ahead of unrelated completions. If a backgrounded
+    // tab's title was refreshed without the prefix while a request still waits,
+    // restore `[Action required]` rather than reporting `[Done]`.
+    if (!isPageActive() && currentPrefix !== `${ATTENTION_TITLE_INDICATOR} `) {
+      showTitleIndicator(ATTENTION_TITLE_INDICATOR);
+    }
+    return;
+  }
+
   const baseTitle = stripIndicator(document.title || 'CloudCLI UI');
   document.title = `${indicator} ${baseTitle}`;
 
@@ -375,6 +395,29 @@ const showTitleIndicator = (indicator: string): void => {
     window.addEventListener('focus', handleUserReturn, true);
     window.addEventListener('click', handleUserReturn, true);
     returnListenersAttached = true;
+  }
+};
+
+/**
+ * Syncs whether any session still awaits user input so completion title cues
+ * never overwrite pending attention, and clears an active attention prefix once
+ * all waiting requests are answered.
+ */
+export const setPendingAttentionTitleState = (
+  hasPending: boolean,
+  { clearActiveIndicator = false }: { clearActiveIndicator?: boolean } = {},
+): void => {
+  const wasPending = hasPendingAttentionState;
+  hasPendingAttentionState = hasPending;
+
+  if (
+    clearActiveIndicator
+    && wasPending
+    && !hasPending
+    && typeof document !== 'undefined'
+    && indicatorPrefixOf(document.title) === `${ATTENTION_TITLE_INDICATOR} `
+  ) {
+    clearTitleIndicator();
   }
 };
 

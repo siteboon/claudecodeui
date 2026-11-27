@@ -1,7 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { isPageActive, playNotificationSound, showAttentionTitleIndicator } from '@/shared/utils';
+import {
+  isPageActive,
+  playNotificationSound,
+  setPendingAttentionTitleState,
+  showAttentionTitleIndicator,
+} from '@/shared/utils';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import type { ServerEvent } from '@/shared/types';
 
@@ -190,6 +195,10 @@ export function PermissionAttentionProvider({ children }: { children: ReactNode 
     });
   }, []);
 
+  useEffect(() => () => {
+    setPendingAttentionTitleState(false);
+  }, []);
+
   // The announcements are deltas, so a set collected only from them is wrong in
   // both directions after a reconnect: requests raised while the socket was
   // down were never heard (no marker, no alert) and requests answered then kept
@@ -203,6 +212,12 @@ export function PermissionAttentionProvider({ children }: { children: ReactNode 
   }, [connectionStatus, sendMessage]);
 
   useEffect(() => {
+    const syncPendingRequests = (next: ReadonlyArray<AttentionNotice>) => {
+      pendingRequestsRef.current = next;
+      setPendingRequests((current) => (areRequestListsEqual(current, next) ? current : next));
+      setPendingAttentionTitleState(next.length > 0, { clearActiveIndicator: true });
+    };
+
     return subscribe((event: ServerEvent) => {
       const kind = event.kind;
 
@@ -217,7 +232,7 @@ export function PermissionAttentionProvider({ children }: { children: ReactNode 
           nextAnnounced.add(requestKey(entry.sessionId, entry.requestId));
         }
         announcedRef.current = nextAnnounced;
-        setPendingRequests((current) => (areRequestListsEqual(current, next) ? current : next));
+        syncPendingRequests(next);
         setDismissedKeys((current) => {
           if (current.size === 0) {
             return current;
@@ -248,7 +263,7 @@ export function PermissionAttentionProvider({ children }: { children: ReactNode 
         }
         announcedRef.current.add(announcementKey);
 
-        setPendingRequests((current) => appendPendingRequest(current, sessionId, requestId));
+        syncPendingRequests(appendPendingRequest(pendingRequestsRef.current, sessionId, requestId));
 
         const isViewedSession = sessionId === readViewedSessionId();
         if (!isViewedSession) {
@@ -277,7 +292,7 @@ export function PermissionAttentionProvider({ children }: { children: ReactNode 
           }
         }
 
-        setPendingRequests((current) => removePendingRequest(current, sessionId, requestId));
+        syncPendingRequests(removePendingRequest(pendingRequestsRef.current, sessionId, requestId));
         setDismissedKeys((current) => {
           if (current.size === 0) {
             return current;

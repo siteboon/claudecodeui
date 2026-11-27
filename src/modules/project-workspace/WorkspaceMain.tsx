@@ -83,6 +83,7 @@ function WorkspaceMain({
     handleFileOpen,
     handleCloseEditor,
     handleToggleEditorExpand,
+    handleCollapseEditor,
     handleResizeStart,
     handleUnsavedChangesChange,
   } = useEditorSidebar({
@@ -246,7 +247,10 @@ function WorkspaceMain({
           projectPath={selectedProject.path}
           fillSpace={activeTab === 'files'}
         />
-        <AttentionToast />
+        <AttentionToast
+          isChatVisible={activeTab === 'chat' && !editorExpanded}
+          onRevealChat={handleCollapseEditor}
+        />
       </div>
     </div>
   );

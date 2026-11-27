@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
 import { test, vi } from 'vitest';
 
-import type { CodeEditorFile } from '@/shared/types';
+import type { CodeEditorFile, Project } from '@/shared/types';
 
 /**
  * Regression guard for #870: `EditorSidebar` used to return a different root
@@ -62,6 +63,7 @@ vi.mock('@/modules/code-editor/utils/editorToolbarPanel', () => ({
 }));
 
 const { default: EditorSidebar } = await import('@/modules/code-editor/EditorSidebar');
+const { useEditorSidebar } = await import('@/modules/code-editor/hooks/useEditorSidebar');
 
 const file: CodeEditorFile = { name: 'a.txt', path: '/repo/a.txt', projectId: 'p1' };
 
@@ -204,4 +206,62 @@ test('an editor opened on mobile is floating from the start', async () => {
   assert.ok(isFloating(container));
   assert.equal(isDocked(), false);
   assert.equal(toolbarPanels.at(-1)?.isSidebar, false);
+});
+
+test('collapsing an expanded editor reveals the workspace without discarding its unsaved buffer', async () => {
+  containerWidth = 1400;
+  toolbarPanels.length = 0;
+  readFile.mockClear();
+  onUnsavedChangesChange.mockClear();
+  const project: Project = { projectId: 'p1', displayName: 'repo', fullPath: '/repo', path: '/repo' };
+
+  function ExpandableHarness() {
+    const sidebarState = useEditorSidebar({ selectedProject: project, isMobile: false });
+    const { handleFileOpen, handleCollapseEditor } = sidebarState;
+
+    useEffect(() => {
+      handleFileOpen('/repo/a.txt');
+    }, [handleFileOpen]);
+
+    return (
+      <div data-testid="workspace" data-expanded={String(sidebarState.editorExpanded)}>
+        <button type="button" onClick={handleCollapseEditor}>
+          Reveal chat
+        </button>
+        <EditorSidebar
+          editingFile={sidebarState.editingFile}
+          isMobile={false}
+          editorExpanded={sidebarState.editorExpanded}
+          editorWidth={sidebarState.editorWidth}
+          hasManualWidth={sidebarState.hasManualWidth}
+          resizeHandleRef={sidebarState.resizeHandleRef}
+          onResizeStart={sidebarState.handleResizeStart}
+          onCloseEditor={sidebarState.handleCloseEditor}
+          onToggleEditorExpand={sidebarState.handleToggleEditorExpand}
+          onUnsavedChangesChange={(dirty) => {
+            sidebarState.handleUnsavedChangesChange(dirty);
+            onUnsavedChangesChange(dirty);
+          }}
+          projectPath="/repo"
+        />
+      </div>
+    );
+  }
+
+  render(<ExpandableHarness />);
+  const editor = await screen.findByTestId<HTMLTextAreaElement>('editor');
+  await waitFor(() => assert.equal(editor.value, 'hello'));
+
+  typeInto(editor, 'hello edited');
+
+  const toggleExpand = toolbarPanels.at(-1)?.onToggleExpand;
+  assert.ok(toggleExpand, 'the docked toolbar offers an expand toggle');
+  act(() => toggleExpand());
+  assert.equal(screen.getByTestId('workspace').getAttribute('data-expanded'), 'true');
+  assert.equal(toolbarPanels.at(-1)?.isExpanded, true);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Reveal chat' }));
+  assert.equal(screen.getByTestId('workspace').getAttribute('data-expanded'), 'false');
+  assert.equal(toolbarPanels.at(-1)?.isExpanded, false);
+  assertBufferSurvived();
 });

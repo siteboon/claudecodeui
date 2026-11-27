@@ -89,6 +89,10 @@ export const useEditorSidebar = ({
     setEditorExpanded((previous) => !previous);
   }, []);
 
+  const handleCollapseEditor = useCallback(() => {
+    setEditorExpanded(false);
+  }, []);
+
   const handleResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       if (isMobile) {
@@ -188,6 +192,7 @@ export const useEditorSidebar = ({
     handleFileOpen,
     handleCloseEditor,
     handleToggleEditorExpand,
+    handleCollapseEditor,
     handleResizeStart,
     handleUnsavedChangesChange,
   };

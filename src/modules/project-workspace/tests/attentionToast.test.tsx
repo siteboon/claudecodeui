@@ -79,11 +79,14 @@ function LocationProbe() {
   );
 }
 
-const mount = (initialEntry = '/') => {
-  render(
+const mount = (
+  initialEntry = '/',
+  toastProps: { isChatVisible?: boolean; onRevealChat?: () => void } = {},
+) => {
+  const view = render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <PermissionAttentionProvider>
-        <AttentionToast />
+        <AttentionToast {...toastProps} />
         <LocationProbe />
       </PermissionAttentionProvider>
     </MemoryRouter>,
@@ -91,6 +94,16 @@ const mount = (initialEntry = '/') => {
 
   return {
     location: () => screen.getByTestId('location').textContent,
+    rerenderToast: (nextEntry: string, nextProps: { isChatVisible?: boolean; onRevealChat?: () => void } = {}) => {
+      view.rerender(
+        <MemoryRouter initialEntries={[nextEntry]}>
+          <PermissionAttentionProvider>
+            <AttentionToast {...nextProps} />
+            <LocationProbe />
+          </PermissionAttentionProvider>
+        </MemoryRouter>,
+      );
+    },
   };
 };
 
@@ -228,4 +241,42 @@ test('a replayed announcement does not reopen a dismissed card', () => {
   send({ kind: 'permission_attention', sessionId: 's1', requestId: 'r1' });
 
   assert.equal(screen.queryByRole('status'), null);
+});
+
+test('on the waiting session, hiding chat (Files tab or expanded editor) surfaces its toast and Dismiss still clears it', () => {
+  const onRevealChat = vi.fn();
+  const view = mount('/session/s1', { isChatVisible: false, onRevealChat });
+
+  send({ kind: 'permission_attention', sessionId: 's1', requestId: 'r1' });
+
+  const card = screen.getByRole('status');
+  assert.match(card.textContent ?? '', /Hermes 在工作/);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+  assert.equal(screen.queryByRole('status'), null);
+
+  // Returning to chat while the request is still pending does not show it, and
+  // a new request on s1 still surfaces when chat is hidden again.
+  send({ kind: 'permission_attention', sessionId: 's1', requestId: 'r2' });
+  assert.ok(screen.getByRole('status'));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+  assert.equal(onRevealChat.mock.calls.length, 1);
+  assert.equal(setActiveTab.mock.calls.at(-1)?.[0], 'chat');
+
+  view.rerenderToast('/session/s1', { isChatVisible: true, onRevealChat });
+  assert.equal(screen.queryByRole('status'), null, 'toast hides once chat is visible again');
+});
+
+test('Open invokes onRevealChat when navigating to another waiting session while the editor is expanded', () => {
+  const onRevealChat = vi.fn();
+  const view = mount('/session/s2', { isChatVisible: false, onRevealChat });
+
+  send({ kind: 'permission_attention', sessionId: 's1', requestId: 'r1' });
+  assert.ok(screen.getByRole('status'));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+  assert.equal(onRevealChat.mock.calls.length, 1);
+  assert.equal(setActiveTab.mock.calls[0][0], 'chat');
+  assert.equal(view.location(), '/session/s1');
 });
