@@ -1742,9 +1742,10 @@ async function queryClaudeSDK(
       if (message.type === 'system' && message.subtype === 'task_started') {
         sawTaskEventThisTurn = true;
       }
-      // The tracker is keyed by session. A process that a newer run replaced
-      // can still report a task, and that task must not hold the newer one.
-      if (!supersededInstances.has(queryInstance)) {
+      // The tracker is keyed by session. A process that was stopped, or that a
+      // newer run replaced, can still report a task, and that task must not
+      // hold the run that has the session now.
+      if (getSession(sessionKey()!)?.instance === queryInstance) {
         backgroundWork.apply(sessionKey()!, message);
       }
 
