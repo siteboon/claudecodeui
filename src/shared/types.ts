@@ -482,6 +482,10 @@ export type SessionEstablishedContext = {
   provider: LLMProvider;
   project: Project;
   summary?: string | null;
+  /** The model, effort and permission mode the session was created with. */
+  selection?: { model?: unknown; effort?: unknown; permissionMode?: unknown };
+  /** The New Session trigger the send started under. */
+  newSessionTrigger?: number;
 };
 
 /** The result returned for a tool call, carrying its content, error flag, timestamp and any provider-specific extras that the tool renderers read. */
