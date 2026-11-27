@@ -60,7 +60,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     codexPermissionMode,
     setCodexPermissionMode,
     chatDefaults,
-    setChatDefaults,
+    updateChatDefaults,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,
@@ -247,7 +247,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   codexPermissionMode={codexPermissionMode}
                   onCodexPermissionModeChange={setCodexPermissionMode}
                   chatDefaults={chatDefaults}
-                  onChatDefaultsChange={setChatDefaults}
+                  onChatDefaultsChange={updateChatDefaults}
                   projects={projects}
                 />
               )}

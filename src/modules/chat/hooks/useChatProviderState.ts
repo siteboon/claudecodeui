@@ -190,6 +190,13 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [providerModelsLoading, setProviderModelsLoading] = useState(true);
 
   const providerModelsRequestIdRef = useRef(0);
+  /**
+   * The defaults last written into the composer. The preference subscription
+   * fires for every setting, so comparing against this tells an actual
+   * chat-defaults edit apart from an unrelated change (a theme switch, say),
+   * which must not overwrite a model the user just picked.
+   */
+  const appliedDefaultsRef = useRef<ChatDefaultsState | null>(null);
   const sessionSelectionLoadRequestIdRef = useRef(0);
   const sessionModelMutationIdRef = useRef(0);
   const sessionEffortMutationIdRef = useRef(0);
@@ -426,6 +433,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
    */
   const applyStoredChatDefaults = useCallback(() => {
     const storedDefaults = readChatDefaults();
+    appliedDefaultsRef.current = storedDefaults;
 
     // The catalog reconciliation below trusts localStorage over the current
     // state, so mirror the defaults there too or it would restore the model the
@@ -470,7 +478,9 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
   // A new chat has no stored selection, so it starts from the saved defaults.
   // Re-applying when the preferences change covers the settings dialog being
-  // edited while this blank composer stays mounted.
+  // edited while this blank composer stays mounted — but only when the defaults
+  // themselves changed. The subscription fires for every preference, and
+  // re-applying on a theme switch would undo a model the user just picked.
   useEffect(() => {
     if (selectedSession?.id) {
       return;
@@ -478,9 +488,14 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
     applyStoredChatDefaults();
     return subscribeToUserPreferences(() => {
-      if (!selectedSession?.id) {
-        applyStoredChatDefaults();
+      if (selectedSession?.id) {
+        return;
       }
+      const nextDefaults = readChatDefaults();
+      if (JSON.stringify(nextDefaults) === JSON.stringify(appliedDefaultsRef.current)) {
+        return;
+      }
+      applyStoredChatDefaults();
     });
   }, [selectedSession?.id, applyStoredChatDefaults]);
 

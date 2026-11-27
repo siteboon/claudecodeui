@@ -493,18 +493,13 @@ export function useChatComposerState({
 
     // Defer submit to next tick so the command text is reflected in UI before dispatching.
     // The expanded body is the message itself: it skips slash-command interception.
+    // The submit clears the composer only once it takes the body; a refused one
+    // (an in-flight submit, a cancelled background-work dialog, a failed upload)
+    // leaves the body in place so it can be sent again.
     setTimeout(() => {
-      if (handleSubmitRef.current) {
-        handleSubmitRef.current(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
-      }
-      // The submit reads the expanded body synchronously, but its own cleanup
-      // runs after uploads/session allocation. Clear here too so the command
-      // text never lingers if that path exits early (busy session, queue
-      // rejection, or a session switch during the await).
-      setInput('');
-      inputValueRef.current = '';
+      handleSubmitRef.current?.(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
     }, 0);
-  }, [addMessage, setInput]);
+  }, [addMessage]);
 
   const executeCommand = useCallback(
     async (command: SlashCommand, rawInput?: string, options?: { preserveInput?: boolean }) => {
@@ -1131,6 +1126,12 @@ export function useChatComposerState({
     [pendingSteers, sessionKey],
   );
 
+  // Every branch below that takes the message — sends it, queues it, steers it,
+  // asks it on the side — clears the composer itself, and only once it has
+  // taken it. A refused submit (a failed upload, a refused session allocation,
+  // a cancelled background-work dialog) returns with the text still in place,
+  // so a caller that pre-filled the composer (a custom command's expanded body)
+  // does not have to clean up after it and cannot lose the body either.
   const submitMessage = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,

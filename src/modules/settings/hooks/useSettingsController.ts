@@ -9,6 +9,7 @@ import {
 } from '@/shared/codeEditorSettings';
 import {
   readUserPreference,
+  writeUserPreference,
   writeUserPreferences,
 } from '@/shared/userSettings';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
@@ -288,6 +289,18 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     [],
   );
 
+  /**
+   * Applies one chat-defaults edit and mirrors it to the preference store right
+   * away. The server write stays debounced inside `writeUserPreference`, but
+   * the mirror is what reopening the dialog reads: leaving it to `saveSettings`
+   * meant a close-and-reopen within the 500 ms debounce loaded the old value
+   * back and cancelled the pending save.
+   */
+  const updateChatDefaults = useCallback((next: ChatDefaultsState) => {
+    setChatDefaults(next);
+    writeUserPreference('chatDefaults', next);
+  }, []);
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -375,7 +388,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     codexPermissionMode,
     setCodexPermissionMode,
     chatDefaults,
-    setChatDefaults,
+    updateChatDefaults,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,

@@ -119,6 +119,19 @@ const readNonEmptyString = (value: unknown): string | null => (
   typeof value === 'string' && value.trim() ? value.trim() : null
 );
 
+/**
+ * The client's own choice for one option, or null when it left the field open.
+ *
+ * The composer's first entry sends the literal `default`, which means "let the
+ * provider decide" rather than naming a model, so it counts as unspecified
+ * here. That is different from a *recorded* `default`, which is the user's
+ * explicit answer for this session and must be preserved.
+ */
+const readExplicitOption = (value: unknown): string | null => {
+  const normalized = readNonEmptyString(value);
+  return normalized === null || normalized === 'default' ? null : normalized;
+};
+
 function readStoredChatDefaults(userId: number, provider: LLMProvider): unknown {
   void provider;
   return userPreferencesDb.getPreferences(userId)[CHAT_DEFAULTS_PREFERENCE_KEY] ?? null;
@@ -351,26 +364,35 @@ async function dispatchRun(
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
 
-  // Fall back to the settings page's new-session defaults when the client
-  // left the choice open (absent, empty, or the composer's `default`).
+  // The settings page's "new session defaults" answer how a *new* chat runs
+  // when the client leaves the choice open. They must not reach a session that
+  // already recorded a choice: automation often sends no model at all, and
+  // letting the defaults through here would overwrite what the user picked the
+  // last time they were in this session.
+  //
+  // Precedence per field: the client's own value, then the session's recorded
+  // value, then the saved default. A recorded `default` is a real answer — the
+  // user explicitly chose the provider default — so only a missing record falls
+  // through to the saved default.
   const chatDefaults = resolveChatDefaults(provider, userId, clientOptions, dependencies);
+  const recordedModel = session.model?.trim() || null;
+  const recordedEffort = session.effort?.trim() || null;
+  const resolvedModel = readExplicitOption(clientOptions.model) ?? recordedModel ?? chatDefaults.model;
+  const resolvedEffort = readExplicitOption(clientOptions.effort) ?? recordedEffort ?? chatDefaults.effort;
 
   // Record what this turn runs with so reopening the session later restores the
   // same model and reasoning effort, and so the resume path has a
-  // session-scoped model answer to use. The saved default is recorded too:
-  // otherwise the next open would show "Default" for a turn that actually ran
-  // with the user's configured effort.
-  const recordedModel = typeof clientOptions.model === 'string' && clientOptions.model.trim()
-    ? clientOptions.model
-    : chatDefaults.model;
-  if (recordedModel) {
-    providerModelsService.setSessionModel(provider, sessionId, recordedModel);
+  // session-scoped model answer to use. The resolved value is recorded rather
+  // than the composer's `default` sentinel: the next open would otherwise show
+  // "Default" for a turn that actually ran with the user's configured effort.
+  // With nothing resolved, the client's own value is kept as before.
+  const modelToRecord = resolvedModel ?? readNonEmptyString(clientOptions.model);
+  if (modelToRecord) {
+    providerModelsService.setSessionModel(provider, sessionId, modelToRecord);
   }
-  const recordedEffort = typeof clientOptions.effort === 'string' && clientOptions.effort.trim()
-    ? clientOptions.effort
-    : chatDefaults.effort;
-  if (recordedEffort) {
-    providerModelsService.setSessionEffort(provider, sessionId, recordedEffort);
+  const effortToRecord = resolvedEffort ?? readNonEmptyString(clientOptions.effort);
+  if (effortToRecord) {
+    providerModelsService.setSessionEffort(provider, sessionId, effortToRecord);
   }
 
   const uniqueAttachments = readVerifiedAttachments(clientOptions);
@@ -383,8 +405,10 @@ async function dispatchRun(
   // app session id.
   const runtimeOptions: AnyRecord = {
     ...clientOptions,
-    ...(chatDefaults.model ? { model: chatDefaults.model } : {}),
-    ...(chatDefaults.effort ? { effort: chatDefaults.effort } : {}),
+    // The same precedence the row above recorded, so the turn runs with what
+    // the session actually holds rather than the saved default for new chats.
+    ...(resolvedModel ? { model: resolvedModel } : {}),
+    ...(resolvedEffort ? { effort: resolvedEffort } : {}),
     ...extraRuntimeOptions,
     // Attachments are re-validated server-side: only direct children of the
     // global upload store may reach provider runtimes or their file tools.

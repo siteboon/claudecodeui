@@ -107,6 +107,13 @@ export default function ChatDefaultsContent({
   };
 
   const handleModelChange = (model: string) => {
+    // With no catalog the levels this model accepts are unknown, so keeping the
+    // stored effort is the only safe answer: clearing it would silently drop a
+    // configured default the runtime would otherwise honour.
+    if (loadError) {
+      update({ model });
+      return;
+    }
     const nextLevels = collectEffortLevels(models, model);
     // An effort the newly selected model does not accept would be silently
     // dropped by the runtime, so clear it instead of storing a broken default.
@@ -158,6 +165,13 @@ export default function ChatDefaultsContent({
     })),
   ];
 
+  const modelFieldLabel = t('agents.defaults.model', { defaultValue: 'Default model' });
+  const effortFieldLabel = t('agents.defaults.effort', { defaultValue: 'Default reasoning effort' });
+  // The trigger shows the value, so its accessible name has to carry both the
+  // field and the current choice; otherwise a screen reader reads only the
+  // field name and never says which model or effort is set.
+  const selectedEffortLabel = selectedEffort || followModelDefaultLabel;
+
   return (
     <SettingsSection
       title={t('agents.defaults.title', { defaultValue: 'New session defaults' })}
@@ -167,16 +181,16 @@ export default function ChatDefaultsContent({
     >
       <SettingsCard divided>
         <SettingsRow
-          label={t('agents.defaults.model', { defaultValue: 'Default model' })}
+          label={modelFieldLabel}
           description={t('agents.defaults.modelDescription', {
             defaultValue: 'Used when a new session is created without picking a model.',
           })}
         >
           <ActionMenu
             label={selectedModelLabel}
-            ariaLabel={t('agents.defaults.model', { defaultValue: 'Default model' })}
+            ariaLabel={`${modelFieldLabel}: ${selectedModelLabel}`}
             items={modelItems}
-            disabled={loading}
+            disabled={loading || loadError}
             portal
             align="right"
             className="w-full sm:w-56"
@@ -186,17 +200,17 @@ export default function ChatDefaultsContent({
         </SettingsRow>
 
         <SettingsRow
-          label={t('agents.defaults.effort', { defaultValue: 'Default reasoning effort' })}
+          label={effortFieldLabel}
           description={t('agents.defaults.effortDescription', {
             defaultValue: 'Higher effort makes the model think longer before answering.',
           })}
         >
           {effortLevels.length > 0 ? (
             <ActionMenu
-              label={selectedEffort || followModelDefaultLabel}
-              ariaLabel={t('agents.defaults.effort', { defaultValue: 'Default reasoning effort' })}
+              label={selectedEffortLabel}
+              ariaLabel={`${effortFieldLabel}: ${selectedEffortLabel}`}
               items={effortItems}
-              disabled={loading}
+              disabled={loading || loadError}
               portal
               align="right"
               className="w-full sm:w-56"

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import '@/modules/i18n';
 import ChatDefaultsContent from '@/modules/settings/tabs/agents-settings/sections/content/ChatDefaultsContent';
@@ -8,8 +8,8 @@ import type { ChatDefaultsState } from '@/shared/types';
 
 // Settings -> Agents -> Defaults: the model/effort a new session starts with.
 
-const json = (body: unknown) => new Response(JSON.stringify(body), {
-  status: 200,
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+  status,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -35,13 +35,19 @@ const CATALOG = {
   },
 };
 
+// Hoisted alongside the mock factory: the factory runs before module-level
+// constants exist, so the swappable response has to live up there with it.
+const { modelsResponse } = vi.hoisted(() => ({
+  modelsResponse: { current: async (): Promise<Response> => new Response('{}') },
+}));
+
 vi.mock('@/shared/api', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
     api: {
       providers: {
-        models: async () => json(CATALOG),
+        models: (...args: unknown[]) => modelsResponse.current(...(args as [])),
       },
     },
   };
@@ -49,9 +55,11 @@ vi.mock('@/shared/api', async (importOriginal) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  modelsResponse.current = async () => json(CATALOG);
 });
 
 afterEach(() => {
+  cleanup();
   document.body.innerHTML = '';
 });
 
@@ -77,7 +85,7 @@ test('choosing a model stores it as the provider default', async () => {
   const { onChange } = renderContent();
   await openMenu(/default model/i);
 
-  fireEvent.click(await screen.findByRole('menuitem', { name: 'Best' }));
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Best' }));
 
   expect(onChange).toHaveBeenCalledWith({ claude: { model: 'best' } });
 });
@@ -86,7 +94,7 @@ test('choosing an effort keeps the selected model', async () => {
   const { onChange } = renderContent({ claude: { model: 'best' } });
   await openMenu(/default reasoning effort/i);
 
-  fireEvent.click(await screen.findByRole('menuitem', { name: 'max' }));
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: 'max' }));
 
   expect(onChange).toHaveBeenCalledWith({ claude: { model: 'best', effort: 'max' } });
 });
@@ -95,9 +103,19 @@ test('an effort the new model cannot run is cleared instead of stored', async ()
   const { onChange } = renderContent({ claude: { model: 'best', effort: 'max' } });
   await openMenu(/default model/i);
 
-  fireEvent.click(await screen.findByRole('menuitem', { name: 'Sonnet' }));
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Sonnet' }));
 
   expect(onChange).toHaveBeenLastCalledWith({ claude: { model: 'sonnet' } });
+});
+
+test('the selected model is exposed to assistive technology', async () => {
+  // The tick icon alone says nothing to a screen reader; the row has to
+  // report itself as the checked option of the group.
+  renderContent({ claude: { model: 'best' } });
+  await openMenu(/default model/i);
+
+  expect((await screen.findByRole('menuitemradio', { name: 'Best' })).getAttribute('aria-checked')).toBe('true');
+  expect(screen.getByRole('menuitemradio', { name: 'Sonnet' }).getAttribute('aria-checked')).toBe('false');
 });
 
 test('a provider without effort support says so instead of offering a menu', async () => {
@@ -106,4 +124,17 @@ test('a provider without effort support says so instead of offering a menu', asy
   await waitFor(() => {
     expect(screen.getByText(/not supported by this provider/i)).toBeTruthy();
   });
+});
+
+test('a failed catalog keeps the controls disabled so a stored effort is not cleared', async () => {
+  // With no catalog, "does this model support max?" has no answer. Letting the
+  // user pick then treated the empty list as "no effort supported" and dropped
+  // a configured default.
+  modelsResponse.current = async () => json({ success: false }, 500);
+
+  renderContent({ claude: { model: 'best', effort: 'max' } });
+
+  const trigger = await screen.findByRole('button', { name: /default model/i });
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(true));
+  expect(await screen.findByText(/could not load this provider/i)).toBeTruthy();
 });

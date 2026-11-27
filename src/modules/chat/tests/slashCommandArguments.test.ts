@@ -5,7 +5,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
-import type { PermissionMode, Project, SlashCommand } from '@/shared/types';
+import type { PermissionMode, Project, SessionActivityMap, SlashCommand } from '@/shared/types';
 
 /**
  * Regression guard for #1523: the composer cut a custom command's arguments at
@@ -43,7 +43,7 @@ const executeBodies = () => fetchMock.mock.calls
   .filter(([url]) => String(url) === '/api/commands/execute')
   .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>);
 
-const renderComposer = () => {
+const renderComposer = (processingSessions?: SessionActivityMap) => {
   const sent: Array<{ type: string; content?: string }> = [];
   const view = renderHook(() =>
     useChatComposerState({
@@ -57,6 +57,7 @@ const renderComposer = () => {
       currentProviderModel: 'test-model',
       currentProviderEffort: 'medium',
       isLoading: false,
+      processingSessions,
       canAbortSession: false,
       tokenBudget: null,
       sendMessage: (message) => { sent.push(message as { type: string; content?: string }); },
@@ -69,8 +70,8 @@ const renderComposer = () => {
   return { view, chatSends: () => sent.filter((message) => message.type === 'chat.send') };
 };
 
-const renderLoadedComposer = async () => {
-  const composer = renderComposer();
+const renderLoadedComposer = async (processingSessions?: SessionActivityMap) => {
+  const composer = renderComposer(processingSessions);
   await waitFor(() => assert.equal(composer.view.result.current.slashCommandsCount, 2));
   return composer;
 };
@@ -219,6 +220,72 @@ test('a command pick clears the composer as soon as its expanded body is submitt
   // The expanded body was sent, but the command text must not remain in the
   // composer even if the send path exits early (busy session, queue refusal).
   assert.equal(view.result.current.input, '');
+});
+
+test('a command pick keeps its expanded body when the background-work dialog is cancelled', async () => {
+  // The composer used to clear itself right after dispatching the submit, so
+  // cancelling the dialog left an empty composer and the expanded body was gone.
+  const { view, chatSends } = await renderLoadedComposer(new Map([[
+    'session-existing',
+    {
+      statusText: null,
+      canInterrupt: false,
+      startedAt: 1,
+      background: true,
+      tasks: [{ taskId: 'a1', toolUseId: 'toolu_agent', taskType: 'local_agent', description: 'Survey the repo', startedAt: 2 }],
+    },
+  ]]));
+  await act(async () => { view.result.current.setInput('/echo hi'); });
+  await act(async () => {
+    view.result.current.handleCommandSelect(ECHO_COMMAND as SlashCommand, 0, false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  await waitFor(() => assert.notEqual(view.result.current.backgroundSendPrompt, null));
+  await act(async () => {
+    view.result.current.resolveBackgroundSendPrompt('cancel');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  assert.equal(chatSends().length, 0, 'cancelled: nothing is sent');
+  assert.equal(view.result.current.input, 'expanded', 'the expanded body is back in the composer');
+});
+
+test('a command pick keeps its expanded body when another submit is still in flight', async () => {
+  // The in-flight guard refuses the deferred submit outright. The body has not
+  // been taken by anything, so it has to stay in the composer — otherwise the
+  // pick silently does nothing at all.
+  let releaseUpload!: (response: Response) => void;
+  const baseFetch = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url: RequestInfo | URL, init?: RequestInit) => (
+    String(url) === '/api/assets/files'
+      ? new Promise<Response>((resolve) => { releaseUpload = resolve; })
+      : baseFetch(url, init)
+  ));
+  const { view } = await renderLoadedComposer();
+  const image = new File(['png'], 'shot.png', { type: 'image/png' });
+  await act(async () => {
+    view.result.current.setInput('look at this');
+    view.result.current.handlePaste({
+      clipboardData: { items: [{ type: 'image/png', getAsFile: () => image }], files: [] },
+    } as never);
+  });
+  // Started, and left awaiting its upload so the scope stays in flight.
+  await act(async () => {
+    void view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  await act(async () => {
+    view.result.current.handleCommandSelect(ECHO_COMMAND as SlashCommand, 0, false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  assert.equal(view.result.current.input, 'expanded', 'the refused submit left the body in the composer');
+
+  await act(async () => {
+    releaseUpload(jsonResponse({ attachments: [{ name: 'shot.png', mimeType: 'image/png' }] }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 });
 
 test('a voice transcript sent straight away is still read as a command', async () => {

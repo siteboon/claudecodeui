@@ -42,6 +42,8 @@ type GatewayOptions = {
   readChatDefaults?: (userId: number, provider: string) => unknown;
   /** Writes this into the saved preferences before connecting. */
   savedDefaults?: unknown;
+  /** Model/effort already recorded on the session row, as a reopened chat has. */
+  sessionSelection?: { model?: string; effort?: string };
   userId?: number | null;
 };
 
@@ -50,7 +52,7 @@ type GatewayOptions = {
  * options the provider runtime was handed, plus the recorded session row.
  */
 async function sendOneTurn(
-  { readChatDefaults, savedDefaults, userId = 1 }: GatewayOptions,
+  { readChatDefaults, savedDefaults, sessionSelection, userId = 1 }: GatewayOptions,
   clientOptions: AnyRecord = {},
 ): Promise<{ runs: AnyRecord[]; session: ReturnType<typeof sessionsDb.getSessionById> }> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -68,6 +70,12 @@ async function sendOneTurn(
       userPreferencesDb.savePreferences(Number(id), { chatDefaults: savedDefaults });
     }
     sessionsDb.createAppSession(SESSION_ID, 'claude', tempDirectory);
+    if (sessionSelection?.model) {
+      sessionsDb.setSessionModel(SESSION_ID, sessionSelection.model);
+    }
+    if (sessionSelection?.effort) {
+      sessionsDb.setSessionEffort(SESSION_ID, sessionSelection.effort);
+    }
 
     handleChatConnection(
       socket as never,
@@ -117,7 +125,7 @@ test('a send that names no model or effort runs with the saved defaults', async 
 });
 
 test('the composer sentinel "default" is treated as unspecified', async () => {
-  const { runs } = await sendOneTurn(
+  const { runs, session } = await sendOneTurn(
     { savedDefaults: SAVED_DEFAULTS },
     { model: 'default', effort: 'default' },
   );
@@ -125,6 +133,35 @@ test('the composer sentinel "default" is treated as unspecified', async () => {
   assert.equal(runs.length, 1);
   assert.equal(runs[0].model, 'best');
   assert.equal(runs[0].effort, 'max');
+  // The row records what the turn ran with, not the sentinel, so reopening the
+  // session does not show "Default" for a turn that used the saved effort.
+  assert.equal(session?.model, 'best');
+  assert.equal(session?.effort, 'max');
+});
+
+test('an existing session keeps its recorded model and effort over the saved defaults', async () => {
+  const { runs, session } = await sendOneTurn(
+    { savedDefaults: SAVED_DEFAULTS, sessionSelection: { model: 'sonnet', effort: 'low' } },
+    {},
+  );
+
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].model, 'sonnet');
+  assert.equal(runs[0].effort, 'low');
+  assert.equal(session?.model, 'sonnet');
+  assert.equal(session?.effort, 'low');
+});
+
+test('an explicit client value still wins over the session record', async () => {
+  const { runs, session } = await sendOneTurn(
+    { savedDefaults: SAVED_DEFAULTS, sessionSelection: { model: 'sonnet', effort: 'low' } },
+    { model: 'opus', effort: 'high' },
+  );
+
+  assert.equal(runs[0].model, 'opus');
+  assert.equal(runs[0].effort, 'high');
+  assert.equal(session?.model, 'opus');
+  assert.equal(session?.effort, 'high');
 });
 
 test('an explicit model and effort always win over the saved defaults', async () => {

@@ -122,12 +122,22 @@ export function ActionMenu({
       return;
     }
 
-    const closeOnViewportChange = () => setMenuOpen(false);
-    window.addEventListener('resize', closeOnViewportChange);
-    window.addEventListener('scroll', closeOnViewportChange, true);
+    // A scroll inside the menu itself must not dismiss it: a long model list is
+    // taller than the viewport and is scrolled internally, and the scroll event
+    // would otherwise close the menu the user is scrolling.
+    const closeOnScroll = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) {
+        return;
+      }
+      setMenuOpen(false);
+    };
+    const closeOnResize = () => setMenuOpen(false);
+    window.addEventListener('resize', closeOnResize);
+    window.addEventListener('scroll', closeOnScroll, true);
     return () => {
-      window.removeEventListener('resize', closeOnViewportChange);
-      window.removeEventListener('scroll', closeOnViewportChange, true);
+      window.removeEventListener('resize', closeOnResize);
+      window.removeEventListener('scroll', closeOnScroll, true);
     };
   }, [isOpen, portal, setMenuOpen]);
 
@@ -138,7 +148,9 @@ export function ActionMenu({
       wasOpenRef.current = true;
       if (focusMenuOnOpenRef.current) {
         const menu = menuRef.current;
-        const firstItem = menu?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])');
+        const firstItem = menu?.querySelector<HTMLButtonElement>(
+          '[role="menuitem"]:not([disabled]), [role="menuitemradio"]:not([disabled])',
+        );
         (firstItem ?? menu)?.focus();
       }
       return;
@@ -200,17 +212,28 @@ export function ActionMenu({
         !portal && (align === 'right' ? 'right-0' : 'left-0'),
         menuClassName,
       )}
-      style={portal && portalPosition ? portalPosition : undefined}
+      style={{
+        ...(portal && portalPosition ? portalPosition : {}),
+        // A provider can list dozens of models. Without a cap the menu runs off
+        // the bottom of the screen, and its own scrolling would have nothing to
+        // scroll: the choices past the fold would be unreachable.
+        maxHeight: 'min(70vh, 420px)',
+        overflowY: 'auto',
+      }}
     >
       {header}
       {items.map((item) => {
         const Icon = item.icon;
+        // An item that carries `isSelected` is one choice among several, so it
+        // reports itself as a radio option; a plain action keeps `menuitem`.
+        const isChoice = item.isSelected !== undefined;
         return (
           <React.Fragment key={item.key}>
             {item.showDividerBefore && <div className="mx-2 my-1 h-px bg-border" />}
             <button
               type="button"
-              role="menuitem"
+              role={isChoice ? 'menuitemradio' : 'menuitem'}
+              aria-checked={isChoice ? item.isSelected : undefined}
               disabled={item.disabled || item.loading}
               onClick={() => runItem(item)}
               className={cn(
