@@ -35,6 +35,11 @@ type ChatRun = {
   completedAt: number | null;
 };
 
+type DrainWaiter = {
+  resolve: (drained: boolean) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 /**
  * How long a completed run stays available for replay. Covers the window
  * between a run finishing and the client refreshing history over REST (for
@@ -49,6 +54,8 @@ const COMPLETED_RUN_RETENTION_MS = 5 * 60 * 1000;
  * REST history refresh, which is always the authoritative source.
  */
 const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
+// Larger delays overflow Node's timer and become a 1ms timeout.
+const MAX_DRAIN_TIMEOUT_MS = 2_147_483_647;
 
 /**
  * Active and recently-completed runs keyed by app session id.
@@ -58,6 +65,30 @@ const MAX_BUFFERED_EVENTS_PER_RUN = 5000;
  * path all consult it instead of asking each provider runtime individually.
  */
 const runs = new Map<string, ChatRun>();
+// An accepted interrupt must keep shutdown waiting while its old run is
+// stopping, even if that run completes before its replacement is registered.
+const pendingAdmissions = new Map<symbol, string>();
+// Agent requests also own setup and GitHub work outside their provider turn.
+const pendingRequestWork = new Set<symbol>();
+let isDraining = false;
+const drainWaiters = new Set<DrainWaiter>();
+
+function hasRunningRuns(): boolean {
+  return pendingRequestWork.size > 0 || pendingAdmissions.size > 0
+    || Array.from(runs.values()).some((run) => run.status === 'running');
+}
+
+function resolveDrainWaitersIfIdle(): void {
+  if (hasRunningRuns()) {
+    return;
+  }
+
+  for (const waiter of drainWaiters) {
+    clearTimeout(waiter.timer);
+    waiter.resolve(true);
+  }
+  drainWaiters.clear();
+}
 
 /**
  * Answers whether a completed run must stay registered a while longer. Set by
@@ -130,6 +161,10 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
   run.events.push(outbound);
   if (run.events.length > MAX_BUFFERED_EVENTS_PER_RUN) {
     run.events.splice(0, run.events.length - MAX_BUFFERED_EVENTS_PER_RUN);
+  }
+
+  if (message.kind === 'complete') {
+    resolveDrainWaitersIfIdle();
   }
 
   return outbound;
@@ -212,8 +247,42 @@ function recordProviderSessionId(run: ChatRun, providerSessionId: string): void 
  * every run gets a `ChatSessionWriter` that remaps provider-native session
  * ids to the app id, assigns `seq` numbers, and buffers events for replay —
  * regardless of which provider runtime produced them.
+ * Consumed by the websocket gateway, scheduled dispatcher, and agent API.
  */
 export const chatRunRegistry = {
+  /**
+   * Keeps the agent API's admitted request in the bounded drain through setup,
+   * provider completion, and branch/PR creation. The caller releases it in
+   * finally; holding it does not permit a new provider run during shutdown.
+   */
+  reserveDrainWork(): (() => void) | null {
+    if (isDraining) {
+      return null;
+    }
+    const work = Symbol('request');
+    pendingRequestWork.add(work);
+    return () => {
+      pendingRequestWork.delete(work);
+      resolveDrainWaitersIfIdle();
+    };
+  },
+
+  /** Reserves an interrupting turn for the websocket gateway before its asynchronous abort. */
+  reserveRunAdmission(appSessionId: string): symbol | null {
+    if (isDraining) {
+      return null;
+    }
+    const admission = Symbol(appSessionId);
+    pendingAdmissions.set(admission, appSessionId);
+    return admission;
+  },
+
+  /** Releases a gateway reservation when its interrupt fails or its replacement settles. */
+  releaseRunAdmission(admission: symbol): void {
+    pendingAdmissions.delete(admission);
+    resolveDrainWaitersIfIdle();
+  },
+
   /** Installs the check that keeps a completed run registered while its session still has background work. */
   setRetentionGuard(guard: (appSessionId: string) => boolean): void {
     retainCompletedRun = guard;
@@ -221,7 +290,9 @@ export const chatRunRegistry = {
 
   /**
    * Starts tracking a run and returns it, or `null` when a run is already in
-   * progress for the session (callers must reject the duplicate send).
+   * progress for the session or shutdown draining has begun (callers must
+   * reject the send). A turn reserved before its interrupt may finish that
+   * handoff during drain; its one-use token cannot admit another session.
    */
   startRun(input: {
     appSessionId: string;
@@ -235,9 +306,18 @@ export const chatRunRegistry = {
      */
     connection: RealtimeClientConnection | null;
     userId: string | number | null;
+    /** A one-use reservation for this session, acquired before shutdown began. */
+    admission?: symbol;
   }): ChatRun | null {
+    const hasAdmission = input.admission !== undefined
+      && pendingAdmissions.get(input.admission) === input.appSessionId;
+    if (isDraining && !hasAdmission) {
+      return null;
+    }
+
     const existing = runs.get(input.appSessionId);
-    if (existing && existing.status === 'running') {
+    if ((existing && existing.status === 'running')
+      || (!hasAdmission && Array.from(pendingAdmissions.values()).includes(input.appSessionId))) {
       return null;
     }
 
@@ -265,6 +345,9 @@ export const chatRunRegistry = {
     });
 
     runs.set(input.appSessionId, run);
+    if (hasAdmission && input.admission !== undefined) {
+      pendingAdmissions.delete(input.admission);
+    }
     return run;
   },
 
@@ -274,6 +357,40 @@ export const chatRunRegistry = {
 
   isProcessing(appSessionId: string): boolean {
     return runs.get(appSessionId)?.status === 'running';
+  },
+
+  isDraining(): boolean {
+    return isDraining;
+  },
+
+  /**
+   * Permanently closes run admission for this process and waits until every
+   * active run, previously accepted interrupt, and agent request finishes.
+   * The boolean distinguishes a clean drain from the bounded timeout used by
+   * server shutdown.
+   */
+  drain(timeoutMs: number): Promise<boolean> {
+    isDraining = true;
+
+    if (!hasRunningRuns()) {
+      return Promise.resolve(true);
+    }
+
+    const boundedTimeoutMs = Math.min(MAX_DRAIN_TIMEOUT_MS, Math.max(0, timeoutMs));
+    if (boundedTimeoutMs === 0) {
+      return Promise.resolve(false);
+    }
+
+    return new Promise((resolve) => {
+      const waiter: DrainWaiter = {
+        resolve,
+        timer: setTimeout(() => {
+          drainWaiters.delete(waiter);
+          resolve(false);
+        }, boundedTimeoutMs),
+      };
+      drainWaiters.add(waiter);
+    });
   },
 
   listRunningRuns(): Array<{
@@ -365,5 +482,9 @@ export const chatRunRegistry = {
    */
   clearAll(): void {
     runs.clear();
+    pendingAdmissions.clear();
+    pendingRequestWork.clear();
+    isDraining = false;
+    resolveDrainWaitersIfIdle();
   },
 };

@@ -550,6 +550,10 @@ export const runMigrations = (db: Database) => {
     db.exec(SESSION_PINS_TABLE_SCHEMA_SQL);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
+    addColumnToTableIfNotExists(
+      db, 'scheduled_messages', getTableInfo(db, 'scheduled_messages').map((column) => column.name),
+      'dispatch_token', 'TEXT',
+    );
 
     db.exec('CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_provider_session_id ON sessions(provider_session_id)');
