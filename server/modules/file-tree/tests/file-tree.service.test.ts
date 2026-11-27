@@ -62,7 +62,8 @@ function createFakeFileSystem(
     openDirectory: () => ({
       [Symbol.asyncIterator]: () => ({ next: unexpectedOperation }),
     }),
-    realpath: unexpectedOperation,
+    // 普通假文件系统没有软链接；真实链接边界另由实文件测试覆盖。
+    realpath: async (candidatePath) => candidatePath,
     readTextFile: unexpectedOperation,
     writeTextFile: unexpectedOperation,
     makeDirectory: unexpectedOperation,
@@ -349,6 +350,22 @@ test('readTextFile rejects traversal before invoking the filesystem adapter', as
       && error.statusCode === 403,
   );
   assert.deepEqual(readPaths, []);
+});
+
+test('文件读取和预览均拒绝真实目标落在项目外的路径', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const targetPath = path.join(projectRoot, 'report.txt');
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => candidatePath === targetPath
+      ? path.resolve('file-tree-other-project', 'report.txt')
+      : candidatePath,
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+  const outsideProject = (error: unknown) => error instanceof AppError
+    && error.code === 'PATH_OUTSIDE_PROJECT' && error.statusCode === 403;
+
+  await assert.rejects(service.readTextFile('project-1', 'report.txt'), outsideProject);
+  await assert.rejects(service.openFile('project-1', 'report.txt'), outsideProject);
 });
 
 test('readTextFile reports a directory as a client error, not a 500', async () => {

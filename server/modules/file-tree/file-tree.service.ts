@@ -379,7 +379,27 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       }
     }
 
-    return resolvePathInsideProject(projectRoot, candidateTarget);
+    const projectPath = resolvePathInsideProject(projectRoot, candidateTarget);
+    let canonicalProject: string;
+    let canonicalTarget: string;
+    try {
+      [canonicalProject, canonicalTarget] = await Promise.all([
+        fileSystem.realpath(projectRoot),
+        fileSystem.realpath(projectPath),
+      ]);
+    } catch (error) {
+      mapFileSystemError(error, {
+        ENOENT: { message: 'File not found', statusCode: 404 },
+        EACCES: { message: 'Permission denied', statusCode: 403 },
+      });
+    }
+
+    // 字面路径在项目内还不够：软链接的真实目标也必须在项目内。
+    const relativePath = path.relative(canonicalProject, canonicalTarget);
+    if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+      throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+    }
+    return canonicalTarget;
   }
 
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
