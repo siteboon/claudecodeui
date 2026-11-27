@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
 import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
+import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useSidebarController } from '@/modules/sidebar/hooks/useSidebarController';
 import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
 import { usePaletteOps } from '@/modules/command-palette';
@@ -75,6 +76,7 @@ function Sidebar({
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
   const paletteOps = usePaletteOps();
+  const { subscribe } = useWebSocket();
   // Only membership is rendered here, so subscribing to the full activity map
   // would re-render the whole tree on every provider status frame.
   const activeSessions = useBusySessionIdSet();
@@ -149,6 +151,7 @@ function Sidebar({
     setPendingDeletion,
     setShowVersionModal,
   } = useSidebarController({
+    subscribeToSessionEvents: subscribe,
     projects,
     selectedProject,
     selectedSession,
