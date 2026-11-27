@@ -1629,6 +1629,17 @@ async function queryClaudeSDK(
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const rawMessage of queryInstance) {
       const message = rawMessage as AnyRecord;
+      // A process that was stopped, or that a newer run replaced, can still
+      // send messages. The session, its provider id mapping, its task state
+      // and the client's view belong to the run that holds the session now,
+      // so the rest of this stream is read and dropped.
+      const holder = sessionKey() ? getSession(sessionKey()!) : undefined;
+      const lostSession = holder
+        ? holder.instance !== queryInstance
+        : abortedInstances.has(queryInstance) || supersededInstances.has(queryInstance);
+      if (lostSession) {
+        continue;
+      }
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 

@@ -431,7 +431,12 @@ test('a replaced process whose first message comes late does not take the sessio
     interrupt: async () => { secondInterrupts += 1; },
   });
   const sent: NormalizedMessage[] = [];
-  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
+  const providerIds: string[] = [];
+  const writer = {
+    send: (message: NormalizedMessage) => { sent.push(message); },
+    setSessionId: (providerSessionId: string) => { providerIds.push(providerSessionId); },
+    userId: null,
+  };
   const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
   const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
     resolveProviderSessionId: () => null,
@@ -452,10 +457,18 @@ test('a replaced process whose first message comes late does not take the sessio
     second.script.emit(taskStarted('a2', 'toolu_agent', 'local_agent'));
     await waitFor(() => listClaudeSDKBackgroundWork().length === 1);
 
-    first.script.emit(init());
+    // The replaced process has a provider session of its own.
+    first.script.emit({ ...init(), session_id: 'native-replaced' });
+    first.script.emit({ ...taskStarted('old', 'toolu_old', 'local_bash'), session_id: 'native-replaced' });
     await settle();
     assert.equal(secondInterrupts, 0, 'the new turn is not interrupted');
     assert.equal(listClaudeSDKBackgroundWork().length, 1, 'and keeps its task tracking');
+    assert.deepEqual(providerIds, [NATIVE_ID], 'the session stays mapped to the new run\'s provider session');
+    assert.equal(
+      sent.some((message) => message.kind === 'task_status' && (message as { taskId?: string }).taskId === 'old'),
+      false,
+      'the client gets no task update from the replaced process',
+    );
 
     first.script.end();
     await firstRun;
