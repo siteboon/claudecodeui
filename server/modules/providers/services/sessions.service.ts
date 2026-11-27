@@ -547,6 +547,7 @@ export const sessionsService = {
       // differently from the conversation it was branched from.
       model: source.model,
       effort: source.effort,
+      permissionMode: source.permission_mode,
     });
 
     await broadcastSessionUpserted(forkSessionId);
