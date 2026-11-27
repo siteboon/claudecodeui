@@ -9,7 +9,7 @@ import {
 } from '@/shared/context/SessionProtectionContext';
 import { useWebSocket } from '@/shared/context/WebSocketContext';
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
-import { useVisualViewportKeyboardOffset } from '@/modules/project-workspace/hooks/useVisualViewportKeyboardOffset';
+import { useVisualViewportKeyboardOffset } from '@/shared/hooks/useVisualViewportKeyboardOffset';
 import ProjectWorkspaceShell from '@/modules/project-workspace/ProjectWorkspaceShell';
 
 const MemoizedProjectWorkspaceRouteContent = memo(ProjectWorkspaceRouteContent);
