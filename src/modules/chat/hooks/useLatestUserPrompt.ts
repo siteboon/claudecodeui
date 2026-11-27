@@ -59,6 +59,7 @@ type PromptPages = {
   rows: NormalizedMessage[];
   offset: number;
   total: number;
+  responseTotal?: number;
   hasMore: boolean;
 };
 
@@ -94,12 +95,19 @@ export function useLatestUserPrompt({
         if (!response.ok) return;
         const payload = await response.json() as { data?: { messages?: NormalizedMessage[]; hasMore?: boolean; total?: number } };
         if (controller.signal.aborted) return;
+        const reportedTotal = payload.data?.total;
+        if (previous && typeof reportedTotal === 'number' && reportedTotal !== previous.responseTotal) {
+          // 历史在两次请求之间增长或回退时，旧偏移可能跳过目标记录。
+          setPages(null);
+          return;
+        }
         const rows = Array.isArray(payload.data?.messages) ? payload.data.messages : [];
         setPages({
           sessionId,
           rows: [...rows, ...(previous?.rows ?? [])],
           offset: offset + rows.length,
           total: totalMessages,
+          responseTotal: typeof reportedTotal === 'number' ? reportedTotal : undefined,
           hasMore: rows.length > 0 && Boolean(payload.data?.hasMore),
         });
       } catch {
