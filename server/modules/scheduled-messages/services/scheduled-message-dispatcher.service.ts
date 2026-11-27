@@ -218,7 +218,8 @@ async function sendClaimedMessage(
       // change the user made while waiting.
       const session = sessionsDb.getSessionById(row.session_id);
       if (session?.model) options.model = session.model;
-      if (session?.effort) options.effort = session.effort;
+      // NULL is meaningful here: deleting a custom model clears the effort chosen for it.
+      if (session?.model) options.effort = session.effort ?? undefined;
       if (session?.permission_mode) options.permissionMode = session.permission_mode;
     }
     const result = await runDetachedChatTurn(

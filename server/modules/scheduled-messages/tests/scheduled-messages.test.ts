@@ -860,7 +860,7 @@ test('an automatic continue runs with the session\'s current selection, not the 
       userId,
       sessionId: SESSION_ID,
       content: 'continue',
-      options: { autoContinue: true, model: 'old-model', permissionMode: 'bypassPermissions' },
+      options: { autoContinue: true, model: 'old-model', effort: 'max', permissionMode: 'bypassPermissions' },
       scheduledFor: new Date(Date.now() - 1_000),
     });
     // Changed while the continue waited for the reset.
@@ -871,6 +871,8 @@ test('an automatic continue runs with the session\'s current selection, not the 
     await dispatchDueScheduledMessages(createRuntime(runs));
 
     assert.equal(runs[0].options.model, 'new-model');
+    // Cleared on the session (e.g. its custom model was deleted): not replayed.
+    assert.equal(runs[0].options.effort, undefined);
     assert.equal(runs[0].options.permissionMode, 'default');
   });
 });
