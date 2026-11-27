@@ -345,17 +345,25 @@ test('a stop still in progress leaves the turn that started meanwhile alone', as
     const answerStop = answerInterrupt;
     const secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: second.createQuery });
     await settle();
+
+    // The stopped process still answers its last turn. That result is not the new turn's.
+    first.script.emit(result());
+    await settle();
+    assert.equal(completes(), 1, 'the replaced process does not report the new turn complete');
+
+    // The new turn can end before the CLI has answered the Stop of the old one.
+    second.script.emit(init());
+    second.script.emit(result());
+    await waitFor(() => completes() === 2);
+
     answerStop?.();
     assert.equal(await stop, true);
-
     assert.equal(isClaudeSDKSessionActive(SESSION_ID), true, 'the new turn is still registered, so Stop can reach it');
     first.script.end();
     await firstRun;
-    second.script.emit(init());
-    second.script.emit(result());
     second.script.end();
     await secondRun;
-    assert.equal(completes(), 2, 'the new turn reports its own completion');
+    assert.equal(completes(), 2, 'the new turn reports its own completion, once');
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

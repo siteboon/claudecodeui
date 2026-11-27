@@ -127,10 +127,12 @@ const activeSessions = new Map<string, ActiveSession>();
 // session is removed, and reset when a newer run takes the key over.
 const backgroundWork = createBackgroundWorkTracker();
 const pendingToolApprovals = new Map<string, ToolApprovalResolver>();
-// Sessions cancelled via abort-session. The abort handler already sent the
+// Queries cancelled via abort-session. The abort handler already sent the
 // terminal `complete` (aborted: true) to the client, so the run loop must not
-// emit a second one when its generator winds down.
-const abortedSessionIds = new Set<string>();
+// emit a second one when its generator winds down. Kept per query, not per
+// session: a turn can start while a Stop still waits for the CLI, and the
+// mark must not reach that turn.
+const abortedInstances = new WeakSet<ClaudeQuery>();
 // Query instances interrupted because a newer run took over their session id
 // (see addSession). Their run loops must stay silent on wind-down: the map
 // entry, the abort flag, and all client-facing events belong to the new run.
@@ -485,9 +487,8 @@ function addSession(
   // superseded without being stopped (e.g. an abort that raced run setup and
   // found nothing to interrupt). Overwriting it here would strand its
   // generator forever — this map entry is the only handle for interrupting
-  // it. Stop it directly rather than via abortClaudeSDKSession, whose
-  // session-keyed abortedSessionIds flag would be consumed by the new run
-  // and suppress its terminal `complete`.
+  // it. Stop it directly rather than via abortClaudeSDKSession: nothing
+  // reports this stop to the client, so the run must not be marked aborted.
   const superseding = Boolean(
     existing && existing.status === 'active' && existing.instance && existing.instance !== queryInstance
   );
@@ -1545,8 +1546,13 @@ async function queryClaudeSDK(
     // Settles a turn whose `result` has arrived: tells the client the turn is
     // over, then holds the process for background work or lets it go.
     const settleTurnResult = () => {
+      // A newer run took this session over: the client state and the
+      // background-work tracking are that run's, and its stdin is already closed.
+      if (queryInstance && supersededInstances.has(queryInstance)) {
+        return;
+      }
       // The turn is done as far as the client is concerned.
-      const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
+      const abortPending = Boolean(queryInstance && abortedInstances.has(queryInstance));
       const stillOutstanding = backgroundWork.hasOutstanding(sessionKey()!);
       if (!turnCompleteSent && !abortPending) {
         turnCompleteSent = true;
@@ -1756,7 +1762,7 @@ async function queryClaudeSDK(
       }
 
       if (message.type === 'result') {
-        const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
+        const abortPending = Boolean(queryInstance && abortedInstances.has(queryInstance));
         if (pendingSteerIds.size > 0 && !abortPending) {
           // The turn ended before Claude reached a tool-call boundary, so the
           // steered messages it never read are still queued in the CLI, which
@@ -1786,7 +1792,7 @@ async function queryClaudeSDK(
     // Send the terminal completion event — skipped for aborted runs, whose
     // terminal `complete` (aborted: true) was already sent by abort-session, and
     // for runs that already reported completion when their `result` arrived.
-    const wasAborted = !superseded && sessionKey() ? abortedSessionIds.delete(sessionKey()!) : false;
+    const wasAborted = !superseded && abortedInstances.delete(queryInstance);
     if (!turnCompleteSent && !superseded) {
       turnCompleteSent = true;
       if (!wasAborted) {
@@ -1817,7 +1823,7 @@ async function queryClaudeSDK(
       return;
     }
 
-    const wasAborted = sessionKey() ? abortedSessionIds.delete(sessionKey()!) : false;
+    const wasAborted = queryInstance ? abortedInstances.delete(queryInstance) : false;
     if (wasAborted) {
       // The abort already produced the terminal complete; a generator throw
       // caused by interrupt() is expected noise, not a user-facing error. It
@@ -1888,7 +1894,7 @@ async function abortClaudeSDKSession(sessionId: string) {
 
     // Mark before interrupting so the run loop knows not to emit its own
     // terminal complete (the abort handler sends the aborted one).
-    abortedSessionIds.add(sessionId);
+    abortedInstances.add(session.instance);
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();
@@ -1900,19 +1906,16 @@ async function abortClaudeSDKSession(sessionId: string) {
     // Update session status
     session.status = 'aborted';
 
-    // A turn that started while the interrupt was awaited owns the map entry
-    // now, and the abort flag would suppress that turn's terminal `complete`.
+    // A turn that started while the interrupt was awaited owns the map entry now.
     if (getSession(sessionId)?.instance === session.instance) {
       removeSession(sessionId);
-    } else {
-      abortedSessionIds.delete(sessionId);
     }
 
     return true;
   } catch (error) {
     console.error(`Error aborting session ${sessionId}:`, error);
     // The run keeps going; let it emit its own terminal complete.
-    abortedSessionIds.delete(sessionId);
+    abortedInstances.delete(session.instance);
     return false;
   }
 }
