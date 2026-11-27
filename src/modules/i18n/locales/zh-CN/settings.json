@@ -120,7 +120,8 @@
     "handle": {
       "closePanel": "关闭快捷键面板",
       "openPanel": "打开快捷键面板"
-    }
+    },
+    "paste": "粘贴"
   },
   "mainTabs": {
     "label": "设置",
@@ -167,7 +168,7 @@
       "error": "运行失败"
     },
     "webhook": {
-      "title": "Webhook",
+      "title": "Webhook 通知",
       "description": "即使没有打开浏览器，也会把运行事件发送到您自己的 HTTP 端点（例如 n8n、Home Assistant 或聊天中转服务）。",
       "urlLabel": "目标 URL",
       "urlPlaceholder": "https://example.com/hooks/cloudcli",
@@ -262,6 +263,11 @@
         "label": "字体大小",
         "description": "编辑器字体大小（px）"
       }
+    },
+    "keepProjectsExpanded": {
+      "section": "侧边栏",
+      "label": "保持项目展开",
+      "description": "可同时展开多个项目，刷新后仍保留展开状态。"
     }
   },
   "mcpForm": {
@@ -311,7 +317,24 @@
       "saving": "保存中...",
       "addServer": "添加服务器",
       "updateServer": "更新服务器"
-    }
+    },
+    "scopes": {
+      "userGlobal": "用户（全局）",
+      "userAllProviders": "用户（所有提供方）",
+      "local": "Claude 本地",
+      "project": "项目",
+      "projectAllProviders": "项目（所有提供方）",
+      "userGlobalDesc": "在此设备的所有项目中可用",
+      "userAllProvidersDesc": "写入各提供方的用户配置，在此设备的所有项目中可用",
+      "localDesc": "保存在 Claude 用户设置中，仅用于所选项目",
+      "projectDesc": "保存在所选项目的工作区中",
+      "projectAllProvidersDesc": "写入所选项目工作区中各提供方的配置"
+    },
+    "unsupportedTransport": "为所有提供方添加 MCP 服务器时，仅支持 stdio 和 http，不支持 {{transport}}。",
+    "addToProvider": "为 {{provider}} {{action}}",
+    "workingDirectory": "工作目录",
+    "envVarNames": "环境变量名",
+    "bearerTokenEnvVar": "Bearer 令牌环境变量"
   },
   "saveStatus": {
     "success": "设置保存成功！",
@@ -466,6 +489,19 @@
         "busy": "此智能体正在某个会话中工作。请等待其完成或将其停止，然后再更新。",
         "requestFailed": "未执行更新：{{error}}",
         "unconfirmed": "服务器没有返回响应（{{error}}）。更新可能已经运行；上方是服务器最后报告的版本。"
+      }
+    },
+    "subscriptionOverride": {
+      "title": "当前未使用您的订阅账户",
+      "description": "{{source}} 中设置了 {{variable}}，因此 Claude Code 的所有请求都会使用该密钥按 API 用量计费，而不会使用已登录账户的订阅额度。",
+      "descriptionWithEmail": "{{source}} 中设置了 {{variable}}，因此 Claude Code 的所有请求都会使用该密钥按 API 用量计费，而不会使用已登录账户（{{email}}）的订阅额度。",
+      "source": {
+        "process_env": "服务器环境",
+        "settings_file": "~/.claude/settings.json"
+      },
+      "fix": {
+        "process_env": "若要使用订阅额度，请从服务器的启动环境（.env、Shell 配置文件或服务单元文件）中移除 {{variable}}，然后重启服务器。",
+        "settings_file": "若要使用订阅额度，请从 ~/.claude/settings.json 的“env”配置中移除 {{variable}}。"
       }
     },
     "login": {
@@ -689,11 +725,226 @@
       "description": "GitHub Issues 看板，支持双向 TaskMaster 同步和 /github-task CLI 技能自动安装",
       "install": "安装"
     },
+    "claudeUsagePlugin": {
+      "name": "Claude 用量",
+      "badge": "非官方",
+      "description": "实时查看 Claude Code 套餐限额，以及近 30 天的 Token 用量和费用记录。",
+      "install": "安装"
+    },
+    "codexUsagePlugin": {
+      "name": "Codex 用量",
+      "badge": "非官方",
+      "description": "实时查看 Codex 套餐限额、额度重置时间，以及近 30 天的账户 Token 用量。",
+      "install": "安装"
+    },
+    "glmUsagePlugin": {
+      "name": "GLM 用量",
+      "badge": "非官方",
+      "description": "实时查看 GLM/Zhipu 编程套餐额度，以及近 30 天的 Token 用量记录。",
+      "install": "安装"
+    },
+    "agentMonitorPlugin": {
+      "name": "智能体监控",
+      "badge": "非官方",
+      "description": "查看并停止聊天结束后仍在后台运行的子智能体和 Shell 进程。",
+      "install": "安装"
+    },
     "morePlugins": "更多",
     "enable": "启用",
     "disable": "禁用",
     "installAriaLabel": "插件 git 仓库 URL",
     "tab": "标签",
     "runningStatus": "运行中"
+  },
+  "skillsPage": {
+    "description": "从本地文件、完整文件夹及项目相关位置管理 {{provider}} 技能。",
+    "searchPlaceholder": "搜索技能...",
+    "searchAriaLabel": "搜索技能",
+    "clearSearch": "清空技能搜索",
+    "addSkill": "添加技能",
+    "refresh": "刷新",
+    "scanningProjectSkills": "正在扫描项目技能...",
+    "addDialogTitle": "添加 {{provider}} 技能",
+    "addDialogDescription": "上传 SKILL.md 文件或完整的技能文件夹。",
+    "closeDialog": "关闭添加技能对话框",
+    "savedSuccessfully": "技能保存成功。",
+    "footerHint": "上传文件夹时保留所选文件夹的名称；上传单独文件时使用 `SKILL.md` 中的 `name`。",
+    "installWithCount_one": "安装 {{count}} 个技能",
+    "installWithCount_other": "安装 {{count}} 个技能",
+    "installPlain": "安装技能",
+    "loading": "正在加载 {{provider}} 技能…",
+    "emptyTitle": "尚未发现技能",
+    "emptyDescription": "在上方添加全局技能，或在工作区中创建项目专用的技能文件夹。",
+    "noMatchTitle": "没有匹配的技能",
+    "noMatchDescription": "请尝试其他命令、名称、范围、项目或来源路径。",
+    "count_one": "{{count}} 个技能",
+    "count_other": "{{count}} 个技能",
+    "noDescription": "技能文件的元数据中未填写描述。",
+    "pluginBadge": "插件：{{name}}",
+    "projectBadge": "项目：{{name}}",
+    "source": "来源",
+    "upload": {
+      "dropTitle": "将技能文件夹或 SKILL.md 拖到此处",
+      "dropHint": "文件夹中可包含脚本、参考资料和资源文件。",
+      "chooseFiles": "选择文件",
+      "chooseFolder": "选择文件夹",
+      "readyToInstall": "可以安装了",
+      "filesCount_one": "{{count}} 个文件",
+      "filesCount_other": "{{count}} 个文件",
+      "markdownFile": "Markdown 文件",
+      "removeFile": "移除 {{name}}",
+      "hideInstallLocation": "隐藏安装位置",
+      "whereToInstall": "将安装到哪里？"
+    },
+    "errors": {
+      "tooManyFiles": "一个技能文件夹最多可包含 {{max}} 个文件。",
+      "tooLarge": "所选技能文件夹的总大小必须小于 30 MB。",
+      "noSkillMd": "所选文件夹中没有 SKILL.md 文件。",
+      "couldNotReadSkillMd": "无法读取 {{folder}} 中的 SKILL.md。",
+      "readFailed": "读取技能文件夹失败",
+      "dropMarkdown": "请拖入一个或多个 Markdown 文件，或包含 SKILL.md 的文件夹。",
+      "addFirst": "请先添加一个或多个 Markdown 文件。",
+      "importFailed": "导入技能失败"
+    },
+    "scopes": {
+      "user": "用户",
+      "plugin": "插件",
+      "repo": "仓库",
+      "project": "项目",
+      "admin": "管理员",
+      "system": "系统"
+    }
+  },
+  "browserUse": {
+    "title": "浏览器",
+    "subtitle": "查看 AI 智能体打开的浏览器会话。",
+    "openSettings": "打开浏览器设置",
+    "refreshSessions": "刷新浏览器会话",
+    "runtimeDisabled": "已禁用",
+    "runtimeReady": "已就绪",
+    "runtimeInstalling": "正在安装",
+    "runtimeSetupRequired": "需要配置",
+    "loadFailed": "加载浏览器失败",
+    "actionFailed": "浏览器操作失败",
+    "inputPlaceholder": "输入文字，按 Enter 发送到页面",
+    "inputSend": "发送",
+    "inputEnter": "Enter",
+    "inputTab": "Tab",
+    "inputBackspace": "Backspace",
+    "inputHint": "点击截图即可点击页面对应位置；也可先选中截图，用方向键移动指针（按住 Shift 加大步长），再按 Enter 或 Space 点击。",
+    "surfaceAriaLabel": "浏览器截图。使用方向键移动指针，按 Enter 或 Space 点击。",
+    "requestFailed": "请求失败（{{status}}）",
+    "never": "从未",
+    "unknown": "未知",
+    "justNow": "刚刚",
+    "secondsAgo": "{{n}} 秒前",
+    "minutesAgo": "{{n}} 分钟前",
+    "hoursAgo": "{{n}} 小时前",
+    "daysAgo": "{{n}} 天前",
+    "noPageLoaded": "尚未加载页面",
+    "waitingAction": "等待中",
+    "emptyTitleEnabled": "暂无浏览器会话",
+    "emptyTitleDisabled": "浏览器已禁用",
+    "emptyDescEnabled": "AI 任务使用浏览器时，智能体的浏览器会话会显示在这里。",
+    "emptyDescDisabled": "在设置中启用浏览器，即可让智能体打开可供查看的浏览器会话。",
+    "runtimeSetupTitle": "需要配置运行环境",
+    "installing": "正在安装...",
+    "installRuntime": "安装运行环境",
+    "promptLabel": "提示词",
+    "prompt1": "使用浏览器检查结账流程，找出并报告界面异常。",
+    "prompt2": "使用浏览器打开 <url>，与页面交互，并总结每一步操作后的变化。",
+    "screenshotAlt": "浏览器会话截图",
+    "waitingScreenshot": "等待截图",
+    "waitingScreenshotHint": "智能体的下一张浏览器截图将显示在这里。",
+    "activeCount": "{{n}} 个活跃会话",
+    "totalCount": "共 {{n}} 个会话",
+    "updated": "更新于 {{time}}",
+    "statusEmpty": "空白",
+    "fullScreen": "全屏",
+    "stopSession": "停止会话",
+    "deleteSession": "删除会话",
+    "sessions": "会话",
+    "noSessions": "暂无智能体浏览器会话。",
+    "selected": "已选中",
+    "statusLabel": "状态",
+    "none": "无",
+    "lastAction": "最近操作",
+    "profileLabel": "配置文件",
+    "temporaryProfile": "临时",
+    "stop": "停止",
+    "delete": "删除",
+    "sessionFallback": "浏览器会话",
+    "close": "关闭",
+    "statusReadySession": "已就绪",
+    "statusStoppedSession": "已停止",
+    "statusUnavailableSession": "不可用",
+    "installFailed": "安装浏览器运行环境失败"
+  },
+  "browserUseSettings": {
+    "sectionTitle": "浏览器",
+    "sectionDescription": "允许智能体创建受控的 Playwright 浏览器会话，您可以在“浏览器”标签页中查看。",
+    "enableLabel": "启用浏览器",
+    "enableDescription": "为支持的智能体注册浏览器功能。智能体可创建浏览器会话，您可以查看、停止或删除这些会话。",
+    "enableAriaLabel": "启用浏览器",
+    "playwrightLabel": "Playwright",
+    "chromiumLabel": "Chromium",
+    "statusPrefix": "状态",
+    "checking": "检查中...",
+    "installed": "已安装",
+    "missing": "未安装",
+    "ready": "已就绪",
+    "setupRequired": "需要配置",
+    "disabled": "已禁用",
+    "runtimeRequiredTitle": "需要安装浏览器运行环境",
+    "runtimeRequiredFallback": "安装浏览器运行环境后，智能体才能创建浏览器会话。",
+    "installing": "正在安装...",
+    "installRuntime": "安装运行环境",
+    "loadSettingsFailed": "加载浏览器设置失败",
+    "loadStatusFailed": "加载浏览器状态失败",
+    "saveFailed": "保存浏览器设置失败",
+    "installFailed": "安装浏览器运行环境失败"
+  },
+  "mcpServersAdd": {
+    "menuLabel": "添加 MCP 服务器",
+    "globalButtonLabel": "添加全局 MCP 服务器",
+    "providerButtonLabel": "添加 {{provider}} MCP 服务器",
+    "globalAddDescription": "“添加全局 MCP 服务器”会将同一个 stdio 或 HTTP 服务器写入 Claude、Cursor、Codex 和 OpenCode 的配置。",
+    "providerAddDescription": "“{{button}}”仅修改 {{provider}} 的配置。",
+    "globalModalDescription": "将此 MCP 服务器添加到所有提供方：Claude、Cursor、Codex 和 OpenCode。由于同一份配置必须适用于所有提供方，因此仅支持 stdio 和 HTTP 传输。",
+    "refreshingScopes": "正在刷新项目范围...",
+    "loadingServers": "正在加载 MCP 服务器...",
+    "configCwd": "工作目录",
+    "configEnvVars": "环境变量"
+  },
+  "mcpTeamCard": {
+    "title": "团队 MCP 配置",
+    "description": "与团队共享 MCP 服务器配置，所有成员的配置都会自动同步。",
+    "proLink": "CloudCLI Pro 专享"
+  },
+  "mcpServersAddErrors": {
+    "loadFailedProvider": "加载 {{provider}} MCP 服务器失败",
+    "deleteFailed": "删除 MCP 服务器失败",
+    "saveFailed": "保存 MCP 服务器失败",
+    "saveGlobalFailed": "将 MCP 服务器保存到所有提供方失败",
+    "selectProjectRequired": "请为项目范围的 MCP 服务器选择一个项目",
+    "globalScopeUnsupported": "为所有提供方添加 MCP 服务器时，仅支持用户或项目范围。",
+    "globalAddFailed": "将 MCP 服务器添加到所有提供方失败。{{details}}",
+    "deleteConfirm": "确定要删除此 MCP 服务器吗？",
+    "unknownError": "未知错误"
+  },
+  "about": {
+    "tagline": "开源 AI 编程助手界面",
+    "starOnGitHub": "在 GitHub 上点亮 Star",
+    "docs": "文档",
+    "hostedTitle": "试用 CloudCLI 托管版",
+    "hostedDescription": "团队协作、共享 MCP 配置、跨环境设置同步，以及托管基础设施。",
+    "learnMore": "了解更多",
+    "proFeaturesTitle": "CloudCLI Pro 功能",
+    "syncSettingsTitle": "设置同步",
+    "syncSettingsDescription": "在所有环境中同步您的偏好设置、MCP 配置和主题。",
+    "teamManagementTitle": "团队管理",
+    "teamManagementDescription": "为团队提供多用户支持、基于角色的访问控制和共享项目。",
+    "licensed": "采用 AGPL-3.0 许可证",
+    "proCta": "CloudCLI Pro 专享"
   }
 }
