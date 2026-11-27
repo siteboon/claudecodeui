@@ -854,6 +854,27 @@ test('a session\'s next due message stays pending while its earlier send is goin
   });
 });
 
+test('an automatic continue runs with the session\'s current selection, not the one at the limit hit', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    scheduledMessagesDb.create({
+      userId,
+      sessionId: SESSION_ID,
+      content: 'continue',
+      options: { autoContinue: true, model: 'old-model', permissionMode: 'bypassPermissions' },
+      scheduledFor: new Date(Date.now() - 1_000),
+    });
+    // Changed while the continue waited for the reset.
+    sessionsDb.setSessionModel(SESSION_ID, 'new-model');
+    sessionsDb.setSessionPermissionMode(SESSION_ID, 'default');
+
+    const runs: RunCall[] = [];
+    await dispatchDueScheduledMessages(createRuntime(runs));
+
+    assert.equal(runs[0].options.model, 'new-model');
+    assert.equal(runs[0].options.permissionMode, 'default');
+  });
+});
+
 test('an automatic continue is dropped when another turn is running', async () => {
   await withIsolatedDatabase(async (userId) => {
     scheduledMessagesDb.create({

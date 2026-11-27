@@ -213,6 +213,13 @@ async function sendClaimedMessage(
       // Unattended, so it needs tool permissions or it stalls on an approval
       // nobody sees: the user's current ones, so revoked ones never run.
       options.toolsSettings = readToolsSettings(userPreferencesDb.getPreferences(row.user_id).claudePermissions);
+      // The session's current selection, not the one at the limit hit: the
+      // run records what it uses back onto the session, which would undo a
+      // change the user made while waiting.
+      const session = sessionsDb.getSessionById(row.session_id);
+      if (session?.model) options.model = session.model;
+      if (session?.effort) options.effort = session.effort;
+      if (session?.permission_mode) options.permissionMode = session.permission_mode;
     }
     const result = await runDetachedChatTurn(
       {
