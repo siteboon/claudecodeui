@@ -42,7 +42,7 @@ type UseChatComposerStateArgs = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
-  /** Bumped on every New Session click; a new chat in the same project keeps its draft scope. */
+  /** Bumped on every New Session click; a new chat in the same project keeps its draft scope, and its session records the value its send started under. */
   newSessionTrigger?: number;
   provider: LLMProvider;
   permissionMode: PermissionMode | string;
