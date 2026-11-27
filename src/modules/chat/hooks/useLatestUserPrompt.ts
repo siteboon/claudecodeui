@@ -1,27 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { ChatMessage, NormalizedMessage } from '@/shared/types';
 import { isUserPromptMessage } from '@/shared/utils';
+import { messagesRepresentSamePersistedRow } from '@/modules/chat/utils/sessionMessagePagination';
 
-/** How many transcript rows one peek asks for; a long turn is usually crossed in one or two. */
+/** 回读保留分页，读取结果只用于固定条，不扩大会话的渲染窗口。 */
 const PEEK_PAGE_SIZE = 100;
 
-/** Walking further back than this is not worth a request: the bar shows nothing instead of a wrong turn. */
-const MAX_PEEK_PAGES = 5;
-
-/** A turn has to carry something the bar can name, or an attachment-only turn to name instead. */
-function hasPromptPayload(message: NormalizedMessage): boolean {
-  return Boolean(String(message.content ?? '').trim())
-    || (message.images?.length ?? 0) > 0
-    || (message.files?.length ?? 0) > 0;
-}
-
-/** The bar only renders text and attachment counts, so the raw row is reduced to just those. */
 function toChatMessage(message: NormalizedMessage): ChatMessage {
   return {
     type: 'user',
     content: message.content ?? '',
+    sourceMessageId: message.id,
+    sourceMessage: message,
+    transcriptAnchorId: message.transcriptAnchorId,
     timestamp: message.timestamp,
     images: message.images,
     files: message.files,
@@ -30,120 +23,88 @@ function toChatMessage(message: NormalizedMessage): ChatMessage {
   };
 }
 
-/** The newest prompt on one page of transcript rows, or null when the page holds none. */
-function findNewestPromptRow(messages: NormalizedMessage[]): NormalizedMessage | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (
-      message.kind !== 'text'
-      || message.role !== 'user'
-      || message.contextCleared
-      || !hasPromptPayload(message)
-    ) {
-      continue;
-    }
-    // One rule for both sources: a row the loaded transcript would not name is
-    // not named here either — tool output labelled as a user turn and the
-    // summary that opens a continued session both fail it.
-    if (isUserPromptMessage(toChatMessage(message))) {
-      return message;
-    }
+/** 按原始记录的顺序定位边界；同时间戳的后续用户提问不属于当前轮次。 */
+function findPrompt(rows: NormalizedMessage[], beforeTime: number, beforeMessageId?: string, beforeMessage?: NormalizedMessage): ChatMessage | null {
+  // 尚未写入历史的实时行只能采用严格更早的历史，不能把同时间的后续行算进去。
+  let reached = !beforeMessageId || (rows.length > 0 && new Date(rows[rows.length - 1].timestamp).getTime() < beforeTime);
+  const hasExactId = Boolean(beforeMessageId && rows.some((row) => row.id === beforeMessageId));
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row.id === beforeMessageId || (!hasExactId && beforeMessage?.provider === 'codex' && messagesRepresentSamePersistedRow(row, beforeMessage))) reached = true;
+    if (!reached || row.kind !== 'text' || row.role !== 'user' || row.contextCleared) continue;
+    if (!beforeMessageId && !(new Date(row.timestamp).getTime() <= beforeTime)) continue;
+    const prompt = toChatMessage(row);
+    const hasPayload = Boolean(prompt.content?.trim() || prompt.images?.length || prompt.files?.length);
+    if (hasPayload && isUserPromptMessage(prompt)) return prompt;
   }
-
   return null;
 }
 
 type UseLatestUserPromptArgs = {
-  /** Session whose transcript is read; null when no session is open. */
   sessionId: string | null;
-  /** A hidden chat tab does not spend a request on something nobody can see. */
   isActive: boolean;
-  /** True once the loaded page holds a prompt, which makes the peek unnecessary. */
   hasLoadedUserPrompt: boolean;
-  /** The server's row count for the tail-paged transcript, which bounds the walk. */
+  beforeTimestamp: string | null;
+  beforeMessageId?: string;
+  beforeMessage?: NormalizedMessage;
   totalMessages: number;
 };
 
-/**
- * Reads the newest user prompt straight from the transcript when the loaded
- * page does not contain one. A long agent turn — hundreds of tool rows after
- * the prompt that started it — pushes that prompt past the first page, leaving
- * the bar with nothing to name even though the turn is right there on screen.
- *
- * Pagination counts from the end, so this walks backwards one page at a time
- * until a prompt turns up. Attachment-only turns come back through the same
- * shape the transcript uses, so the bar can name them without special casing.
- */
+type PromptPages = {
+  sessionId: string;
+  rows: NormalizedMessage[];
+  offset: number;
+  total: number;
+  hasMore: boolean;
+};
+
+/** 供会话 Hook 查询当前阅读位置之前尚未加载的提问，同一轮内上下滚动复用已查页。 */
 export function useLatestUserPrompt({
   sessionId,
   isActive,
   hasLoadedUserPrompt,
+  beforeTimestamp,
+  beforeMessageId,
+  beforeMessage,
   totalMessages,
 }: UseLatestUserPromptArgs): ChatMessage | null {
-  // The prompt found in the transcript away from the loaded page, held with the
-  // session it belongs to so a session switch can never show the previous
-  // conversation's prompt while the new page is still loading.
-  const [peeked, setPeeked] = useState<{ sessionId: string; prompt: ChatMessage } | null>(null);
-  // The session already peeked for. Streamed rows re-render this hook on every
-  // chunk, and the transcript behind them has not changed.
-  const peekedSessionRef = useRef<string | null>(null);
+  // 保存已查过的连续历史页及其会话归属，滚动时只重新选择提问，不重复请求同一段。
+  const [pages, setPages] = useState<PromptPages | null>(null);
+  const beforeTime = beforeTimestamp ? new Date(beforeTimestamp).getTime() : NaN;
+  const sameSession = pages?.sessionId === sessionId ? pages : null;
+  const coversBoundary = sameSession?.rows.some((row) => row.id === beforeMessageId
+    || (beforeMessage?.provider === 'codex' && messagesRepresentSamePersistedRow(row, beforeMessage)));
+  const current = sameSession && (sameSession.total === totalMessages || coversBoundary) ? sameSession : null;
+  const prompt = current && Number.isFinite(beforeTime) ? findPrompt(current.rows, beforeTime, beforeMessageId, beforeMessage) : null;
+  const needsPage = !prompt && (!current || current.hasMore);
 
   useEffect(() => {
-    if (!isActive || !sessionId || hasLoadedUserPrompt || totalMessages <= 0) {
-      return undefined;
-    }
-    if (peekedSessionRef.current === sessionId) {
-      return undefined;
-    }
-    peekedSessionRef.current = sessionId;
-
-    let cancelled = false;
-    const peek = async () => {
-      // Always from the newest page, even though the client already holds one:
-      // live rows can leave gaps in that page, so only the server's own paging
-      // tells the walk where the transcript really ends.
-      let offset = 0;
-
-      for (let page = 0; page < MAX_PEEK_PAGES && offset < totalMessages; page += 1) {
-        try {
-          const response = await api.providers.sessionMessages(sessionId, {
-            limit: PEEK_PAGE_SIZE,
-            offset,
-          });
-          if (!response.ok) {
-            return;
-          }
-          const payload = await response.json() as {
-            data?: { messages?: NormalizedMessage[]; hasMore?: boolean };
-          };
-          if (cancelled) {
-            return;
-          }
-
-          const rows = Array.isArray(payload.data?.messages) ? payload.data.messages : [];
-          const found = findNewestPromptRow(rows);
-          if (found) {
-            setPeeked({ sessionId, prompt: toChatMessage(found) });
-            return;
-          }
-          if (!payload.data?.hasMore || rows.length === 0) {
-            return;
-          }
-          offset += rows.length;
-        } catch {
-          // A failed peek leaves the bar hidden; it must not disturb the chat itself.
-          return;
-        }
+    if (!isActive || !sessionId || hasLoadedUserPrompt || totalMessages <= 0 || !Number.isFinite(beforeTime) || !needsPage) return undefined;
+    const controller = new AbortController();
+    // 继续向前查页时若总数变化，原来的尾部偏移已失效，从最新页重新对齐。
+    const previous = current?.total === totalMessages ? current : null;
+    const offset = previous?.offset ?? 0;
+    const readPage = async () => {
+      try {
+        const response = await api.providers.sessionMessages(sessionId, { limit: PEEK_PAGE_SIZE, offset }, { signal: controller.signal });
+        if (!response.ok) return;
+        const payload = await response.json() as { data?: { messages?: NormalizedMessage[]; hasMore?: boolean; total?: number } };
+        if (controller.signal.aborted) return;
+        const rows = Array.isArray(payload.data?.messages) ? payload.data.messages : [];
+        setPages({
+          sessionId,
+          rows: [...rows, ...(previous?.rows ?? [])],
+          offset: offset + rows.length,
+          total: totalMessages,
+          hasMore: rows.length > 0 && Boolean(payload.data?.hasMore),
+        });
+      } catch {
+        // 失败或取消不锁死查询，重新激活或改变阅读位置后可重试。
       }
     };
+    void readPage();
+    return () => controller.abort();
+  }, [beforeMessage, beforeMessageId, beforeTime, current, hasLoadedUserPrompt, isActive, needsPage, sessionId, totalMessages]);
 
-    void peek();
-    return () => {
-      cancelled = true;
-    };
-  }, [hasLoadedUserPrompt, isActive, sessionId, totalMessages]);
-
-  // Derived rather than cleared: a session switch, a hidden tab, or a prompt
-  // arriving on the loaded page must hide the stale answer in the same render.
-  return !hasLoadedUserPrompt && peeked && peeked.sessionId === sessionId ? peeked.prompt : null;
+  return isActive && !hasLoadedUserPrompt ? prompt : null;
 }

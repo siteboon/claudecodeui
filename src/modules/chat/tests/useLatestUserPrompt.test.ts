@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 import type { NormalizedMessage } from '@/shared/types';
 import { useLatestUserPrompt } from '@/modules/chat/hooks/useLatestUserPrompt';
@@ -45,6 +45,7 @@ const props = {
   sessionId: 'session-1',
   isActive: true,
   hasLoadedUserPrompt: false,
+  beforeTimestamp: '2026-11-26T11:00:00.000Z',
   totalMessages: 396,
 };
 
@@ -76,7 +77,7 @@ describe('the latest user prompt peek', () => {
     await waitFor(() => expect(result.current?.content).toBe('中间又补了一句'));
     // From the server's own tail, not from the client's row count: live rows
     // can leave gaps, and skipping by that count would step over the prompt.
-    expect(sessionMessages).toHaveBeenCalledWith('session-1', { limit: 100, offset: 0 });
+    expect(sessionMessages).toHaveBeenCalledWith('session-1', { limit: 100, offset: 0 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
     const prompt = result.current;
     expect(prompt?.type).toBe('user');
     expect(sessionMessages).toHaveBeenCalledTimes(1);
@@ -90,8 +91,8 @@ describe('the latest user prompt peek', () => {
     const { result } = renderHook(() => useLatestUserPrompt(props));
 
     await waitFor(() => expect(result.current?.content).toBe('更早之前说的话'));
-    expect(sessionMessages).toHaveBeenNthCalledWith(1, 'session-1', { limit: 100, offset: 0 });
-    expect(sessionMessages).toHaveBeenNthCalledWith(2, 'session-1', { limit: 100, offset: 100 });
+    expect(sessionMessages).toHaveBeenNthCalledWith(1, 'session-1', { limit: 100, offset: 0 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(sessionMessages).toHaveBeenNthCalledWith(2, 'session-1', { limit: 100, offset: 100 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
   it('never mistakes tool output, a cleared-context marker, or a continued-session summary for a prompt', async () => {
@@ -109,6 +110,91 @@ describe('the latest user prompt peek', () => {
 
     await waitFor(() => expect(sessionMessages).toHaveBeenCalledTimes(1));
     expect(result.current).toBeNull();
+  });
+
+  it('跳过当前阅读位置之后的提问，继续回读旧页', async () => {
+    sessionMessages
+      .mockReturnValueOnce(page([row({ timestamp: '2026-11-26T12:00:00.000Z', content: '下一轮提问' })], true))
+      .mockReturnValueOnce(page([row({ content: '当前阅读轮次的提问' })], false));
+    const { result } = renderHook(() => useLatestUserPrompt(props));
+    await waitFor(() => expect(result.current?.content).toBe('当前阅读轮次的提问'));
+    expect(sessionMessages).toHaveBeenCalledTimes(2);
+  });
+
+  it('阅读位置越过缓存提问向前滚动时，立即隐藏旧结果并重新查找', async () => {
+    sessionMessages.mockReturnValueOnce(page([row({ content: '较新提问' })], true));
+    const { result, rerender } = renderHook((next) => useLatestUserPrompt(next), { initialProps: props });
+    await waitFor(() => expect(result.current?.content).toBe('较新提问'));
+    sessionMessages.mockReturnValueOnce(page([row({ timestamp: '2026-11-26T08:00:00.000Z', content: '更早提问' })], false));
+    rerender({ ...props, beforeTimestamp: '2026-11-26T09:00:00.000Z' });
+    expect(result.current).toBeNull();
+    await waitFor(() => expect(result.current?.content).toBe('更早提问'));
+  });
+
+  it('标签隐藏取消请求后，重新激活仍会查找，且迟到结果不能覆盖', async () => {
+    let finish: (response: Response) => void = () => {};
+    sessionMessages.mockReturnValueOnce(new Promise<Response>((resolve) => { finish = resolve; }));
+    const { result, rerender } = renderHook((next) => useLatestUserPrompt(next), { initialProps: props });
+    rerender({ ...props, isActive: false });
+    expect(sessionMessages.mock.calls[0][2]?.signal?.aborted).toBe(true);
+    sessionMessages.mockReturnValueOnce(page([row({ content: '恢复后找到的提问' })], false));
+    rerender(props);
+    await waitFor(() => expect(result.current?.content).toBe('恢复后找到的提问'));
+    await act(async () => finish(await page([row({ content: '过期请求' })], false)));
+    expect(result.current?.content).toBe('恢复后找到的提问');
+  });
+
+  it('长回复超过五页时仍能找到原提问', async () => {
+    for (let index = 0; index < 6; index += 1) sessionMessages.mockReturnValueOnce(page([assistantRow()], true));
+    sessionMessages.mockReturnValueOnce(page([row({ content: '长回复之前的提问' })], false));
+    const { result } = renderHook(() => useLatestUserPrompt(props));
+    await waitFor(() => expect(result.current?.content).toBe('长回复之前的提问'));
+    expect(sessionMessages).toHaveBeenCalledTimes(7);
+  });
+
+  it('同一轮向下阅读复用已查页，不隐藏提问或重复请求', async () => {
+    sessionMessages.mockReturnValueOnce(page([row({ content: '本轮提问' }), assistantRow()], true));
+    const { result, rerender } = renderHook((next) => useLatestUserPrompt(next), { initialProps: props });
+    await waitFor(() => expect(result.current?.content).toBe('本轮提问'));
+    rerender({ ...props, beforeTimestamp: '2026-11-26T11:30:00.000Z' });
+    expect(result.current?.content).toBe('本轮提问');
+    expect(sessionMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it('跨页查询按消息标识划定同时间戳边界，不选后面的用户消息', async () => {
+    sessionMessages.mockReturnValueOnce(page([
+      row({ id: 'u1', content: '当前轮次' }),
+      assistantRow({ id: 'a1' }),
+      row({ id: 'u2', content: '后续轮次' }),
+    ], false));
+    const { result } = renderHook(() => useLatestUserPrompt({ ...props, beforeTimestamp: '2026-11-26T10:00:00.000Z', beforeMessageId: 'a1' }));
+    await waitFor(() => expect(result.current?.content).toBe('当前轮次'));
+    expect(result.current?.sourceMessageId).toBe('u1');
+  });
+
+  it('Codex 每次读取重新生成 id 时仍按原始字段找到同时间的阅读边界', async () => {
+    const boundary = assistantRow({ id: 'old-a', provider: 'codex' });
+    sessionMessages.mockReturnValueOnce(page([
+      row({ id: 'new-u', provider: 'codex', content: '当前轮次' }),
+      { ...boundary, id: 'new-a' },
+      row({ id: 'next-u', provider: 'codex', content: '同时间的下一轮' }),
+    ], false));
+    const { result } = renderHook(() => useLatestUserPrompt({ ...props, beforeMessage: boundary,
+      beforeMessageId: boundary.id, beforeTimestamp: boundary.timestamp }));
+    await waitFor(() => expect(result.current?.content).toBe('当前轮次'));
+    expect(result.current?.sourceMessage?.provider).toBe('codex');
+  });
+
+  it('离开后会话新增一轮，返回新阅读位置时先刷新旧缓存', async () => {
+    sessionMessages.mockReturnValueOnce(page([row({ content: '上一轮缓存' })], false));
+    const { result, rerender } = renderHook((next) => useLatestUserPrompt(next), { initialProps: props });
+    await waitFor(() => expect(result.current?.content).toBe('上一轮缓存'));
+    rerender({ ...props, sessionId: 'session-2', hasLoadedUserPrompt: true });
+    sessionMessages.mockReturnValueOnce(page([row({ timestamp: '2026-11-26T12:00:00.000Z', content: '后台新一轮提问' })], false));
+    rerender({ ...props, totalMessages: 700, beforeTimestamp: '2026-11-26T13:00:00.000Z' });
+    expect(result.current).toBeNull();
+    await waitFor(() => expect(result.current?.content).toBe('后台新一轮提问'));
+    expect(sessionMessages).toHaveBeenCalledTimes(2);
   });
 
   it('names an attachment-only turn', async () => {
@@ -146,8 +232,8 @@ describe('the latest user prompt peek', () => {
     );
     await waitFor(() => expect(result.current?.content).toBe('唯一一条提问'));
 
-    rerender({ ...props, totalMessages: 397 });
-    rerender({ ...props, totalMessages: 403 });
+    rerender({ ...props });
+    rerender({ ...props });
     expect(sessionMessages).toHaveBeenCalledTimes(1);
     expect(result.current?.content).toBe('唯一一条提问');
   });

@@ -367,6 +367,10 @@ export type ChatMessage = {
   type: string;
   content?: string;
   displayText?: string;
+  /** 原始归一化消息的稳定标识，供分页阅读边界和精确定位使用；时间戳可以重复。 */
+  sourceMessageId?: string;
+  /** 仅跨页回读的定位候选携带原始记录，兼容每次读取会重新生成 id 的供应商。 */
+  sourceMessage?: NormalizedMessage;
   timestamp: string | number | Date;
   images?: ChatImage[];
   files?: ChatAttachment[];

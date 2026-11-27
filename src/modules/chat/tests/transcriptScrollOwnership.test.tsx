@@ -100,9 +100,9 @@ async function renderChatSessionState(options: {
   const { useChatSessionState } = await import('@/modules/chat/hooks/useChatSessionState');
 
   return renderHook(
-    ({ session }: { session: ProjectSession }) =>
+    ({ session, isActive = true }: { session: ProjectSession; isActive?: boolean }) =>
       useChatSessionState({
-        isActive: true,
+        isActive,
         selectedProject: project,
         selectedSession: session,
         ws: null,
@@ -112,7 +112,7 @@ async function renderChatSessionState(options: {
         lastSeqRef: { current: new Map() },
         sessionStore: options.store as never,
       }),
-    { initialProps: { session: options.session } },
+    { initialProps: { session: options.session } as { session: ProjectSession; isActive?: boolean } },
   );
 }
 
@@ -131,6 +131,117 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   vi.resetModules();
+});
+
+describe('上一条提问跨页定位', () => {
+  it('只补到目标所在页，更早的历史保留分页，不加载全量', async () => {
+    const prompt = buildMessage(0, '2026-01-01T00:00:00.000Z');
+    const tail = buildMessage(1, '2026-01-01T00:02:00.000Z');
+    const messages = new Map([[SESSION_A, [tail]]]);
+    const store = createStore(messages);
+    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => slot);
+    store.fetchMore.mockImplementation(async () => {
+      slot.offset += 20;
+      if (slot.offset === 60) messages.set(SESSION_A, [prompt, tail]);
+      return { slot, prependedCount: 20 };
+    });
+    const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    store.fetchFromServer.mockClear();
+    const container = createContainer(5000, 500);
+    const row = document.createElement('div');
+    row.setAttribute('data-message-timestamp', prompt.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    await act(async () => {
+      result.current.revealUserPrompt({ type: 'user', content: prompt.content, timestamp: prompt.timestamp });
+    });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(2);
+    expect(store.fetchMore).toHaveBeenCalledWith(SESSION_A, expect.objectContaining({ limit: 20 }));
+    expect(store.fetchFromServer).not.toHaveBeenCalled();
+    expect(result.current.hasMoreMessages).toBe(true);
+    expect(result.current.allMessagesLoaded).toBe(false);
+    expect(row.scrollIntoView).toHaveBeenCalled();
+    expect(row.classList.contains('search-highlight-flash')).toBe(true);
+    container.element.scrollTop = 0;
+    await act(async () => { await result.current.handleScroll(); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(2);
+    await act(async () => { result.current.handleUserHistoryScroll(); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(3);
+  });
+
+  it('连续点击同一缺失提问合并请求，并按标识避开同时间戳的后续提问', async () => {
+    const prompt = buildMessage(0, '2026-01-01T00:00:00.000Z');
+    const later = { ...prompt, id: 'later', content: '同时间但在后面的提问' };
+    const tail = buildMessage(1, '2026-01-01T00:02:00.000Z');
+    const messages = new Map([[SESSION_A, [later, tail]]]);
+    const store = createStore(messages);
+    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => slot);
+    let finish = () => {};
+    store.fetchMore.mockImplementation(async () => {
+      await new Promise<void>((resolve) => { finish = resolve; });
+      messages.set(SESSION_A, [prompt, later, tail]);
+      slot.offset += 20;
+      return { slot, prependedCount: 20 };
+    });
+    const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    const container = createContainer(5000, 500);
+    const row = document.createElement('div');
+    row.setAttribute('data-message-id', prompt.id);
+    row.setAttribute('data-message-timestamp', prompt.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    const target = { type: 'user', content: prompt.content, timestamp: prompt.timestamp, sourceMessageId: prompt.id };
+    await act(async () => { result.current.revealUserPrompt(target); });
+    await act(async () => { result.current.revealUserPrompt(target); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(); });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(1);
+    expect(row.scrollIntoView).toHaveBeenCalled();
+  });
+});
+
+describe('分页定位的恢复与供应商兼容', () => {
+  it('Codex 目标 id 变化时停在目标页，隐藏标签后可继续完成 DOM 定位，键盘可恢复翻页', async () => {
+    const saved = { ...buildMessage(0, '2026-01-01T00:00:00.000Z'), provider: 'codex' as const, id: 'peek-id' };
+    const persisted = { ...saved, id: 'loaded-id' };
+    const tail = { ...buildMessage(1, '2026-01-01T00:02:00.000Z'), provider: 'codex' as const };
+    const messages = new Map([[SESSION_A, [tail]]]);
+    const store = createStore(messages);
+    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => slot);
+    store.fetchMore.mockImplementation(async () => {
+      messages.set(SESSION_A, [persisted, tail]);
+      slot.offset += 20;
+      return { slot, prependedCount: 20 };
+    });
+    const session = { id: SESSION_A } as ProjectSession;
+    const { result, rerender } = await renderChatSessionState({ session, store });
+    const container = createContainer(5000, 500);
+    const row = document.createElement('div');
+    row.setAttribute('data-message-id', persisted.id);
+    row.setAttribute('data-message-timestamp', persisted.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    await act(async () => { result.current.revealUserPrompt({ type: 'user', timestamp: saved.timestamp, content: saved.content, sourceMessageId: saved.id, sourceMessage: saved }); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(1);
+    act(() => { rerender({ session, isActive: false }); });
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(row.scrollIntoView).not.toHaveBeenCalled();
+    await act(async () => { rerender({ session, isActive: true }); });
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(row.scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(store.fetchMore).toHaveBeenCalledTimes(1);
+    container.element.scrollTop = 0;
+    await act(async () => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('deferred scroll-to-bottom', () => {

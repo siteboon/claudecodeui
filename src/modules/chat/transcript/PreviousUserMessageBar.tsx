@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useState } from 'react';
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { History } from 'lucide-react';
@@ -15,14 +15,12 @@ const MAX_PREVIEW_CHARS = 400;
 type PreviousUserMessageBarProps = {
   /** The transcript's scrolling container, whose viewport top decides which message counts as "above". */
   scrollContainerRef: RefObject<HTMLDivElement>;
-  /** Every loaded row of the session, in transcript order; only rows currently in the DOM can be scrolled past. */
+  /** 已加载的会话消息；较早的用户提问可能不在当前渲染窗口。 */
   messages: ChatMessage[];
-  /**
-   * The session's newest prompt read from the transcript when no loaded row is
-   * one. A long agent turn can push the prompt that started it past the first
-   * page, and the bar still has to name something.
-   */
+  /** 按当前阅读位置回读得到的提问，不能晚于顶部首条可读消息。 */
   latestUserPrompt: ChatMessage | null;
+  /** 把阅读边界交给会话 Hook，让跨页回读使用相同的位置。 */
+  onViewportChange?: (timestamp: string | null, messageId?: string) => void;
   /**
    * Brings a row into view. Owned by the session state because the row may sit
    * outside the render window, so it takes more than an element lookup.
@@ -30,16 +28,11 @@ type PreviousUserMessageBarProps = {
   onReveal: (message: ChatMessage) => void;
 };
 
-/** The newest prompt among the loaded rows — what the bar shows while that turn is still on screen. */
-function findNewestLoadedPrompt(messages: ChatMessage[]): ChatMessage | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (isUserPromptMessage(messages[index])) {
-      return messages[index];
-    }
-  }
-
-  return null;
-}
+type ViewportPrompt = {
+  prompt: ChatMessage | null;
+  timestamp: string | null;
+  messageId?: string;
+};
 
 /** The bar's one line of plain text; an attachment-only turn is named instead. */
 function readPreview(message: ChatMessage, attachmentsLabel: string): string {
@@ -51,74 +44,65 @@ function readPreview(message: ChatMessage, attachmentsLabel: string): string {
   return attachments > 0 ? attachmentsLabel : '';
 }
 
-/**
- * The newest user turn whose row has scrolled completely above the container's
- * top edge — the prompt the reader is currently inside. Returns null while that
- * prompt is still on screen, which is what keeps the bar out of the way when
- * there is nothing to jump back to.
- */
+/** 先定位顶部首条可读消息，再按会话顺序往前找；提问自己的 DOM 可以已被裁掉。 */
 function findPreviousUserPrompt(
   container: HTMLDivElement,
   messages: ChatMessage[],
-): ChatMessage | null {
+): ViewportPrompt {
   const containerTop = container.getBoundingClientRect().top;
-  const rowsByTimestamp = new Map<string, HTMLElement>();
+  const indicesById = new Map<string, number>();
+  const indicesByTimestamp = new Map<string, number>();
+  messages.forEach((message, index) => {
+    const timestamp = String(message.timestamp);
+    if (message.sourceMessageId && !indicesById.has(message.sourceMessageId)) indicesById.set(message.sourceMessageId, index);
+    if (!indicesByTimestamp.has(timestamp)) indicesByTimestamp.set(timestamp, index);
+  });
+
+  let anchorIndex = -1;
   for (const row of container.querySelectorAll<HTMLElement>('[data-message-timestamp]')) {
+    // 只跳过同一行的内层包装，不合并时间戳相同的不同消息。
+    if (row.parentElement?.closest('[data-message-timestamp]')) continue;
     const timestamp = row.getAttribute('data-message-timestamp');
-    // A row that shares its timestamp with an earlier one (a user turn and the
-    // tool row stamped with it) keeps the first occurrence, which is the turn.
-    if (timestamp && !rowsByTimestamp.has(timestamp)) {
-      rowsByTimestamp.set(timestamp, row);
-    }
+    if (!timestamp) continue;
+    const messageId = row.getAttribute('data-message-id');
+    const index = messageId ? indicesById.get(messageId) : indicesByTimestamp.get(timestamp);
+    if (index === undefined) continue;
+    anchorIndex = index;
+    // 用户气泡只露出一部分也属于当前轮次，不能跳到后面的提问。
+    if (row.getBoundingClientRect().bottom > containerTop + PAST_TOP_EDGE_TOLERANCE_PX) break;
   }
 
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (!isUserPromptMessage(message)) {
-      continue;
-    }
-    const row = rowsByTimestamp.get(String(message.timestamp));
-    if (!row) {
-      continue;
-    }
-    if (row.getBoundingClientRect().bottom <= containerTop + PAST_TOP_EDGE_TOLERANCE_PX) {
-      return message;
-    }
+  const timestamp = anchorIndex < 0 ? null : String(messages[anchorIndex].timestamp);
+  const messageId = anchorIndex < 0 ? undefined : messages[anchorIndex].sourceMessageId;
+  for (let index = anchorIndex; index >= 0; index -= 1) {
+    if (isUserPromptMessage(messages[index])) return { prompt: messages[index], timestamp, messageId };
   }
-
-  return null;
+  return { prompt: null, timestamp, messageId };
 }
 
-/**
- * Rendered by chat's ChatInterface above ChatMessagesPane: one pinned line
- * naming the user message whose turn is above the viewport, which clicking
- * scrolls back to. Repeated clicks walk up the conversation one prompt at a
- * time instead of scrolling and hunting for where a turn started. When no
- * prompt has scrolled away yet it names the newest one, so the line is there
- * from the moment a session opens instead of only after some scrolling.
- */
+/** 供 ChatInterface 固定显示当前阅读轮次的用户提问，点击可回到原消息。 */
 export const PreviousUserMessageBar = memo(({
   scrollContainerRef,
   messages,
   latestUserPrompt,
+  onViewportChange,
   onReveal,
 }: PreviousUserMessageBarProps) => {
   const { t } = useTranslation('chat');
-  // The prompt currently scrolled past; kept as state because the bar renders from it and must follow the viewport.
-  const [previousPrompt, setPreviousPrompt] = useState<ChatMessage | null>(null);
-  const newestLoadedPrompt = useMemo(() => findNewestLoadedPrompt(messages), [messages]);
+  // 滚动和懒渲染都会改变阅读边界，保留测量结果以更新固定条和跨页查询。
+  const [viewport, setViewport] = useState<ViewportPrompt>({ prompt: null, timestamp: null });
 
   const measure = useCallback(() => {
     const container = scrollContainerRef.current;
-    setPreviousPrompt(container ? findPreviousUserPrompt(container, messages) : null);
-  }, [messages, scrollContainerRef]);
+    const next = container ? findPreviousUserPrompt(container, messages) : { prompt: null, timestamp: null };
+    setViewport((previous) => previous.prompt === next.prompt && previous.timestamp === next.timestamp && previous.messageId === next.messageId ? previous : next);
+    onViewportChange?.(next.timestamp, next.messageId);
+  }, [messages, onViewportChange, scrollContainerRef]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = scrollContainerRef.current;
-    if (!container) {
-      setPreviousPrompt(null);
-      return undefined;
-    }
+    measure();
+    if (!container) return undefined;
 
     let frame: number | null = null;
     const scheduleMeasure = () => {
@@ -131,8 +115,6 @@ export const PreviousUserMessageBar = memo(({
       });
     };
 
-    // Compute once for the rows already on screen, then follow scroll frames.
-    measure();
     container.addEventListener('scroll', scheduleMeasure, { passive: true });
     // A sidebar or window resize moves rows past the top edge with no scroll
     // event, and so does a lazy row settling into its measured height (that
@@ -154,10 +136,12 @@ export const PreviousUserMessageBar = memo(({
     };
   }, [measure, scrollContainerRef]);
 
-  // The scrolled-past turn wins while there is one; otherwise the newest prompt
-  // keeps the bar visible even before it scrolls away, including when that
-  // prompt was never part of the loaded page.
-  const prompt = previousPrompt ?? newestLoadedPrompt ?? latestUserPrompt;
+  // 回读结果也必须在阅读边界之前，避免异步旧结果或全局最后一条指向后面的内容。
+  const fallback = latestUserPrompt && viewport.timestamp
+    && new Date(latestUserPrompt.timestamp).getTime() <= new Date(viewport.timestamp).getTime()
+    ? latestUserPrompt
+    : null;
+  const prompt = viewport.prompt ?? fallback;
   if (!prompt) {
     return null;
   }

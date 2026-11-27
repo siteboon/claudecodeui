@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import type { MarkSessionIdle, SessionActivityMap,Project,ProjectSession,LLMProvider,NormalizedMessage,ChatMessage,DiffCalculator } from '@/shared/types';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
-import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessagePagination';
+import { messagesRepresentSamePersistedRow, SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessagePagination';
 import { createMessageHistoryRefreshCoordinator } from '@/modules/chat/utils/messageHistoryRefreshCoordinator';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
@@ -45,7 +45,13 @@ function findRenderedMessageElement(
   container: HTMLElement,
   timestamp: unknown,
   allowNearest: boolean,
+  messageId?: string,
 ): HTMLElement | null {
+  if (messageId) {
+    const row = Array.from(container.querySelectorAll<HTMLElement>('[data-message-id]'))
+      .find((candidate) => candidate.getAttribute('data-message-id') === messageId) ?? null;
+    if (row || !allowNearest) return row;
+  }
   const targetTimestamp = String(timestamp);
   const targetTime = new Date(targetTimestamp).getTime();
   const candidates = container.querySelectorAll<HTMLElement>('[data-message-timestamp]');
@@ -230,6 +236,8 @@ export function useChatSessionState({
   // and it is cleared once the row is on screen or the retries run out.
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const searchScrollActiveRef = useRef(false);
+  // 导航代次取消旧请求；定位滚动不应触发顶部自动翻页，真实滑动后再恢复。
+  const promptNavigationRef = useRef({ generation: 0, target: '', suppressTopPaging: false });
   /**
    * The pending step of the search-jump retry chain, so a session change can
    * cancel a jump that belongs to the transcript the user just left.
@@ -436,16 +444,35 @@ export function useChatSessionState({
     });
   }, [storeMessages, pendingUserMessage, sideQuestions, hasMoreMessages, t]);
 
-  // Whether the loaded page already holds a prompt decides if the bar needs the
-  // transcript peek at all: a page with one makes the newest loaded prompt the
-  // answer.
-  const hasLoadedUserPrompt = useMemo(() => chatMessages.some(isUserPromptMessage), [chatMessages]);
-  // The prompt the bar falls back to when a long turn has pushed every loaded
-  // user row past the tail page. Read from the server, never rendered here.
+  // 固定条测得的阅读位置带上会话归属，切换会话时不能沿用旧边界。
+  const [userPromptViewport, setUserPromptViewport] = useState<{ sessionId: string; timestamp: string; messageId?: string } | null>(null);
+  const onUserPromptViewportChange = useCallback((timestamp: string | null, messageId?: string) => {
+    setUserPromptViewport((previous) => {
+      if (!activeSessionId || !timestamp) return null;
+      if (previous?.sessionId === activeSessionId && previous.timestamp === timestamp && previous.messageId === messageId) return previous;
+      return { sessionId: activeSessionId, timestamp, messageId };
+    });
+  }, [activeSessionId]);
+  const userPromptBeforeTimestamp = userPromptViewport?.sessionId === activeSessionId
+    ? userPromptViewport?.timestamp ?? null
+    : null;
+  const userPromptBeforeId = userPromptViewport?.sessionId === activeSessionId ? userPromptViewport?.messageId : undefined;
+  const hasLoadedUserPrompt = useMemo(() => {
+    if (!userPromptBeforeTimestamp) return false;
+    if (userPromptBeforeId) {
+      const index = chatMessages.findIndex((message) => message.sourceMessageId === userPromptBeforeId);
+      return index >= 0 && chatMessages.slice(0, index + 1).some(isUserPromptMessage);
+    }
+    const boundary = new Date(userPromptBeforeTimestamp).getTime();
+    return chatMessages.some((message) => isUserPromptMessage(message) && new Date(message.timestamp).getTime() <= boundary);
+  }, [chatMessages, userPromptBeforeId, userPromptBeforeTimestamp]);
   const latestUserPrompt = useLatestUserPrompt({
     sessionId: activeSessionId,
     isActive,
     hasLoadedUserPrompt,
+    beforeTimestamp: userPromptBeforeTimestamp,
+    beforeMessageId: userPromptBeforeId,
+    beforeMessage: storeMessages.find((message) => message.id === userPromptBeforeId),
     totalMessages,
   });
 
@@ -568,6 +595,7 @@ export function useChatSessionState({
       top: container.scrollTop,
     };
 
+    if (promptNavigationRef.current.suppressTopPaging) return;
     const scrolledNearTop = container.scrollTop < 100;
 
     // "Load all" prompt: appear (with fade-in) when the user reaches the top
@@ -596,6 +624,39 @@ export function useChatSessionState({
       if (didLoad) topLoadLockRef.current = true;
     }
   }, [hasMoreMessages, isActive, isNearBottom, loadOlderMessages]);
+
+  const handleUserHistoryScroll = useCallback(() => {
+    const navigation = promptNavigationRef.current;
+    if (navigation.suppressTopPaging || searchScrollActiveRef.current) {
+      navigation.generation += 1;
+      navigation.target = '';
+      navigation.suppressTopPaging = false;
+      searchScrollActiveRef.current = false;
+      setSearchTarget(null);
+      if (searchScrollTimerRef.current) clearTimeout(searchScrollTimerRef.current);
+    }
+    void handleScroll();
+  }, [handleScroll]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!isActive || !container) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target === container) handleUserHistoryScroll();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || target.closest('input,textarea,select,[contenteditable="true"]')) return;
+      if ((target === document.body || container.contains(target))
+        && ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) handleUserHistoryScroll();
+    };
+    container.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      container.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [handleUserHistoryScroll, isActive]);
 
   const wasChatActiveRef = useRef(isActive);
   useLayoutEffect(() => {
@@ -644,6 +705,7 @@ export function useChatSessionState({
     }
     searchScrollActiveRef.current = false;
     setSearchTarget(null);
+    promptNavigationRef.current = { generation: promptNavigationRef.current.generation + 1, target: '', suppressTopPaging: false };
 
     pendingInitialScrollRef.current = true;
     setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
@@ -892,10 +954,39 @@ export function useChatSessionState({
     if (!isActive || !searchTarget || chatMessages.length === 0 || isLoadingSessionMessages) return;
 
     const target = searchTarget;
+    const generation = target.navigationId ?? promptNavigationRef.current.generation;
+    const ownsNavigation = () => generation === promptNavigationRef.current.generation;
     setSearchTarget(null);
 
     const scrollToTarget = async () => {
-      if (!allMessagesLoadedRef.current && selectedSession && selectedProject) {
+      if (!ownsNavigation()) return;
+      if (target.loadOlderPages && selectedSession) {
+        const sessionId = selectedSession.id;
+        const canRequest = () => ownsNavigation() && isActiveRef.current && activeSessionIdRef.current === sessionId;
+        const targetLoaded = () => sessionStore.getMessages(sessionId).some((message) =>
+          message.kind === 'text' && message.role === 'user'
+          && (target.messageId ? message.id === target.messageId
+            || Boolean(target.persistedMessage?.provider === 'codex' && messagesRepresentSamePersistedRow(message, target.persistedMessage))
+            : message.timestamp === target.timestamp));
+        // 只补载到目标提问为止；排队请求执行时也重新检查目标是否已经到达。
+        while (canRequest()) {
+          const loaded = targetLoaded();
+          if (loaded || !sessionStore.getSessionSlot(sessionId)?.hasMore) break;
+          const { slot, prependedCount } = await sessionStore.fetchMore(sessionId, {
+            limit: SESSION_MESSAGES_PAGE_SIZE,
+            canRequest: () => canRequest() && !targetLoaded(),
+          });
+          if (!canRequest()) {
+            if (ownsNavigation() && activeSessionIdRef.current === sessionId) setSearchTarget(target);
+            return;
+          }
+          setHasMoreMessages(slot.hasMore);
+          setTotalMessages(slot.total);
+          messagesOffsetRef.current = slot.offset;
+          if (prependedCount === 0) break;
+        }
+        if (!canRequest()) return;
+      } else if (!allMessagesLoadedRef.current && selectedSession && selectedProject) {
           try {
             // Load all messages into the store for search navigation
             const slot = await sessionStore.fetchFromServer(selectedSession.id, {
@@ -929,7 +1020,15 @@ export function useChatSessionState({
       const messagesForSearch = activeSessionIdRef.current
         ? normalizedToChatMessages(sessionStore.getMessages(activeSessionIdRef.current))
         : chatMessages;
-      const targetIndex = findSearchTargetIndex(messagesForSearch, target);
+      const persistedTarget = target.persistedMessage?.provider === 'codex' && activeSessionIdRef.current
+        ? sessionStore.getMessages(activeSessionIdRef.current).find((message) => message.id === target.messageId)
+          ?? sessionStore.getMessages(activeSessionIdRef.current).find((message) => messagesRepresentSamePersistedRow(message, target.persistedMessage!))
+        : null;
+      const resolvedMessageId = persistedTarget?.id ?? target.messageId;
+      const targetIndex = target.loadOlderPages
+        ? messagesForSearch.findIndex((message) => isUserPromptMessage(message)
+          && (resolvedMessageId ? message.sourceMessageId === resolvedMessageId : String(message.timestamp) === target.timestamp))
+        : findSearchTargetIndex(messagesForSearch, target);
       if (targetIndex < 0) {
         // The target is not in the transcript at all. Scrolling somewhere
         // plausible would claim a hit that does not exist.
@@ -949,6 +1048,12 @@ export function useChatSessionState({
       const targetTimestamp = messagesForSearch[targetIndex].timestamp;
 
       const scrollToRenderedTarget = (retriesLeft: number) => {
+        if (!ownsNavigation()) return;
+        if (!isActiveRef.current) {
+          searchScrollTimerRef.current = null;
+          setSearchTarget(target);
+          return;
+        }
         const container = scrollContainerRef.current;
         if (!container) return;
 
@@ -958,7 +1063,8 @@ export function useChatSessionState({
         const targetElement = findRenderedMessageElement(
           container,
           targetTimestamp,
-          retriesLeft === 0,
+          !target.loadOlderPages && retriesLeft === 0,
+          resolvedMessageId,
         );
 
         if (targetElement) {
@@ -1152,19 +1258,21 @@ export function useChatSessionState({
   // then scroll to the row's wrapper, which is in the DOM as soon as the row
   // is inside the window, mounted or not.
   const revealMessage = useCallback((message: ChatMessage) => {
+    const generation = promptNavigationRef.current.generation;
     const index = chatMessages.indexOf(message);
     if (index >= 0) {
       setVisibleMessageCount((prev) => visibleCountToReveal(chatMessages.length, index, prev));
     }
 
     const attempt = (remaining: number) => {
+      if (generation !== promptNavigationRef.current.generation) return;
       const container = scrollContainerRef.current;
       // The widened window commits after this frame, so the row can be absent
       // on the first attempts; only the last one may settle for the nearest
       // row (a hit collapsed inside a tool group carries the group's
       // timestamp), or the first attempt scrolls to an unrelated row and the
       // retries never run.
-      const element = container ? findRenderedMessageElement(container, message.timestamp, remaining === 0) : null;
+      const element = container ? findRenderedMessageElement(container, message.timestamp, remaining === 0 && !isUserPromptMessage(message), message.sourceMessageId) : null;
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
@@ -1179,15 +1287,28 @@ export function useChatSessionState({
   /**
    * Brings one of the session's user prompts into view. A row the client holds
    * scrolls directly; a prompt that lives past the loaded page goes through the
-   * search jump, which loads the transcript and flashes where it landed.
+   * paginated jump, which reads only as far as that prompt and highlights it.
    */
   const revealUserPrompt = useCallback((prompt: ChatMessage) => {
+    const key = prompt.sourceMessageId ?? String(prompt.timestamp);
+    const navigation = promptNavigationRef.current;
+    if (navigation.target === key && searchScrollActiveRef.current) return;
+    navigation.generation += 1;
+    navigation.target = key;
+    navigation.suppressTopPaging = true;
+    pendingInitialScrollRef.current = false;
+    if (searchScrollTimerRef.current) clearTimeout(searchScrollTimerRef.current);
+    isUserScrolledUpRef.current = true;
+    setIsUserScrolledUp(true);
     const loaded = chatMessages.indexOf(prompt) >= 0
       ? prompt
       : chatMessages.find(
-        (message) => isUserPromptMessage(message) && String(message.timestamp) === String(prompt.timestamp),
+        (message) => isUserPromptMessage(message)
+          && (prompt.sourceMessageId ? message.sourceMessageId === prompt.sourceMessageId : String(message.timestamp) === String(prompt.timestamp)),
       );
     if (loaded) {
+      setSearchTarget(null);
+      searchScrollActiveRef.current = false;
       revealMessage(loaded);
       return;
     }
@@ -1198,7 +1319,7 @@ export function useChatSessionState({
     // The timestamp is exact and already on the row, while the prompt's text can
     // reappear earlier in the transcript (a compact summary quotes it), so the
     // jump resolves by the stronger key only.
-    setSearchTarget({ timestamp: String(prompt.timestamp) });
+    setSearchTarget({ timestamp: String(prompt.timestamp), messageId: prompt.sourceMessageId, persistedMessage: prompt.sourceMessage, loadOlderPages: true, navigationId: navigation.generation });
   }, [chatMessages, revealMessage]);
   return {
     chatMessages,
@@ -1221,6 +1342,7 @@ export function useChatSessionState({
     loadEarlierMessages,
     revealMessage,
     latestUserPrompt,
+    onUserPromptViewportChange,
     revealUserPrompt,
     loadAllMessages,
     loadFullTranscript,
@@ -1233,6 +1355,7 @@ export function useChatSessionState({
     scrollToBottom,
     scrollToBottomAndReset,
     handleScroll,
+    handleUserHistoryScroll,
     requestLatestMessages,
   };
 }

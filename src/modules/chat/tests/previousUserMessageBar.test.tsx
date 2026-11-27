@@ -15,18 +15,19 @@ import type { ChatMessage } from '@/shared/types';
  */
 
 const CONTAINER_TOP = 100;
+const timestampOf = (value: string) => value.startsWith('t') ? `2026-11-27T00:00:0${value.slice(1)}.000Z` : value;
 
 const userMessage = (timestamp: string, content: string, overrides: Partial<ChatMessage> = {}): ChatMessage => ({
   type: 'user',
   content,
-  timestamp,
+  timestamp: timestampOf(timestamp),
   ...overrides,
 });
 
 const assistantMessage = (timestamp: string): ChatMessage => ({
   type: 'assistant',
   content: 'reply',
-  timestamp,
+  timestamp: timestampOf(timestamp),
 });
 
 type RowBox = { element: HTMLDivElement; bottom: number };
@@ -46,7 +47,7 @@ const rect = (top: number, bottom: number): DOMRect => ({
 const mountedContainers: HTMLDivElement[] = [];
 
 /** A stand-in for the scrolling transcript: a container top edge plus one row per timestamp. */
-function makeContainer(rows: Array<{ timestamp: string; bottom: number }>): {
+function makeContainer(rows: Array<{ timestamp: string; bottom: number; id?: string }>): {
   container: HTMLDivElement;
   rows: Record<string, RowBox>;
 } {
@@ -56,9 +57,11 @@ function makeContainer(rows: Array<{ timestamp: string; bottom: number }>): {
 
   for (const row of rows) {
     const element = document.createElement('div');
-    element.setAttribute('data-message-timestamp', row.timestamp);
-    boxes[row.timestamp] = { element, bottom: row.bottom };
-    element.getBoundingClientRect = () => rect(boxes[row.timestamp].bottom - 20, boxes[row.timestamp].bottom);
+    element.setAttribute('data-message-timestamp', timestampOf(row.timestamp));
+    if (row.id) element.setAttribute('data-message-id', row.id);
+    const key = row.id ?? row.timestamp;
+    boxes[key] = { element, bottom: row.bottom };
+    element.getBoundingClientRect = () => rect(boxes[key].bottom - 20, boxes[key].bottom);
     container.appendChild(element);
   }
 
@@ -195,6 +198,7 @@ describe('the previous user message bar', () => {
     expect(screen.getByTitle('Jump to the previous message you sent').textContent).toContain('最早的一条');
 
     // The reader scrolls far enough that the newer prompt is above the edge too.
+    rows.t2.bottom = 50;
     rows.t3.bottom = 90;
     fireEvent.scroll(container);
     await act(async () => {
@@ -202,6 +206,55 @@ describe('the previous user message bar', () => {
     });
 
     expect(screen.getByTitle('Jump to the previous message you sent').textContent).toContain('较新的一条');
+  });
+
+  it('阅读第一轮时显示当前提问，不能跳到已加载的下一轮', () => {
+    const { container } = makeContainer([
+      { timestamp: 't1', bottom: 300 },
+      { timestamp: 't2', bottom: 500 },
+      { timestamp: 't3', bottom: 900 },
+    ]);
+    const messages = [userMessage('t1', '这个窗口是哪个应用在弹'), assistantMessage('t2'), userMessage('t3', '我已经把设置关了')];
+    const onReveal = vi.fn();
+    render(<PreviousUserMessageBar scrollContainerRef={{ current: container }} messages={messages} latestUserPrompt={messages[2]} onReveal={onReveal} />);
+    const bar = screen.getByTitle('Jump to the previous message you sent');
+    expect(bar.textContent).toContain('这个窗口是哪个应用在弹');
+    expect(bar.textContent).not.toContain('我已经把设置关了');
+    fireEvent.click(bar);
+    expect(onReveal).toHaveBeenCalledWith(messages[0]);
+  });
+
+  it('用户与回复时间戳相同时，仍按不同的消息行定位', () => {
+    const { container } = makeContainer([
+      { timestamp: 't1', bottom: 60, id: 'u1' },
+      { timestamp: 't1', bottom: 300, id: 'a1' },
+      { timestamp: 't2', bottom: 900, id: 'u2' },
+    ]);
+    const messages = [userMessage('t1', '当前轮次', { sourceMessageId: 'u1' }),
+      { ...assistantMessage('t1'), sourceMessageId: 'a1' },
+      userMessage('t2', '后续轮次', { sourceMessageId: 'u2' })];
+    const onViewportChange = vi.fn();
+    render(<PreviousUserMessageBar scrollContainerRef={{ current: container }} messages={messages} latestUserPrompt={null} onViewportChange={onViewportChange} onReveal={() => {}} />);
+    expect(screen.getByTitle('Jump to the previous message you sent').textContent).toContain('当前轮次');
+    expect(onViewportChange).toHaveBeenCalledWith(timestampOf('t1'), 'a1');
+  });
+
+  it('旧提问离开渲染窗口后，仍从当前回复之前查找', () => {
+    const { container } = makeContainer([{ timestamp: 't2', bottom: 300 }, { timestamp: 't3', bottom: 900 }]);
+    const messages = [userMessage('t1', '已退出渲染窗口的提问'), assistantMessage('t2'), userMessage('t3', '下面的提问')];
+    render(<PreviousUserMessageBar scrollContainerRef={{ current: container }} messages={messages} latestUserPrompt={null} onReveal={() => {}} />);
+    expect(screen.getByTitle('Jump to the previous message you sent').textContent).toContain('已退出渲染窗口的提问');
+  });
+
+  it('仅加载后续提问时，也按旧回复的边界回读并拒绝未来结果', () => {
+    const { container } = makeContainer([{ timestamp: 't2', bottom: 300 }, { timestamp: 't3', bottom: 900 }]);
+    const messages = [assistantMessage('t2'), userMessage('t3', '后续提问')];
+    const onViewportChange = vi.fn();
+    const { rerender } = render(<PreviousUserMessageBar scrollContainerRef={{ current: container }} messages={messages} latestUserPrompt={messages[1]} onViewportChange={onViewportChange} onReveal={() => {}} />);
+    expect(screen.queryByTitle('Jump to the previous message you sent')).toBeNull();
+    expect(onViewportChange).toHaveBeenCalledWith(timestampOf('t2'), undefined);
+    rerender(<PreviousUserMessageBar scrollContainerRef={{ current: container }} messages={messages} latestUserPrompt={userMessage('t1', '跨页找到的前一条提问')} onReveal={() => {}} />);
+    expect(screen.getByTitle('Jump to the previous message you sent').textContent).toContain('跨页找到的前一条提问');
   });
 
   it('never names the compaction summary that opens a continued session', () => {

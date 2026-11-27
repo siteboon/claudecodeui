@@ -1,4 +1,4 @@
-import type { ChatMessage } from '@/shared/types';
+import type { ChatMessage, NormalizedMessage } from '@/shared/types';
 
 /**
  * Locates the message a sidebar search result points at, against the loaded
@@ -20,6 +20,14 @@ const MAX_SNIPPET_LENGTH = 80;
 export type SearchTarget = {
   snippet?: string;
   timestamp?: string;
+  /** 用户提问定位使用原始消息标识，避免重复时间戳命中其他轮次。 */
+  messageId?: string;
+  /** 供应商重新生成 id 时，以原始记录的持久化字段匹配同一消息。 */
+  persistedMessage?: NormalizedMessage;
+  /** 定位前一条提问时按页补到目标，不请求整段会话。 */
+  loadOlderPages?: boolean;
+  /** 分页定位的请求代次，连续点击时仅保留最新操作。 */
+  navigationId?: number;
 };
 
 /** Every field of a message that ends up as rendered text. */

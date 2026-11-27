@@ -312,6 +312,7 @@ function ChatMessagesPane({
                     key={`tool-group-${getMessageKey(item.messages[0])}`}
                     lazyRows={lazyRows}
                     timestamp={item.timestamp}
+                    messageId={item.messages[0].sourceMessageId}
                     initiallyNearViewport={initiallyNearViewport}
                   >
                     <ToolGroupContainer
@@ -339,6 +340,7 @@ function ChatMessagesPane({
                   key={getMessageKey(item)}
                   lazyRows={lazyRows}
                   timestamp={item.timestamp}
+                  messageId={item.sourceMessageId}
                   initiallyNearViewport={initiallyNearViewport}
                   // A side question's answer is the bottom half of the aside
                   // its question row starts, so the list's gap goes.
