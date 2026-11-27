@@ -152,6 +152,17 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `;
 
+/** Database migrations creates the bounded failure journal read by Providers. */
+export const SESSION_RUNTIME_FAILURES_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS session_runtime_failures (
+    id TEXT PRIMARY KEY NOT NULL,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    timestamp TEXT NOT NULL,
+    payload_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_runtime_failures_session ON session_runtime_failures(session_id, timestamp);
+`;
+
 export const LAST_SCANNED_AT_SQL = `
 CREATE TABLE IF NOT EXISTS scan_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),

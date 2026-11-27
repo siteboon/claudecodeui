@@ -20,6 +20,8 @@ for (const resumed of [false, true]) {
           capturedPrompt = prompt;
           return { events: (async function* () {
             yield { type: 'thread.started', thread_id: 'native-thread' };
+            yield { type: 'item.completed', item: { type: 'agent_message', id: 'reply', text: 'Done' } };
+            yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
           })() };
         },
       } as unknown as Thread;
@@ -68,6 +70,8 @@ for (const command of ['', '  \n\t']) {
         capturedPrompt = prompt;
         return { events: (async function* () {
           yield { type: 'thread.started', thread_id: 'native-thread' };
+          yield { type: 'item.completed', item: { type: 'agent_message', id: 'reply', text: 'Done' } };
+          yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
         })() };
       },
     } as unknown as Thread;

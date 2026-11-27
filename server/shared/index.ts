@@ -15,3 +15,8 @@ export { sliceTailPage } from './utils.js';
 // Session persistence uses canonical path normalization and fork/history metadata.
 export { normalizeProjectPath } from './utils.js';
 export type { SessionForkAncestor } from './types.js';
+
+// Providers and Database share bounded, prompt-free runtime failure evidence.
+export type { SessionRuntimeFailure } from './types.js';
+// Providers uses these contracts to answer Codex side questions outside the main turn.
+export type { SideQuestionOutcome, SideQuestionRequest, SideQuestionSink } from './types.js';
