@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { SESSION_TITLE_MAX_WIDTH, truncateSessionTitle } from '@/shared/utils.js';
+import { SESSION_TITLE_MAX_WIDTH, measureTitleWidth, truncateSessionTitle } from '@/shared/utils.js';
 
 /**
  * Session titles come from user text, and a Chinese prompt has no spaces: the
@@ -56,4 +56,10 @@ test('an unbreakable latin word falls back to a hard cut', () => {
 
 test('the documented budget is eight double-width characters', () => {
   assert.equal(SESSION_TITLE_MAX_WIDTH, 16);
+});
+
+test('emoji prefixes count as double-width so fallback cuts never spill past the row', () => {
+  assert.equal(measureTitleWidth('🔍 红包发放资质'), 15);
+  assert.equal(truncateSessionTitle('🔍 红包发放资质调研'), '🔍 红包发放资…');
+  assert.ok(measureTitleWidth(truncateSessionTitle('🔍 红包发放资质调研')) <= SESSION_TITLE_MAX_WIDTH);
 });

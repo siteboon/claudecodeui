@@ -1061,7 +1061,7 @@ export function truncateSessionTitle(
   let lastBreak = 0;
 
   for (const char of normalized) {
-    const charWidth = isWideTitleCharacter(char) ? 2 : 1;
+    const charWidth = measureCharTitleWidth(char);
     if (width + charWidth > budget) {
       break;
     }
@@ -1118,20 +1118,37 @@ function isWideTitleCharacter(char: string): boolean {
   const code = char.codePointAt(0) ?? 0;
   return (
     (code >= 0x1100 && code <= 0x115f)
+    || (code >= 0x2600 && code <= 0x27bf)
     || (code >= 0x2e80 && code <= 0xa4cf)
     || (code >= 0xac00 && code <= 0xd7a3)
     || (code >= 0xf900 && code <= 0xfaff)
     || (code >= 0xfe30 && code <= 0xfe6f)
     || (code >= 0xff00 && code <= 0xff60)
     || (code >= 0xffe0 && code <= 0xffe6)
+    || (code >= 0x1f300 && code <= 0x1faff)
   );
 }
 
-/** Counts a title in the same half-width units the truncation budget uses. */
-function measureTitleWidth(text: string): number {
+/** Measures one Unicode scalar's sidebar width (`0` for variation/joiner marks, `2` for wide CJK/emoji, `1` otherwise). */
+function measureCharTitleWidth(char: string): number {
+  const code = char.codePointAt(0) ?? 0;
+  if (code === 0x200d || (code >= 0xfe00 && code <= 0xfe0f)) {
+    return 0;
+  }
+  return isWideTitleCharacter(char) ? 2 : 1;
+}
+
+/**
+ * Counts a title in the same half-width units the truncation budget uses.
+ *
+ * Used by `server/shared/utils.ts` (`truncateSessionTitle`) and
+ * `claude-title.provider.ts` to keep AI-generated titles within
+ * {@link SESSION_TITLE_MAX_WIDTH} without dropping into ellipsis truncation.
+ */
+export function measureTitleWidth(text: string): number {
   let width = 0;
   for (const char of text) {
-    width += isWideTitleCharacter(char) ? 2 : 1;
+    width += measureCharTitleWidth(char);
   }
   return width;
 }

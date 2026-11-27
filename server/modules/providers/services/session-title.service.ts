@@ -24,6 +24,8 @@ export type SessionTitleRequest = {
   firstMessage: string;
   /** The name written at creation; a different stored value means the user renamed it. */
   initialName: string;
+  /** Optional session/default model used as fallback if the small model fails. */
+  model?: string | null;
 };
 
 /**
@@ -61,7 +63,10 @@ async function generateAndStore(
   generate: typeof generateClaudeSessionTitle,
 ): Promise<void> {
   try {
-    const title = await generate(request.firstMessage, { cwd: request.projectPath });
+    const title = await generate(request.firstMessage, {
+      cwd: request.projectPath,
+      model: request.model ?? undefined,
+    });
     if (!title) {
       return;
     }

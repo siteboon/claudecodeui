@@ -15,7 +15,7 @@ export { sliceTailPage } from './utils.js';
 // Session creation and the four provider synchronizers name a session from
 // user text; they share one width budget so every provider's title fits the
 // sidebar row.
-export { SESSION_TITLE_MAX_WIDTH, normalizeAutoSessionName, truncateSessionTitle } from './utils.js';
+export { SESSION_TITLE_MAX_WIDTH, measureTitleWidth, normalizeAutoSessionName, truncateSessionTitle } from './utils.js';
 
 // Session persistence uses canonical path normalization and fork/history metadata.
 export { normalizeProjectPath } from './utils.js';

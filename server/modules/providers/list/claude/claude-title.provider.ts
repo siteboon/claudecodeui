@@ -1,8 +1,16 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { readFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+import { query, type Settings } from '@anthropic-ai/claude-agent-sdk';
 
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
-import { SESSION_TITLE_MAX_WIDTH, truncateSessionTitle } from '@/shared/utils.js';
-import type { AnyRecord } from '@/shared/types.js';
+import {
+  SESSION_TITLE_MAX_WIDTH,
+  measureTitleWidth,
+  truncateSessionTitle,
+} from '@/shared/index.js';
+import type { AnyRecord } from '@/shared/index.js';
 
 /**
  * Names a session from its first message, the way the Claude CLI names its own.
@@ -10,106 +18,296 @@ import type { AnyRecord } from '@/shared/types.js';
  * The CLI writes an `ai-title` record into its transcript for sessions started
  * in a terminal, but CloudCLI runs the CLI through the SDK and never gets one,
  * so a session here kept its raw first prompt as a name. This asks the model
- * for a short title instead, once, in a throwaway query on the user's own
- * configuration.
+ * for a short title instead, once, in an isolated throwaway query that reads
+ * only the user's API/model settings — never CLAUDE.md, hooks, or plugins.
  */
 
-// A title that takes longer than this is not worth holding the session for;
-// the caller falls back to the truncated first message.
-const TITLE_TIMEOUT_MS = 20_000;
+// Total budget across primary, optional over-length condensation, and fallback.
+const TITLE_TIMEOUT_MS = 25_000;
 
-// The CLI skips title generation for very short prompts, and so do we: a
-// two-word greeting says nothing about the task.
-const MIN_PROMPT_LENGTH = 10;
+// Remaining time required before attempting an extra condensation/fallback call.
+const MIN_REMAINING_RETRY_MS = 3_000;
 
-const TITLE_SYSTEM_PROMPT_APPEND = 'You name chat sessions. Reply with a title only.';
+// Skip only trivial greetings (`你好`, `hi`, `hello`); a 6-9 character Chinese
+// message already exceeds the 16-unit sidebar width and needs an AI title.
+const MIN_PROMPT_WIDTH = 9;
 
-/**
- * Builds the naming request.
- *
- * The width budget is stated the way the code measures it — a CJK character
- * costs two — because a model asked for "sixteen characters" writes sixteen
- * Latin letters, which is half the space a Chinese title needs.
- */
-function buildTitlePrompt(firstMessage: string): string {
-  const maxChineseCharacters = SESSION_TITLE_MAX_WIDTH / 2;
+// Cap huge pasted logs so the title query stays fast and focused on the intent.
+const MAX_PROMPT_CHARS = 1_500;
+
+const SAFE_USER_SETTING_KEYS = [
+  'env',
+  'model',
+  'apiKeyHelper',
+  'awsAuthRefresh',
+  'awsCredentialExport',
+  'otelHeadersHelper',
+  'forceLoginMethod',
+  'forceLoginOrgUUID',
+] as const;
+
+type TitlePromptRunnerParams = {
+  prompt: string;
+  systemPrompt: string;
+  model?: string;
+  cwd?: string;
+  signal: AbortSignal;
+  settings: Settings;
+};
+
+type TitleGenerationOptions = {
+  cwd?: string;
+  /** Session or default main model used as fallback if the small model fails. */
+  model?: string;
+  signal?: AbortSignal;
+  /** Test seam replacing the SDK query; production callers omit this. */
+  runPrompt?: (params: TitlePromptRunnerParams) => Promise<string | null>;
+};
+
+function buildTitleSystemPrompt(): string {
+  const maxChineseCharacters = Math.floor(SESSION_TITLE_MAX_WIDTH / 2);
+  const preferredChineseCharacters = Math.max(1, maxChineseCharacters - 1);
   return [
-    'Write a title for the chat session that starts with the message below.',
-    `Rules: at most ${maxChineseCharacters} Chinese characters of visual width — a Latin letter or digit counts as half a Chinese character, so at most ${SESSION_TITLE_MAX_WIDTH} of them.`,
-    'Name the task the user wants done, not the fact that they wrote to you.',
-    'Write it in the language of the message.',
-    'No quotes, no trailing punctuation, no explanation. Output the title only.',
-    '',
-    'Message:',
-    firstMessage,
+    'You generate a concise sidebar title for a chat session. Reply with ONLY the title text.',
+    'Rules:',
+    `- Visual width MUST be <= ${SESSION_TITLE_MAX_WIDTH} units (1 Chinese/CJK character = 2 units, 1 ASCII letter/digit/space = 1 unit). That means at most ${maxChineseCharacters} Chinese characters (aim for 4 to ${preferredChineseCharacters} Chinese characters) or ${SESSION_TITLE_MAX_WIDTH} English characters.`,
+    '- Return a complete, self-contained phrase that fits the limit so no ellipsis or truncation is needed.',
+    '- Name the core task or topic in the same language as the user message.',
+    '- Plain text ONLY: NO emoji, NO icons, NO mode tags, NO quotes, NO ellipsis, NO trailing punctuation.',
+    'Examples:',
+    '- Message: 调研微信红包支付资质和审核时间 -> 微信红包资质调研',
+    '- Message: Investigate the streaming queue regression in chat -> Fix queue stream',
+  ].join('\n');
+}
+
+function buildShortenSystemPrompt(): string {
+  const maxChineseCharacters = Math.floor(SESSION_TITLE_MAX_WIDTH / 2);
+  const preferredChineseCharacters = Math.max(1, maxChineseCharacters - 1);
+  return [
+    'You shorten an over-long chat session title. Reply with ONLY the shortened title text.',
+    `Rules: visual width MUST be <= ${SESSION_TITLE_MAX_WIDTH} units (at most ${maxChineseCharacters} Chinese characters, aim for 4 to ${preferredChineseCharacters}, or ${SESSION_TITLE_MAX_WIDTH} ASCII characters).`,
+    'Keep it a complete phrase in the same language. Plain text only: NO emoji, NO quotes, NO ellipsis, NO punctuation.',
   ].join('\n');
 }
 
 /**
- * Strips the wrapping the model still sometimes adds — quotes, a "Title:"
- * prefix, a trailing period — and fits the result into the width budget.
+ * Loads only auth/env/model keys from `~/.claude/settings.json` while disabling
+ * hooks and thinking, so `settingSources: []` keeps CLAUDE.md, hooks, and
+ * plugins completely isolated from title generation.
  */
-function sanitizeTitle(rawValue: string): string {
-  const firstLine = rawValue.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length > 0) ?? '';
-  const withoutPrefix = firstLine.replace(/^(?:title|标题|标题[:：])\s*[:：]\s*/iu, '');
-  const withoutQuotes = withoutPrefix.replace(/^["'“”‘’《》]+|["'“”‘’《》]+$/gu, '').trim();
-  return truncateSessionTitle(withoutQuotes.replace(/[.。;；]+$/u, '').trim());
+async function loadSanitizedUserSettings(): Promise<Settings> {
+  const base: Settings = {
+    alwaysThinkingEnabled: false,
+    disableAllHooks: true,
+  };
+
+  try {
+    const raw = await readFile(path.join(os.homedir(), '.claude', 'settings.json'), 'utf8');
+    const parsed = JSON.parse(raw) as AnyRecord;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return base;
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const key of SAFE_USER_SETTING_KEYS) {
+      if (parsed[key] !== undefined) {
+        result[key] = parsed[key];
+      }
+    }
+    return {
+      ...(result as Settings),
+      ...base,
+    };
+  } catch {
+    return base;
+  }
+}
+
+/**
+ * Strips formatting noise (tool XML leaks, prefixes, quotes, emojis, trailing
+ * punctuation/ellipses) without cutting the title short.
+ */
+function cleanModelTitle(rawValue: string): string | null {
+  const trimmed = rawValue.trim();
+  if (!trimmed || /<[|｜]DSML[|｜]|<function_calls>|<invoke\b/i.test(trimmed)) {
+    return null;
+  }
+
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^(?:title|session\s*title|标题|会话标题)\s*[:：]\s*/iu, '').trim())
+    .filter(Boolean);
+  let candidate = lines[0] ?? '';
+  if (!candidate) {
+    return null;
+  }
+
+  // Strip surrounding quotes/brackets and leading/trailing emojis or mode tags.
+  let previous = '';
+  while (candidate !== previous) {
+    previous = candidate;
+    candidate = candidate
+      .replace(/^["'“”‘’《》「」【】`]+|["'“”‘’《》「」【】`]+$/gu, '')
+      .replace(/^(?:\s|\p{Extended_Pictographic}|\uFE0F|\u200D|[•·:：-])+/gu, '')
+      .replace(/(?:\s|\p{Extended_Pictographic}|\uFE0F|\u200D|[.。;；:：!！?？…])+$/gu, '')
+      .replace(/\.{2,}$/u, '')
+      .trim();
+  }
+
+  return candidate || null;
+}
+
+async function runSdkTitlePrompt({
+  prompt,
+  systemPrompt,
+  model,
+  cwd,
+  signal,
+  settings,
+}: TitlePromptRunnerParams): Promise<string | null> {
+  const queryInstance = query({
+    prompt,
+    options: {
+      persistSession: false,
+      tools: [],
+      allowedTools: [],
+      permissionMode: 'dontAsk',
+      settingSources: [],
+      settings,
+      strictMcpConfig: true,
+      maxTurns: 1,
+      effort: 'low',
+      ...(model ? { model } : {}),
+      cwd,
+      abortController: createLinkedAbortController(signal),
+      pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
+      systemPrompt,
+    },
+  });
+
+  for await (const message of queryInstance as AsyncIterable<AnyRecord>) {
+    if (message.type !== 'result') {
+      continue;
+    }
+    if (message.subtype !== 'success' || message.is_error) {
+      return null;
+    }
+    const resultText = typeof message.result === 'string' ? message.result : '';
+    return resultText.trim() || null;
+  }
+  return null;
+}
+
+function createLinkedAbortController(parentSignal: AbortSignal): AbortController {
+  const controller = new AbortController();
+  if (parentSignal.aborted) {
+    controller.abort();
+    return controller;
+  }
+  parentSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  return controller;
+}
+
+function buildModelCandidates(fallbackModel?: string): Array<string | undefined> {
+  const candidates: Array<string | undefined> = ['haiku'];
+  const trimmedFallback = fallbackModel?.trim();
+  if (trimmedFallback && trimmedFallback !== 'default' && trimmedFallback !== 'haiku') {
+    candidates.push(trimmedFallback);
+  }
+  candidates.push(undefined);
+  return candidates;
 }
 
 /**
  * Asks Claude for a title for one session. Resolves to `null` whenever no
- * usable title came back: a missing answer, an error, an abort, or a message
- * too short to name anything. Never rejects — naming is a nicety, and a
+ * usable title came back: a missing answer, an error, an abort, or a trivial
+ * greeting too short to rename. Never rejects — naming is a nicety, and a
  * failure must not surface to the caller that created the session.
  */
 export async function generateClaudeSessionTitle(
   firstMessage: string,
-  options: { cwd?: string; signal?: AbortSignal } = {},
+  options: TitleGenerationOptions = {},
 ): Promise<string | null> {
   const prompt = firstMessage.trim();
-  if (prompt.length < MIN_PROMPT_LENGTH) {
+  if (!prompt || measureTitleWidth(prompt) < MIN_PROMPT_WIDTH) {
+    return null;
+  }
+
+  if (options.signal?.aborted) {
     return null;
   }
 
   const abortController = new AbortController();
   const onAbort = () => abortController.abort();
-  if (options.signal?.aborted) {
-    return null;
-  }
   options.signal?.addEventListener('abort', onAbort);
+  const deadline = Date.now() + TITLE_TIMEOUT_MS;
   const timer = setTimeout(() => abortController.abort(), TITLE_TIMEOUT_MS);
 
-  try {
-    const queryInstance = query({
-      prompt: buildTitlePrompt(prompt),
-      options: {
-        persistSession: false,
-        // Naming reads one message; it needs no tools and no session of its own.
-        tools: [],
-        allowedTools: [],
-        permissionMode: 'dontAsk',
-        // The user's own model and credentials live in their settings files;
-        // an isolated query would fall back to a model that may not exist here.
-        settingSources: ['project', 'user', 'local'],
-        strictMcpConfig: true,
-        maxTurns: 1,
-        cwd: options.cwd,
-        abortController,
-        pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
-        systemPrompt: { type: 'preset', preset: 'claude_code', append: TITLE_SYSTEM_PROMPT_APPEND },
-      },
-    });
+  const runPrompt = options.runPrompt ?? runSdkTitlePrompt;
+  const titlePrompt = `Message:\n${prompt.slice(0, MAX_PROMPT_CHARS)}`;
+  const systemPrompt = buildTitleSystemPrompt();
 
-    for await (const message of queryInstance as AsyncIterable<AnyRecord>) {
-      if (message.type !== 'result') {
-        continue;
-      }
-      if (message.subtype !== 'success') {
+  try {
+    const settings = await loadSanitizedUserSettings();
+    const candidates = buildModelCandidates(options.model);
+
+    for (let index = 0; index < candidates.length; index += 1) {
+      if (abortController.signal.aborted) {
         return null;
       }
-      const resultText = typeof message.result === 'string' ? message.result : '';
-      return resultText.trim() ? sanitizeTitle(resultText) || null : null;
+      if (index > 0 && deadline - Date.now() < MIN_REMAINING_RETRY_MS) {
+        return null;
+      }
+
+      const candidateModel = candidates[index];
+      let raw: string | null = null;
+      try {
+        raw = await runPrompt({
+          prompt: titlePrompt,
+          systemPrompt,
+          model: candidateModel,
+          cwd: options.cwd,
+          signal: abortController.signal,
+          settings,
+        });
+      } catch {
+        raw = null;
+      }
+
+      const cleaned = raw ? cleanModelTitle(raw) : null;
+      if (!cleaned) {
+        continue;
+      }
+
+      if (measureTitleWidth(cleaned) <= SESSION_TITLE_MAX_WIDTH) {
+        return cleaned;
+      }
+
+      // The model produced a clean phrase that slightly overshot the 16-unit
+      // width budget; ask the same working model once to tighten it instead of
+      // chopping the end off with an ellipsis.
+      if (deadline - Date.now() >= MIN_REMAINING_RETRY_MS && !abortController.signal.aborted) {
+        try {
+          const shortenedRaw = await runPrompt({
+            prompt: `Title to shorten:\n${cleaned}`,
+            systemPrompt: buildShortenSystemPrompt(),
+            model: candidateModel,
+            cwd: options.cwd,
+            signal: abortController.signal,
+            settings,
+          });
+          const shortened = shortenedRaw ? cleanModelTitle(shortenedRaw) : null;
+          if (shortened && measureTitleWidth(shortened) <= SESSION_TITLE_MAX_WIDTH) {
+            return shortened;
+          }
+        } catch {
+          // Fall back to width truncation of the already-clean AI title below.
+        }
+      }
+
+      return truncateSessionTitle(cleaned) || null;
     }
+
     return null;
   } catch {
     // A timeout or a missing CLI is a normal outcome here; the caller keeps the
