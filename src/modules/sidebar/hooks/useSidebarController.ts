@@ -173,6 +173,14 @@ export function useSidebarController({
   const [isRecentConversationsLoading, setIsRecentConversationsLoading] = useState(false);
   const [isLoadingMoreRecentConversations, setIsLoadingMoreRecentConversations] = useState(false);
   const [recentConversationsError, setRecentConversationsError] = useState(false);
+  // When the first page of the Conversations list last arrived (client clock),
+  // or null before it has. A session active after that is new to the list,
+  // which is how an empty list still picks up sessions that start later.
+  const [recentConversationsLoadedAt, setRecentConversationsLoadedAt] = useState<number | null>(null);
+  // Sessions this sidebar archived or deleted since the list was fetched. A
+  // project refresh already in flight can still bring them back into
+  // `projects`, and the live merge must not re-add them from there.
+  const [removedRecentSessionIds, setRemovedRecentSessionIds] = useState<ReadonlySet<string>>(() => new Set());
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
   const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
@@ -313,6 +321,11 @@ export function useSidebarController({
         return;
       }
 
+      if (!append) {
+        setRecentConversationsLoadedAt(Date.now());
+        // A fresh list is the server's word on what exists.
+        setRemovedRecentSessionIds(new Set());
+      }
       setRecentConversations((previous) => {
         if (!append) {
           return conversations;
@@ -395,39 +408,96 @@ export function useSidebarController({
   }, [debouncedSearchQuery, reloadRecentConversations, searchMode]);
 
   // The Conversations list is only fetched when its tab opens, while `projects`
-  // is patched the moment a session is renamed from the workspace header. Fold
-  // those title changes into the rows already loaded, or a header rename would
-  // leave the highlighted conversation on its old name. The loaded rows are
-  // returned as-is when no session carries a different custom name, so
-  // unrelated `projects` updates do not re-render the list, and an empty
-  // summary never overwrites the id the server shows for an unnamed session.
-  const recentConversationsWithCurrentTitles = useMemo(() => {
-    if (recentConversations.length === 0) {
-      return recentConversations;
+  // is kept live: sessions are patched in as they are renamed, get new
+  // messages or start. Fold that into the rows already loaded, or the list
+  // keeps the order, times and titles it had when the tab opened:
+  // - a newer title or last activity replaces the row's own;
+  // - a session active after every loaded row (after the fetch, for an empty
+  //   list) started or woke up since, and is added;
+  // - the rows are re-sorted newest first, as the server sorts them.
+  // Rows are never dropped here: `projects` is not told when a session is
+  // archived or deleted elsewhere, so a session missing from it is not gone.
+  // The loaded rows are returned as-is when nothing changes, so unrelated
+  // `projects` updates do not re-render the list, and an empty summary never
+  // overwrites the id the server shows for an unnamed session.
+  const liveRecentConversations = useMemo(() => {
+    const unchanged = { rows: recentConversations, added: 0 };
+    if (recentConversationsLoadedAt === null) {
+      return unchanged;
     }
 
-    // Trimmed, because that is how the server derives a row's `sessionTitle`.
-    const summaryBySessionId = new Map<string, string>();
+    const timeOf = (value: string | null | undefined) => {
+      const time = Date.parse(value ?? '');
+      return Number.isNaN(time) ? 0 : time;
+    };
+    // Rows without a readable time say nothing about how recent the list is.
+    const loadedActivityTimes = recentConversations
+      .map((conversation) => Date.parse(conversation.lastActivity ?? ''))
+      .filter((time) => !Number.isNaN(time));
+    const addedAfter = loadedActivityTimes.length > 0
+      ? Math.max(...loadedActivityTimes)
+      : recentConversationsLoadedAt;
+
+    const liveSessions = new Map<string, { session: ProjectSession; project: Project }>();
     for (const project of projects) {
       for (const session of project.sessions ?? []) {
-        const summary = typeof session.summary === 'string' ? session.summary.trim() : '';
-        if (summary) {
-          summaryBySessionId.set(session.id, summary);
-        }
+        liveSessions.set(session.id, { session, project });
       }
     }
 
     let changed = false;
-    const next = recentConversations.map((conversation) => {
-      const summary = summaryBySessionId.get(conversation.sessionId);
-      if (summary === undefined || summary === conversation.sessionTitle) {
-        return conversation;
+    const seen = new Set<string>();
+    const next: RecentConversationListItem[] = [];
+    for (const conversation of recentConversations) {
+      if (seen.has(conversation.sessionId)) {
+        // Rows reordered between pages can come back in a later page.
+        changed = true;
+        continue;
       }
+      seen.add(conversation.sessionId);
+
+      const live = liveSessions.get(conversation.sessionId);
+      // Trimmed, because that is how the server derives a row's `sessionTitle`.
+      const summary = typeof live?.session.summary === 'string' ? live.session.summary.trim() : '';
+      const lastActivity = live?.session.lastActivity;
+      const newerActivity = Boolean(lastActivity) && timeOf(lastActivity) > timeOf(conversation.lastActivity);
+      if ((summary && summary !== conversation.sessionTitle) || newerActivity) {
+        changed = true;
+        next.push({
+          ...conversation,
+          sessionTitle: summary || conversation.sessionTitle,
+          lastActivity: newerActivity ? lastActivity! : conversation.lastActivity,
+        });
+        continue;
+      }
+      next.push(conversation);
+    }
+
+    let added = 0;
+    for (const [sessionId, { session, project }] of liveSessions) {
+      if (seen.has(sessionId) || removedRecentSessionIds.has(sessionId) || timeOf(session.lastActivity) <= addedAfter) {
+        continue;
+      }
+      const summary = typeof session.summary === 'string' ? session.summary.trim() : '';
       changed = true;
-      return { ...conversation, sessionTitle: summary };
-    });
-    return changed ? next : recentConversations;
-  }, [projects, recentConversations]);
+      added += 1;
+      next.push({
+        sessionId,
+        provider: session.__provider ?? session.provider ?? 'claude',
+        projectId: project.projectId,
+        projectDisplayName: project.displayName || project.path || '',
+        // The server shows the id for a session with no title.
+        sessionTitle: summary || sessionId,
+        lastActivity: session.lastActivity ?? null,
+      });
+    }
+
+    if (!changed) {
+      return unchanged;
+    }
+    next.sort((left, right) => timeOf(right.lastActivity) - timeOf(left.lastActivity));
+    return { rows: next, added };
+  }, [projects, recentConversations, recentConversationsLoadedAt, removedRecentSessionIds]);
 
   useEffect(() => {
     if (searchMode !== 'archived') {
@@ -922,6 +992,7 @@ export function useSidebarController({
         // Same gap as rename: nothing refetched the recents feed, so the row the
         // user just archived stayed in the list. Archiving keeps the session, so
         // only the non-archived total moves.
+        setRemovedRecentSessionIds((previous) => new Set(previous).add(sessionId));
         setRecentConversations((previous) => {
           const remaining = previous.filter((conversation) => conversation.sessionId !== sessionId);
           if (remaining.length !== previous.length) {
@@ -1061,6 +1132,7 @@ export function useSidebarController({
       // Counted outside the updater so both updaters stay pure: React may run an
       // updater twice, which would take the rows off the total twice.
       const removed = recentConversations.filter((conversation) => deletedIdSet.has(conversation.sessionId)).length;
+      setRemovedRecentSessionIds((previous) => new Set([...previous, ...deletedIdSet]));
       setRecentConversations((previous) =>
         previous.filter((conversation) => !deletedIdSet.has(conversation.sessionId)),
       );
@@ -1328,8 +1400,9 @@ export function useSidebarController({
     archivedSessions: filteredArchivedSessions,
     archivedSessionsCount: archivedProjects.length + archivedSessions.length,
     isArchivedSessionsLoading,
-    recentConversations: recentConversationsWithCurrentTitles,
-    recentConversationsTotal,
+    recentConversations: liveRecentConversations.rows,
+    // Sessions added live are not in the fetched total yet.
+    recentConversationsTotal: recentConversationsTotal + liveRecentConversations.added,
     recentConversationsHasMore,
     isRecentConversationsLoading,
     isLoadingMoreRecentConversations,
