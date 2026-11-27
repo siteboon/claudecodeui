@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '@/shared/api';
+import { replaceDirectoryChildren } from '@/modules/file-tree/utils/fileTreeUtils';
 import type { Project,FileTreeNode } from '@/shared/types';
 
 type UseFileTreeDataResult = {
@@ -8,6 +9,8 @@ type UseFileTreeDataResult = {
   loading: boolean;
   error: string | null;
   refreshFiles: () => void;
+  // Fetches one directory the server left unloaded and splices it into `files`.
+  loadDirectory: (directoryPath: string) => Promise<void>;
 };
 
 const DEFAULT_LOAD_ERROR = 'Unable to load the file tree for this project.';
@@ -37,6 +40,23 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
   const refreshFiles = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
   }, []);
+
+  const projectId = selectedProject?.projectId;
+
+  const loadDirectory = useCallback(async (directoryPath: string) => {
+    if (!projectId) {
+      return;
+    }
+    const response = await api.getFiles(projectId, {}, directoryPath);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(readResponseErrorMessage(errorText) ?? DEFAULT_LOAD_ERROR);
+    }
+    const children = (await response.json()) as FileTreeNode[];
+    // A response for a directory that is no longer in the tree (project
+    // switched, tree refreshed) leaves `files` untouched.
+    setFiles((previous) => replaceDirectoryChildren(previous, directoryPath, children));
+  }, [projectId]);
 
   useEffect(() => {
     // File-tree requests use the DB projectId; the backend resolves it to the
@@ -111,5 +131,6 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
     loading,
     error,
     refreshFiles,
+    loadDirectory,
   };
 }
