@@ -77,7 +77,15 @@ export function createCliApplication() {
     output: { log: () => undefined, error: () => undefined },
     sandboxService: { execute: async () => 0 },
     getLatestPackageVersion: async () => '1.0.0',
-    updateGlobalPackage: () => undefined,
+    updateGlobalPackage: async () => {
+      throw new Error('update is not part of the bootstrap fixture');
+    },
+    readUpdateHistory: async () => ({
+      lastStart: null,
+      lastUpdate: null,
+      lastStartPath: ${JSON.stringify(path.join(fixtureRoot, '.cloudcli', 'last-start.json'))},
+      lastUpdatePath: ${JSON.stringify(path.join(fixtureRoot, '.cloudcli', 'last-update.json'))},
+    }),
     startServer: async () => undefined,
     startBrowserUseMcp: async () => undefined,
   });
