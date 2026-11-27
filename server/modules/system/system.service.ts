@@ -1,8 +1,14 @@
+import path from 'node:path';
+
 type SystemUpdateCommandResult = {
   exitCode: number | null;
   output: string;
   errorOutput: string;
 };
+
+type SystemUpdateResult =
+  | { success: true; output: string; message: string }
+  | { success: false; error: string; output?: string; errorOutput?: string };
 
 type SystemUpdateDependencies = {
   appRoot: string;
@@ -17,60 +23,162 @@ type SystemUpdateDependencies = {
     onOutput: (output: string) => void,
     onErrorOutput: (errorOutput: string) => void,
   ): Promise<SystemUpdateCommandResult>;
+  createDirectory(directory: string): Promise<void>;
+  moveDirectory(from: string, to: string): Promise<void>;
+  removeDirectory(directory: string): Promise<void>;
+  pathExists(target: string): Promise<boolean>;
   logInfo(message: string, detail?: string): void;
   logError(message: string, detail?: string): void;
 };
+
+// --install-strategy=shallow nests every transitive dependency inside the
+// package directory, exactly like `npm install -g`, so the directory can be moved.
+const NPM_STAGED_INSTALL_COMMAND =
+  'npm install --prefix . --install-strategy=shallow --no-save --no-package-lock @cloudcli-ai/cloudcli@latest';
+
+/** Whether `appRoot` is `<prefix>/node_modules/@cloudcli-ai/cloudcli`, the layout `npm install -g` creates. */
+function isGlobalNpmPackage(appRoot: string): boolean {
+  const packageDirectory = path.resolve(appRoot);
+  return path.basename(packageDirectory) === 'cloudcli'
+    && path.basename(path.dirname(packageDirectory)) === '@cloudcli-ai'
+    && path.basename(path.dirname(path.dirname(packageDirectory))) === 'node_modules';
+}
 
 /**
  * Creates the update workflow used by the system module and its focused tests.
  * Runtime-specific process spawning stays behind the injected command adapter.
  */
 export function createSystemUpdateService(dependencies: SystemUpdateDependencies) {
-  return {
-    /** Selects and executes the correct update workflow for this installation. */
-    async updateSystem() {
+  let runningUpdate: Promise<SystemUpdateResult> | null = null;
+  let lastResult: SystemUpdateResult | null = null;
+
+  async function runUpdateCommand(command: string, workingDirectory: string): Promise<SystemUpdateResult> {
+    const result = await dependencies.runShellCommand(
+      command,
+      workingDirectory,
+      dependencies.environment,
+      (output) => dependencies.logInfo('Update output:', output),
+      (errorOutput) => dependencies.logError('Update error:', errorOutput),
+    );
+
+    if (result.exitCode === 0) {
+      return {
+        success: true,
+        output: result.output || 'Update completed successfully',
+        message: 'Update completed. Please restart the server to apply changes.',
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Update command failed',
+      output: result.output,
+      errorOutput: result.errorOutput,
+    };
+  }
+
+  /**
+   * Installs the new version next to the running one and swaps the directories
+   * only after npm succeeded. An in-place `npm install -g` that gets killed
+   * (e.g. by the OOM killer together with the server's cgroup) leaves a
+   * half-deleted package behind that can no longer start.
+   */
+  async function updateNpmInstallation(): Promise<SystemUpdateResult> {
+    const scopeDirectory = path.dirname(dependencies.appRoot);
+    const stagingRoot = path.join(scopeDirectory, '.cloudcli-update');
+    const stagedApp = path.join(stagingRoot, 'node_modules', '@cloudcli-ai', 'cloudcli');
+    const previousApp = path.join(scopeDirectory, '.cloudcli-previous');
+
+    dependencies.logInfo('Starting system update from directory:', stagingRoot);
+    await dependencies.removeDirectory(stagingRoot);
+    await dependencies.createDirectory(stagingRoot);
+
+    const result = await runUpdateCommand(NPM_STAGED_INSTALL_COMMAND, stagingRoot);
+    if (!result.success) {
+      return result;
+    }
+
+    // A swap that could not put the old version back left it only in the backup: keep that backup.
+    if (await dependencies.pathExists(dependencies.appRoot)) {
+      await dependencies.removeDirectory(previousApp);
+      await dependencies.moveDirectory(dependencies.appRoot, previousApp);
+    }
+    // shortcut: the global bin symlink is reused as is, so a release that renames its bin entry needs a manual `npm install -g`.
+    try {
+      await dependencies.moveDirectory(stagedApp, dependencies.appRoot);
+    } catch (error) {
+      try {
+        await dependencies.moveDirectory(previousApp, dependencies.appRoot);
+      } catch (restoreError) {
+        const detail = restoreError instanceof Error ? restoreError.message : String(restoreError);
+        dependencies.logError(`Could not restore the previous version from ${previousApp}:`, detail);
+      }
+      throw error;
+    }
+
+    // The new version is in place; a leftover directory must not turn that into a failure.
+    for (const directory of [stagingRoot, previousApp]) {
+      try {
+        await dependencies.removeDirectory(directory);
+      } catch (cleanupError) {
+        const detail = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+        dependencies.logError(`Could not remove ${directory} after the update:`, detail);
+      }
+    }
+    return result;
+  }
+
+  /** Selects and executes the correct update workflow for this installation. */
+  async function updateSystem(): Promise<SystemUpdateResult> {
+    try {
+      if (!dependencies.isPlatform && dependencies.installMode === 'npm') {
+        // Only a global npm package directory can be swapped; anything else
+        // (a desktop app bundle, an unpacked tarball) keeps the plain global install.
+        if (isGlobalNpmPackage(dependencies.appRoot)) {
+          return await updateNpmInstallation();
+        }
+        dependencies.logInfo('Starting system update from directory:', dependencies.homeDirectory);
+        return await runUpdateCommand('npm install -g @cloudcli-ai/cloudcli@latest', dependencies.homeDirectory);
+      }
+
       const updateCommand = dependencies.isPlatform
         ? 'npm run update:platform'
-        : dependencies.installMode === 'git'
-          ? 'git checkout main && git pull && npm install'
-          : 'npm install -g @cloudcli-ai/cloudcli@latest';
-      const workingDirectory = dependencies.isPlatform || dependencies.installMode === 'git'
-        ? dependencies.appRoot
-        : dependencies.homeDirectory;
+        : 'git checkout main && git pull && npm install';
+      dependencies.logInfo('Starting system update from directory:', dependencies.appRoot);
+      return await runUpdateCommand(updateCommand, dependencies.appRoot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      dependencies.logError('Update process error:', message);
+      return {
+        success: false,
+        error: message,
+      };
+    }
+  }
 
-      dependencies.logInfo('Starting system update from directory:', workingDirectory);
+  return {
+    updateSystem,
 
-      try {
-        const result = await dependencies.runShellCommand(
-          updateCommand,
-          workingDirectory,
-          dependencies.environment,
-          (output) => dependencies.logInfo('Update output:', output),
-          (errorOutput) => dependencies.logError('Update error:', errorOutput),
-        );
-
-        if (result.exitCode === 0) {
-          return {
-            success: true as const,
-            output: result.output || 'Update completed successfully',
-            message: 'Update completed. Please restart the server to apply changes.',
-          };
-        }
-
-        return {
-          success: false as const,
-          error: 'Update command failed',
-          output: result.output,
-          errorOutput: result.errorOutput,
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        dependencies.logError('Update process error:', message);
-        return {
-          success: false as const,
-          error: message,
-        };
+    /**
+     * Runs the update in the background so a slow install cannot outlast the
+     * HTTP request and surface as a proxy timeout. Repeated calls while an
+     * update is running join the existing run.
+     */
+    startUpdate() {
+      if (runningUpdate) {
+        return;
       }
+
+      lastResult = null;
+      runningUpdate = updateSystem().then((result) => {
+        lastResult = result;
+        runningUpdate = null;
+        return result;
+      });
+    },
+
+    getUpdateStatus() {
+      return { running: runningUpdate !== null, result: lastResult };
     },
   };
 }

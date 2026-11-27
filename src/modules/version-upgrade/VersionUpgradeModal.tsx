@@ -17,6 +17,7 @@ type VersionUpgradeModalProps = {
 };
 
 const RELOAD_COUNTDOWN_START = 120;
+const UPDATE_POLL_INTERVAL_MS = 2000;
 
 /** This module's only public export: rendered by the sidebar module's modal layer to show release notes and run the app upgrade. */
 export function VersionUpgradeModal({
@@ -73,7 +74,38 @@ export function VersionUpgradeModal({
 
         try {
             // Call the backend API to run the update command
-            const response = await api.system.update();
+            let postError: unknown = null;
+            let response: Response | null = await api.system.update().catch((error: unknown) => {
+                postError = error;
+                return null;
+            });
+            // A dropped connection or a proxy 502-504 can hide a POST the server got; only a running update proves it did.
+            if (!response || (response.status >= 502 && response.status <= 504)) {
+                const status = await api.system.updateStatus().catch(() => null);
+                if (status?.status === 202) response = status;
+            }
+            if (!response) throw postError;
+
+            // The server answers 202 and keeps installing in the background so
+            // a slow install cannot run into a proxy timeout; poll until done.
+            while (response.status === 202) {
+                await new Promise(resolve => window.setTimeout(resolve, UPDATE_POLL_INTERVAL_MS));
+                try {
+                    const next = await api.system.updateStatus();
+                    // A proxy answers 502-504 while the server is busy or restarting: ask again.
+                    if (next.status < 502 || next.status > 504) {
+                        response = next;
+                    }
+                } catch {
+                    // A dropped connection says nothing about the update, which keeps running.
+                }
+            }
+
+            if (response.status === 404) {
+                // A restarted server no longer knows the update it ran.
+                setUpdateOutput(prev => prev + '\n' + t('versionUpdate.updateStartedRestarting') + '\n');
+                return;
+            }
 
             // The server (or a proxy in front of it) can answer with an HTML
             // page instead of JSON — e.g. while a hosted/Docker deployment
