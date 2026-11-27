@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
 
@@ -306,7 +307,57 @@ async function readWorkflowJournal(transcriptDir: string): Promise<WorkflowAgent
     }
   }
 
-  return [...agentsById.values()];
+  const agents = [...agentsById.values()];
+  await Promise.all(agents.map(async (agent) => {
+    const timing = await readTranscriptTimeSpan(path.join(transcriptDir, `agent-${agent.id}.jsonl`));
+    if (timing) {
+      agent.startedAt = timing.startedAt;
+      agent.lastActivityAt = timing.lastActivityAt;
+    }
+  }));
+  return agents;
+}
+
+/** How much of a transcript's head and tail is read for its first and last timestamps. */
+const TRANSCRIPT_TIME_SPAN_WINDOW_BYTES = 256 * 1024;
+
+/**
+ * The first and last `timestamp` in a transcript, as epoch ms, or null when
+ * the file is missing or has none in reach.
+ *
+ * An agent's transcript runs to megabytes and this is read for every agent of
+ * every workflow on each history load, so only its head and tail are read. A
+ * timestamp quoted inside a tool's output is JSON-escaped (`\"timestamp\"`),
+ * so the pattern only ever matches an entry's own key.
+ */
+async function readTranscriptTimeSpan(
+  transcriptPath: string,
+): Promise<{ startedAt: number; lastActivityAt: number } | null> {
+  let handle: FileHandle | undefined;
+  try {
+    handle = await fsp.open(transcriptPath, 'r');
+    const { size } = await handle.stat();
+    const readSlice = async (position: number) => {
+      const length = Math.min(size, TRANSCRIPT_TIME_SPAN_WINDOW_BYTES);
+      const buffer = Buffer.alloc(length);
+      await handle!.read(buffer, 0, length, position);
+      return buffer.toString('utf8');
+    };
+    const timestampsIn = (text: string) => [...text.matchAll(/"timestamp":"([^"]+)"/g)]
+      .map((match) => Date.parse(match[1]))
+      .filter(Number.isFinite);
+
+    const head = timestampsIn(await readSlice(0));
+    const tail = timestampsIn(await readSlice(Math.max(0, size - TRANSCRIPT_TIME_SPAN_WINDOW_BYTES)));
+    if (head.length === 0 || tail.length === 0) {
+      return null;
+    }
+    return { startedAt: Math.min(...head), lastActivityAt: Math.max(...tail) };
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
 }
 
 /**

@@ -882,6 +882,51 @@ test('Claude history reads a workflow\'s agents and their progress from its jour
   }
 });
 
+test('Claude history times each workflow agent from the first and last entry of its own transcript', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-agent-timing-'));
+
+  try {
+    const parentPath = await writeClaudeWorkflowSession(tempRoot, { notification: 'none', journal: true });
+    // audit:chat's transcript; the other two agents left none.
+    const runDir = path.join(tempRoot, WORKFLOW_SESSION_ID, 'subagents', 'workflows', WORKFLOW_RUN_ID);
+    const agentId = 'aa1e064cf8bd159d6';
+    const rows = [
+      { isSidechain: true, agentId, type: 'user', uuid: 'wt-u1', timestamp: '2026-08-21T10:33:00.000Z', message: { role: 'user', content: 'Audit src/modules/chat.' } },
+      // A timestamp quoted in a tool's output is not the entry's own.
+      { isSidechain: true, agentId, type: 'user', uuid: 'wt-u2', timestamp: '2026-08-21T10:34:10.000Z', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_wt_1', content: '{"timestamp":"2026-08-21T23:59:59.000Z"}' }] } },
+      { isSidechain: true, agentId, type: 'assistant', uuid: 'wt-a1', timestamp: '2026-08-21T10:35:14.000Z', message: { role: 'assistant', model: 'claude-opus-4-1', content: [{ type: 'text', text: 'Three large hooks.' }] } },
+    ];
+    await writeFile(path.join(runDir, `agent-${agentId}.jsonl`), `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`, 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(WORKFLOW_SESSION_ID, 'claude', tempRoot, 'Workflow session', now, now, parentPath);
+
+      const history = await new ClaudeSessionsProvider({ getLiveRunStartTime: () => Date.parse('2026-08-21T10:30:00.000Z') }).fetchHistory(WORKFLOW_SESSION_ID, {
+        providerSessionId: WORKFLOW_SESSION_ID,
+      });
+      const workflowRow = history.messages.find(
+        (message) => message.kind === 'tool_use' && message.toolId === WORKFLOW_TOOL_USE_ID,
+      );
+
+      assert.deepEqual(workflowRow?.workflow?.agents, [
+        {
+          id: agentId,
+          label: 'audit:chat',
+          phase: 'Audit',
+          status: 'completed',
+          startedAt: Date.parse('2026-08-21T10:33:00.000Z'),
+          lastActivityAt: Date.parse('2026-08-21T10:35:14.000Z'),
+        },
+        { id: 'a9cfe29aa8f2afcbf', label: 'audit:sidebar', phase: 'Audit', status: 'failed' },
+        { id: 'ab89f2cde612a51b1', label: 'synthesize', phase: 'Synthesize', status: 'running' },
+      ]);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Claude history does not keep a journal agent running once the workflow itself has settled', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-workflow-orphan-agent-'));
 
