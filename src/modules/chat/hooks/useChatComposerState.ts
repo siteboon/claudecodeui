@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -315,6 +315,13 @@ export function useChatComposerState({
     ) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  // Read when a send starts, so the established session reports that send's
+  // New Session trigger even if the user clicks New Session while it is out.
+  // Written once committed, never from a render React throws away.
+  const newSessionTriggerRef = useRef(newSessionTrigger);
+  useLayoutEffect(() => {
+    newSessionTriggerRef.current = newSessionTrigger;
+  }, [newSessionTrigger]);
   const selectedProjectId = selectedProject?.projectId;
   // Prefer the stable backend-allocated id (selectedSession.id) but fall back
   // to currentSessionId for a just-established session that hasn't been
@@ -329,8 +336,6 @@ export function useChatComposerState({
   const draftScope = sessionKey ?? (selectedProjectId ? `project:${selectedProjectId}` : null);
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
-  const newSessionTriggerRef = useRef(newSessionTrigger);
-  newSessionTriggerRef.current = newSessionTrigger;
   // Composition is tracked on `window` in the capture phase rather than on the textarea, so a
   // composition that starts in one field and ends after focus moves still closes cleanly.
   const isComposingRef = useRef(false);
@@ -530,7 +535,8 @@ export function useChatComposerState({
         const context = {
           projectPath: selectedProject.fullPath || selectedProject.path,
           projectId: selectedProject.projectId,
-          sessionId: currentSessionId || selectedSession?.id || null,
+          // The selected session first: currentSessionId can still name the previous one.
+          sessionId: selectedSession?.id || currentSessionId || null,
           provider,
           model: currentProviderModel,
           tokenUsage: tokenBudget,
@@ -1137,6 +1143,7 @@ export function useChatComposerState({
       submitOptions?: SubmitOptions,
     ) => {
       event.preventDefault();
+      const sendNewSessionTrigger = newSessionTriggerRef.current;
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
       const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
       const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];
@@ -1153,7 +1160,6 @@ export function useChatComposerState({
       // The chat this send belongs to: the upload and session allocation below can outlast a
       // chat switch, and the cleanup at the end must not empty whichever chat is open by then.
       const submittedScope = draftScopeRef.current;
-      const submittedNewSessionTrigger = newSessionTriggerRef.current;
 
       // `/btw <question>` never becomes a turn: checked before the in-flight
       // queue below, since that branch runs before slash-command
@@ -1272,7 +1278,7 @@ export function useChatComposerState({
       // a brand-new chat moving from its project scope to its session id has not left.
       // New Session only leaves a send that started a new chat: an existing chat keeps its own scope.
       const startsNewChat = targetSessionId === null;
-      const leftChat = () => (startsNewChat && newSessionTriggerRef.current !== submittedNewSessionTrigger)
+      const leftChat = () => (startsNewChat && newSessionTriggerRef.current !== sendNewSessionTrigger)
         || (draftScopeRef.current !== submittedScope
           && (targetSessionId === null || draftScopeRef.current !== targetSessionId));
 
@@ -1301,6 +1307,8 @@ export function useChatComposerState({
       // BEFORE the first websocket send: brand-new chats allocate one here
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
+      // Built once: the new session row records the same selection the send carries.
+      const sendOptions = queuedSubmission?.options ?? buildSendOptions(messageContent);
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
@@ -1308,6 +1316,9 @@ export function useChatComposerState({
             provider,
             projectPath: resolvedProjectPath,
             initialMessage: messageContent,
+            model: sendOptions.model,
+            effort: sendOptions.effort,
+            permissionMode: sendOptions.permissionMode,
           });
           if (!response.ok) {
             throw new Error(`Failed to create session (${response.status})`);
@@ -1351,6 +1362,12 @@ export function useChatComposerState({
           project: selectedProject,
           summary: createdSessionName,
           chatLeft: leftChat(),
+          newSessionTrigger: sendNewSessionTrigger,
+          selection: {
+            model: sendOptions.model,
+            effort: sendOptions.effort,
+            permissionMode: sendOptions.permissionMode,
+          },
         });
       }
 
@@ -1382,7 +1399,7 @@ export function useChatComposerState({
             content: currentInput,
             attachments: currentAttachments,
             uploadedAttachments,
-            options: buildSendOptions(currentInput),
+            options: sendOptions,
           }, targetSessionId);
           return;
         }
@@ -1430,7 +1447,7 @@ export function useChatComposerState({
         ...(editingAnchorId ? { anchorId: editingAnchorId } : {}),
         content: messageContent,
         options: {
-          ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
+          ...sendOptions,
           attachments: uploadedAttachments,
         },
       });

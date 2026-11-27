@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { api, readApiErrorMessage } from '@/shared/api';
 import type { Plugin } from '@/shared/types';
+import { invalidateToolRendererModules } from '@/modules/plugins/tool-renderers/loadToolRendererModule';
 
 
 type PluginsContextValue = {
@@ -25,6 +26,12 @@ export function usePlugins() {
   }
   return context;
 }
+
+/** Like usePlugins, for components that also render outside the provider (exports, tests): no plugins there. */
+export function useOptionalPlugins(): Plugin[] {
+  return useContext(PluginsContext)?.plugins ?? NO_PLUGINS;
+}
+const NO_PLUGINS: Plugin[] = [];
 
 /** Mounted by the app root so the plugins and project-workspace modules can read and mutate installed plugins through usePlugins. */
 export function PluginsProvider({ children }: { children: ReactNode }) {
@@ -81,6 +88,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
       const res = await api.plugins.uninstall(name);
       const data = await res.json();
       if (res.ok) {
+        invalidateToolRendererModules(name);
         await refreshPlugins();
         return { success: true };
       }
@@ -95,6 +103,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
       const res = await api.plugins.update(name);
       const data = await res.json();
       if (res.ok) {
+        invalidateToolRendererModules(name);
         await refreshPlugins();
         return { success: true };
       }

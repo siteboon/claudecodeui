@@ -24,7 +24,8 @@
     "fullscreen": "全屏",
     "close": "关闭",
     "previewMarkdown": "预览 Markdown",
-    "editMarkdown": "编辑 Markdown"
+    "editMarkdown": "编辑 Markdown",
+    "previewHtml": "在新标签页中预览 HTML"
   },
   "footer": {
     "lines": "行数：",
@@ -33,7 +34,10 @@
   },
   "binaryFile": {
     "title": "二进制文件",
-    "message": "文件 \"{{fileName}}\" 无法在文本编辑器中显示，因为它是二进制文件。"
+    "message": "文件 \"{{fileName}}\" 无法在文本编辑器中显示，因为它是二进制文件。",
+    "download": "下载原始文件",
+    "downloading": "正在下载…",
+    "downloadFailed": "无法下载文件，请重试。"
   },
   "filePreview": {
     "loading": "正在加载预览...",
