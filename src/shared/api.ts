@@ -628,6 +628,12 @@ export const api = {
     stopSession: (sessionId: string) => post(`/api/browser-use/sessions/${sessionId}/stop`),
     deleteSession: (sessionId: string) => del(`/api/browser-use/sessions/${sessionId}`),
     sendInput: (sessionId: string, input: unknown) => post(`/api/browser-use/sessions/${sessionId}/input`, input),
+    control: (
+      sessionId: string,
+      action: 'take' | 'frame' | 'input' | 'release',
+      body?: unknown,
+      options?: ApiRequestOptions,
+    ) => post(`/api/browser-use/sessions/${encodeURIComponent(sessionId)}/control/${action}`, body, options),
     installRuntime: () => post('/api/browser-use/runtime/install'),
   },
 
