@@ -4,20 +4,36 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { TFunction } from 'i18next';
 import { beforeEach, test, vi } from 'vitest';
 
-import type { Project, RecentConversationListItem } from '@/shared/types';
-
-/**
- * The Conversations list keeps its own copy of each session's title and is
- * fetched only when its tab opens. A session renamed from the workspace header
- * is patched straight into `projects`, so the list has to fold that title in
- * itself, or the highlighted row would keep the old name beside the new header.
- */
+import type { Project, RecentConversationListItem, ServerEvent } from '@/shared/types';
 
 const recentConversationsResponse = vi.fn();
+const sessionEventListeners = new Set<(event: ServerEvent) => void>();
+
+const subscribeToSessionEvents = (listener: (event: ServerEvent) => void) => {
+  sessionEventListeners.add(listener);
+  return () => { sessionEventListeners.delete(listener); };
+};
+
+const sendSessionEvent = (event: ServerEvent) => {
+  act(() => sessionEventListeners.forEach((listener) => listener(event)));
+};
+
+function recentResponse(rows: RecentConversationListItem[], limit = rows.length, offset = 0) {
+  return {
+    ok: true,
+    json: async () => ({
+      data: {
+        conversations: rows.slice(offset, offset + limit),
+        total: rows.length,
+        hasMore: offset + limit < rows.length,
+      },
+    }),
+  };
+}
 
 vi.mock('@/shared/api', () => ({
   api: {
-    recentConversations: () => recentConversationsResponse(),
+    recentConversations: (page: { limit: number; offset: number }) => recentConversationsResponse(page),
     archivedProjects: () => Promise.resolve({ ok: true, json: async () => ({ data: { projects: [] } }) }),
     getArchivedSessions: () => Promise.resolve({ ok: true, json: async () => ({ data: { sessions: [] } }) }),
   },
@@ -62,6 +78,7 @@ const renderController = (initialProjects: Project[]) => renderHook(
     setCurrentProject: vi.fn(),
     setSidebarVisible: vi.fn(),
     sidebarVisible: true,
+    subscribeToSessionEvents,
   }),
   { initialProps: { projects: initialProjects } },
 );
@@ -112,4 +129,83 @@ test('rows keep their identity, and an unnamed session keeps its id, when nothin
   rerender({ projects: [buildProject({ 'session-1': 'Original title', 'session-2': '' })] });
 
   assert.equal(result.current.recentConversations, rowsBefore);
+});
+
+test('an external turn brings a previously unloaded conversation to the top while the tab stays open', async () => {
+  const rows = Array.from({ length: 45 }, (_, index) => conversation(`session-${index}`, `Title ${index}`));
+  let orderedRows = rows;
+  recentConversationsResponse.mockImplementation(async ({ limit, offset }) => recentResponse(orderedRows, limit, offset));
+
+  const { result } = renderController([]);
+  act(() => result.current.setSearchMode('conversations'));
+  await waitFor(() => assert.equal(result.current.recentConversations.length, 40));
+
+  // The native activity arrives through the watcher. The global feed has the
+  // newer timestamp even when the owning project was never loaded in the UI.
+  const resumed = {
+    ...rows[44],
+    provider: 'codex' as const,
+    projectId: null,
+    lastActivity: '2026-09-22T10:00:00.000Z',
+  };
+  orderedRows = [resumed, ...rows.slice(0, 44)];
+  sendSessionEvent({ kind: 'session_upserted', sessionId: resumed.sessionId, project: null });
+  sendSessionEvent({ kind: 'session_upserted', sessionId: resumed.sessionId, project: null });
+
+  await waitFor(() => assert.deepEqual(result.current.recentConversations[0], resumed));
+  assert.equal(recentConversationsResponse.mock.calls.length, 2, 'a burst of updates uses one request');
+  assert.equal(result.current.recentConversationsTotal, 45);
+  assert.equal(result.current.recentConversationsHasMore, true);
+});
+
+test('live reordering preserves loaded pages and keeps the next scroll page in sequence', async () => {
+  const rows = Array.from({ length: 137 }, (_, index) => conversation(`session-${index}`, `Title ${index}`));
+  let orderedRows = rows;
+  recentConversationsResponse.mockImplementation(async ({ limit, offset }) => recentResponse(orderedRows, limit, offset));
+  const { result } = renderController([]);
+  act(() => result.current.setSearchMode('conversations'));
+  await waitFor(() => assert.equal(result.current.recentConversations.length, 40));
+  act(() => result.current.loadMoreRecentConversations());
+  await waitFor(() => assert.equal(result.current.recentConversations.length, 80));
+  act(() => result.current.loadMoreRecentConversations());
+  await waitFor(() => assert.equal(result.current.recentConversations.length, 120));
+
+  const resumed = { ...rows[105], lastActivity: '2026-09-22T10:00:00.000Z' };
+  orderedRows = [resumed, ...rows.slice(0, 105), ...rows.slice(106)];
+  sendSessionEvent({ kind: 'session_upserted', sessionId: resumed.sessionId });
+  await waitFor(() => assert.deepEqual(result.current.recentConversations, orderedRows.slice(0, 120)));
+  assert.deepEqual(recentConversationsResponse.mock.calls.slice(3), [[{ limit: 100, offset: 0 }], [{ limit: 20, offset: 100 }]]);
+
+  act(() => result.current.loadMoreRecentConversations());
+  await waitFor(() => assert.deepEqual(result.current.recentConversations, orderedRows));
+  assert.equal(result.current.recentConversationsHasMore, false);
+});
+
+test('events received during a live read trigger a follow-up, and leaving the tab cancels the subscription', async () => {
+  const { result } = await openConversationsTab([]);
+  const initialRows = result.current.recentConversations;
+  let releaseRead!: (response: ReturnType<typeof recentResponse>) => void;
+  recentConversationsResponse.mockImplementationOnce(
+    () => new Promise<ReturnType<typeof recentResponse>>((resolve) => { releaseRead = resolve; }),
+  );
+
+  sendSessionEvent({ kind: 'websocket_reconnected' });
+  await waitFor(() => assert.equal(recentConversationsResponse.mock.calls.length, 2));
+  assert.equal(result.current.recentConversations, initialRows, 'existing rows stay visible during a live read');
+
+  const updated = { ...initialRows[1], lastActivity: '2026-09-22T10:00:00.000Z' };
+  const updatedRows = [updated, initialRows[0]];
+  recentConversationsResponse.mockResolvedValue(recentResponse(updatedRows));
+  sendSessionEvent({ kind: 'session_upserted', sessionId: updated.sessionId });
+  await act(async () => releaseRead(recentResponse(initialRows)));
+
+  await waitFor(() => assert.deepEqual(result.current.recentConversations, updatedRows));
+  assert.equal(recentConversationsResponse.mock.calls.length, 3);
+
+  sendSessionEvent({ kind: 'session_upserted', sessionId: updated.sessionId });
+  act(() => result.current.setSearchMode('projects'));
+  assert.equal(sessionEventListeners.size, 0);
+  sendSessionEvent({ kind: 'session_upserted', sessionId: updated.sessionId });
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(recentConversationsResponse.mock.calls.length, 3);
 });

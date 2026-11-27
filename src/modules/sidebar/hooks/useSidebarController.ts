@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import { api } from '@/shared/api';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, ServerEvent, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
 import {
   filterProjects,
   getAllSessions,
@@ -18,6 +18,9 @@ import {
 
 
 const EXPANDED_PROJECTS_STORAGE_KEY = 'cloudcli-expanded-projects';
+const CONVERSATIONS_PAGE_SIZE = 40;
+const CONVERSATIONS_API_LIMIT = 100;
+const CONVERSATIONS_REFRESH_DELAY_MS = 150;
 
 /** Read browser-local project expansion, tolerating missing or invalid storage. */
 function readExpandedProjects(): Set<string> | null {
@@ -75,6 +78,7 @@ type UseSidebarControllerArgs = {
   setSidebarVisible: (visible: boolean) => void;
   sidebarVisible: boolean;
   keepProjectsExpanded?: boolean;
+  subscribeToSessionEvents?: (listener: (event: ServerEvent) => void) => () => void;
 };
 
 /** Used by Sidebar to coordinate project navigation, expansion and session actions. */
@@ -97,6 +101,7 @@ export function useSidebarController({
   setSidebarVisible,
   sidebarVisible,
   keepProjectsExpanded = false,
+  subscribeToSessionEvents,
 }: UseSidebarControllerArgs) {
   const paletteOps = usePaletteOps();
   // Remember whether a saved set existed before the first persistence effect.
@@ -182,7 +187,10 @@ export function useSidebarController({
   // not set yet when read back: React may hold the updater until the next render.
   const projectIdsLoadingMoreSessionsRef = useRef<Set<string>>(new Set());
   const searchSeqRef = useRef(0);
-  const recentConversationsSeqRef = useRef(0);
+  // Coordinate background refreshes with the page the user is already loading.
+  const recentConversationsRequestRef = useRef<Promise<void> | null>(null);
+  // Preserve the loaded depth when the server reorders the list.
+  const recentConversationsDepthRef = useRef(CONVERSATIONS_PAGE_SIZE);
   const eventSourceRef = useRef<EventSource | null>(null);
   const starToggleSequenceByProjectRef = useRef<Map<string, number>>(new Map());
   const migrationStartedRef = useRef(false);
@@ -289,72 +297,103 @@ export function useSidebarController({
     }
   }, []);
 
-  const fetchRecentConversationsPage = useCallback(async (offset: number, append: boolean) => {
-    const requestSequence = ++recentConversationsSeqRef.current;
+  const fetchRecentConversationsPage = useCallback((
+    offset: number,
+    mode: 'reload' | 'append' | 'refresh',
+  ) => {
+    const append = mode === 'append';
+    const limit = mode === 'refresh' ? recentConversationsDepthRef.current : CONVERSATIONS_PAGE_SIZE;
     if (append) {
       setIsLoadingMoreRecentConversations(true);
     } else {
       setIsRecentConversationsLoading(true);
     }
-    setRecentConversationsError(false);
+    if (mode !== 'refresh') {
+      setRecentConversationsError(false);
+    }
 
-    try {
-      const response = await api.recentConversations({ limit: 40, offset });
-      if (!response.ok) {
-        throw new Error(`Failed to load recent conversations: ${response.status}`);
-      }
+    const request = Promise.resolve().then(async () => {
+      try {
+        const conversations = new Map<string, RecentConversationListItem>();
+        let total = 0;
+        let hasMore = false;
 
-      const payload = (await response.json()) as RecentConversationsApiPayload;
-      const conversations = Array.isArray(payload.data?.conversations)
-        ? payload.data.conversations
-        : [];
+        // Read the loaded prefix again because activity can cross any page
+        // boundary. Keep each request within the API's per-page limit.
+        for (let fetched = 0; fetched < limit;) {
+          const response = await api.recentConversations({
+            limit: Math.min(CONVERSATIONS_API_LIMIT, limit - fetched),
+            offset: offset + fetched,
+          });
+          if (!response.ok) {
+            throw new Error(`Failed to load recent conversations: ${response.status}`);
+          }
+          const payload = (await response.json()) as RecentConversationsApiPayload;
+          if (request !== recentConversationsRequestRef.current) {
+            return;
+          }
 
-      if (requestSequence !== recentConversationsSeqRef.current) {
-        return;
-      }
-
-      setRecentConversations((previous) => {
-        if (!append) {
-          return conversations;
+          const page = Array.isArray(payload.data?.conversations) ? payload.data.conversations : [];
+          for (const conversation of page) {
+            if (!conversations.has(conversation.sessionId)) {
+              conversations.set(conversation.sessionId, conversation);
+            }
+          }
+          total = Number(payload.data?.total ?? conversations.size);
+          hasMore = Boolean(payload.data?.hasMore);
+          fetched += page.length;
+          if (!hasMore || page.length === 0) {
+            break;
+          }
         }
 
-        const existingIds = new Set(previous.map((conversation) => conversation.sessionId));
-        return [
-          ...previous,
-          ...conversations.filter((conversation) => !existingIds.has(conversation.sessionId)),
-        ];
-      });
-      setRecentConversationsTotal(Number(payload.data?.total ?? conversations.length));
-      setRecentConversationsHasMore(Boolean(payload.data?.hasMore));
-    } catch (error) {
-      if (requestSequence !== recentConversationsSeqRef.current) {
-        return;
+        const rows = [...conversations.values()];
+        recentConversationsDepthRef.current = Math.max(
+          CONVERSATIONS_PAGE_SIZE,
+          mode === 'refresh' ? limit : offset + rows.length,
+        );
+        setRecentConversations((previous) => {
+          if (!append) {
+            return rows;
+          }
+          const existingIds = new Set(previous.map((conversation) => conversation.sessionId));
+          return [...previous, ...rows.filter((conversation) => !existingIds.has(conversation.sessionId))];
+        });
+        setRecentConversationsTotal(total);
+        setRecentConversationsHasMore(hasMore);
+        if (mode !== 'refresh' || rows.length > 0 || !hasMore) {
+          setRecentConversationsError(false);
+        }
+      } catch (error) {
+        if (request !== recentConversationsRequestRef.current) {
+          return;
+        }
+        console.error('[Sidebar] Failed to load recent conversations:', error);
+        if (mode !== 'refresh') {
+          setRecentConversationsError(true);
+        }
+      } finally {
+        if (request === recentConversationsRequestRef.current) {
+          recentConversationsRequestRef.current = null;
+          setIsRecentConversationsLoading(false);
+          setIsLoadingMoreRecentConversations(false);
+        }
       }
-      console.error('[Sidebar] Failed to load recent conversations:', error);
-      setRecentConversationsError(true);
-    } finally {
-      if (requestSequence === recentConversationsSeqRef.current) {
-        setIsRecentConversationsLoading(false);
-        setIsLoadingMoreRecentConversations(false);
-      }
-    }
+    });
+    recentConversationsRequestRef.current = request;
+    return request;
   }, []);
 
   const reloadRecentConversations = useCallback(() => {
-    void fetchRecentConversationsPage(0, false);
+    void fetchRecentConversationsPage(0, 'reload');
   }, [fetchRecentConversationsPage]);
 
   const loadMoreRecentConversations = useCallback(() => {
-    if (isLoadingMoreRecentConversations || !recentConversationsHasMore) {
+    if (recentConversationsRequestRef.current || !recentConversationsHasMore) {
       return;
     }
-    void fetchRecentConversationsPage(recentConversations.length, true);
-  }, [
-    fetchRecentConversationsPage,
-    isLoadingMoreRecentConversations,
-    recentConversations.length,
-    recentConversationsHasMore,
-  ]);
+    void fetchRecentConversationsPage(recentConversations.length, 'append');
+  }, [fetchRecentConversationsPage, recentConversations.length, recentConversationsHasMore]);
 
   useEffect(() => {
     if (migrationStartedRef.current) {
@@ -386,21 +425,67 @@ export function useSidebarController({
     void fetchArchivedSessions();
   }, [fetchArchivedSessions]);
 
+  const isRecentConversationsVisible = searchMode === 'conversations' && debouncedSearchQuery.length < 2;
   useEffect(() => {
-    if (searchMode !== 'conversations' || debouncedSearchQuery.length >= 2) {
+    if (isRecentConversationsVisible) {
+      reloadRecentConversations();
+    }
+  }, [isRecentConversationsVisible, reloadRecentConversations]);
+
+  useEffect(() => {
+    if (!isRecentConversationsVisible || !subscribeToSessionEvents) {
       return;
     }
 
-    reloadRecentConversations();
-  }, [debouncedSearchQuery, reloadRecentConversations, searchMode]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let disposed = false;
+    let refreshing = false;
+    let invalidated = false;
 
-  // The Conversations list is only fetched when its tab opens, while `projects`
-  // is patched the moment a session is renamed from the workspace header. Fold
-  // those title changes into the rows already loaded, or a header rename would
-  // leave the highlighted conversation on its old name. The loaded rows are
-  // returned as-is when no session carries a different custom name, so
-  // unrelated `projects` updates do not re-render the list, and an empty
-  // summary never overwrites the id the server shows for an unnamed session.
+    function scheduleRefresh() {
+      if (!invalidated || refreshing || timer !== undefined) {
+        return;
+      }
+      timer = setTimeout(() => {
+        timer = undefined;
+        void refresh();
+      }, CONVERSATIONS_REFRESH_DELAY_MS);
+    }
+
+    async function refresh() {
+      refreshing = true;
+      // Keep a load-more request in flight from being replaced by a refresh
+      // of the shorter list. One more refresh covers events received mid-read.
+      while (!disposed && recentConversationsRequestRef.current) {
+        await recentConversationsRequestRef.current;
+      }
+      if (!disposed) {
+        invalidated = false;
+        await fetchRecentConversationsPage(0, 'refresh');
+        refreshing = false;
+        if (!disposed) {
+          scheduleRefresh();
+        }
+      }
+    }
+
+    const unsubscribe = subscribeToSessionEvents((event) => {
+      if (event.kind === 'session_upserted' || event.kind === 'websocket_reconnected') {
+        invalidated = true;
+        scheduleRefresh();
+      }
+    });
+
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [fetchRecentConversationsPage, isRecentConversationsVisible, subscribeToSessionEvents]);
+
+  // Fold workspace-header renames into loaded rows immediately. Order and
+  // membership come from the globally ordered feed, including sessions absent
+  // from the project's loaded pages.
   const recentConversationsWithCurrentTitles = useMemo(() => {
     if (recentConversations.length === 0) {
       return recentConversations;
@@ -929,6 +1014,9 @@ export function useSidebarController({
           }
           return remaining;
         });
+        if (recentConversationsRequestRef.current) {
+          void fetchRecentConversationsPage(0, 'refresh');
+        }
         await fetchArchivedSessions();
       } else {
         const errorText = await response.text();
@@ -946,7 +1034,7 @@ export function useSidebarController({
         ? t('messages.deleteSessionError')
         : t('messages.archiveSessionError', 'Error archiving session. Please try again.'));
     }
-  }, [fetchArchivedSessions, onSessionDelete, t]);
+  }, [fetchArchivedSessions, fetchRecentConversationsPage, onSessionDelete, t]);
 
   // Archiving is reversible from the archive list, so it skips the confirmation
   // that guards a permanent delete.
@@ -1067,6 +1155,9 @@ export function useSidebarController({
       if (removed > 0) {
         setRecentConversationsTotal((total) => Math.max(0, total - removed));
       }
+      if (recentConversationsRequestRef.current) {
+        void fetchRecentConversationsPage(0, 'refresh');
+      }
       await fetchArchivedSessions();
     }
 
@@ -1085,7 +1176,7 @@ export function useSidebarController({
         }),
       );
     }
-  }, [activeSessions, backgroundSessionIds, fetchArchivedSessions, onSessionDelete, pendingDeletion, recentConversations, sessionSelection, t]);
+  }, [activeSessions, backgroundSessionIds, fetchArchivedSessions, fetchRecentConversationsPage, onSessionDelete, pendingDeletion, recentConversations, sessionSelection, t]);
 
   const requestProjectDelete = useCallback(
     (project: Project) => {
@@ -1220,7 +1311,7 @@ export function useSidebarController({
         Promise.resolve(onRefresh()),
         fetchArchivedSessions(),
         searchMode === 'conversations'
-          ? fetchRecentConversationsPage(0, false)
+          ? fetchRecentConversationsPage(0, 'reload')
           : Promise.resolve(),
       ]);
     } finally {
