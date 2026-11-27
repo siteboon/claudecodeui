@@ -20,6 +20,7 @@ vi.mock('@/shared/api', () => ({
 }));
 vi.mock('@/shared/hooks/useProviderCapabilities', () => ({
   useSessionForkingProviders: () => new Set(['claude', 'codex']),
+  useSessionMovingProviders: () => new Set(),
 }));
 vi.mock('@/modules/sidebar/hooks/useCompactSidebar', () => ({ useCompactSidebar: () => mocks.compact }));
 vi.mock('@/modules/sidebar/SidebarHeader', () => ({ default: () => null }));
@@ -52,7 +53,7 @@ const listProps: SidebarProjectListProps = {
   tasksEnabled: false, mcpServerStatus: {}, getProjectSessions: (project) => (project.sessions ?? []).map((session) => ({ ...session, __provider: session.__provider ?? 'codex' })),
   onLoadMoreSessions: noop, loadingMoreProjects: new Set(), isProjectStarred: () => false,
   onToggleProject: noop, onProjectSelect: noop, onToggleStarProject: noop,
-  onStartEditingProject: noop, onCancelEditingProject: noop, onSaveProjectName: noop, onDeleteProject: noop,
+  onStartEditingProject: noop, onCancelEditingProject: noop, onRenamePathDraftChange: noop, onSaveProjectName: noop, onDeleteProject: noop,
   onSessionSelect: noop, onNewSession: noop, sessionSelection: null, onSetSessionSelection: noop,
   onToggleSessionSelected: noop, onCancelSessionSelection: noop, onDeleteSelectedSessions: noop, t,
 };

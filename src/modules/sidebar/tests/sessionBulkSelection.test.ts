@@ -33,6 +33,7 @@ const recordedOptionsProps: Record<string, unknown>[] = [];
 
 vi.mock('@/shared/hooks/useProviderCapabilities', () => ({
   useSessionForkingProviders: () => new Set(),
+  useSessionMovingProviders: () => new Set(),
 }));
 
 vi.mock('@/modules/sidebar/SessionOptions', () => ({

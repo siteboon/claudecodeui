@@ -7,6 +7,7 @@ import { CodexMcpProvider } from '@/modules/providers/list/codex/codex-mcp.provi
 import { CodexSessionSynchronizer } from '@/modules/providers/list/codex/codex-session-synchronizer.provider.js';
 import { CodexSessionsProvider } from '@/modules/providers/list/codex/codex-sessions.provider.js';
 import { CodexSkillsProvider } from '@/modules/providers/list/codex/codex-skills.provider.js';
+import { CodexTranscriptRelocationProvider } from '@/modules/providers/list/codex/codex-transcript-relocation.provider.js';
 import type {
   IProviderAuth,
   IProviderFork,
@@ -15,6 +16,7 @@ import type {
   IProviderSessionSynchronizer,
   IProviderSkills,
   IProviderSessions,
+  IProviderTranscriptRelocation,
 } from '@/shared/interfaces.js';
 
 export class CodexProvider extends AbstractProvider {
@@ -25,6 +27,7 @@ export class CodexProvider extends AbstractProvider {
   readonly skills: IProviderSkills = new CodexSkillsProvider();
   readonly sessions: IProviderSessions = new CodexSessionsProvider();
   readonly fork: IProviderFork = new CodexForkProvider();
+  readonly transcriptRelocation: IProviderTranscriptRelocation = new CodexTranscriptRelocationProvider();
   readonly sessionSynchronizer: IProviderSessionSynchronizer = new CodexSessionSynchronizer();
 
   constructor() {

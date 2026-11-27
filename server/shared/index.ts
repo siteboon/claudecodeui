@@ -9,7 +9,7 @@ export type { CustomProviderModelEffort, CustomProviderModelInput, LLMProvider, 
 export { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from './utils.js';
 
 // Providers uses the shared history and runtime summary contracts through this barrel.
-export type { BackgroundTaskSummary, ClearedContextSegment, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, WorkflowAgentActivity } from './types.js';
+export type { BackgroundTaskSummary, ClearedContextSegment, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, SessionTranscriptRelocation, WorkflowAgentActivity } from './types.js';
 export { sliceTailPage } from './utils.js';
 
 // Session persistence uses canonical path normalization and fork/history metadata.

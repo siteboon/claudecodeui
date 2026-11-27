@@ -234,6 +234,10 @@ export const api = {
     get(`/api/projects/${encodeURIComponent(projectId)}/taskmaster`),
   renameProject: (projectId: string, displayName: string) =>
     put(`/api/projects/${projectId}/rename`, { displayName }),
+  // Repoints a project at a folder renamed or moved outside the app; the server
+  // moves its sessions and Claude transcripts along with it.
+  updateProjectPath: (projectId: string, projectPath: string) =>
+    put(`/api/projects/${encodeURIComponent(projectId)}/path`, { projectPath }),
   restoreProject: (projectId: string) =>
     post(`/api/projects/${encodeURIComponent(projectId)}/restore`),
   // `hardDelete` => server `?force=true` (remove DB row + Claude *.jsonl + sessions rows for path).
@@ -289,6 +293,10 @@ export const api = {
   // `upToAnchorId` (all of it when omitted). The source is left untouched.
   forkSession: (sessionId: string, body: { upToAnchorId?: string; title?: string } = {}) =>
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
+  // Files the session under another project; its next run works in that
+  // project's directory.
+  moveSession: (sessionId: string, projectId: string) =>
+    post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/move`, { projectId }),
   // Starts the session's next message on a fresh context. Its history stays
   // visible; `cleared` is false when there was no context to clear.
   clearSessionContext: (sessionId: string) =>

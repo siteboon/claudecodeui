@@ -20,6 +20,8 @@ type SidebarProjectItemProps = {
   /** Resolved for this row: only the project being renamed re-renders on a keystroke. */
   isEditing: boolean;
   renameDraft: string;
+  /** The folder the project points at while it is being edited; saved with the name. */
+  renamePathDraft: string;
   includeOffPagePins?: boolean;
   sessions: SessionWithProvider[];
   initialSessionsLoaded: boolean;
@@ -31,17 +33,19 @@ type SidebarProjectItemProps = {
   tasksEnabled: boolean;
   mcpServerStatus: MCPServerStatus;
   onRenameDraftChange: (name: string) => void;
+  onRenamePathDraftChange: (path: string) => void;
   onToggleProject: (projectId: string) => void;
   onProjectSelect: (project: Project) => void;
   onToggleStarProject: (projectId: string) => void;
   onStartEditingProject: (project: Project) => void;
   onCancelEditingProject: () => void;
-  onSaveProjectName: (projectId: string, nextName: string) => void;
+  onSaveProjectName: (projectId: string, nextName: string, nextPath: string) => void;
   onDeleteProject: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onArchiveSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   onForkSession?: (session: SessionWithProvider) => void;
+  onMoveSession?: (session: SessionWithProvider) => void;
   onLoadMoreSessions: (projectId: string) => void;
   activeSessions: ReadonlySet<string>;
   backgroundSessionIds: ReadonlySet<string>;
@@ -74,6 +78,7 @@ function SidebarProjectItem({
   isStarred,
   isEditing,
   renameDraft,
+  renamePathDraft,
   includeOffPagePins = true,
   sessions,
   initialSessionsLoaded,
@@ -84,6 +89,7 @@ function SidebarProjectItem({
   tasksEnabled,
   mcpServerStatus,
   onRenameDraftChange,
+  onRenamePathDraftChange,
   onToggleProject,
   onProjectSelect,
   onToggleStarProject,
@@ -95,6 +101,7 @@ function SidebarProjectItem({
   onArchiveSession,
   onDeleteSession,
   onForkSession,
+  onMoveSession,
   onLoadMoreSessions,
   activeSessions,
   backgroundSessionIds,
@@ -147,7 +154,7 @@ function SidebarProjectItem({
   const toggleStarProject = () => onToggleStarProject(project.projectId);
 
   const saveProjectName = () => {
-    onSaveProjectName(project.projectId, renameDraft);
+    onSaveProjectName(project.projectId, renameDraft, renamePathDraft);
   };
 
   const selectAndToggleProject = () => {
@@ -200,33 +207,63 @@ function SidebarProjectItem({
 
                 <div className="min-w-0 flex-1">
                   {isEditing ? (
-                    <input
-                      ref={mobileRenameInputRef}
-                      type="text"
-                      value={renameDraft}
-                      onChange={(event) => onRenameDraftChange(event.target.value)}
-                      className="w-full rounded-lg border-2 border-primary/40 bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-all duration-200 focus:border-primary focus:shadow-md focus:outline-none"
-                      placeholder={t('projects.projectNamePlaceholder')}
-                      autoFocus
-                      autoComplete="off"
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          saveProjectName();
-                        }
+                    <div className="space-y-2">
+                      <input
+                        ref={mobileRenameInputRef}
+                        type="text"
+                        value={renameDraft}
+                        onChange={(event) => onRenameDraftChange(event.target.value)}
+                        className="w-full rounded-lg border-2 border-primary/40 bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-all duration-200 focus:border-primary focus:shadow-md focus:outline-none"
+                        placeholder={t('projects.projectNamePlaceholder')}
+                        autoFocus
+                        autoComplete="off"
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            saveProjectName();
+                          }
 
-                        if (event.key === 'Escape') {
-                          // Cancelling the rename must not also close the code editor.
-                          event.stopPropagation();
-                          onCancelEditingProject();
-                        }
-                      }}
-                      style={{
-                        fontSize: '16px',
-                        WebkitAppearance: 'none',
-                        borderRadius: '8px',
-                      }}
-                    />
+                          if (event.key === 'Escape') {
+                            // Cancelling the rename must not also close the code editor.
+                            event.stopPropagation();
+                            onCancelEditingProject();
+                          }
+                        }}
+                        style={{
+                          fontSize: '16px',
+                          WebkitAppearance: 'none',
+                          borderRadius: '8px',
+                        }}
+                      />
+                      <input
+                        type="text"
+                        value={renamePathDraft}
+                        onChange={(event) => onRenamePathDraftChange(event.target.value)}
+                        className="block w-full rounded-lg border-2 border-border bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm transition-all duration-200 focus:border-primary focus:shadow-md focus:outline-none"
+                        placeholder={t('projects.projectPathPlaceholder')}
+                        aria-label={t('projects.projectPathPlaceholder')}
+                        title={t('projects.projectPathHint')}
+                        spellCheck={false}
+                        autoComplete="off"
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            saveProjectName();
+                          }
+
+                          if (event.key === 'Escape') {
+                            // Cancelling the rename must not also close the code editor.
+                            event.stopPropagation();
+                            onCancelEditingProject();
+                          }
+                        }}
+                        style={{
+                          fontSize: '16px',
+                          WebkitAppearance: 'none',
+                          borderRadius: '8px',
+                        }}
+                      />
+                    </div>
                   ) : (
                     <>
                       <div className="flex min-w-0 flex-1 items-center justify-between">
@@ -364,9 +401,28 @@ function SidebarProjectItem({
                       }
                     }}
                   />
-                  <div className="truncate text-xs text-muted-foreground" title={project.fullPath}>
-                    {project.fullPath}
-                  </div>
+                  <input
+                    type="text"
+                    value={renamePathDraft}
+                    onChange={(event) => onRenamePathDraftChange(event.target.value)}
+                    className="block w-full rounded border border-border bg-background px-2 py-1 text-xs text-muted-foreground focus:ring-2 focus:ring-primary/20"
+                    placeholder={t('projects.projectPathPlaceholder')}
+                    aria-label={t('projects.projectPathPlaceholder')}
+                    title={t('projects.projectPathHint')}
+                    spellCheck={false}
+                    autoComplete="off"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        saveProjectName();
+                      }
+                      if (event.key === 'Escape') {
+                        // Cancelling the rename must not also close the code editor.
+                        event.stopPropagation();
+                        onCancelEditingProject();
+                      }
+                    }}
+                  />
                 </div>
               ) : (
                 <div>
@@ -467,6 +523,7 @@ function SidebarProjectItem({
         onArchiveSession={onArchiveSession}
         onDeleteSession={onDeleteSession}
         onForkSession={onForkSession}
+        onMoveSession={onMoveSession}
         onLoadMoreSessions={onLoadMoreSessions}
         onNewSession={onNewSession}
         selectedSessionIds={selectedSessionIds}
