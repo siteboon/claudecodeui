@@ -17,6 +17,83 @@ type SessionViewModel = {
   messageCount: number;
 };
 
+/**
+ * Trailing path segment of a project's full path, tolerant of both `/` and `\`
+ * separators so paths recorded on different machines (macOS/Linux vs Windows)
+ * produce the same key for the same project folder name.
+ */
+export const getProjectGroupKey = (project: Project): string => {
+  const fullPath = String(project.fullPath || project.path || '').replace(/\\/g, '/');
+  const segments = fullPath.split('/').filter((segment) => segment.length > 0);
+  return segments[segments.length - 1] || project.displayName || project.projectId;
+};
+
+const rawProjectPath = (project: Project): string => String(project.fullPath || project.path || '');
+
+/**
+ * Location hint for each project under one group header, keyed by projectId.
+ * Every project in a group ends in the same folder name, and synced paths often
+ * share a leading root and a trailing parent run too, so a fixed-length tail can
+ * read the same for two rows. The hint keeps only the parent segments that differ
+ * inside the group, marking the dropped shared prefix and suffix with `...`.
+ */
+export const getGroupPathHints = (projects: Project[]): Map<string, string> => {
+  const parents = projects.map((project) =>
+    rawProjectPath(project).split(/[\\/]+/).filter((segment) => segment.length > 0).slice(0, -1),
+  );
+  const minLength = Math.min(...parents.map((segments) => segments.length));
+  const sameAt = (index: (segments: string[]) => number) =>
+    parents.every((segments) => segments[index(segments)] === parents[0][index(parents[0])]);
+
+  let prefix = 0;
+  while (prefix < minLength && sameAt(() => prefix)) prefix += 1;
+  let suffix = 0;
+  while (suffix < minLength - prefix && sameAt((segments) => segments.length - 1 - suffix)) suffix += 1;
+
+  const hints = new Map<string, string>();
+  projects.forEach((project, index) => {
+    const segments = parents[index];
+    const middle = segments.slice(prefix, segments.length - suffix);
+    if (middle.length === 0) {
+      const raw = rawProjectPath(project).replace(/[\\/]+$/, '');
+      const cut = Math.max(raw.lastIndexOf('/'), raw.lastIndexOf('\\'));
+      hints.set(project.projectId, cut > 0 ? raw.slice(0, cut) : raw.slice(0, 1) || raw);
+      return;
+    }
+    hints.set(
+      project.projectId,
+      `${prefix > 0 ? '.../' : ''}${middle.join('/')}${suffix > 0 ? '/...' : ''}`,
+    );
+  });
+  return hints;
+};
+
+export type ProjectGroup = {
+  key: string;
+  projects: Project[];
+};
+
+/**
+ * Groups projects whose paths share the same trailing folder name, preserving
+ * the incoming (already sorted) order by first occurrence. Purely visual: the
+ * grouped projects keep their own identity, sessions and actions.
+ */
+export const groupProjectsByBasename = (projects: Project[]): ProjectGroup[] => {
+  const groups = new Map<string, ProjectGroup>();
+
+  for (const project of projects) {
+    const key = getProjectGroupKey(project);
+    const group = groups.get(key);
+    if (group) {
+      group.projects.push(project);
+    } else {
+      groups.set(key, { key, projects: [project] });
+    }
+  }
+
+  return Array.from(groups.values());
+};
+
 export const formatCompactAge = (
   dateString: string | null | undefined,
   currentTime: Date,
