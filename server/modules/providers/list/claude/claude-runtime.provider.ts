@@ -377,8 +377,10 @@ export function buildClaudeSdkEnv(hostEnv: NodeJS.ProcessEnv = process.env): Nod
   };
 }
 
-function mapCliOptionsToSDK(options: AnyRecord = {}) {
-  const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch } = options;
+export function mapCliOptionsToSDK(options: AnyRecord = {}) {
+  const {
+    providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch, enforcePermissionMode,
+  } = options;
 
   const sdkOptions: AnyRecord = {};
 
@@ -397,7 +399,10 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
     sdkOptions.cwd = cwd;
   }
 
-  if (permissionMode && permissionMode !== 'default') {
+  // A chat turn's 'default' means "whatever the user's settings say", so it is left unset and the SDK applies
+  // permissions.defaultMode. A caller that explicitly asked for a mode (the Agent API) gets exactly that mode,
+  // including 'default', so a user-level bypass setting cannot silently skip the approvals it asked for.
+  if (permissionMode && (permissionMode !== 'default' || enforcePermissionMode === true)) {
     sdkOptions.permissionMode = permissionMode;
   }
 
