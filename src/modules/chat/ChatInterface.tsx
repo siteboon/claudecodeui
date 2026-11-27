@@ -209,7 +209,8 @@ function ChatInterface({
    * a divider where the clear happened, and the next message starts fresh.
    */
   const handleClearContext = useCallback(async () => {
-    const sessionId = currentSessionId || selectedSession?.id;
+    const sessionId = selectedSession?.id || currentSessionId;
+    if (routeSessionId && routeSessionId !== sessionId) return;
     if (!supportsContextClearing) {
       addMessage({ type: 'assistant', content: t('misc.clearContextUnsupported'), timestamp: Date.now() });
       return;
@@ -238,7 +239,7 @@ function ChatInterface({
       const message = error instanceof Error ? error.message : String(error);
       addMessage({ type: 'error', content: t('misc.clearContextFailed', { message }), timestamp: Date.now() });
     }
-  }, [addMessage, currentSessionId, requestLatestMessages, selectedSession?.id, setTokenBudget, supportsContextClearing, t]);
+  }, [addMessage, currentSessionId, requestLatestMessages, routeSessionId, selectedSession?.id, setTokenBudget, supportsContextClearing, t]);
 
   // The button asks first: unlike a typed `/clear`, a click can be a slip.
   const handleClearContextClick = useCallback(() => {
