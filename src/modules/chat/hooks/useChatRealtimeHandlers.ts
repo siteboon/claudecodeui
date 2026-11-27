@@ -140,7 +140,8 @@ export function useChatRealtimeHandlers({
       const activeViewSessionId = activeViewSessionIdRef.current;
       const sid = (typeof msg.sessionId === 'string' && msg.sessionId) || activeViewSessionId;
 
-      if (sid && typeof msg.runId === 'string' && lastRunIdRef && lastRunIdRef.current.get(sid) !== msg.runId) {
+      const changedRun = typeof msg.runId === 'string' && lastRunIdRef?.current.get(sid ?? '') !== msg.runId;
+      if (sid && changedRun && typeof msg.runId === 'string' && lastRunIdRef) {
         lastRunIdRef.current.set(sid, msg.runId);
         lastSeqRef.current.delete(sid);
         if (sid === activeViewSessionId) {
@@ -230,7 +231,7 @@ export function useChatRealtimeHandlers({
               ? Math.max(sentAt, runStartedAt + 1)
               : sentAt;
             onSessionIdle?.(sid, { ifStartedBefore });
-            if (runStartedAt !== undefined) {
+            if (runStartedAt !== undefined || changedRun) {
               void requestLatestMessages(sid, isActiveRef.current);
             }
           }
