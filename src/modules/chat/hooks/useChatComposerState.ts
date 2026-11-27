@@ -349,6 +349,9 @@ export function useChatComposerState({
    * Stops inside the grace window are dropped as mistaps — but only for the
    * session that was just sent to. An upload can finish after the user has
    * moved on, and a stop in the chat now on screen is a real stop.
+   *
+   * `at` comes from `performance.now()`, which only moves forward: a system
+   * clock correction must not stretch a one-second window into a minute.
    */
   const lastSendRef = useRef<{ sessionId: string | null; at: number }>({ sessionId: null, at: 0 });
 
@@ -1042,7 +1045,7 @@ export function useChatComposerState({
         content: message.content,
         options: { attachments: message.uploadedAttachments },
       });
-      lastSendRef.current = { sessionId: steerSessionKey, at: Date.now() };
+      lastSendRef.current = { sessionId: steerSessionKey, at: performance.now() };
       recordSentMessage(message.content, steerSessionKey);
       // Attachments are not kept per chat: the steered ones leave even when another chat is open now.
       setAttachedFiles((files) => files.filter((file) => !message.attachments.includes(file)));
@@ -1428,7 +1431,7 @@ export function useChatComposerState({
           attachments: uploadedAttachments,
         },
       });
-      lastSendRef.current = { sessionId: targetSessionId, at: Date.now() };
+      lastSendRef.current = { sessionId: targetSessionId, at: performance.now() };
       // Only this send's edit: an edit begun in another chat during the upload stays.
       setEditingAnchorId((current) => (current === editingAnchorId ? null : current));
 
@@ -1829,7 +1832,7 @@ export function useChatComposerState({
     const lastSend = lastSendRef.current;
     if (
       lastSend.sessionId === targetSessionId
-      && Date.now() - lastSend.at < ABORT_GRACE_AFTER_SEND_MS
+      && performance.now() - lastSend.at < ABORT_GRACE_AFTER_SEND_MS
     ) {
       return;
     }

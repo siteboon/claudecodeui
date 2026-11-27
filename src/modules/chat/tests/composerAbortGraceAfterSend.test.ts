@@ -25,6 +25,8 @@ type SentFrame = { type: string; sessionId?: string; content?: string };
 
 let sent: SentFrame[] = [];
 let now = 1_000_000;
+// The wall clock, which the grace window must not be measured against.
+let wall = 1_700_000_000_000;
 let boundSession = SESSION;
 
 const renderComposer = () => {
@@ -74,7 +76,11 @@ const openSession = async (view: ReturnType<typeof renderComposer>, session: Pro
 beforeEach(() => {
   localStorage.clear();
   now = 1_000_000;
-  vi.spyOn(Date, 'now').mockImplementation(() => now);
+  wall = 1_700_000_000_000;
+  // The window is measured on the monotonic clock: a system clock correction
+  // must not stretch one second into a minute.
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  vi.spyOn(Date, 'now').mockImplementation(() => wall);
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([]), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
@@ -120,6 +126,23 @@ test('a stop in a conversation nothing was just sent from is untouched', async (
   await abort(view);
 
   assert.equal(sent.filter((frame) => frame.type === 'chat.abort').length, 1);
+});
+
+test('a system clock correction does not stretch the grace window', async () => {
+  const view = renderComposer();
+  await sendMessage(view, 'hello');
+
+  // The wall clock jumps a minute backwards while the monotonic clock keeps
+  // counting: only real elapsed time may decide whether this is a mistap.
+  wall -= 60_000;
+  now += 1000;
+  await abort(view);
+
+  assert.deepEqual(
+    sent.filter((frame) => frame.type === 'chat.abort').map((frame) => frame.sessionId),
+    [SESSION.id],
+    'the stop is a real one a full second after the send',
+  );
 });
 
 test('a send into another chat does not swallow the stop of the chat on screen', async () => {
