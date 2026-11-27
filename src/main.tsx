@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { scan } from 'react-scan'
 
 import App from '@/App'
+import AppErrorBoundary from '@/shared/ui/AppErrorBoundary'
 import '@/index.css'
 import 'katex/dist/katex.min.css'
 
@@ -30,6 +31,8 @@ if (!rootElement) {
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
   </React.StrictMode>,
 )
