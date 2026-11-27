@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
@@ -74,6 +74,8 @@ function Sidebar({
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
   const paletteOps = usePaletteOps();
+  // 409 返回的项目可能不在当前分页中；刷新到它后再完成用户的打开请求。
+  const [pendingExistingProjectId, setPendingExistingProjectId] = useState<string | null>(null);
   // Only membership is rendered here, so subscribing to the full activity map
   // would re-render the whole tree on every provider status frame.
   const activeSessions = useBusySessionIdSet();
@@ -186,13 +188,17 @@ function Sidebar({
     (projectId: string) => {
       const existingProject = projects.find((project) => project.projectId === projectId);
       setShowNewProject(false);
+      setSearchMode('projects');
+      setSearchFilter('');
       if (!existingProject) {
-        void paletteOps.refreshProjects();
+        setPendingExistingProjectId(projectId);
+        void Promise.resolve(paletteOps.refreshProjects()).catch(() => {
+          setPendingExistingProjectId((current) => current === projectId ? null : current);
+        });
         return;
       }
 
-      setSearchMode('projects');
-      setSearchFilter('');
+      setPendingExistingProjectId(null);
       ensureProjectExpanded(existingProject.projectId);
       handleProjectSelect(existingProject);
     },
@@ -206,6 +212,15 @@ function Sidebar({
       setShowNewProject,
     ],
   );
+
+  useEffect(() => {
+    if (!pendingExistingProjectId) return;
+    const existingProject = projects.find((project) => project.projectId === pendingExistingProjectId);
+    if (!existingProject) return;
+    setPendingExistingProjectId(null);
+    ensureProjectExpanded(existingProject.projectId);
+    handleProjectSelect(existingProject);
+  }, [ensureProjectExpanded, handleProjectSelect, pendingExistingProjectId, projects]);
 
   // Stable so memo() on the row components can bail out; an inline arrow here
   // would give every row a new callback on each sidebar render.
