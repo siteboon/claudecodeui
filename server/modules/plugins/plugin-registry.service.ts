@@ -90,6 +90,15 @@ export function validateManifest(manifest) {
     }
   }
 
+  if (manifest.toolRenderers !== undefined) {
+    // Tool names (e.g. `mcp__myserver__do_thing`) or prefixes ending in `*` that the plugin's
+    // frontend module renders in chat through its `renderTool` export.
+    if (!Array.isArray(manifest.toolRenderers) || manifest.toolRenderers.length > 50
+      || !manifest.toolRenderers.every(p => typeof p === 'string' && /^[A-Za-z0-9_.-]+\*?$/.test(p))) {
+      return { valid: false, error: 'toolRenderers must be an array of tool names or prefixes ending in "*"' };
+    }
+  }
+
   if (manifest.permissions !== undefined) {
     if (!Array.isArray(manifest.permissions) || !manifest.permissions.every(p => typeof p === 'string')) {
       return { valid: false, error: 'Permissions must be an array of strings' };
@@ -216,6 +225,7 @@ export function scanPlugins() {
         entry: manifest.entry,
         server: manifest.server || null,
         permissions: manifest.permissions || [],
+        toolRenderers: manifest.toolRenderers || [],
         enabled: config[manifest.name]?.enabled !== false, // enabled by default
         dirName: entry.name,
         repoUrl,

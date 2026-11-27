@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -21,6 +21,7 @@ import {
 import { readUserPreference } from '@/shared/userSettings';
 import type { AttachmentRejection, BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, PendingSteer, QueuedDraft, SessionActivityMap, StatusCommandData, SteerOutcome,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
+import { uploadAttachmentFiles } from '@/modules/chat/utils/uploadAttachmentFiles';
 import {
   appendQueuedMessage,
   clearQueuedMessage,
@@ -41,6 +42,8 @@ type UseChatComposerStateArgs = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
+  /** Bumped on every New Session click; a new chat's session records the value its send started under. */
+  newSessionTrigger?: number;
   provider: LLMProvider;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
@@ -127,7 +130,7 @@ const createFakeSubmitEvent = () => {
 };
 
 /**
- * A v4 UUID for a steered message. The id becomes the message's transcript
+ * A v4 UUID for a steered message or attachment upload request. The id becomes the message's transcript
  * uuid, so it must be a real one. `crypto.randomUUID` only exists in secure
  * contexts, and the app is often opened over plain http on a LAN address
  * (a phone on the same network), so this falls back to `getRandomValues`.
@@ -154,31 +157,6 @@ const isImageAttachment = (attachment: ChatAttachment) => {
   if (attachment.mimeType?.startsWith('image/')) return true;
   return /\.(gif|jpe?g|png|svg|webp)$/i.test(attachment.path || attachment.name || '');
 };
-
-const uploadAttachmentFiles = async (files: File[]): Promise<unknown[]> => {
-  if (files.length === 0) {
-    return [];
-  }
-
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append('files', file);
-  });
-
-  const response = await api.assets.uploadFiles(formData);
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.error || 'Failed to upload files');
-  }
-
-  const result = await response.json();
-  if (!Array.isArray(result.attachments) || result.attachments.length !== files.length) {
-    throw new Error('File upload returned an incomplete result');
-  }
-  return result.attachments;
-};
-
 
 const restoreQueuedDraft = (sessionKey: string): QueuedDraft | null => {
   const saved = readQueuedMessage(sessionKey);
@@ -259,6 +237,7 @@ export function useChatComposerState({
   selectedProject,
   selectedSession,
   currentSessionId,
+  newSessionTrigger,
   provider,
   permissionMode,
   cyclePermissionMode,
@@ -336,6 +315,13 @@ export function useChatComposerState({
     ) => Promise<void>) | null
   >(null);
   const inputValueRef = useRef(input);
+  // Read when a send starts, so the established session reports that send's
+  // New Session trigger even if the user clicks New Session while it is out.
+  // Written once committed, never from a render React throws away.
+  const newSessionTriggerRef = useRef(newSessionTrigger);
+  useLayoutEffect(() => {
+    newSessionTriggerRef.current = newSessionTrigger;
+  }, [newSessionTrigger]);
   const selectedProjectId = selectedProject?.projectId;
   // Prefer the stable backend-allocated id (selectedSession.id) but fall back
   // to currentSessionId for a just-established session that hasn't been
@@ -549,7 +535,8 @@ export function useChatComposerState({
         const context = {
           projectPath: selectedProject.fullPath || selectedProject.path,
           projectId: selectedProject.projectId,
-          sessionId: currentSessionId || selectedSession?.id || null,
+          // The selected session first: currentSessionId can still name the previous one.
+          sessionId: selectedSession?.id || currentSessionId || null,
           provider,
           model: currentProviderModel,
           tokenUsage: tokenBudget,
@@ -1156,6 +1143,7 @@ export function useChatComposerState({
       submitOptions?: SubmitOptions,
     ) => {
       event.preventDefault();
+      const sendNewSessionTrigger = newSessionTriggerRef.current;
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
       const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
       const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];
@@ -1214,7 +1202,7 @@ export function useChatComposerState({
         const queuedSessionKey = sessionKey;
         let uploadedAttachments: unknown[] = [];
         try {
-          uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
+          uploadedAttachments = await uploadAttachmentFiles(currentAttachments, createSteerMessageId());
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Queued file upload failed:', error);
@@ -1286,7 +1274,7 @@ export function useChatComposerState({
       let uploadedAttachments = previouslyUploadedAttachments;
       if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {
         try {
-          uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
+          uploadedAttachments = await uploadAttachmentFiles(currentAttachments, createSteerMessageId());
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('File upload failed:', error);
@@ -1306,6 +1294,8 @@ export function useChatComposerState({
       // BEFORE the first websocket send: brand-new chats allocate one here
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
+      // Built once: the new session row records the same selection the send carries.
+      const sendOptions = queuedSubmission?.options ?? buildSendOptions(messageContent);
       let targetSessionId = selectedSession?.id || currentSessionId || null;
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
@@ -1314,6 +1304,9 @@ export function useChatComposerState({
             provider,
             projectPath: resolvedProjectPath,
             initialMessage: messageContent,
+            model: sendOptions.model,
+            effort: sendOptions.effort,
+            permissionMode: sendOptions.permissionMode,
           });
           if (!response.ok) {
             throw new Error(`Failed to create session (${response.status})`);
@@ -1352,6 +1345,12 @@ export function useChatComposerState({
           provider,
           project: selectedProject,
           summary: createdSessionName,
+          newSessionTrigger: sendNewSessionTrigger,
+          selection: {
+            model: sendOptions.model,
+            effort: sendOptions.effort,
+            permissionMode: sendOptions.permissionMode,
+          },
         });
       }
 
@@ -1383,7 +1382,7 @@ export function useChatComposerState({
             content: currentInput,
             attachments: currentAttachments,
             uploadedAttachments,
-            options: buildSendOptions(currentInput),
+            options: sendOptions,
           }, targetSessionId);
           return;
         }
@@ -1426,7 +1425,7 @@ export function useChatComposerState({
         ...(editingAnchorId ? { anchorId: editingAnchorId } : {}),
         content: messageContent,
         options: {
-          ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
+          ...sendOptions,
           attachments: uploadedAttachments,
         },
       });

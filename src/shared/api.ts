@@ -277,6 +277,9 @@ export const api = {
   sessionDetails: (sessionId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}`),
   runningSessions: () => get('/api/providers/sessions/running'),
+  pinnedSessions: (options: ApiRequestOptions = {}) => get('/api/providers/sessions/pinned', options),
+  setSessionPinned: (sessionId: string, isPinned: boolean, options: ApiRequestOptions = {}) =>
+    put(`/api/providers/sessions/${encodeURIComponent(sessionId)}/pin`, { isPinned }, options),
   recentConversations: ({ limit = 40, offset = 0 }: { limit?: number; offset?: number } = {}) =>
     get(`/api/providers/sessions/recent${query({ limit, offset })}`),
   providerSessionId: (sessionId: string) =>
@@ -447,6 +450,10 @@ export const api = {
       provider: string;
       projectPath: string;
       initialMessage?: unknown;
+      // The composer's selection, from the same untyped options a send carries.
+      model?: unknown;
+      effort?: unknown;
+      permissionMode?: unknown;
     }) => post('/api/providers/sessions', payload),
     sessionMessages: (
       sessionId: string,
@@ -455,8 +462,8 @@ export const api = {
     ) => get(sessionMessagesUrl(sessionId, pagination), options),
     sessionTokenUsage: (sessionId: string) =>
       get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/token-usage`),
-    sessionActiveModel: (provider: string, sessionId: string) =>
-      get(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`),
+    sessionActiveModel: (provider: string, sessionId: string, options: ApiRequestOptions = {}) =>
+      get(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`, options),
     setSessionActiveModel: (provider: string, sessionId: string, model: string) =>
       post(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`, {
         model,
@@ -465,6 +472,12 @@ export const api = {
       post(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-effort`, {
         effort,
       }),
+    setSessionActivePermissionMode: (provider: string, sessionId: string, permissionMode: string) =>
+      post(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-permission-mode`, {
+        permissionMode,
+      }),
+    projectSelection: (provider: string, workspacePath: string) =>
+      get(`/api/providers/${provider}/project-selection${query({ workspacePath })}`),
 
     mcpServers: (
       provider: string,
@@ -498,10 +511,10 @@ export const api = {
 
   // Chat attachments, stored globally under ~/.cloudcli/assets
   assets: {
-    uploadFiles: (formData: FormData) =>
+    uploadFiles: (formData: FormData, requestId?: string) =>
       authenticatedFetch('/api/assets/files', {
         method: 'POST',
-        headers: {}, // Let browser set Content-Type for FormData
+        headers: requestId ? { 'X-Upload-Request-ID': requestId } : {},
         body: formData,
       }),
     file: (storedName: string) => get(`/api/assets/files/${encodeURIComponent(storedName)}`),

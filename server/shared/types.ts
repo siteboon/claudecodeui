@@ -170,9 +170,12 @@ export type CustomProviderModelInput = {
  * `model` must always be populated. Provider adapters should use the
  * provider-specific lookup method requested by the caller, and only fall back
  * to the provider catalog `DEFAULT` value when the active model cannot be read.
+ * `isFallback` marks that case, so a session really running on the catalog
+ * default can be told apart from a lookup that found nothing.
  */
 export type ProviderCurrentActiveModel = {
   model: string;
+  isFallback?: boolean;
 };
 
 /**
@@ -432,6 +435,29 @@ export type SessionForkAncestor = {
   lastActivity: string;
   forkedFromSessionId: string | null;
 };
+
+//----------------- SESSION PINS ------------
+
+/**
+ * A visible pinned session joined to its owning project by the Database module.
+ * Providers converts it to a sidebar summary without reading transcripts or
+ * depending on project pagination. IDs are stable app IDs. The database returns
+ * these records in newest-pin-first order, independently of session activity.
+ * Nullable project fields support sessions whose project was removed.
+ */
+export type SessionPinRecord = {
+  session_id: string;
+  /** Canonical app parent id, used with bounded active ancestry in pin summaries. */
+  forked_from_session_id: string | null;
+  provider: LLMProvider;
+  project_id: string | null;
+  project_path: string | null;
+  custom_project_name: string | null;
+  custom_name: string | null;
+  last_activity: string | null;
+};
+
+// ---------------------------
 
 /**
  * One earlier part of a conversation whose context was cleared, shared by the

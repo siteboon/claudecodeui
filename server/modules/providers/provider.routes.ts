@@ -20,10 +20,18 @@ import type {
   ProviderSkillCreateFile,
   ProviderSkillCreateInput,
   UpsertProviderMcpServerInput,
-} from '@/shared/types.js';
-import { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
+} from '@/shared/index.js';
+import { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from '@/shared/index.js';
 
 const router = express.Router();
+
+function readPinUserId(req: Request): number {
+  const userId = Number((req as Request & { user?: { id?: unknown } }).user?.id);
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
+    throw new AppError('Authentication is required.', { code: 'UNAUTHORIZED', statusCode: 401 });
+  }
+  return userId;
+}
 
 const readPathParam = (value: unknown, name: string): string => {
   if (typeof value === 'string') {
@@ -730,7 +738,10 @@ router.get(
       sessionId,
       requestedModel,
     });
-    res.json(createApiSuccessResponse(result));
+    res.json(createApiSuccessResponse({
+      ...result,
+      permissionMode: providerModelsService.readSessionPermissionMode(sessionId),
+    }));
   }),
 );
 
@@ -762,6 +773,57 @@ router.post(
     res.json(createApiSuccessResponse(
       stored ?? { provider, sessionId, effort, source: 'session' as const },
     ));
+  }),
+);
+
+/** Records the permission-mode choice for one app session. */
+router.post(
+  '/:provider/sessions/:sessionId/active-permission-mode',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const permissionMode = readOptionalQueryString((req.body as Record<string, unknown> | undefined)?.permissionMode);
+    if (!permissionMode) {
+      throw new AppError('permissionMode is required.', {
+        code: 'PERMISSION_MODE_REQUIRED',
+        statusCode: 400,
+      });
+    }
+    if (!providerCapabilitiesService.getProviderCapabilities(provider).permissionModes.includes(permissionMode)) {
+      throw new AppError(`${provider} does not support permission mode "${permissionMode}".`, {
+        code: 'INVALID_PERMISSION_MODE',
+        statusCode: 400,
+      });
+    }
+    const stored = providerModelsService.setSessionPermissionMode(provider, sessionId, permissionMode);
+    // A row that refused the mode belongs to a provider without it (the URL can name another one).
+    if (!stored && providerModelsService.hasSession(sessionId)) {
+      throw new AppError(`This session's provider does not support permission mode "${permissionMode}".`, {
+        code: 'INVALID_PERMISSION_MODE',
+        statusCode: 400,
+      });
+    }
+    // Mirror active-model behavior for a composer that picked a mode just
+    // before the session gateway created its row.
+    res.json(createApiSuccessResponse(
+      stored ?? { provider, sessionId, permissionMode, source: 'session' as const },
+    ));
+  }),
+);
+
+/** The model, effort and permission mode a new chat in one project starts with. */
+router.get(
+  '/:provider/project-selection',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    if (!workspacePath) {
+      throw new AppError('workspacePath is required.', {
+        code: 'WORKSPACE_PATH_REQUIRED',
+        statusCode: 400,
+      });
+    }
+    res.json(createApiSuccessResponse(providerModelsService.resolveProjectSelection(provider, workspacePath)));
   }),
 );
 
@@ -903,6 +965,9 @@ router.post(
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
     const initialMessage = typeof body.initialMessage === 'string' ? body.initialMessage : '';
     const result = sessionsService.createAppSession(provider, projectPath, initialMessage);
+    // The client switches to the new id before its first send records the
+    // selection, so the row has to answer with it from the start.
+    providerModelsService.recordSessionSelection(provider, result.sessionId, body);
     res.status(201).json(createApiSuccessResponse(result));
   }),
 );
@@ -929,6 +994,27 @@ router.get(
   '/sessions/archived',
   asyncHandler(async (_req: Request, res: Response) => {
     const sessions = sessionsService.listArchivedSessions();
+    res.json(createApiSuccessResponse({ sessions }));
+  }),
+);
+
+router.get(
+  '/sessions/pinned',
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(createApiSuccessResponse({ sessions: sessionsService.listPinnedSessions(readPinUserId(req)) }));
+  }),
+);
+
+router.put(
+  '/sessions/:sessionId/pin',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = readPinUserId(req);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const isPinned: unknown = req.body?.isPinned;
+    if (typeof isPinned !== 'boolean') {
+      throw new AppError('isPinned must be a boolean.', { code: 'INVALID_SESSION_PIN', statusCode: 400 });
+    }
+    const sessions = sessionsService.setSessionPinned(userId, sessionId, isPinned);
     res.json(createApiSuccessResponse({ sessions }));
   }),
 );

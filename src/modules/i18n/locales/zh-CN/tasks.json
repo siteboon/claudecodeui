@@ -133,10 +133,26 @@
   "priorities": {
     "high": "高",
     "medium": "中",
-    "low": "低"
+    "low": "低",
+    "highTitle": "高优先级",
+    "mediumTitle": "中优先级",
+    "lowTitle": "低优先级"
   },
   "noMatchingTasks": {
     "title": "没有符合筛选条件的任务",
     "description": "尝试调整您的搜索或筛选条件。"
+  },
+  "banner": {
+    "initialize": "初始化",
+    "hideDetails": "收起详情",
+    "whatIsTaskmaster": "什么是 TaskMaster？",
+    "detailAiPowered": "- AI 辅助任务管理，支持依赖关系和子任务。",
+    "detailPrdDriven": "- 根据产品需求文档（PRD）生成任务，快速启动项目。",
+    "detailKanbanList": "- 提供看板和列表视图，方便日常任务管理。",
+    "startTask": "开始任务",
+    "viewTaskDetails": "查看任务详情",
+    "viewAllTasks": "查看所有任务",
+    "allComplete": "所有任务已完成",
+    "noPending": "暂无待处理任务"
   }
 }

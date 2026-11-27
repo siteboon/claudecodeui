@@ -26,7 +26,8 @@
     "close": "Close",
     "previewMarkdown": "Preview markdown",
     "liveMarkdown": "Live preview editing",
-    "editMarkdown": "Edit markdown"
+    "editMarkdown": "Edit markdown",
+    "previewHtml": "Open HTML preview in new tab"
   },
   "footer": {
     "lines": "Lines:",

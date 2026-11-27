@@ -9,14 +9,12 @@ import type {
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
 } from '@/shared/types.js';
-import { AppError } from '@/shared/utils.js';
+import { AppError, buildDefaultProviderCurrentActiveModel } from '@/shared/utils.js';
 
 const createModels = (value: string): ProviderModelsDefinition => ({
   OPTIONS: [{ value, label: value }],
   DEFAULT: value,
 });
-
-const createCurrentActiveModel = (model: string): ProviderCurrentActiveModel => ({ model });
 
 /** In-memory stand-in for the `sessions` table rows the service reads and writes. */
 const createSessionStore = (
@@ -25,7 +23,7 @@ const createSessionStore = (
 ) => {
   const sessions = new Map(Object.entries(rows).map(([sessionId, model]) => [
     sessionId,
-    { model, effort: efforts[sessionId] ?? null },
+    { model, effort: efforts[sessionId] ?? null, permission_mode: null as string | null },
   ]));
   return {
     sessions,
@@ -43,6 +41,14 @@ const createSessionStore = (
         session.effort = effort;
       }
     },
+    setSessionPermissionMode: (sessionId: string, permissionMode: string) => {
+      const session = sessions.get(sessionId);
+      if (session) {
+        session.permission_mode = permissionMode;
+      }
+    },
+    // Stands in for "the project's latest session": the last row inserted.
+    getLatestProjectSelection: () => [...sessions.values()].at(-1) ?? null,
   };
 };
 
@@ -126,7 +132,8 @@ const createTestService = (options: {
   catalog?: ReturnType<typeof createCatalogStore>;
   sessions?: ReturnType<typeof createSessionStore>;
   settings?: ReturnType<typeof createSettingsStore>;
-  activeModel?: (provider: LLMProvider, sessionId?: string) => string;
+  // Returning undefined models an adapter that found nothing for the session.
+  activeModel?: (provider: LLMProvider, sessionId?: string) => string | undefined;
   onCatalogRead?: (provider: LLMProvider) => void;
 } = {}) => {
   const catalog = options.catalog ?? createCatalogStore();
@@ -142,9 +149,10 @@ const createTestService = (options: {
           options.onCatalogRead?.(provider);
           return createModels(`${provider}-default`);
         },
-        getCurrentActiveModel: async (sessionId) => createCurrentActiveModel(
-          options.activeModel?.(provider, sessionId) ?? `${provider}-default`,
-        ),
+        getCurrentActiveModel: async (sessionId): Promise<ProviderCurrentActiveModel> => {
+          const model = options.activeModel?.(provider, sessionId);
+          return model ? { model } : buildDefaultProviderCurrentActiveModel(createModels(`${provider}-default`));
+        },
       },
     }),
   });
@@ -283,6 +291,28 @@ test('custom-models-only makes the first custom model the session fallback', asy
     await service.resolveResumeModel('claude', 'session-on-built-in', 'gateway-model'),
     'claude-default',
   );
+});
+
+test('custom-models-only keeps a provider-reported model that equals the built-in default', async () => {
+  const { service } = createTestService({
+    sessions: createSessionStore({ 'external': null, 'recorded': 'cursor-default' }),
+    activeModel: () => 'cursor-default',
+  });
+  await service.createCustomModel('cursor', { model: 'Gateway', id: 'gateway/custom' });
+  await service.setCustomModelsOnly('cursor', true);
+
+  const external = await service.resolveSessionModel('cursor', { sessionId: 'external' });
+  assert.equal(external.model, 'cursor-default');
+  assert.equal(external.source, 'provider');
+
+  const recorded = await service.resolveSessionModel('cursor', { sessionId: 'recorded' });
+  assert.equal(recorded.model, 'cursor-default');
+  assert.equal(recorded.source, 'session');
+
+  await service.setCustomModelsOnly('cursor', false);
+  const withoutCustomOnly = await service.resolveSessionModel('cursor', { sessionId: 'external' });
+  assert.equal(withoutCustomOnly.model, 'cursor-default');
+  assert.equal(withoutCustomOnly.source, 'provider');
 });
 
 test('custom models can be created, edited, and deleted', async () => {
@@ -539,6 +569,62 @@ test('setSessionEffort ignores sessions that have no row yet', () => {
 
   assert.equal(service.setSessionEffort('codex', 'missing-session', 'high'), null);
   assert.equal(sessions.sessions.size, 0);
+});
+
+test('setSessionPermissionMode records a mode the provider offers', () => {
+  const sessions = createSessionStore({ 'session-1': 'opus' });
+  const { service } = createTestService({ sessions });
+
+  const stored = service.setSessionPermissionMode('claude', 'session-1', 'acceptEdits');
+
+  assert.deepEqual(stored, {
+    provider: 'claude',
+    sessionId: 'session-1',
+    permissionMode: 'acceptEdits',
+    source: 'session',
+  });
+  assert.equal(service.readSessionPermissionMode('session-1'), 'acceptEdits');
+});
+
+test('setSessionPermissionMode ignores unsupported modes and sessions without a row', () => {
+  const sessions = createSessionStore({ 'session-1': 'gpt-5.4' });
+  const { service } = createTestService({ sessions });
+
+  // Codex has no plan mode.
+  assert.equal(service.setSessionPermissionMode('codex', 'session-1', 'plan'), null);
+  assert.equal(service.setSessionPermissionMode('codex', 'missing-session', 'acceptEdits'), null);
+  assert.equal(service.readSessionPermissionMode('session-1'), null);
+});
+
+test('setSessionPermissionMode checks the mode against the session row provider', () => {
+  const sessions = createSessionStore({ 'session-1': 'gpt-5.4' });
+  Object.assign(sessions.sessions.get('session-1')!, { provider: 'codex' });
+  const { service } = createTestService({ sessions });
+
+  // A Claude URL cannot store Claude's plan mode on a Codex session.
+  assert.equal(service.setSessionPermissionMode('claude', 'session-1', 'plan'), null);
+  assert.equal(service.readSessionPermissionMode('session-1'), null);
+});
+
+test('resolveProjectSelection returns the latest session selection, or nulls', () => {
+  const empty = createTestService({ sessions: createSessionStore() }).service;
+  assert.deepEqual(empty.resolveProjectSelection('claude', '/repo'), {
+    provider: 'claude',
+    model: null,
+    effort: null,
+    permissionMode: null,
+  });
+
+  const sessions = createSessionStore({ 'session-1': 'opus' }, { 'session-1': 'high' });
+  const { service } = createTestService({ sessions });
+  service.setSessionPermissionMode('claude', 'session-1', 'plan');
+
+  assert.deepEqual(service.resolveProjectSelection('claude', '/repo'), {
+    provider: 'claude',
+    model: 'opus',
+    effort: 'high',
+    permissionMode: 'plan',
+  });
 });
 
 test('resolveSessionModel prefers the recorded session model', async () => {

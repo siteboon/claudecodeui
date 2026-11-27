@@ -138,6 +138,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- restores its exact runtime configuration instead of provider defaults.
     model TEXT,
     effort TEXT,
+    -- Permission mode this session runs with, recorded the same way so it
+    -- follows the session to every browser instead of living in one.
+    permission_mode TEXT,
     -- The app session this one was branched from, NULL for sessions created
     -- normally. Informational only: a fork is a fully independent provider
     -- session, and deleting the source does not affect it.
@@ -263,6 +266,17 @@ CREATE TABLE IF NOT EXISTS superseded_provider_sessions (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (provider_session_id, provider)
 );
+`;
+
+/** Database initialization and migrations create the per-user session bookmarks. */
+export const SESSION_PINS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS session_pins (
+    pin_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    UNIQUE(user_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_session_pins_user_order ON session_pins(user_id, pin_id DESC);
 `;
 
 export const INIT_SCHEMA_SQL = `
