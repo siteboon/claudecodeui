@@ -931,6 +931,24 @@ export function useProjectsState({
     );
   }, [selectedProject?.projectId, selectedSession?.__projectId, selectedSession?.id, sessionId]);
 
+  // Entering `/new` from an existing conversation (browser Back, or a notification
+  // without a session id) reuses the mounted provider, so clear the selected
+  // conversation and reset chat state on entry — only on the transition into
+  // `/new`, never continuously, so first-message session allocation can bind
+  // `selectedSession` before the URL updates.
+  const wasNewSessionRouteRef = useRef(isNewSessionRoute);
+  useEffect(() => {
+    const enteredNewSessionRoute = isNewSessionRoute && !wasNewSessionRouteRef.current;
+    wasNewSessionRouteRef.current = isNewSessionRoute;
+    if (!enteredNewSessionRoute) {
+      return;
+    }
+
+    setSelectedSession(null);
+    setActiveTab('chat');
+    setNewSessionTrigger((previous) => previous + 1);
+  }, [isNewSessionRoute]);
+
   /**
    * Reopen the remembered conversation when the route names none and the user
    * did not ask for a new chat.

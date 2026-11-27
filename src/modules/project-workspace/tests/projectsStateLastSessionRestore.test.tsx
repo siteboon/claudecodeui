@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
-import type { Project } from '@/shared/types';
+import type { Project, ProjectSession } from '@/shared/types';
 
 /**
  * The root path reopens the conversation this browser had open last.
@@ -228,4 +228,41 @@ test('opening another chat while the lookup is in flight wins over the restore',
   );
   assert.notEqual(localStorage.getItem(LAST_OPENED_SESSION_STORAGE_KEY), null);
   assert.equal(view.result.current.isLoadingProjects, false);
+});
+
+test('entering /new after viewing a session clears the selection and resets chat state once', async () => {
+  const { view, reopen } = await renderProjectsState({ isNewSessionRoute: true });
+
+  await waitFor(() => {
+    assert.equal(view.result.current.isLoadingProjects, false);
+  });
+
+  // Opening a conversation from /new binds selectedSession; navigating back to
+  // /new reuses the mounted provider and must drop that session and reset chat.
+  await act(async () => {
+    reopen({ sessionId: 'session-1', isNewSessionRoute: false });
+  });
+  await waitFor(() => {
+    assert.equal(view.result.current.selectedSession?.id, 'session-1');
+  });
+  const triggerBeforeBack = view.result.current.newSessionTrigger;
+
+  await act(async () => {
+    reopen({ sessionId: undefined, isNewSessionRoute: true });
+  });
+  assert.equal(view.result.current.selectedSession, null);
+  assert.equal(view.result.current.activeTab, 'chat');
+  assert.equal(view.result.current.newSessionTrigger, triggerBeforeBack + 1);
+
+  // Staying on /new while first-message allocation binds an optimistic session
+  // must keep that selection instead of clearing it continuously.
+  await act(async () => {
+    view.result.current.registerOptimisticSession({
+      sessionId: 'allocated-session',
+      provider: 'claude',
+      project: buildProject(),
+      summary: 'hello',
+    });
+  });
+  assert.equal((view.result.current.selectedSession as ProjectSession | null)?.id, 'allocated-session');
 });
