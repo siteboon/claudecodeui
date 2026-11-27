@@ -75,7 +75,10 @@ function Sidebar({
   const { tasksEnabled } = useTasksSettings();
   const paletteOps = usePaletteOps();
   // 409 返回的项目可能不在当前分页中；刷新到它后再完成用户的打开请求。
-  const [pendingExistingProjectId, setPendingExistingProjectId] = useState<string | null>(null);
+  const [pendingExistingProject, setPendingExistingProject] = useState<{
+    id: string;
+    navigationKey: string;
+  } | null>(null);
   // 等待列表时若用户改变选中项，晚到的结果不能把页面跳回旧目标。
   const navigationKey = JSON.stringify([selectedProject?.projectId, selectedSession?.id]);
   const currentNavigationRef = useRef(navigationKey);
@@ -201,7 +204,7 @@ function Sidebar({
           try {
             await paletteOps.refreshProjects();
             if (requestId === existingProjectRequestRef.current && navigationKey === currentNavigationRef.current) {
-              setPendingExistingProjectId(projectId);
+              setPendingExistingProject({ id: projectId, navigationKey });
             }
           } catch {
             // 保留当前项目，用户可再次尝试打开。
@@ -210,7 +213,7 @@ function Sidebar({
         return;
       }
 
-      setPendingExistingProjectId(null);
+      setPendingExistingProject(null);
       ensureProjectExpanded(existingProject.projectId);
       handleProjectSelect(existingProject);
     },
@@ -227,13 +230,24 @@ function Sidebar({
   );
 
   useEffect(() => {
-    if (!pendingExistingProjectId) return;
-    setPendingExistingProjectId(null);
-    const existingProject = projects.find((project) => project.projectId === pendingExistingProjectId);
+    if (!pendingExistingProject) return;
+    const timer = window.setTimeout(() => setPendingExistingProject(null), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [pendingExistingProject]);
+
+  useEffect(() => {
+    if (!pendingExistingProject) return;
+    if (pendingExistingProject.navigationKey !== navigationKey) {
+      setPendingExistingProject(null);
+      return;
+    }
+    // A newer, overlapping refresh may still be applying its project list.
+    const existingProject = projects.find((project) => project.projectId === pendingExistingProject.id);
     if (!existingProject) return;
+    setPendingExistingProject(null);
     ensureProjectExpanded(existingProject.projectId);
     handleProjectSelect(existingProject);
-  }, [ensureProjectExpanded, handleProjectSelect, pendingExistingProjectId, projects]);
+  }, [ensureProjectExpanded, handleProjectSelect, navigationKey, pendingExistingProject, projects]);
 
   // Stable so memo() on the row components can bail out; an inline arrow here
   // would give every row a new callback on each sidebar render.
