@@ -56,7 +56,7 @@ export function getClaudeSettings(): ClaudeSettings {
     allowedTools: Array.isArray(stored.allowedTools) ? stored.allowedTools : [],
     disallowedTools: Array.isArray(stored.disallowedTools) ? stored.disallowedTools : [],
     skipPermissions: Boolean(stored.skipPermissions),
-    projectSortOrder: readUserPreference<ClaudeSettings['projectSortOrder']>('projectSortOrder', 'name'),
+    projectSortOrder: readUserPreference<ClaudeSettings['projectSortOrder']>('projectSortOrder', 'date'),
   };
 }
 

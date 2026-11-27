@@ -53,11 +53,11 @@ const getSessionDate = (session: SessionWithProvider): Date => {
   return new Date(getUpdatedTimestamp(session) || getCreatedTimestamp(session) || 0);
 };
 
-const getSessionName = (session: SessionWithProvider, t: TFunction): string => {
+export const getSessionName = (session: SessionWithProvider, t: TFunction): string => {
   return session.summary || session.name || t('projects.newSession');
 };
 
-const getSessionTime = (session: SessionWithProvider): string => {
+export const getSessionTime = (session: SessionWithProvider): string => {
   return getUpdatedTimestamp(session) || getCreatedTimestamp(session);
 };
 
@@ -160,28 +160,6 @@ export const filterProjects = (projects: Project[], searchFilter: string): Proje
     const searchPath = (project.path || project.fullPath || '').toLowerCase();
     return displayName.includes(normalizedSearch) || searchPath.includes(normalizedSearch);
   });
-};
-
-export const getTaskIndicatorStatus = (
-  project: Project,
-  mcpServerStatus: { hasMCPServer?: boolean; isConfigured?: boolean } | null,
-) => {
-  const projectConfigured = Boolean(project.taskmaster?.hasTaskmaster);
-  const mcpConfigured = Boolean(mcpServerStatus?.hasMCPServer && mcpServerStatus?.isConfigured);
-
-  if (projectConfigured && mcpConfigured) {
-    return 'fully-configured';
-  }
-
-  if (projectConfigured) {
-    return 'taskmaster-only';
-  }
-
-  if (mcpConfigured) {
-    return 'mcp-only';
-  }
-
-  return 'not-configured';
 };
 
 export const normalizeProjectForSettings = (project: Project): SettingsProject => {

@@ -125,7 +125,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
 
   const [activeTab, setActiveTab] = useState<SettingsMainTab>(() => normalizeMainTab(initialTab));
   const [saveStatus, setSaveStatus] = useState<'success' | 'error' | null>(null);
-  const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
+  const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('date');
   const [codeEditorSettings, setCodeEditorSettings] = useState<CodeEditorSettingsState>(() => (
     readCodeEditorSettings()
   ));
@@ -157,7 +157,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         disallowedTools: savedClaudeSettings.disallowedTools || [],
         skipPermissions: Boolean(savedClaudeSettings.skipPermissions),
       });
-      setProjectSortOrder(readUserPreference<ProjectSortOrder>('projectSortOrder', 'name') === 'date' ? 'date' : 'name');
+      setProjectSortOrder(readUserPreference<ProjectSortOrder>('projectSortOrder', 'date') === 'name' ? 'name' : 'date');
 
       const savedCursorSettings = readUserPreference<CursorSettingsStorage>('cursorPermissions', {});
       setCursorPermissions({

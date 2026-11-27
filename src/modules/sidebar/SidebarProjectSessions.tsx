@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
-import { CheckSquare, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
 import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
-import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
 import { buildProjectSessionTree } from '@/modules/sidebar/utils/projectSessionTree';
 
@@ -33,13 +32,11 @@ type SidebarProjectSessionsProps = {
   onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
-  onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onArchiveSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   onForkSession?: (session: SessionWithProvider) => void;
   onLoadMoreSessions: (projectId: string) => void;
-  onNewSession: (project: Project) => void;
   /** The sessions ticked here, or null when this project's list is not in selection mode. */
   selectedSessionIds: ReadonlySet<string> | null;
   onSetSessionSelection: (selection: SidebarSessionSelection) => void;
@@ -87,13 +84,11 @@ export default function SidebarProjectSessions({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
-  onProjectSelect,
   onSessionSelect,
   onArchiveSession,
   onDeleteSession,
   onForkSession,
   onLoadMoreSessions,
-  onNewSession,
   selectedSessionIds,
   onSetSessionSelection,
   onToggleSessionSelected,
@@ -101,7 +96,6 @@ export default function SidebarProjectSessions({
   onDeleteSelectedSessions,
   t,
 }: SidebarProjectSessionsProps) {
-  const isCompact = useCompactSidebar();
   const pins = useSessionPins();
   const treeRows = useMemo(() => {
     const projectPins = pins?.sessions.filter((pin) => pin.projectId === project.projectId) ?? [];
@@ -200,88 +194,46 @@ export default function SidebarProjectSessions({
       : t('sessions.selectAll');
 
   return (
-    <div className="ml-1.5 space-y-1 border-l border-border/70 pl-1.5">
-      {isCompact ? (
-        <div className="px-3 pb-1 pt-1">
-          <button
-            className="flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary text-xs font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]"
-            onClick={() => {
-              onProjectSelect(project);
-              onNewSession(project);
-            }}
+    <div className="ml-4 space-y-0.5 border-l border-border/60 pl-1.5">
+      {/* The project row's menu enters selection; these controls finish it. */}
+      {isSelecting && (
+        <div className="space-y-1">
+          {/* Wraps rather than clips: at the narrowest sidebar width a long
+              translated "Select all loaded" leaves no room for Cancel. */}
+          <div className="flex flex-wrap items-center justify-between gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() =>
+                onSetSessionSelection({
+                  projectId: project.projectId,
+                  sessionIds: new Set(allLoadedSelected ? [] : selectableSessionIds),
+                })
+              }
+              disabled={selectableSessionIds.length === 0}
+            >
+              {selectAllLabel}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={onCancelSessionSelection}
+            >
+              {t('actions.cancel')}
+            </Button>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-8 w-full justify-center gap-2 bg-red-600 text-xs font-medium text-white hover:bg-red-700"
+            onClick={() => onDeleteSelectedSessions(effectiveSelectedIds)}
+            disabled={effectiveSelectedIds.length === 0}
           >
-            <Plus className="h-3 w-3" />
-            {t('sessions.newSession')}
-          </button>
-        </div>
-      ) : (
-        <Button
-          variant="default"
-          size="sm"
-          className="flex h-8 w-full justify-start gap-2 bg-primary text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          onClick={() => onNewSession(project)}
-        >
-          <Plus className="h-3 w-3" />
-          {t('sessions.newSession')}
-        </Button>
-      )}
-
-      {(isSelecting || (initialSessionsLoaded && selectableSessionIds.length > 0)) && (
-        <div className={cn('space-y-1', isCompact && 'px-3')}>
-          {isSelecting ? (
-            <>
-              {/* Wraps rather than clips: at the narrowest sidebar width a long
-                  translated "Select all loaded" leaves no room for Cancel. */}
-              <div className="flex flex-wrap items-center justify-between gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() =>
-                    onSetSessionSelection({
-                      projectId: project.projectId,
-                      sessionIds: new Set(allLoadedSelected ? [] : selectableSessionIds),
-                    })
-                  }
-                  disabled={selectableSessionIds.length === 0}
-                >
-                  {selectAllLabel}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={onCancelSessionSelection}
-                >
-                  {t('actions.cancel')}
-                </Button>
-              </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-8 w-full justify-center gap-2 bg-red-600 text-xs font-medium text-white hover:bg-red-700"
-                onClick={() => onDeleteSelectedSessions(effectiveSelectedIds)}
-                disabled={effectiveSelectedIds.length === 0}
-              >
-                <Trash2 className="h-3 w-3" />
-                {t('sessions.deleteSelected', { count: effectiveSelectedIds.length })}
-              </Button>
-            </>
-          ) : (
-            <div className="flex justify-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() =>
-                  onSetSessionSelection({ projectId: project.projectId, sessionIds: new Set() })
-                }
-              >
-                <CheckSquare className="h-3 w-3" />
-                {t('sessions.select')}
-              </Button>
-            </div>
-          )}
+            <Trash2 className="h-3 w-3" />
+            {t('sessions.deleteSelected', { count: effectiveSelectedIds.length })}
+          </Button>
         </div>
       )}
 
@@ -369,7 +321,6 @@ export default function SidebarProjectSessions({
                     onStartEditingSession={onStartEditingSession}
                     onCancelEditingSession={onCancelEditingSession}
                     onSaveEditingSession={onSaveEditingSession}
-                    onProjectSelect={onProjectSelect}
                     onSessionSelect={onSessionSelect}
                     onArchiveSession={onArchiveSession}
                     onDeleteSession={onDeleteSession}

@@ -18,6 +18,10 @@ export default {
         sans: ['"Encode Sans"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
         serif: ['Merriweather', 'Georgia', 'Cambria', '"Times New Roman"', 'serif'],
       },
+      fontSize: {
+        // Sidebar row titles: half a step below text-sm.
+        row: ['13.5px', '20px'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

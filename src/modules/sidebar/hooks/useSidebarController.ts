@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import { api } from '@/shared/api';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SessionListKind, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
 import {
   filterProjects,
   getAllSessions,
@@ -134,16 +134,13 @@ export function useSidebarController({
       localStorage.setItem(EXPANDED_PROJECTS_STORAGE_KEY, JSON.stringify([...expandedProjects]));
     } catch { /* Keep navigation working when browser storage is unavailable. */ }
   }, [expandedProjects, keepProjectsExpanded, selectedProject?.projectId]);
-  // Running groups start expanded and remember manual collapses independently of Projects.
-  const [collapsedRunningProjects, setCollapsedRunningProjects] = useState<Set<string>>(new Set());
   // The one rename the sidebar has open, as a single value so a project and a
   // session cannot both be mid-rename. See ActiveSidebarRename.
   const [activeRename, setActiveRename] = useState<ActiveSidebarRename | null>(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [initialSessionsLoaded, setInitialSessionsLoaded] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('name');
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [projectSortOrder, setProjectSortOrder] = useState<ProjectSortOrder>('date');
   const [searchFilter, setSearchFilter] = useState('');
   const [deletingProjects, setDeletingProjects] = useState<Set<string>>(new Set());
   // The one delete confirmation the sidebar has open. One value because the
@@ -189,8 +186,6 @@ export function useSidebarController({
   const onRefreshRef = useRef(onRefresh);
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
-  const activeSessionIds = activeSessions;
-  const runningSessionsCount = activeSessionIds.size;
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -486,7 +481,7 @@ export function useSidebarController({
     }
 
     const query = debouncedSearchQuery;
-    if (searchMode !== 'conversations' || query.length < 2) {
+    if (searchMode === 'archived' || query.length < 2) {
       searchSeqRef.current += 1;
       setConversationResults(null);
       setSearchProgress(null);
@@ -605,17 +600,6 @@ export function useSidebarController({
       // selection they belong to is dropped with them.
       setSessionSelection(null);
 
-      if (searchMode === 'running') {
-        setCollapsedRunningProjects((prev) => {
-          const next = new Set(prev);
-          if (!next.delete(projectId)) {
-            next.add(projectId);
-          }
-          return next;
-        });
-        return;
-      }
-
       setExpandedProjects((prev) => {
         const next = keepProjectsExpanded ? new Set(prev) : new Set<string>();
         if (prev.has(projectId)) {
@@ -626,15 +610,12 @@ export function useSidebarController({
         return next;
       });
     },
-    [searchMode, keepProjectsExpanded],
+    [keepProjectsExpanded],
   );
 
   const isProjectExpanded = useCallback(
-    (projectId: string) =>
-      searchMode === 'running'
-        ? !collapsedRunningProjects.has(projectId)
-        : expandedProjects.has(projectId),
-    [collapsedRunningProjects, expandedProjects, searchMode],
+    (projectId: string) => expandedProjects.has(projectId),
+    [expandedProjects],
   );
 
   const handleSessionClick = useCallback(
@@ -782,35 +763,10 @@ export function useSidebarController({
     [projectSortOrder, projectsWithResolvedStarState],
   );
 
-  const runningProjects = useMemo(() => {
-    if (activeSessionIds.size === 0) {
-      return [];
-    }
-
-    return sortedProjects.reduce<Project[]>((acc, project) => {
-      const sessions = (project.sessions ?? []).filter((session) => activeSessionIds.has(String(session.id)));
-      const runningCount = sessions.length;
-
-      if (runningCount === 0) {
-        return acc;
-      }
-
-      acc.push({
-        ...project,
-        sessions,
-        sessionMeta: {
-          ...project.sessionMeta,
-          total: runningCount,
-          hasMore: false,
-        },
-      });
-      return acc;
-    }, []);
-  }, [activeSessionIds, sortedProjects]);
-
   const filteredProjects = useMemo(
-    () => filterProjects(searchMode === 'running' ? runningProjects : sortedProjects, debouncedSearchQuery),
-    [debouncedSearchQuery, runningProjects, searchMode, sortedProjects],
+    // A cleared box shows every project at once rather than waiting out the debounce.
+    () => filterProjects(sortedProjects, searchFilter.trim() ? debouncedSearchQuery : ''),
+    [debouncedSearchQuery, searchFilter, sortedProjects],
   );
 
   const filteredArchivedSessions = useMemo(() => {
@@ -870,8 +826,8 @@ export function useSidebarController({
   }, []);
 
   const startEditingSession = useCallback(
-    (projectId: string, sessionId: string, initialName: string) => {
-      setActiveRename({ target: 'session', id: sessionId, projectId, draft: initialName });
+    (projectId: string, sessionId: string, initialName: string, origin?: SessionListKind) => {
+      setActiveRename({ target: 'session', id: sessionId, projectId, draft: initialName, origin });
     },
     [],
   );
@@ -1214,18 +1170,13 @@ export function useSidebarController({
   }, [fetchArchivedSessions, onRefresh, t]);
 
   const refreshProjects = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      await Promise.all([
-        Promise.resolve(onRefresh()),
-        fetchArchivedSessions(),
-        searchMode === 'conversations'
-          ? fetchRecentConversationsPage(0, false)
-          : Promise.resolve(),
-      ]);
-    } finally {
-      setIsRefreshing(false);
-    }
+    await Promise.all([
+      Promise.resolve(onRefresh()),
+      fetchArchivedSessions(),
+      searchMode === 'conversations'
+        ? fetchRecentConversationsPage(0, false)
+        : Promise.resolve(),
+    ]);
   }, [fetchArchivedSessions, fetchRecentConversationsPage, onRefresh, searchMode]);
 
   const updateSessionSummary = useCallback(
@@ -1316,14 +1267,12 @@ export function useSidebarController({
     showNewProject,
     initialSessionsLoaded,
     currentTime,
-    isRefreshing,
     searchFilter,
     deletingProjects,
     loadingMoreProjects,
     pendingDeletion,
     showVersionModal,
     filteredProjects,
-    runningSessionsCount,
     archivedProjects: filteredArchivedProjects,
     archivedSessions: filteredArchivedSessions,
     archivedSessionsCount: archivedProjects.length + archivedSessions.length,

@@ -1667,7 +1667,7 @@ export type SessionRowActions = {
   /** Sessions waiting on the user, which show the amber dot. */
   attentionSessionIds: ReadonlySet<string>;
   onRenameDraftChange: (draft: string) => void;
-  onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
+  onStartEditingSession: (projectId: string, sessionId: string, initialName: string, origin?: SessionListKind) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectId: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   /** Archives the session straight away; it stays restorable from the archive. */
@@ -1691,8 +1691,6 @@ export type SidebarProjectListProps = SessionRowActions & {
   initialSessionsLoaded: Set<string>;
   currentTime: Date;
   deletingProjects: Set<string>;
-  tasksEnabled: boolean;
-  mcpServerStatus: MCPServerStatus;
   getProjectSessions: (project: Project) => SessionWithProvider[];
   onLoadMoreSessions: (projectId: string) => void;
   loadingMoreProjects: Set<string>;
@@ -1732,8 +1730,8 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 /** The ordering applied to the project list, either alphabetically by name or by most recent activity, persisted alongside the user's appearance settings. */
 export type ProjectSortOrder = 'name' | 'date';
 
-/** Which list the sidebar is currently showing: projects, conversation search results, running sessions or archived items. */
-export type SidebarSearchMode = 'projects' | 'conversations' | 'running' | 'archived';
+/** Which list the sidebar is currently showing: projects, conversation search results or archived items. */
+export type SidebarSearchMode = 'projects' | 'conversations' | 'archived';
 
 /** A Project narrowed to the archived state so archived entries can be listed and restored without being mistaken for active projects. */
 export type ArchivedProjectListItem = Project & { isArchived: true };
@@ -1758,6 +1756,9 @@ export type ArchivedSessionListItem = {
 };
 
 /** The subset of archived-session fields needed to render a recent-conversations row and reopen the session it points at. */
+/** The sidebar's cross-project session lists. Also names where a rename was opened, so only that list's row edits. */
+export type SessionListKind = 'active' | 'pinned' | 'recent';
+
 export type RecentConversationListItem = Pick<
   ArchivedSessionListItem,
   'sessionId' | 'provider' | 'projectId' | 'projectDisplayName' | 'sessionTitle' | 'lastActivity'
@@ -1779,7 +1780,18 @@ export type PinnedConversationListItem = RecentConversationListItem & Pick<Proje
  */
 export type ActiveSidebarRename =
   | { target: 'project'; id: string; draft: string }
-  | { target: 'session'; id: string; projectId: string; draft: string };
+  | {
+    target: 'session';
+    id: string;
+    projectId: string;
+    draft: string;
+    /**
+     * The cross-project list (Active, Pinned, Recent) the rename was opened from,
+     * or undefined for the project tree. A session can show in several lists at
+     * once; only the row it was opened from turns into an editor.
+     */
+    origin?: SessionListKind;
+  };
 
 /**
  * The sidebar's pending delete confirmation. One value rather than a pair of

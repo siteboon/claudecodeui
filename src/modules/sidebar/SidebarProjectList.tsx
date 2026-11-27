@@ -1,17 +1,13 @@
-import { useEffect } from 'react';
 
 import type { SidebarProjectListProps } from '@/shared/types';
-import { getPageTitle } from '@/shared/utils';
 import SidebarProjectItem from '@/modules/sidebar/SidebarProjectItem';
 import SidebarProjectsState from '@/modules/sidebar/SidebarProjectsState';
-
 
 /** Rendered by SidebarContent to list the filtered projects, delegating each row to SidebarProjectItem. */
 export default function SidebarProjectList({
   includeOffPagePins = true,
   projects,
   filteredProjects,
-  selectedProject,
   selectedSession,
   isLoading,
   loadingProgress,
@@ -21,8 +17,6 @@ export default function SidebarProjectList({
   currentTime,
 
   deletingProjects,
-  tasksEnabled,
-  mcpServerStatus,
   getProjectSessions,
   onLoadMoreSessions,
   loadingMoreProjects,
@@ -32,7 +26,6 @@ export default function SidebarProjectList({
   isProjectStarred,
   onRenameDraftChange,
   onToggleProject,
-  onProjectSelect,
   onToggleStarProject,
   onStartEditingProject,
   onCancelEditingProject,
@@ -53,7 +46,6 @@ export default function SidebarProjectList({
   onDeleteSelectedSessions,
   t,
 }: SidebarProjectListProps) {
-  const pageTitle = getPageTitle(selectedProject, selectedSession);
   const state = (
     <SidebarProjectsState
       isLoading={isLoading}
@@ -63,10 +55,6 @@ export default function SidebarProjectList({
       t={t}
     />
   );
-
-  useEffect(() => {
-    document.title = pageTitle;
-  }, [pageTitle]);
 
   const showProjects = !isLoading && projects.length > 0 && filteredProjects.length > 0;
 
@@ -83,7 +71,7 @@ export default function SidebarProjectList({
                   ? activeRename
                   : null;
               const renamingSession =
-                activeRename?.target === 'session' && activeRename.projectId === project.projectId
+                activeRename?.target === 'session' && activeRename.projectId === project.projectId && !activeRename.origin
                   ? activeRename
                   : null;
               // Resolved here for the same reason as the renames: only the
@@ -98,7 +86,6 @@ export default function SidebarProjectList({
               <SidebarProjectItem
                 key={project.projectId}
                 project={project}
-                selectedProject={selectedProject}
                 selectedSession={selectedSession}
                 isExpanded={isProjectExpanded(project.projectId)}
                 isDeleting={deletingProjects.has(project.projectId)}
@@ -112,11 +99,8 @@ export default function SidebarProjectList({
                 currentTime={currentTime}
                 sessionRenameId={renamingSession?.id ?? null}
                 sessionRenameDraft={renamingSession?.draft ?? ''}
-                tasksEnabled={tasksEnabled}
-                mcpServerStatus={mcpServerStatus}
                 onRenameDraftChange={onRenameDraftChange}
                 onToggleProject={onToggleProject}
-                onProjectSelect={onProjectSelect}
                 onToggleStarProject={onToggleStarProject}
                 onStartEditingProject={onStartEditingProject}
                 onCancelEditingProject={onCancelEditingProject}

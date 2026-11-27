@@ -105,6 +105,7 @@ test('the rename open elsewhere does not put this row into editing', () => {
     id: 's2',
     projectId: 'project-1',
     draft: 'a new name',
+    origin: 'recent',
   };
   renderList([conversation('s1'), conversation('s2')], makeActions({ activeRename }));
 
@@ -129,7 +130,7 @@ test('a running session is marked processing and shows a spinner instead of its 
 
   assert.equal(recordedOptionsProps[0].isProcessing, true);
   assert.equal(recordedOptionsProps[1].isProcessing, false);
-  assert.equal(container.querySelectorAll('.animate-spin').length, 1);
+  assert.equal(container.querySelectorAll('[class*="animate-spin"]').length, 1);
   assert.equal(container.querySelectorAll('time').length, 1);
 });
 
@@ -142,7 +143,7 @@ test('a session with only background work running gets the purple dot, not the s
   );
 
   assert.equal(recordedOptionsProps[0].isProcessing, false);
-  assert.equal(container.querySelectorAll('.animate-spin').length, 0);
+  assert.equal(container.querySelectorAll('[class*="animate-spin"]').length, 0);
   const dots = container.querySelectorAll('[role="status"].bg-purple-500');
   assert.equal(dots.length, 1);
   assert.equal(dots[0].getAttribute('aria-label'), 'tooltips.backgroundWorkIndicator');

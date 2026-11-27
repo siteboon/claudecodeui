@@ -8,11 +8,7 @@ import { test, vi } from 'vitest';
 import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
 import type { LLMProvider, Project, SessionWithProvider } from '@/shared/types';
 
-vi.mock('@/modules/sidebar/hooks/useCompactSidebar', () => ({
-  useCompactSidebar: () => true,
-}));
-
-// Exercise the real shared capability hook: the mobile menu must follow the
+// Exercise the real shared capability hook: the row's menu must follow the
 // server matrix and withhold actions for missing or unsupported providers.
 vi.mock('@/shared/api', () => ({
   api: {
@@ -67,7 +63,6 @@ const rowProps = (
   onStartEditingSession: noop,
   onCancelEditingSession: noop,
   onSaveEditingSession: noop,
-  onProjectSelect: noop,
   onSessionSelect: noop,
   onArchiveSession: noop,
   onDeleteSession: noop,
@@ -83,97 +78,95 @@ const openOptions = async () => {
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: 'Session options for Session one' }));
   });
-  return within(screen.getByRole('dialog'));
+  return within(screen.getByRole('menu'));
 };
 
-test.each<LLMProvider>(['claude', 'codex'])('mobile offers a fork for a supported %s session', async (provider) => {
+test.each<LLMProvider>(['claude', 'codex'])('the menu offers a fork for a supported %s session', async (provider) => {
   render(<SidebarSessionItem {...rowProps({ session: { ...SESSION, __provider: provider } })} />);
-  const sheet = await openOptions();
+  const menu = await openOptions();
 
-  assert.ok(sheet.getByRole('button', { name: /Fork session/ }));
-  assert.ok(sheet.getByRole('button', { name: 'Rename session' }));
-  assert.ok(sheet.getByRole('button', { name: 'Archive session' }));
-  assert.ok(sheet.getByRole('button', { name: 'Delete session' }));
+  assert.ok(menu.getByRole('menuitem', { name: /Fork session/ }));
+  assert.ok(menu.getByRole('menuitem', { name: 'Rename session' }));
+  assert.ok(menu.getByRole('menuitem', { name: 'Archive session' }));
+  assert.ok(menu.getByRole('menuitem', { name: 'Delete session' }));
 });
 
-test('mobile archive and delete are separate actions with their own handlers', async () => {
+test('archive and delete are separate actions with their own handlers', async () => {
   const onArchiveSession = vi.fn();
   const onDeleteSession = vi.fn();
   const { unmount } = render(<SidebarSessionItem {...rowProps({ onArchiveSession, onDeleteSession })} />);
-  let sheet = await openOptions();
+  let menu = await openOptions();
 
-  fireEvent.click(sheet.getByRole('button', { name: 'Archive session' }));
+  fireEvent.click(menu.getByRole('menuitem', { name: 'Archive session' }));
   assert.deepEqual(onArchiveSession.mock.calls, [[SESSION.id]]);
   assert.equal(onDeleteSession.mock.calls.length, 0);
-  assert.equal(screen.queryByRole('dialog'), null);
+  assert.equal(screen.queryByRole('menu'), null);
   unmount();
 
   render(<SidebarSessionItem {...rowProps({ onArchiveSession, onDeleteSession })} />);
-  sheet = await openOptions();
-  fireEvent.click(sheet.getByRole('button', { name: 'Delete session' }));
+  menu = await openOptions();
+  fireEvent.click(menu.getByRole('menuitem', { name: 'Delete session' }));
   assert.deepEqual(onDeleteSession.mock.calls, [[SESSION.id, 'Session one']]);
   assert.equal(onArchiveSession.mock.calls.length, 1);
 });
 
-test('mobile withholds archive and delete while the session is running', async () => {
+test('the menu withholds archive and delete while the session is running', async () => {
   render(<SidebarSessionItem {...rowProps({ isProcessing: true })} />);
-  const sheet = await openOptions();
+  const menu = await openOptions();
 
-  assert.equal(sheet.queryByRole('button', { name: 'Archive session' }), null);
-  assert.equal(sheet.queryByRole('button', { name: 'Delete session' }), null);
+  assert.equal(menu.queryByRole('menuitem', { name: 'Archive session' }), null);
+  assert.equal(menu.queryByRole('menuitem', { name: 'Delete session' }), null);
 });
 
-test('forking from the mobile sheet passes the owning session once and dismisses the sheet', async () => {
+test('forking passes the owning session once and closes the menu', async () => {
   const onForkSession = vi.fn();
-  const onProjectSelect = vi.fn();
   const onSessionSelect = vi.fn();
-  render(<SidebarSessionItem {...rowProps({ onForkSession, onProjectSelect, onSessionSelect })} />);
-  const sheet = await openOptions();
+  render(<SidebarSessionItem {...rowProps({ onForkSession, onSessionSelect })} />);
+  const menu = await openOptions();
 
-  fireEvent.click(sheet.getByRole('button', { name: /Fork session/ }));
+  fireEvent.click(menu.getByRole('menuitem', { name: /Fork session/ }));
 
   assert.deepEqual(onForkSession.mock.calls, [[SESSION]]);
-  assert.equal(onProjectSelect.mock.calls.length, 0);
   assert.equal(onSessionSelect.mock.calls.length, 0);
-  assert.equal(screen.queryByRole('dialog'), null);
+  assert.equal(screen.queryByRole('menu'), null);
   assert.equal(screen.getByRole('button', { name: 'Session options for Session one' }).getAttribute('aria-expanded'), 'false');
 });
 
-test.each<LLMProvider>(['cursor', 'opencode'])('mobile withholds a fork when %s is unsupported or absent from the matrix', async (provider) => {
+test.each<LLMProvider>(['cursor', 'opencode'])('the menu withholds a fork when %s is unsupported or absent from the matrix', async (provider) => {
   render(<SidebarSessionItem {...rowProps({ session: { ...SESSION, __provider: provider } })} />);
-  const sheet = await openOptions();
+  const menu = await openOptions();
 
-  assert.equal(sheet.queryByRole('button', { name: /Fork session/ }), null);
+  assert.equal(menu.queryByRole('menuitem', { name: /Fork session/ }), null);
 });
 
-test('mobile withholds a fork when its caller provides no fork handler', async () => {
+test('the menu withholds a fork when its caller provides no fork handler', async () => {
   render(<SidebarSessionItem {...rowProps({ onForkSession: undefined })} />);
-  const sheet = await openOptions();
+  const menu = await openOptions();
 
-  assert.equal(sheet.queryByRole('button', { name: /Fork session/ }), null);
+  assert.equal(menu.queryByRole('menuitem', { name: /Fork session/ }), null);
 });
 
-test('mobile withholds a fork while the session is running, including when it starts with the sheet open', async () => {
+test('the menu withholds a fork while the session is running, including when it starts with the menu open', async () => {
   const props = rowProps({ isProcessing: true });
   const { rerender } = render(<SidebarSessionItem {...props} />);
-  const sheet = await openOptions();
-  assert.equal(sheet.queryByRole('button', { name: /Fork session/ }), null);
+  const menu = await openOptions();
+  assert.equal(menu.queryByRole('menuitem', { name: /Fork session/ }), null);
 
   rerender(<SidebarSessionItem {...props} isProcessing={false} />);
-  assert.ok(sheet.getByRole('button', { name: /Fork session/ }));
+  assert.ok(menu.getByRole('menuitem', { name: /Fork session/ }));
 
   rerender(<SidebarSessionItem {...props} />);
-  assert.equal(sheet.queryByRole('button', { name: /Fork session/ }), null);
+  assert.equal(menu.queryByRole('menuitem', { name: /Fork session/ }), null);
 });
 
-test('background work alone keeps the mobile fork available, matching the desktop rule', async () => {
+test('background work alone keeps the fork available', async () => {
   render(<SidebarSessionItem {...rowProps({ hasBackgroundWork: true })} />);
-  const sheet = await openOptions();
+  const menu = await openOptions();
 
-  assert.ok(sheet.getByRole('button', { name: /Fork session/ }));
+  assert.ok(menu.getByRole('menuitem', { name: /Fork session/ }));
 });
 
-test('bulk selection withholds the mobile options trigger', () => {
+test('bulk selection withholds the options trigger', () => {
   render(<SidebarSessionItem {...rowProps({ isSelecting: true })} />);
 
   assert.equal(screen.queryByRole('button', { name: 'Session options for Session one' }), null);

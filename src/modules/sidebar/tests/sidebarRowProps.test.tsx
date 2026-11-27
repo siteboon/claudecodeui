@@ -75,8 +75,6 @@ const listProps = (
   initialSessionsLoaded: new Set(),
   currentTime: NOW,
   deletingProjects: new Set(),
-  tasksEnabled: false,
-  mcpServerStatus: null,
   getProjectSessions: getAllSessions,
   onLoadMoreSessions: noop,
   loadingMoreProjects: new Set(),
