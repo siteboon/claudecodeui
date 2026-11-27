@@ -134,6 +134,8 @@ export type Project = {
   fullPath: string;
   path?: string;
   isStarred?: boolean;
+  /** Main repository path when this project is a linked git worktree; the sidebar nests it under that project. */
+  worktreeOf?: string | null;
   sessions?: ProjectSession[];
   sessionMeta?: ProjectSessionMeta;
   taskmaster?: ProjectTaskmasterInfo;

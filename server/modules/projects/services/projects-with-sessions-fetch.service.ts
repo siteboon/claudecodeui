@@ -6,6 +6,7 @@ import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { RealtimeClientConnection, SessionForkAncestor } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
+import { resolveWorktreeParent } from '@/modules/projects/services/project-worktree-parent.service.js';
 
 type SessionSummary = {
   id: string;
@@ -32,6 +33,8 @@ export type ProjectListItem = {
   displayName: string;
   fullPath: string;
   isStarred: boolean;
+  /** Main repository path when this project is a linked git worktree; the sidebar nests it there. */
+  worktreeOf: string | null;
   sessions: SessionSummary[];
   sessionMeta: {
     hasMore: boolean;
@@ -196,6 +199,7 @@ export async function getProjectsWithSessions(
     isStarred?: number;
   }>;
   const totalProjects = projectRows.length;
+  const knownProjectPaths = new Set(projectRows.map((row) => row.project_path));
   const projects: ProjectListItem[] = [];
   let processedProjects = 0;
 
@@ -228,6 +232,7 @@ export async function getProjectsWithSessions(
       displayName,
       fullPath: projectPath,
       isStarred: Boolean(row.isStarred),
+      worktreeOf: resolveWorktreeParent(projectPath, knownProjectPaths),
       sessions: sessionsPage.sessions,
       sessionMeta: {
         hasMore: sessionsPage.hasMore,
@@ -280,6 +285,7 @@ export async function getArchivedProjectsWithSessions(
       displayName,
       fullPath: row.project_path,
       isStarred: Boolean(row.isStarred),
+      worktreeOf: null,
       isArchived: true,
       sessions: sessionsPage.sessions,
       sessionMeta: {

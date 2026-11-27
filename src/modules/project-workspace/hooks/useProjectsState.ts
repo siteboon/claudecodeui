@@ -40,6 +40,7 @@ type SessionUpsertedEvent = ServerEvent & {
     fullPath: string;
     displayName: string;
     isStarred: boolean;
+    worktreeOf?: string | null;
   } | null;
 };
 
@@ -112,6 +113,7 @@ const projectsHaveChanges = (
       nextProject.projectId !== prevProject.projectId ||
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
+      (nextProject.worktreeOf ?? null) !== (prevProject.worktreeOf ?? null) ||
       Boolean(nextProject.isStarred) !== Boolean(prevProject.isStarred) ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
       serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
@@ -830,6 +832,7 @@ export function useProjectsState({
             fullPath: upsert.project.fullPath,
             displayName: upsert.project.displayName,
             isStarred: upsert.project.isStarred,
+            worktreeOf: upsert.project.worktreeOf ?? null,
             sessions: [],
             sessionMeta: { hasMore: false, total: 0 },
           } as Project;
@@ -837,7 +840,15 @@ export function useProjectsState({
           return [...previousProjects, upsertSessionIntoProject(newProject, upsert)];
         }
 
-        const updatedProject = upsertSessionIntoProject(existingProject, upsert);
+        // The event carries the resolved worktree parent; apply it when it is explicitly present so a project
+        // first listed before its parent could be resolved still nests under it. Omitted means "unchanged".
+        const eventWorktreeOf = upsert.project && 'worktreeOf' in upsert.project
+          ? (upsert.project.worktreeOf ?? null)
+          : undefined;
+        const baseProject = eventWorktreeOf !== undefined && eventWorktreeOf !== (existingProject.worktreeOf ?? null)
+          ? { ...existingProject, worktreeOf: eventWorktreeOf }
+          : existingProject;
+        const updatedProject = upsertSessionIntoProject(baseProject, upsert);
         if (updatedProject === existingProject) {
           return previousProjects;
         }
