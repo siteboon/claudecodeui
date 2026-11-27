@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { EventEmitter, once } from 'node:events';
+import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
 
@@ -8,7 +12,51 @@ import express from 'express';
 
 import { connectedClients } from '@/modules/websocket/index.js';
 
-import { createTaskmasterRouter } from '../taskmaster.routes.js';
+import { closeTasksFileWatchers, createTaskmasterRouter } from '../taskmaster.routes.js';
+
+test('a tasks.json edit made outside the routes is broadcast once the tasks were read', async () => {
+  const projectPath = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'tm-watch-'));
+  const tasksFile = path.join(projectPath, '.taskmaster', 'tasks', 'tasks.json');
+  await fsPromises.mkdir(path.dirname(tasksFile), { recursive: true });
+  await fsPromises.writeFile(tasksFile, JSON.stringify({ master: { tasks: [{ id: 1, status: 'pending' }] } }));
+
+  const chatClient = { readyState: 1, frames: [] as string[], send(data: string) { this.frames.push(data); } };
+  const router = createTaskmasterRouter({
+    fileSystem: fs,
+    fileSystemPromises: fsPromises,
+    spawnProcess: (() => { throw new Error('spawn should not run'); }) as unknown as
+      Parameters<typeof createTaskmasterRouter>[0]['spawnProcess'],
+    resolveProjectPathById: () => projectPath,
+    taskmasterService: {
+      detectMcpServer: async () => ({ hasMCPServer: false, reason: 'Not configured', hasConfig: false }),
+    },
+  });
+  const app = express().use('/api/taskmaster', router);
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  connectedClients.add(chatClient as never);
+  try {
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/taskmaster/tasks/project-7`);
+    assert.equal(response.status, 200);
+    await new Promise((resolve) => setTimeout(resolve, 300)); // let the watcher settle
+
+    await fsPromises.writeFile(tasksFile, JSON.stringify({ master: { tasks: [{ id: 1, status: 'review' }] } }));
+    const deadline = Date.now() + 5000;
+    while (chatClient.frames.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.equal(chatClient.frames.length, 1);
+    const frame = JSON.parse(chatClient.frames[0]) as Record<string, unknown>;
+    assert.equal(frame.type, 'taskmaster-tasks-updated');
+    assert.equal(frame.projectId, 'project-7');
+  } finally {
+    connectedClients.clear();
+    await closeTasksFileWatchers();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await fsPromises.rm(projectPath, { recursive: true, force: true });
+  }
+});
 
 test('tasks route resolves project ids through the injected project adapter', async () => {
   const resolvedIds: string[] = [];
