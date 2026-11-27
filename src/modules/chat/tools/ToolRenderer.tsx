@@ -17,6 +17,7 @@ import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
+import { PluginToolRenderer, findToolRendererPlugin, useOptionalPlugins } from '@/modules/plugins';
 
 type ToolRendererProps = {
   toolName: string;
@@ -31,6 +32,8 @@ type ToolRendererProps = {
   rawToolInput?: string;
   /** Lifecycle the provider reported, when it reports one. Overrides the result-based inference. */
   toolStatus?: string;
+  /** Set on the host rendering a plugin falls back to, so it does not recurse into the plugin again. */
+  disablePluginRenderer?: boolean;
 };
 
 function getToolCategory(toolName: string): string {
@@ -88,6 +91,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   showRawParameters = false,
   rawToolInput,
   toolStatus: reportedStatus,
+  disablePluginRenderer = false,
 }) => {
   const config = getToolConfig(toolName);
   const displayConfig: any = mode === 'input' ? config.input : config.result;
@@ -106,12 +110,44 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     [mode, toolResult, reportedStatus],
   );
 
+  const plugins = useOptionalPlugins();
+  const rendererPlugin = useMemo(
+    () => (disablePluginRenderer ? null : findToolRendererPlugin(plugins, toolName)),
+    [disablePluginRenderer, plugins, toolName],
+  );
+
   const handleAction = useCallback(() => {
     if (displayConfig?.action === 'open-file' && onFileOpen) {
       const value = displayConfig.getValue?.(parsedData) || '';
       onFileOpen(value);
     }
   }, [displayConfig, parsedData, onFileOpen]);
+
+  // A plugin that claims this tool draws one row covering both the call and its result.
+  if (rendererPlugin) {
+    if (mode === 'result') return null;
+    const hostProps = {
+      toolName, toolInput, toolResult, toolId, onFileOpen, createDiff, selectedProject, showRawParameters, rawToolInput,
+      toolStatus: reportedStatus, disablePluginRenderer: true,
+    };
+    return (
+      <PluginToolRenderer
+        plugin={rendererPlugin}
+        toolName={toolName}
+        toolId={toolId}
+        toolInput={parseToolPayload(toolInput)}
+        toolResult={toolResult}
+        status={toolStatus ?? 'running'}
+        selectedProject={selectedProject}
+        fallback={(
+          <>
+            <ToolRenderer {...hostProps} mode="input" />
+            {toolResult && !toolResult.isError && <ToolRenderer {...hostProps} mode="result" />}
+          </>
+        )}
+      />
+    );
+  }
 
   if (!displayConfig) return null;
 
