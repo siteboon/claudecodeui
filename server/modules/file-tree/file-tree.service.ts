@@ -397,12 +397,19 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       const requestedPath = inputPath
         ? expandWorkspacePath(dependencies.workspace.rootPath, inputPath)
         : dependencies.workspace.rootPath;
-      const hostResolution = resolveWorkspacePathForHost(requestedPath);
-      if (hostResolution.error) {
-        throw createFileTreeError(hostResolution.error, 403, 'INVALID_WORKSPACE_PATH');
+      // Only a Windows identifier needs translating to its host path. A native
+      // path is taken as typed: the resolver trims, so `/workspace/notes `
+      // would silently list `/workspace/notes` instead.
+      let candidatePath = requestedPath;
+      if (isWindowsStylePath(requestedPath)) {
+        const hostResolution = resolveWorkspacePathForHost(requestedPath);
+        if (hostResolution.error) {
+          throw createFileTreeError(hostResolution.error, 403, 'INVALID_WORKSPACE_PATH');
+        }
+        candidatePath = hostResolution.path;
       }
 
-      const targetPath = path.resolve(hostResolution.path);
+      const targetPath = path.resolve(candidatePath);
       const resolvedPath = await resolveBrowsablePath(targetPath);
 
       try {
@@ -447,12 +454,18 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async createWorkspaceFolder(folderPath) {
       const expandedPath = expandWorkspacePath(dependencies.workspace.rootPath, folderPath);
-      const hostResolution = resolveWorkspacePathForHost(expandedPath);
-      if (hostResolution.error) {
-        throw createFileTreeError(hostResolution.error, 403, 'INVALID_WORKSPACE_PATH');
+      // A native folder name keeps its exact spelling: the resolver trims, so
+      // `/workspace/draft ` would create `/workspace/draft` instead.
+      let candidatePath = expandedPath;
+      if (isWindowsStylePath(expandedPath)) {
+        const hostResolution = resolveWorkspacePathForHost(expandedPath);
+        if (hostResolution.error) {
+          throw createFileTreeError(hostResolution.error, 403, 'INVALID_WORKSPACE_PATH');
+        }
+        candidatePath = hostResolution.path;
       }
 
-      const resolvedInput = path.resolve(hostResolution.path);
+      const resolvedInput = path.resolve(candidatePath);
       const validation = await dependencies.workspace.validatePath(resolvedInput);
       if (!validation.valid) {
         throw createFileTreeError(validation.error ?? 'Path is outside the workspace root', 403, 'INVALID_WORKSPACE_PATH');

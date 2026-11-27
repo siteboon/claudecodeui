@@ -635,3 +635,27 @@ test('readTextFile and openFile preserve whitespace in native file names', async
     await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
   }
 });
+
+test('browsing and folder creation keep whitespace in native paths', { skip: process.platform === 'win32' }, async () => {
+  // The host-path resolver trims its input, so routing a native path through
+  // it made `/workspace/notes ` list `/workspace/notes`, and `/workspace/draft `
+  // create `/workspace/draft`. Only Windows identifiers need translating.
+  const workspaceRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-native-space-'));
+  const projectRoot = path.join(workspaceRoot, 'project');
+
+  try {
+    await fsPromises.mkdir(path.join(projectRoot, 'notes'), { recursive: true });
+    await fsPromises.mkdir(path.join(projectRoot, 'notes '), { recursive: true });
+    const service = createRealFileSystemService(projectRoot, workspaceRoot);
+
+    const padded = await service.browseWorkspace(path.join(projectRoot, 'notes '));
+    assert.equal(padded.path, path.join(projectRoot, 'notes '), 'the trailing space is part of the directory name');
+
+    await service.createWorkspaceFolder(path.join(projectRoot, 'draft '));
+    const created = await fsPromises.readdir(projectRoot);
+    assert.ok(created.includes('draft '), 'the folder keeps its trailing space');
+    assert.equal(created.includes('draft'), false, 'no trimmed twin is created');
+  } finally {
+    await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
