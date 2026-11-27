@@ -18,7 +18,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "Configurações da Tool",
@@ -203,6 +204,7 @@
       "cursor": "Pronto para usar o Cursor com {{model}}. Comece a digitar sua mensagem abaixo.",
       "codex": "Pronto para usar o Codex com {{model}}. Comece a digitar sua mensagem abaixo.",
       "opencode": "Pronto para usar o OpenCode com {{model}}. Comece a digitar sua mensagem abaixo.",
+      "antigravity": "Pronto para usar o Antigravity com {{model}}. Comece a digitar sua mensagem abaixo.",
       "default": "Selecione um provedor acima para começar"
     },
     "pressToSearch": "Pressione <kbd>{{shortcut}}</kbd> para pesquisar sessões, arquivos e commits",

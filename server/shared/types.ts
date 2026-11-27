@@ -66,7 +66,7 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
  * Use this as the source of truth whenever a function or payload needs to identify
  * a specific LLM integration.
  */
-export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode';
+export type LLMProvider = 'claude' | 'codex' | 'cursor' | 'opencode' | 'antigravity';
 
 /**
  * One selectable model row in a provider model catalog.
@@ -351,6 +351,23 @@ export type SideQuestionRuntime = {
   askSideQuestion(provider: LLMProvider, request: SideQuestionRequest, sink: SideQuestionSink): Promise<SideQuestionOutcome>;
 };
 
+// ---------------------------
+//----------------- CHAT RUN ADMISSION ------------
+/**
+ * Websocket dispatch and the scheduled-message queue use this result to retain
+ * a queued turn when another managed or native run wins admission. Retryable
+ * failures have not sent any input to the provider; all other failures must be
+ * surfaced instead of replaying a possibly accepted prompt.
+ */
+export type ChatTurnDispatchResult = {
+  started: boolean;
+  error: string | null;
+  retryable?: boolean;
+};
+
+// ---------------------------
+//----------------- SIDE-QUESTION STORE ------------
+
 /**
  * The one place a side question's mutable state lives.
  *
@@ -507,6 +524,11 @@ export type NormalizedMessage = {
    * has to survive a reload — never a value this app synthesized.
    */
   transcriptAnchorId?: string;
+  /** Native assistant message identity shared by live deltas and final text; never inferred from prose.
+   * Claude runtime/normalizer supplies it for Agent response reconciliation, including delayed finals. */
+  assistantReplyId?: string;
+  /** Native content block index within assistantReplyId; tool/thinking blocks retain their original positions. */
+  assistantBlockIndex?: number;
   sessionId: string;
   timestamp: string;
   provider: LLMProvider;
@@ -879,6 +901,7 @@ export type FetchHistoryOptions = {
   limit?: number | null;
   offset?: number;
   providerSessionId?: string;
+  jsonlPath?: string | null;
   transcriptPath?: string;
 };
 

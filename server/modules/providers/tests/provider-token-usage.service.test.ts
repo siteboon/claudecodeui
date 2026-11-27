@@ -30,6 +30,22 @@ function createSessionRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+test('AGY usage survives reload and sums native step counters without a guessed quota or window', async () => {
+  const service = createProviderTokenUsageService({
+    getSessionById: () => createSessionRow({ provider: 'antigravity', jsonl_path: '/native/transcript.jsonl' }),
+    fileExists: () => true,
+    readTextFile: async () => [
+      { step_index: 1, input_tokens: 100, output_tokens: 20, cache_read_tokens: 60 },
+      { step_index: 3, input_tokens: 50, output_tokens: 10, cache_read_tokens: 40 },
+      { input_tokens: -50, output_tokens: 'bad' },
+    ].map((row) => JSON.stringify(row)).join('\n') + '\n{unfinished',
+  });
+  assert.deepEqual(await service.getSessionTokenUsage('app-session'), {
+    used: 180, inputTokens: 150, outputTokens: 30, cacheReadTokens: 100,
+    breakdown: { input: 150, output: 30 },
+  });
+});
+
 test('token usage lookup requires only the app-facing session id for Claude', async () => {
   const tempDirectory = await mkdtemp(path.join(tmpdir(), 'provider-token-usage-claude-'));
   const sessionFilePath = path.join(tempDirectory, 'provider-session.jsonl');

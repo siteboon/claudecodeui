@@ -4,6 +4,7 @@ import { announceScheduledMessagesChanged } from '@/modules/scheduled-messages/s
 import { chatRunRegistry, onRunSettled, runDetachedChatTurn } from '@/modules/websocket/index.js';
 import type { ProviderRuntimeGateway } from '@/modules/websocket/index.js';
 import { readQueuedChatMessage } from '@/shared/utils.js';
+import { sessionsService } from '@/modules/providers/index.js';
 
 /**
  * How often due messages are looked for.
@@ -62,7 +63,7 @@ async function sendClaimedQueuedMessage(
 
   // The registry check and run reservation are separate operations. If a run
   // wins that tiny race, put the turn back so the next poll tries again.
-  if (!result.started && result.error === 'A run was already in progress for this session.') {
+  if (!result.started && result.retryable) {
     sessionDraftsDb.restoreQueuedMessage(candidate);
     return;
   }
@@ -78,10 +79,11 @@ async function sendClaimedQueuedMessage(
  * work, which is why the composer asks before an interactive send. A queued
  * turn was promised to go "when this finishes", so it waits for that work too.
  */
-function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): boolean {
+async function isSessionBusy(sessionId: string, runtime: ProviderRuntimeGateway): Promise<boolean> {
   // sessionsSending too: a scheduled turn can complete before its send settles,
   // and the session's next due row would then interrupt this queued turn.
-  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId) || sessionsSending.has(sessionId);
+  return chatRunRegistry.isProcessing(sessionId) || runtime.hasBackgroundWork(sessionId) || sessionsSending.has(sessionId)
+    || Boolean(await sessionsService.getExternalSessionActivity(sessionId));
 }
 
 /**
@@ -98,9 +100,11 @@ export async function dispatchQueuedMessages(
   let claimed = 0;
 
   await Promise.all(candidates.map(async (candidate) => {
-    if (isSessionBusy(candidate.sessionId, runtime)) {
+    if (await isSessionBusy(candidate.sessionId, runtime)) {
       return;
     }
+    if (chatRunRegistry.isProcessing(candidate.sessionId) || runtime.hasBackgroundWork(candidate.sessionId)
+      || sessionsSending.has(candidate.sessionId)) return;
     if (!sessionDraftsDb.claimQueuedMessage(candidate)) {
       return;
     }
@@ -120,7 +124,7 @@ function recordFailure(row: ScheduledMessageRow, reason: string): void {
 async function sendClaimedMessage(
   row: ScheduledMessageRow,
   runtime: ProviderRuntimeGateway,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const result = await runDetachedChatTurn(
       {
@@ -136,6 +140,12 @@ async function sendClaimedMessage(
       { runtime },
     );
 
+    if (!result.started && result.retryable) {
+      scheduledMessagesDb.restoreUnsentClaim(row.id);
+      announceScheduledMessagesChanged(row.session_id);
+      return false;
+    }
+
     // Recorded rather than retried, and recorded whether the run never started
     // (deleted session, unavailable provider) or started and then failed.
     // Silently dropping a message the user scheduled is worse than telling
@@ -147,6 +157,7 @@ async function sendClaimedMessage(
     const message = error instanceof Error ? error.message : String(error);
     recordFailure(row, message);
   }
+  return true;
 }
 
 /**
@@ -185,7 +196,7 @@ export async function dispatchDueScheduledMessages(
     try {
       let row: ScheduledMessageRow | null = first;
       while (row) {
-        await sendClaimedMessage(row, runtime);
+        if (!await sendClaimedMessage(row, runtime)) break;
         sent += 1;
         row = scheduledMessagesDb.claimNextDue(sessionId, now);
         if (row) announceScheduledMessagesChanged(sessionId);

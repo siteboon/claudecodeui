@@ -1272,10 +1272,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     if (raw.type === 'content_block_delta' && raw.delta?.text) {
-      return [createNormalizedMessage({ kind: 'stream_delta', content: raw.delta.text, sessionId, provider: PROVIDER })];
+      return [createNormalizedMessage({ kind: 'stream_delta', content: raw.delta.text, sessionId, provider: PROVIDER, assistantReplyId: raw.assistantReplyId, assistantBlockIndex: raw.index })];
     }
     if (raw.type === 'content_block_stop') {
-      return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER })];
+      return [createNormalizedMessage({ kind: 'stream_end', sessionId, provider: PROVIDER, assistantReplyId: raw.assistantReplyId, assistantBlockIndex: raw.index })];
     }
 
     const messages: NormalizedMessage[] = [];
@@ -1634,6 +1634,8 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               kind: 'text',
               role: 'assistant',
               content: part.text,
+              assistantReplyId: readOptionalString(raw.message.id),
+              assistantBlockIndex: raw.message.content.length > 1 ? partIndex : undefined,
               model: answeredByModel,
             }));
           } else if (part.type === 'tool_use') {
@@ -1668,6 +1670,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           kind: 'text',
           role: 'assistant',
           content: raw.message.content,
+          assistantReplyId: readOptionalString(raw.message.id),
           model: answeredByModel,
         }));
       }

@@ -59,9 +59,9 @@ export interface IProviderRuntime {
   /**
    * Asks a side question on the provider runtime while a session is active.
    *
-   * A provider with this method uses its native fork capability; one without it
-   * falls back to the history path (the provider runtime service supplies the history
-   * and drives the Claude adapter instead). This method never rejects: all outcomes
+   * Each adapter owns its context isolation, read-only execution and cleanup.
+   * A provider without this method is unsupported; the dispatcher never changes
+   * providers or silently answers with another model. This method never rejects: all outcomes
    * are returned as SideQuestionOutcome (done or error), never thrown.
    */
   askSideQuestion?(
@@ -125,7 +125,9 @@ export interface IProviderFork {
     projectPath: string;
     upToAnchorId?: string;
     title?: string;
-  }): Promise<{ providerSessionId: string; jsonlPath: string }>;
+    /** Optional cancellation for snapshots owned by transient side questions. */
+    signal?: AbortSignal;
+  }): Promise<{ providerSessionId: string; jsonlPath: string; /** Roll back owned artifacts if app persistence fails. */ dispose?: () => Promise<void> }>;
 }
 
 // ---------------------------
@@ -172,9 +174,10 @@ export interface IProviderAuth {
    * Runs `--version` on the CLI this provider's chats use: the same check
    * `getStatus()` reports as `installed` and `installedVersion`, without the
    * credential lookup (which can take seconds). The providers module's CLI
-   * update service reads versions through it.
+   * update service reads versions through it. Providers may probe asynchronously
+   * so slow CLI startup does not block the server event loop.
    */
-  checkInstalled(): CliVersionProbe;
+  checkInstalled(): CliVersionProbe | Promise<CliVersionProbe>;
 }
 
 // ---------------------------
@@ -215,6 +218,8 @@ export interface IProviderSkills {
  * `ProviderMcpServer` records used by routes and frontend state.
  */
 export interface IProviderMcp {
+  /** Bulk operations skip adapters whose native configuration is read-only in CloudCLI. */
+  readonly supportsMutations?: boolean;
   listServers(options?: { workspacePath?: string }): Promise<Record<McpScope, ProviderMcpServer[]>>;
   listServersForScope(scope: McpScope, options?: { workspacePath?: string }): Promise<ProviderMcpServer[]>;
   upsertServer(input: UpsertProviderMcpServerInput): Promise<ProviderMcpServer>;

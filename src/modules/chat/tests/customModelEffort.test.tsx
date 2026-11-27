@@ -61,6 +61,12 @@ const CATALOG: Partial<Record<LLMProvider, ProviderModelsDefinition>> = {
     DEFAULT: 'auto',
     EFFORT_LEVELS: [],
   },
+  antigravity: {
+    OPTIONS: [{ value: 'gemini-pro-low', label: 'Gemini Pro Low', effort: {
+      default: 'low', values: [{ value: 'low' }, { value: 'high' }],
+    } }],
+    DEFAULT: 'gemini-pro-low', EFFORT_LEVELS: ['low', 'medium', 'high', 'xhigh', 'max'],
+  },
   // What OpenCode serves on a machine with only OpenCode Zen connected: none of
   // the visible built-in models declares effort, yet the provider supports it.
   opencode: {
@@ -201,5 +207,18 @@ test('the composer offers exactly the declared levels for a selected custom mode
   await waitFor(() => assert.equal(result.current.providerModelsLoading, false));
   assert.equal(result.current.provider, 'claude');
   assert.equal(result.current.currentProviderModel, 'my-custom-model');
+  assert.deepEqual(result.current.currentProviderEffortOptions, [{ value: 'low' }, { value: 'high' }]);
+});
+
+test('AGY uses the shared effort picker and preserves a saved selection while catalogs hydrate', async () => {
+  localStorage.setItem('antigravity-effort', 'high');
+  const { useChatProviderState } = await import('@/modules/chat/hooks/useChatProviderState');
+  const { result } = renderHook(() => useChatProviderState({
+    selectedSession: { id: 'agy-session', __provider: 'antigravity' }, selectedProject: null,
+  }));
+  await waitFor(() => assert.equal(result.current.providerModelsLoading, false));
+  assert.equal(result.current.provider, 'antigravity');
+  assert.equal(result.current.currentProviderModel, 'gemini-pro-low');
+  assert.equal(result.current.currentProviderEffort, 'high');
   assert.deepEqual(result.current.currentProviderEffortOptions, [{ value: 'low' }, { value: 'high' }]);
 });

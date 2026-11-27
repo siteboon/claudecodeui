@@ -6,11 +6,11 @@ import { sessionsDb } from '@/modules/database/index.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
-  findFilesRecursivelyCreatedAfter,
+  findFilesRecursivelyModifiedAfter,
   normalizeSessionName,
   readFileTimestamps,
-} from '@/shared/utils.js';
-import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+} from '@/shared/index.js';
+import type { IProviderSessionSynchronizer } from '@/shared/index.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -30,7 +30,7 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   async synchronize(since?: Date): Promise<number> {
     const nameMap = await buildLookupMap(path.join(this.codexHome, 'session_index.jsonl'), 'id', 'thread_name');
-    const files = await findFilesRecursivelyCreatedAfter(
+    const files = await findFilesRecursivelyModifiedAfter(
       path.join(this.codexHome, 'sessions'),
       '.jsonl',
       since ?? null

@@ -7,11 +7,11 @@ import readline from 'node:readline';
 import { sessionsDb } from '@/modules/database/index.js';
 import {
   extractFirstValidJsonlData,
-  findFilesRecursivelyCreatedAfter,
+  findFilesRecursivelyModifiedAfter,
   normalizeSessionName,
   readFileTimestamps,
-} from '@/shared/utils.js';
-import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+} from '@/shared/index.js';
+import type { IProviderSessionSynchronizer } from '@/shared/index.js';
 
 type ParsedSession = {
   sessionId: string;
@@ -47,7 +47,7 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let processed = 0;
 
-    const files = await findFilesRecursivelyCreatedAfter(projectsDir, '.jsonl', since ?? null);
+    const files = await findFilesRecursivelyModifiedAfter(projectsDir, '.jsonl', since ?? null);
 
     for (const filePath of files) {
       const parsed = await this.processSessionFile(filePath);
@@ -56,11 +56,13 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
       }
 
       const timestamps = await readFileTimestamps(filePath);
+      const existing = sessionsDb.getSessionByProviderSessionId(parsed.sessionId);
       sessionsDb.createSession(
         parsed.sessionId,
         this.provider,
         parsed.projectPath,
-        parsed.sessionName,
+        existing?.custom_name && existing.custom_name !== 'Untitled Cursor Session'
+          ? existing.custom_name : parsed.sessionName,
         timestamps.createdAt,
         timestamps.updatedAt,
         filePath
@@ -85,11 +87,13 @@ export class CursorSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     const timestamps = await readFileTimestamps(filePath);
+    const existing = sessionsDb.getSessionByProviderSessionId(parsed.sessionId);
     return sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
-      parsed.sessionName,
+      existing?.custom_name && existing.custom_name !== 'Untitled Cursor Session'
+          ? existing.custom_name : parsed.sessionName,
       timestamps.createdAt,
       timestamps.updatedAt,
       filePath

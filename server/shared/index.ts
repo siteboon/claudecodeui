@@ -1,17 +1,84 @@
-export { appendFilesInputTag, buildCodexInputItems, normalizeImageDescriptors } from './image-attachments.js';
-export { createCompleteMessage, createNormalizedMessage } from './utils.js';
-export type { AnyRecord, ProviderRuntimeContext, ProviderRuntimeWriter } from './types.js';
+export { appendFilesInputTag, appendImagesInputTag, parseImagesInputTag, buildCodexInputItems, normalizeImageDescriptors } from './image-attachments.js';
 
-// Database and Providers share the persisted session-pin summary contract.
-export type { SessionPinRecord } from './types.js';
-// Providers uses these shared request payloads, validators and response helpers.
-export type { CustomProviderModelEffort, CustomProviderModelInput, LLMProvider, McpScope, McpTransport, ProviderSkillCreateFile, ProviderSkillCreateInput, UpsertProviderMcpServerInput } from './types.js';
-export { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from './utils.js';
+// Providers, Agent response collection, and Websocket Shell launches consume these shared contracts.
+export type {
+  IProvider,
+  IProviderAuth,
+  IProviderFork,
+  IProviderMcp,
+  IProviderModels,
+  IProviderRuntime,
+  IProviderSessions,
+  IProviderSessionSynchronizer,
+  IProviderSkills,
+} from './interfaces.js';
+export type {
+  AnyRecord,
+  ChatTurnDispatchResult,
+  SideQuestionOutcome,
+  AuthenticatedWebSocketRequest,
+  BackgroundTaskSummary,
+  LLMProvider,
+  ProviderPermissionDecision,
+  WorkflowAgentActivity,
+  CliVersionProbe,
+  FetchHistoryOptions,
+  FetchHistoryResult,
+  McpScope,
+  NormalizedMessage,
+  ProviderAuthStatus,
+  ProviderCurrentActiveModel,
+  ProviderMcpServer,
+  ProviderModelsDefinition,
+  ProviderModelOption,
+  ProviderRunFunction,
+  ProviderRuntimeContext,
+  ProviderRuntimeWriter,
+  ProviderSkillSource,
+  SideQuestion,
+  SideQuestionEvent,
+  SideQuestionRuntime,
+  UpsertProviderMcpServerInput,
+} from './types.js';
+export {
+  AppError,
+  SIDE_QUESTION_ID_PATTERN,
+  SIDE_CONVERSATION_DEVELOPER_INSTRUCTIONS,
+  SIDE_CONVERSATION_BOUNDARY_PROMPT,
+  buildDefaultProviderCurrentActiveModel,
+  buildLookupMap,
+  extractFirstValidJsonlData,
+  buildProviderCliEnv,
+  createCompleteMessage,
+  createNormalizedMessage,
+  findFilesRecursivelyModifiedAfter,
+  generateMessageId,
+  normalizeProjectPath,
+  normalizeSessionName,
+  parseIncomingJsonObject,
+  probeCliVersion,
+  parseCliVersion,
+  readFileTimestamps,
+  readJsonConfig,
+  readObjectRecord,
+  readProtobufFields,
+  normalizeAntigravityTokenUsage,
+  readOptionalString,
+  readStringArray,
+  readStringRecord,
+  resolveConfiguredCliExecutable,
+  runProviderCliCommand,
+  sanitizeLeafDirectoryName,
+  sliceTailPage,
+  stripAnsiSequences,
+  stripAntigravityTags,
+  writeJsonConfig,
+} from './utils.js';
 
-// Providers uses the shared history and runtime summary contracts through this barrel.
-export type { BackgroundTaskSummary, ClearedContextSegment, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, WorkflowAgentActivity } from './types.js';
-export { sliceTailPage } from './utils.js';
+export { getLinuxFileLockIdentity, parseLinuxExclusiveFileLocks } from './utils.js';
 
-// Session persistence uses canonical path normalization and fork/history metadata.
-export { normalizeProjectPath } from './utils.js';
-export type { SessionForkAncestor } from './types.js';
+export { getGlobalImageAssetsDir, isImageAttachmentDescriptor, normalizeAttachmentDescriptors, parseFilesInputTag } from './image-attachments.js';
+export type { ChatAttachmentDescriptor } from './image-attachments.js';
+
+export type { SessionPinRecord, ClearedContextSegment, SessionForkAncestor, McpTransport, CustomProviderModelEffort, CustomProviderModelInput, ProviderSkillCreateFile, ProviderSkillCreateInput } from './types.js';
+export { asyncHandler, createApiSuccessResponse } from './utils.js';

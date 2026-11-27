@@ -5,6 +5,7 @@ import path from 'node:path';
 import { projectsDb, sessionPinsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import { antigravityCliLivenessService } from './antigravity-cli-liveness.service.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
@@ -43,6 +44,7 @@ type RunningSessionEntry = {
   canInterrupt?: false;
   statusText?: string;
   tasks?: BackgroundTaskSummary[];
+  external?: true;
 };
 
 type CreateAppSessionResult = {
@@ -237,7 +239,7 @@ async function readCurrentContextHistory(
   // Claude and Codex history readers parse `jsonl_path` itself, so a page
   // can be sliced from the stat-validated full-transcript cache instead of
   // re-parsing the whole file per request. Cursor and OpenCode read their
-  // messages from elsewhere (store.db / shared SQLite), so that file's stat
+  // messages from elsewhere; Antigravity also reads its native DB. The file stat
   // says nothing about their history — they stay on the direct path.
   const transcriptPath = provider === 'claude' || provider === 'codex'
     ? session.jsonl_path
@@ -250,6 +252,7 @@ async function readCurrentContextHistory(
       offset: 0,
       projectPath,
       providerSessionId,
+      jsonlPath: session.jsonl_path,
     }),
   });
 
@@ -271,6 +274,7 @@ async function readCurrentContextHistory(
       offset: requestedOffset,
       projectPath,
       providerSessionId,
+      jsonlPath: session.jsonl_path,
     });
   }
 
@@ -346,7 +350,26 @@ export const sessionsService = {
       runningById.set(session.session_id, entries[entries.length - 1]);
     }
 
+    // Native process inspection is optional display enrichment. Admission
+    // still uses getSession's unavailable sentinel and remains fail-closed.
+    const externalAntigravity = await antigravityCliLivenessService.listSessions().catch(() => []);
+    for (const live of externalAntigravity) {
+      const session = sessionsDb.getSessionByProviderSessionId(live.providerSessionId);
+      if (!session || session.provider !== 'antigravity' || runningById.has(session.session_id)) continue;
+      entries.push({
+        sessionId: session.session_id, provider: 'antigravity', startedAt: live.startedAt,
+        lastSeq: chatRunRegistry.getRun(session.session_id)?.lastSeq ?? 0,
+        canInterrupt: false, external: true, statusText: 'Running in the Antigravity CLI',
+      });
+    }
     return entries;
+  },
+
+  /** WebSocket and fork admission inspect native AGY work without signalling its owner. */
+  async getExternalSessionActivity(sessionId: string) {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (session?.provider !== 'antigravity' || !session.provider_session_id) return null;
+    return antigravityCliLivenessService.getSession(session.provider_session_id);
   },
 
   /**
@@ -504,6 +527,12 @@ export const sessionsService = {
       });
     }
 
+    if (source.provider === 'antigravity' && (await this.getExternalSessionActivity(sessionId)
+      || chatRunRegistry.isProcessing(sessionId))) {
+      throw new AppError('Wait for the Antigravity turn to finish before forking.', {
+        code: 'SESSION_BUSY', statusCode: 409,
+      });
+    }
     const provider = source.provider as LLMProvider;
     const fork = providerRegistry.resolveProvider(provider).fork;
     if (!fork) {
@@ -534,19 +563,24 @@ export const sessionsService = {
     });
 
     const forkSessionId = randomUUID();
-    sessionsDb.createForkedSession({
-      sessionId: forkSessionId,
-      provider,
-      projectPath: source.project_path ?? '',
-      customName: sessionName,
-      providerSessionId: forked.providerSessionId,
-      jsonlPath: forked.jsonlPath,
-      forkedFromSessionId: sessionId,
-      // A fork that silently dropped to the catalog default would answer
-      // differently from the conversation it was branched from.
-      model: source.model,
-      effort: source.effort,
-    });
+    try {
+      sessionsDb.createForkedSession({
+        sessionId: forkSessionId,
+        provider,
+        projectPath: source.project_path ?? '',
+        customName: sessionName,
+        providerSessionId: forked.providerSessionId,
+        jsonlPath: forked.jsonlPath,
+        forkedFromSessionId: sessionId,
+        // A fork that silently dropped to the catalog default would answer
+        // differently from the conversation it was branched from.
+        model: source.model,
+        effort: source.effort,
+      });
+    } catch (error) {
+      await forked.dispose?.();
+      throw error;
+    }
 
     await broadcastSessionUpserted(forkSessionId);
 

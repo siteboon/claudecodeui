@@ -405,6 +405,9 @@
       },
       "codex": {
         "description": "OpenAI Codex AIアシスタント"
+      },
+      "antigravity": {
+        "description": "Antigravity CLI アシスタント"
       }
     },
     "connectionStatus": "接続状態",
@@ -545,11 +548,13 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "ここでは Antigravity の MCP サーバーを確認できます。変更するには Antigravity で /mcp を使用してください。",
     "title": "MCPサーバー",
     "description": {
       "claude": "Model Context Protocolサーバーは、Claudeに追加のツールやデータソースを提供します",
       "cursor": "Model Context Protocolサーバーは、Cursorに追加のツールやデータソースを提供します",
-      "codex": "Model Context Protocolサーバーは、Codexに追加のツールやデータソースを提供します"
+      "codex": "Model Context Protocolサーバーは、Codexに追加のツールやデータソースを提供します",
+      "antigravity": "Model Context Protocolサーバーは、Antigravityに追加のツールとデータソースを提供します"
     },
     "addButton": "MCPサーバーを追加",
     "empty": "MCPサーバーは設定されていません",

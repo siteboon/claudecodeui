@@ -364,3 +364,38 @@ test('a turn whose tool emits no task events still holds on the static rule', as
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
   });
 });
+
+
+test('native SDK reply and block identity survives delayed finals and subagent interleaving', async () => {
+  await withRun(async ({ script, sent }) => {
+    script.emit(init());
+    const stream = (event: Record<string, unknown>, parent: string | null = null) => script.emit({ type: 'stream_event', session_id: NATIVE_ID, parent_tool_use_id: parent, event });
+    stream({ type: 'message_start', message: { id: 'first' } });
+    stream({ type: 'content_block_delta', index: 0, delta: { text: 'same' } });
+    stream({ type: 'content_block_stop', index: 0 });
+    stream({ type: 'message_stop' });
+    stream({ type: 'message_start', message: { id: 'second' } });
+    script.emit({ type: 'assistant', session_id: NATIVE_ID, message: { id: 'first', role: 'assistant', content: [{ type: 'text', text: 'same' }] } });
+    stream({ type: 'content_block_delta', index: 0, delta: { text: 'partial' } });
+    stream({ type: 'message_start', message: { id: 'child' } }, 'toolu_child');
+    stream({ type: 'content_block_delta', index: 0, delta: { text: 'child text' } }, 'toolu_child');
+    stream({ type: 'content_block_stop', index: 0 });
+    stream({ type: 'content_block_delta', index: 2, delta: { text: 'same' } });
+    stream({ type: 'content_block_stop', index: 2 });
+    script.emit({ type: 'assistant', session_id: NATIVE_ID, message: { id: 'second', role: 'assistant', content: [
+      { type: 'text', text: 'same' }, { type: 'thinking', thinking: 'reason' }, { type: 'text', text: 'same' },
+    ] } });
+    stream({ type: 'message_stop' });
+    script.emit({ type: 'assistant', session_id: NATIVE_ID, message: { id: 'child', role: 'assistant', content: [{ type: 'text', text: 'child text' }] }, parent_tool_use_id: 'toolu_child' });
+    script.emit(result());
+    await waitFor(() => sent.some((message) => message.kind === 'complete'));
+    const rows = sent.filter((message) => message.kind === 'stream_delta' || message.kind === 'text');
+    assert.deepEqual(rows.map((message) => [message.kind, message.assistantReplyId, message.assistantBlockIndex, message.content]), [
+      ['stream_delta', 'first', 0, 'same'], ['text', 'first', undefined, 'same'], ['stream_delta', 'second', 0, 'partial'],
+      ['stream_delta', 'child', 0, 'child text'], ['stream_delta', 'second', 2, 'same'],
+      ['text', 'second', 0, 'same'], ['text', 'second', 2, 'same'],
+      ['text', 'child', undefined, 'child text'],
+    ]);
+    assert.equal(rows[3].parentToolUseId, 'toolu_child');
+  });
+});

@@ -18,6 +18,7 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
+    "antigravity": "Antigravity",
     "opencode": "OpenCode"
   },
   "tools": {
@@ -226,6 +227,7 @@
       "claude": "Claude'u {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "cursor": "Cursor'ı {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "codex": "Codex'i {{model}} ile kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
+      "antigravity": "Antigravity ile {{model}} kullanmaya hazır. Mesajını aşağıya yazmaya başla.",
       "opencode": "OpenCode {{model}} ile kullanıma hazır. Mesajınızı aşağıya yazmaya başlayın.",
       "default": "Başlamak için yukarıdan bir sağlayıcı seç"
     },

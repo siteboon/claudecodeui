@@ -20,7 +20,8 @@
     "claude": "Claude",
     "cursor": "Cursor",
     "codex": "Codex",
-    "opencode": "OpenCode"
+    "opencode": "OpenCode",
+    "antigravity": "Antigravity"
   },
   "tools": {
     "settings": "Nastavení nástroje",
@@ -217,6 +218,7 @@
       "cursor": "Cursor s modelem {{model}} je připraven. Začněte psát zprávu níže.",
       "codex": "Codex s modelem {{model}} je připraven. Začněte psát zprávu níže.",
       "opencode": "OpenCode s modelem {{model}} je připraven. Začněte psát zprávu níže.",
+      "antigravity": "Antigravity s modelem {{model}} je připraven. Začněte psát zprávu níže.",
       "default": "Začněte výběrem provideru výše"
     },
     "pressToSearch": "Stiskněte <kbd>{{shortcut}}</kbd> pro hledání v relacích, souborech a commitech",

@@ -21,6 +21,7 @@ const MCP_PROVIDER_BUTTON_CLASSES: Record<McpProvider, string> = {
   cursor: 'bg-primary text-primary-foreground hover:bg-primary/90',
   codex: 'bg-primary text-primary-foreground hover:bg-primary/90',
   opencode: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  antigravity: 'bg-primary text-primary-foreground hover:bg-primary/90',
 };
 
 const getTransportIcon = (transport: string | undefined) => {
@@ -124,6 +125,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
   } = useMcpServers({ selectedProvider, currentProjects });
 
   const providerName = MCP_PROVIDER_NAMES[selectedProvider];
+  const canEditProvider = selectedProvider !== 'antigravity';
   const description = t(`mcpServers.description.${selectedProvider}`, {
     defaultValue: `Model Context Protocol servers provide additional tools and data sources to ${providerName}`,
   });
@@ -141,6 +143,9 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
           <div className="min-w-0 space-y-1">
             <h3 className="text-lg font-medium text-foreground">{t('mcpServers.title')}</h3>
             <p className="text-sm text-muted-foreground">{description}</p>
+            {!canEditProvider && (
+              <p className="text-sm text-muted-foreground">{t('mcpServers.antigravityReadOnly')}</p>
+            )}
           </div>
         </div>
         <ActionMenu
@@ -156,13 +161,13 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
               icon: Globe,
               onSelect: openGlobalForm,
             },
-            {
+            ...(canEditProvider ? [{
               key: 'provider',
               label: providerButtonLabel,
               description: providerAddDescription,
               icon: Server,
               onSelect: () => openForm(),
-            },
+            }] : []),
           ]}
         />
 
@@ -191,7 +196,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
         )}
 
         {servers.map((server) => {
-          const managed = isManagedServer(server);
+          const managed = canEditProvider && isManagedServer(server);
 
           return (
             <div key={getServerKey(server)} className="rounded-lg border border-border bg-card/50 p-4">
@@ -250,7 +255,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
                   </div>
                 </div>
 
-                {!managed && (
+                {canEditProvider && !managed && (
                   <div className="ml-4 flex items-center gap-2">
                     <Button
                       onClick={() => openForm(server)}
@@ -292,7 +297,7 @@ export default function McpServers({ selectedProvider, currentProjects }: McpSer
       {selectedProvider === 'claude' && !IS_PLATFORM && <TeamMcpFeatureCard />}
 
       {/* Mounted only while open: each instance runs a full useMcpServerForm. */}
-      {serverForm?.scope === 'provider' && (
+      {canEditProvider && serverForm?.scope === 'provider' && (
         <McpServerFormModal
           provider={selectedProvider}
           editingServer={serverForm.editingServer}

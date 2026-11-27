@@ -1619,6 +1619,9 @@ async function queryClaudeSDK(
       steerFollowUpTimer.unref?.();
     };
 
+    // Message starts own subsequent block events within this run and subagent.
+    const assistantReplyIds = new Map<string, string>();
+
     // Process streaming messages
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const rawMessage of queryInstance) {
@@ -1671,7 +1674,19 @@ async function queryClaudeSDK(
       }
 
       // Transform and normalize message via adapter
-      const transformedMessage = transformMessage(message);
+      const streamEvent = message.type === 'stream_event' ? message.event : message;
+      const streamOwner = String(message.parent_tool_use_id ?? '');
+      if (streamEvent?.type === 'message_start') {
+        const replyId = streamEvent.message?.id;
+        if (typeof replyId === 'string' && replyId) assistantReplyIds.set(streamOwner, replyId);
+        else assistantReplyIds.delete(streamOwner);
+      }
+      const transformedMessage = transformMessage(message.type === 'stream_event'
+        ? { ...streamEvent, parent_tool_use_id: message.parent_tool_use_id } : message);
+      if (transformedMessage.type === 'content_block_delta' || transformedMessage.type === 'content_block_stop') {
+        transformedMessage.assistantReplyId = assistantReplyIds.get(streamOwner);
+      }
+      if (streamEvent?.type === 'message_stop') assistantReplyIds.delete(streamOwner);
       const sid = capturedSessionId || sessionId || null;
 
       // Use adapter to normalize SDK events into NormalizedMessage[]

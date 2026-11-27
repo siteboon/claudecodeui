@@ -76,10 +76,8 @@ const labels = (messages: ChatMessage[]) => messages
 
 const renderSessionState = () => {
   // Created once per render of the test, not per render of the hook:
-  // `resetStreamingState` is in the load effect's deps, so a new function on
-  // every render would re-run the load on every render, without end.
+  // Keep the send callback stable so load effects do not restart on every render.
   const sendMessage = vi.fn();
-  const resetStreamingState = vi.fn();
   const statusCheckSentAtRef = { current: new Map<string, number>() };
   const lastSeqRef = { current: new Map<string, number>() };
   return renderHook(() => {
@@ -90,7 +88,6 @@ const renderSessionState = () => {
       selectedSession: session,
       ws: null,
       sendMessage,
-      resetStreamingState,
       statusCheckSentAtRef,
       lastSeqRef,
       sessionStore,

@@ -100,8 +100,8 @@ const CLI_UPDATERS: Partial<Record<LLMProvider, CliUpdater>> = {
   },
 };
 
-/** Why the settings page offers no update: the CLI ships with CloudCLI, or the hosting platform manages the CLIs. */
-type CliUpdateUnavailableReason = 'bundled' | 'platform';
+/** Why the settings page offers no update: bundled, platform-managed, or an external CLI without a configured updater. */
+type CliUpdateUnavailableReason = 'bundled' | 'platform' | 'manual';
 
 /** Why an update run went wrong, as read from its exit code and output. */
 type CliUpdateFailure = 'permission_denied' | 'timed_out' | 'failed';
@@ -193,6 +193,7 @@ function getProviderLabel(provider: LLMProvider): string {
     codex: 'Codex',
     cursor: 'Cursor CLI',
     opencode: 'OpenCode',
+    antigravity: 'Antigravity',
   };
   return labels[provider];
 }
@@ -387,7 +388,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       timeoutMs: dependencies.updateTimeoutMs,
       killGraceMs: dependencies.updateKillGraceMs,
     });
-    const installedVersion = provider.auth.checkInstalled().version;
+    const installedVersion = (await provider.auth.checkInstalled()).version;
     const note = CLI_UPDATERS[provider.id]?.explainRun?.(update, run.exitCode);
 
     return {
@@ -414,11 +415,11 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       // and cursor-agent), a page that follows the run asks every few seconds,
       // and the updater may be replacing that binary right then.
       const running = updatesInProgress.get(provider.id);
-      let { installed, version: installedVersion } = running?.before ?? provider.auth.checkInstalled();
+      let { installed, version: installedVersion } = running?.before ?? await provider.auth.checkInstalled();
       const update = resolveUpdateCommand(provider.id);
       const updateUnavailableReason: CliUpdateUnavailableReason | null = dependencies.platformMode
         ? 'platform'
-        : update ? null : 'bundled';
+        : update ? null : provider.id === 'antigravity' ? 'manual' : 'bundled';
 
       // The registry is only worth asking when the answer can lead to an update
       // of a CLI that is there.
@@ -434,7 +435,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       // reported instead (still no probe while a run is going on).
       const runAfterLookup = updatesInProgress.get(provider.id);
       if (running && runAfterLookup !== running) {
-        ({ installed, version: installedVersion } = runAfterLookup?.before ?? provider.auth.checkInstalled());
+        ({ installed, version: installedVersion } = runAfterLookup?.before ?? await provider.auth.checkInstalled());
       }
 
       return {
@@ -466,7 +467,10 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       const provider = dependencies.resolveProvider(providerName);
       const update = resolveUpdateCommand(provider.id);
       if (!update) {
-        throw new AppError(`${getProviderLabel(provider.id)} ships with CloudCLI and is updated together with it.`, {
+        const message = provider.id === 'antigravity'
+          ? 'Manage Antigravity CLI updates outside CloudCLI.'
+          : `${getProviderLabel(provider.id)} ships with CloudCLI and is updated together with it.`;
+        throw new AppError(message, {
           code: 'PROVIDER_CLI_UPDATE_UNAVAILABLE',
           statusCode: 400,
         });
@@ -492,7 +496,11 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
         );
       }
 
-      const before = provider.auth.checkInstalled();
+      const probe = provider.auth.checkInstalled();
+      const before = probe instanceof Promise ? await probe : probe;
+      // Async version probes must not admit duplicate updaters while awaiting.
+      const startedDuringProbe = updatesInProgress.get(provider.id);
+      if (startedDuringProbe) return startedDuringProbe.result;
       if (!before.installed) {
         throw new AppError(`${getProviderLabel(provider.id)} is not installed on the server, so there is nothing to update.`, {
           code: 'PROVIDER_CLI_NOT_INSTALLED',

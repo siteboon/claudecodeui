@@ -451,6 +451,9 @@
       },
       "opencode": {
         "description": "Assistente CLI OpenCode"
+      },
+      "antigravity": {
+        "description": "Assistente CLI Antigravity"
       }
     },
     "connectionStatus": "Status da conexão",
@@ -604,12 +607,14 @@
     }
   },
   "mcpServers": {
+    "antigravityReadOnly": "Veja os servidores MCP do Antigravity aqui. Use /mcp no Antigravity para alterá-los.",
     "title": "Servidores MCP",
     "description": {
       "claude": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao Claude",
       "cursor": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao Cursor",
       "codex": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao Codex",
-      "opencode": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao OpenCode"
+      "opencode": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao OpenCode",
+      "antigravity": "Servidores Model Context Protocol fornecem ferramentas e fontes de dados adicionais ao Antigravity"
     },
     "addButton": "Adicionar servidor MCP",
     "empty": "Nenhum servidor MCP configurado",
