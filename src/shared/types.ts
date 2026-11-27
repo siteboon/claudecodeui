@@ -1023,6 +1023,9 @@ export type CodeEditorGotoTarget = {
 /** The category of browser-renderable media a file maps to, used by the code editor to decide whether to show an inline image, PDF, video or audio preview instead of a text buffer. */
 export type PreviewKind = 'image' | 'pdf' | 'video' | 'audio';
 
+/** How the code editor shows a Markdown file: 'code' edits the raw text in CodeMirror, 'preview' renders it read-only, 'live' edits it with the preview rendered in place. Picked in the editor header and honored by the editor surface; other files always show the code view. */
+export type MarkdownViewMode = 'code' | 'preview' | 'live';
+
 // ---------------------------
 
 //----------------- FILE TREE ------------

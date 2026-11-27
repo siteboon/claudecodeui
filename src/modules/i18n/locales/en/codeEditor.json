@@ -10,6 +10,7 @@
     "expand": "Expand editor to full width"
   },
   "loading": "Loading {{fileName}}...",
+  "liveEditorLabel": "Live editor: {{fileName}}",
   "header": {
     "showingChanges": "Showing changes"
   },
@@ -24,6 +25,7 @@
     "fullscreen": "Fullscreen",
     "close": "Close",
     "previewMarkdown": "Preview markdown",
+    "liveMarkdown": "Live preview editing",
     "editMarkdown": "Edit markdown",
     "previewHtml": "Open HTML preview in new tab"
   },

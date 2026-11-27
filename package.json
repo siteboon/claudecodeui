@@ -183,6 +183,7 @@
     "@openai/codex": "0.166.0",
     "@openai/codex-sdk": "^0.166.0",
     "@opencode-ai/sdk": "^1.19.5",
+    "@openmarkdown-dev/editor": "^0.2.1",
     "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.16",
     "@uiw/react-codemirror": "^4.23.13",
