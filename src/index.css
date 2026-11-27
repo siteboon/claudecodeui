@@ -572,16 +572,18 @@
     contain: layout style;
   }
 
+  /* `backwards`, not `both`, and no will-change: the indicator stays on screen
+     for the whole turn, and holding the last keyframe would keep a filter and
+     its own compositing layer on it long after the entrance has ended. The
+     last keyframe equals the resting style, so dropping it changes nothing. */
   .chat-activity-enter {
-    animation: chat-activity-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: chat-activity-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
     transform-origin: bottom center;
-    will-change: transform, opacity, filter;
   }
 
   .chat-activity-exit {
     animation: chat-activity-exit 220ms cubic-bezier(0.4, 0, 1, 1) both;
     transform-origin: bottom center;
-    will-change: transform, opacity, filter;
   }
 
   .chat-activity-tab {
