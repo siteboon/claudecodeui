@@ -339,14 +339,17 @@ function ChatInterface({
   // A run the server started on its own (the dispatcher's queued turn, a
   // scheduled message) streams only to sockets that subscribe while it runs.
   // Subscribing again attaches this page to that run so the turn arrives live
-  // instead of showing up only after a reload.
+  // instead of showing up only after a reload. A new run resets its sequence
+  // counter at 1 on the server, so drop any prior run's cursor first rather
+  // than inheriting its high-water mark and skipping the new run's early replay.
   const handleSessionRunStarted = useCallback((sessionId: string) => {
+    lastSeqRef.current.delete(sessionId);
     statusCheckSentAtRef.current.set(sessionId, Date.now());
     sendMessage({
       type: 'chat.subscribe',
       sessions: [{
         sessionId,
-        lastSeq: lastSeqRef.current.get(sessionId) ?? 0,
+        lastSeq: 0,
       }],
     });
   }, [sendMessage]);

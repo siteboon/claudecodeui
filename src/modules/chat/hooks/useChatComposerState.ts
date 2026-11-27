@@ -1522,19 +1522,34 @@ export function useChatComposerState({
 
   // The VPS dispatcher owns sending. While the card is visible, periodically
   // reconcile it with the server, so the UI notices when the server claims it
-  // or another tab adds to it.
+  // or another tab adds to it. Bumped on session changes and unmount so an
+  // in-flight hydration for a prior session cannot overwrite the next one.
+  const reconcileGenerationRef = useRef(0);
+  useEffect(() => {
+    reconcileGenerationRef.current += 1;
+    return () => {
+      reconcileGenerationRef.current += 1;
+    };
+  }, [sessionKey]);
+
   const reconcileQueuedDraft = useCallback(async () => {
-    if (!sessionKey) {
+    const targetSession = sessionKey;
+    if (!targetSession) {
       return;
     }
+    const generation = reconcileGenerationRef.current;
     await hydrateChatDrafts();
-    if (!readQueuedMessage(sessionKey)) {
-      queuedDraftSessionRef.current = sessionKey;
+    if (reconcileGenerationRef.current !== generation || sessionKeyRef.current !== targetSession) {
+      return;
+    }
+    if (!readQueuedMessage(targetSession)) {
+      queuedDraftSessionRef.current = targetSession;
       setQueuedDraft(null);
+      return;
     }
     // Another tab may have added to the queued message; the card shows what
     // will be sent, so it follows the server's copy.
-    const stored = restoreQueuedDraft(sessionKey);
+    const stored = restoreQueuedDraft(targetSession);
     if (stored) {
       setQueuedDraft((card) => {
         if (!card || showsQueuedMessage(card, stored)) {

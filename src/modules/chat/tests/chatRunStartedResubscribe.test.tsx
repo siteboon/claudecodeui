@@ -5,6 +5,7 @@ import { describe, it, vi } from 'vitest';
 
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
+import { useSessionProtection } from '@/shared/hooks/useSessionProtection';
 import type { ProjectSession, ServerEvent } from '@/shared/types';
 
 /**
@@ -15,43 +16,72 @@ import type { ProjectSession, ServerEvent } from '@/shared/types';
  * otherwise the turn is transcribed but never painted until a reload.
  */
 
-const renderHandlers = (resubscribed: string[], processing: string[]) => {
-  let listener: ((event: ServerEvent) => void) | null = null;
+type HarnessOptions = {
+  initialLastSeq?: Array<[string, number]>;
+  markSubscribeSent?: boolean;
+};
 
-  renderHook(() => useChatRealtimeHandlers({
-    isActive: true,
-    subscribe: (fn) => {
-      listener = fn;
-      return () => { listener = null; };
-    },
-    provider: 'claude',
-    selectedSession: { id: 'viewed-session' } as ProjectSession,
-    currentSessionId: 'viewed-session',
-    setTokenBudget: () => {},
-    pendingPermissionRequests: [],
-    setPendingPermissionRequests: () => {},
-    streamTimerRef: { current: null },
-    accumulatedStreamRef: { current: '' },
-    lastSeqRef: { current: new Map() },
-    statusCheckSentAtRef: { current: new Map() },
-    onSessionProcessing: (sessionId) => { if (sessionId) processing.push(sessionId); },
-    onSessionIdle: () => {},
-    onSessionBackground: () => {},
-    getSessionActivity: () => undefined,
-    requestResubscribe: (sessionId) => { resubscribed.push(sessionId); },
-    requestLatestMessages: async () => {},
-    sessionStore: {
-      appendRealtime: () => {},
-      getMessages: () => [],
-      updateStreaming: () => {},
-      finalizeStreaming: () => {},
-    } as unknown as SessionStore,
-  }));
+const renderHandlers = (options: HarnessOptions = {}) => {
+  let listener: ((event: ServerEvent) => void) | null = null;
+  const resubscribed: Array<{ sessionId: string; lastSeq: number }> = [];
+  const processing: string[] = [];
+  const reloads: Array<{ sessionId: string; allowNetwork?: boolean }> = [];
+  const streamed: string[] = [];
+  const lastSeqRef = { current: new Map<string, number>(options.initialLastSeq) };
+  const statusCheckSentAtRef = { current: new Map<string, number>() };
+  const streamTimerRef = { current: null as number | null };
+  const accumulatedStreamRef = { current: '' };
+
+  const hook = renderHook(() => {
+    const protection = useSessionProtection();
+    useChatRealtimeHandlers({
+      isActive: true,
+      subscribe: (fn) => {
+        listener = fn;
+        return () => { listener = null; };
+      },
+      provider: 'claude',
+      selectedSession: { id: 'viewed-session' } as ProjectSession,
+      currentSessionId: 'viewed-session',
+      setTokenBudget: () => {},
+      pendingPermissionRequests: [],
+      setPendingPermissionRequests: () => {},
+      streamTimerRef,
+      accumulatedStreamRef,
+      lastSeqRef,
+      statusCheckSentAtRef,
+      onSessionProcessing: (sessionId, activity) => {
+        if (sessionId) processing.push(sessionId);
+        protection.markSessionProcessing(sessionId, activity);
+      },
+      onSessionIdle: (sessionId, opts) => {
+        protection.markSessionIdle(sessionId, opts);
+      },
+      onSessionBackground: () => {},
+      getSessionActivity: protection.getSessionActivity,
+      requestResubscribe: (sessionId) => {
+        if (options.markSubscribeSent) {
+          statusCheckSentAtRef.current.set(sessionId, Date.now());
+        }
+        resubscribed.push({ sessionId, lastSeq: lastSeqRef.current.get(sessionId) ?? 0 });
+      },
+      requestLatestMessages: async (sessionId, allowNetwork) => {
+        reloads.push({ sessionId, allowNetwork });
+      },
+      sessionStore: {
+        appendRealtime: () => {},
+        getMessages: () => [],
+        updateStreaming: (_sid: string, text: string) => { streamed.push(text); },
+        finalizeStreaming: () => {},
+      } as unknown as SessionStore,
+    });
+    return { processingSessions: protection.processingSessions };
+  });
 
   const dispatch = (event: ServerEvent) => {
     act(() => { listener?.(event); });
   };
-  return { dispatch };
+  return { dispatch, resubscribed, processing, reloads, streamed, lastSeqRef, hook };
 };
 
 const runStarted = (sessionId: string): ServerEvent => ({
@@ -61,24 +91,121 @@ const runStarted = (sessionId: string): ServerEvent => ({
 
 describe('chat_run_started', () => {
   it('subscribes the visible session to the run that started without it', () => {
-    const resubscribed: string[] = [];
-    const processing: string[] = [];
-    const { dispatch } = renderHandlers(resubscribed, processing);
+    const { dispatch, resubscribed, processing } = renderHandlers();
 
     dispatch(runStarted('viewed-session'));
 
     assert.deepEqual(processing, ['viewed-session']);
-    assert.deepEqual(resubscribed, ['viewed-session']);
+    assert.deepEqual(resubscribed.map((entry) => entry.sessionId), ['viewed-session']);
   });
 
   it('leaves a run in another session alone: this page is not showing it', () => {
-    const resubscribed: string[] = [];
-    const processing: string[] = [];
-    const { dispatch } = renderHandlers(resubscribed, processing);
+    const { dispatch, resubscribed, processing } = renderHandlers();
 
     dispatch(runStarted('other-session'));
 
     assert.deepEqual(processing, ['other-session']);
     assert.deepEqual(resubscribed, []);
+  });
+
+  it('reloads the transcript and clears processing when an idle ack answers a post-run-start subscribe', () => {
+    const { dispatch, reloads, hook } = renderHandlers({ markSubscribeSent: true });
+
+    dispatch(runStarted('viewed-session'));
+    assert.equal(hook.result.current.processingSessions.has('viewed-session'), true);
+
+    dispatch({
+      kind: 'chat_subscribed',
+      sessionId: 'viewed-session',
+      isProcessing: false,
+      pendingPermissions: [],
+    } as unknown as ServerEvent);
+
+    assert.equal(hook.result.current.processingSessions.has('viewed-session'), false);
+    assert.deepEqual(reloads, [{ sessionId: 'viewed-session', allowNetwork: true }]);
+  });
+
+  it('does not reload on an ordinary idle ack or when the resubscribed run is still processing', () => {
+    const { dispatch, reloads } = renderHandlers({ markSubscribeSent: true });
+
+    dispatch({
+      kind: 'chat_subscribed',
+      sessionId: 'viewed-session',
+      isProcessing: false,
+      pendingPermissions: [],
+    } as unknown as ServerEvent);
+    assert.deepEqual(reloads, []);
+
+    dispatch(runStarted('viewed-session'));
+    dispatch({
+      kind: 'chat_subscribed',
+      sessionId: 'viewed-session',
+      isProcessing: true,
+      pendingPermissions: [],
+    } as unknown as ServerEvent);
+    assert.deepEqual(reloads, []);
+  });
+
+  it('resets the prior run cursor on chat_run_started while keeping the current run cursor', () => {
+    const { dispatch, resubscribed, lastSeqRef } = renderHandlers({
+      initialLastSeq: [['viewed-session', 100]],
+    });
+
+    dispatch(runStarted('viewed-session'));
+    assert.deepEqual(resubscribed, [{ sessionId: 'viewed-session', lastSeq: 0 }]);
+
+    dispatch({
+      kind: 'stream_delta',
+      sessionId: 'viewed-session',
+      content: 'first',
+      seq: 1,
+    } as unknown as ServerEvent);
+    dispatch({
+      kind: 'stream_delta',
+      sessionId: 'viewed-session',
+      content: ' second',
+      seq: 2,
+    } as unknown as ServerEvent);
+
+    assert.equal(lastSeqRef.current.get('viewed-session'), 2);
+  });
+
+  it('drops duplicate replayed deltas within the same run while still playing detached replays', () => {
+    vi.useFakeTimers();
+    try {
+      const { dispatch, streamed } = renderHandlers();
+
+      dispatch(runStarted('viewed-session'));
+      // Live frame arrives before the replay for seq 1 lands.
+      dispatch({
+        kind: 'stream_delta',
+        sessionId: 'viewed-session',
+        content: 'Hi',
+        seq: 1,
+      } as unknown as ServerEvent);
+      dispatch({
+        kind: 'chat_subscribed',
+        sessionId: 'viewed-session',
+        isProcessing: true,
+        pendingPermissions: [],
+      } as unknown as ServerEvent);
+      dispatch({
+        kind: 'stream_delta',
+        sessionId: 'viewed-session',
+        content: 'Hi',
+        seq: 1,
+      } as unknown as ServerEvent);
+      dispatch({
+        kind: 'stream_delta',
+        sessionId: 'viewed-session',
+        content: '!',
+        seq: 2,
+      } as unknown as ServerEvent);
+
+      act(() => { vi.advanceTimersByTime(150); });
+      assert.deepEqual(streamed, ['Hi!']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

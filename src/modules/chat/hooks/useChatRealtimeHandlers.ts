@@ -110,6 +110,12 @@ export function useChatRealtimeHandlers({
   // notification sound before React finishes a rerender.
   const pendingPermissionRequestsRef = useRef(pendingPermissionRequests);
 
+  // Tracks sessions whose post-`chat_run_started` resubscribe is still waiting
+  // for its `chat_subscribed` ack, recording when `chat_run_started` fired so
+  // a sub-millisecond idle ack is never discarded as stale and triggers a
+  // transcript reload if the run finished before subscribe reached the server.
+  const runStartedAckPendingRef = useRef(new Map<string, number>());
+
   useEffect(() => {
     pendingPermissionRequestsRef.current = pendingPermissionRequests;
   }, [pendingPermissionRequests]);
@@ -131,12 +137,37 @@ export function useChatRealtimeHandlers({
       const activeViewSessionId = activeViewSessionIdRef.current;
       const sid = (typeof msg.sessionId === 'string' && msg.sessionId) || activeViewSessionId;
 
-      // Record replay progress for every sequenced live event.
-      if (sid && typeof msg.seq === 'number') {
-        const known = lastSeqRef.current.get(sid) ?? 0;
-        if (msg.seq > known) {
-          lastSeqRef.current.set(sid, msg.seq);
+      if (msg.kind === 'chat_run_started') {
+        // A run that started somewhere other than this composer: the
+        // dispatcher sending the queued turn once the previous one settles,
+        // or a scheduled message. Without this the session reads as idle
+        // until the run's first text arrives.
+        if (sid) {
+          // Each run resets its sequence counter on the server, so drop any
+          // prior run's cursor before resubscribing or accepting live events.
+          lastSeqRef.current.delete(sid);
+          const runStartedAt = Date.now();
+          onSessionProcessing?.(sid);
+          // The writer streams only to sockets subscribed while the run is
+          // live. This page subscribed before the run existed, so it has to
+          // subscribe again or the whole turn stays invisible until reload.
+          if (sid === activeViewSessionId && requestResubscribe) {
+            runStartedAckPendingRef.current.set(sid, runStartedAt);
+            requestResubscribe(sid);
+          }
         }
+        return;
+      }
+
+      // Record replay progress for every sequenced live event, and drop
+      // already-seen sequence numbers within the active run so a live frame
+      // and its `chat.subscribe` replay never double-apply (e.g. "HiHi").
+      if (sid && typeof msg.seq === 'number' && Number.isFinite(msg.seq)) {
+        const known = lastSeqRef.current.get(sid) ?? 0;
+        if (msg.seq <= known) {
+          return;
+        }
+        lastSeqRef.current.set(sid, msg.seq);
       }
 
       switch (msg.kind) {
@@ -154,36 +185,41 @@ export function useChatRealtimeHandlers({
           return;
         }
 
-        case 'chat_run_started': {
-          // A run that started somewhere other than this composer: the
-          // dispatcher sending the queued turn once the previous one settles,
-          // or a scheduled message. Without this the session reads as idle
-          // until the run's first text arrives.
-          if (sid) {
-            onSessionProcessing?.(sid);
-            // The writer streams only to sockets subscribed while the run is
-            // live. This page subscribed before the run existed, so it has to
-            // subscribe again or the whole turn stays invisible until reload.
-            if (sid === activeViewSessionIdRef.current) {
-              requestResubscribe?.(sid);
-            }
-          }
-          return;
-        }
-
         case 'chat_subscribed': {
           // Ack for chat.subscribe: authoritative processing state plus any
           // pending tool-permission prompts for the run.
           if (!sid) return;
 
+          const runStartedAt = runStartedAckPendingRef.current.get(sid);
+          runStartedAckPendingRef.current.delete(sid);
+
           if (msg.isProcessing) {
+            // If a newer run started while this client was offline, the
+            // server's run cursor can be below our stale one; reset and
+            // resubscribe from 0 so missed early events still replay.
+            const known = lastSeqRef.current.get(sid) ?? 0;
+            if (typeof msg.lastSeq === 'number' && Number.isFinite(msg.lastSeq) && msg.lastSeq < known) {
+              lastSeqRef.current.delete(sid);
+              if (sid === activeViewSessionId && requestResubscribe) {
+                runStartedAckPendingRef.current.set(sid, Date.now());
+                requestResubscribe(sid);
+              }
+            }
             onSessionProcessing?.(sid);
           } else {
             // Idle ack: ignore it if a newer request started after the
-            // subscribe was sent — the ack describes the older state.
-            onSessionIdle?.(sid, {
-              ifStartedBefore: statusCheckSentAtRef.current.get(sid),
-            });
+            // subscribe was sent — the ack describes the older state. When
+            // answering a post-`chat_run_started` resubscribe, ensure the
+            // run-start timestamp itself does not block clearing if both
+            // landed in the same millisecond, and reload the missed turn.
+            const sentAt = statusCheckSentAtRef.current.get(sid);
+            const ifStartedBefore = runStartedAt !== undefined && sentAt !== undefined
+              ? Math.max(sentAt, runStartedAt + 1)
+              : sentAt;
+            onSessionIdle?.(sid, { ifStartedBefore });
+            if (runStartedAt !== undefined) {
+              void requestLatestMessages(sid, isActiveRef.current);
+            }
           }
 
           const isViewedSession = sid === activeViewSessionId;
@@ -258,6 +294,7 @@ export function useChatRealtimeHandlers({
             // A refused or failed stop request is not about the run, and
             // idling here would drop a response in flight on that session.
             if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED' && msg.code !== 'TASK_STOP_FAILED') {
+              runStartedAckPendingRef.current.delete(sid);
               onSessionIdle?.(sid);
             }
             sessionStore.appendRealtime(sid, {
@@ -371,6 +408,9 @@ export function useChatRealtimeHandlers({
           // running leaves the session as background work — the CLI is held
           // open for them — and any other leaves it idle. An abort releases
           // the CLI and takes that work down with it.
+          if (sid) {
+            runStartedAckPendingRef.current.delete(sid);
+          }
           if (sid && !msg.aborted) {
             reportRemainingBackgroundWork(sid);
           } else {
@@ -514,6 +554,7 @@ export function useChatRealtimeHandlers({
     onSessionBackground,
     getSessionActivity,
     onWebSocketReconnect,
+    requestResubscribe,
     requestLatestMessages,
     sessionStore,
     onSteerOutcome,
