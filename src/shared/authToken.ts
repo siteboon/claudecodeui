@@ -106,3 +106,14 @@ export const storeAuthToken = (token: unknown): boolean => {
   }
   return true;
 };
+
+// A refreshed token rides on the response to a request made with the previous
+// one, so it may only replace that same token. A response that lands after
+// sign-out — or after a newer sign-in — would otherwise write back a session
+// the user just ended, and the next reload would quietly sign them in again.
+export const storeRefreshedAuthToken = (token: unknown, sentWithToken: string | null): boolean => {
+  if (!sentWithToken || localStorage.getItem('auth-token') !== sentWithToken) {
+    return false;
+  }
+  return storeAuthToken(token);
+};

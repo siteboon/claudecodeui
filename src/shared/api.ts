@@ -1,7 +1,7 @@
 import {
   expireAuthSession,
   getStoredAuthToken,
-  storeAuthToken,
+  storeRefreshedAuthToken,
 } from '@/shared/authToken';
 import { IS_PLATFORM } from '@/shared/utils';
 import { readVoiceConfig, voiceConfigHeaders } from '@/shared/voiceConfig';
@@ -45,7 +45,7 @@ export const authenticatedFetch = (
   }).then((response) => {
     const refreshedToken = response.headers.get('X-Refreshed-Token');
     if (refreshedToken) {
-      storeAuthToken(refreshedToken);
+      storeRefreshedAuthToken(refreshedToken, token);
     }
     // Belt and braces for any path that still reaches a cached response: only a
     // real rejection ends the session. Note that a revalidated response surfaces

@@ -158,6 +158,22 @@ test('a refreshed token on the response replaces the stored one', async () => {
   assert.equal(announced, rotated);
 });
 
+// Value: protects=sign-out survives an in-flight request; fails_when=authenticatedFetch stores X-Refreshed-Token without checking the sending token; why_new=existing cases always keep the token stored; seam=none; no_claim=server timing (fetch stubbed)
+test('a refreshed token arriving after sign-out does not restore the session', async () => {
+  localStorage.setItem('auth-token', liveToken());
+  let releaseResponse: () => void = () => {};
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => {
+    releaseResponse = () => resolve(new Response('{}', { status: 200, headers: { 'X-Refreshed-Token': liveToken().replace('signature', 'rotated') } }));
+  })));
+
+  const request = (await loadFetch(false))('/api/projects');
+  localStorage.removeItem('auth-token');
+  releaseResponse();
+  await request;
+
+  assert.equal(localStorage.getItem('auth-token'), null);
+});
+
 test('an auth error on the response ends the session', async () => {
   localStorage.setItem('auth-token', liveToken());
   let expiries = 0;

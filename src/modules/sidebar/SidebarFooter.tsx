@@ -3,6 +3,7 @@ import type { TFunction } from 'i18next';
 
 import { IS_PLATFORM } from '@/shared/utils';
 import type { ReleaseInfo } from '@/shared/types';
+import SidebarSignOutButton from '@/modules/sidebar/SidebarSignOutButton';
 
 const GITHUB_ISSUES_URL = 'https://github.com/siteboon/claudecodeui/issues/new';
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
@@ -28,7 +29,7 @@ type SidebarFooterProps = {
   t: TFunction;
 };
 
-/** Rendered by SidebarContent at the bottom of the panel for settings, update status and community links. */
+/** Rendered by SidebarContent at the bottom of the panel for settings, sign-out, update status and community links. */
 export default function SidebarFooter({
   updateAvailable,
   restartRequired,
@@ -134,7 +135,7 @@ export default function SidebarFooter({
         </a>
       </div>
 
-      {/* Desktop settings */}
+      {/* Desktop settings and sign-out */}
       <div className="hidden px-2 py-1.5 md:block">
         <button
           className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
@@ -143,6 +144,7 @@ export default function SidebarFooter({
           <Settings className="h-3.5 w-3.5" />
           <span className="text-sm">{t('actions.settings')}</span>
         </button>
+        <SidebarSignOutButton variant="row" />
       </div>
 
       {/* Desktop version brand line (OSS mode only) */}
@@ -189,7 +191,7 @@ export default function SidebarFooter({
         </a>
       </div>
 
-      {/* Mobile settings */}
+      {/* Mobile settings and sign-out */}
       <div className="px-3 pb-3 pt-2 md:hidden">
         <button
           className="flex h-10 w-full items-center gap-3 rounded-xl bg-muted/40 px-3.5 transition-all hover:bg-muted/60 active:scale-[0.98]"
@@ -200,6 +202,7 @@ export default function SidebarFooter({
           </div>
           <span className="text-sm font-normal text-foreground">{t('actions.settings')}</span>
         </button>
+        <SidebarSignOutButton variant="tile" />
       </div>
     </div>
   );

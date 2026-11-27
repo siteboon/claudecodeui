@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { IS_PLATFORM } from '@/shared/utils';
 import { api, readApiErrorMessage } from '@/shared/api';
-import { AUTH_SESSION_EXPIRED_EVENT, AUTH_TOKEN_REFRESHED_EVENT, getAuthTokenRefreshDelay, isValidRefreshedToken, storeAuthToken } from '@/shared/authToken';
+import { AUTH_SESSION_EXPIRED_EVENT, AUTH_TOKEN_REFRESHED_EVENT, getAuthTokenRefreshDelay, isValidRefreshedToken, storeAuthToken, storeRefreshedAuthToken } from '@/shared/authToken';
 import { hydrateChatDrafts, resetChatDrafts } from '@/shared/chatDrafts';
 import { hydrateUserPreferences, resetUserPreferences } from '@/shared/userSettings';
 /** The signed-in account held by AuthContext - a required `username` plus an optional id and any additional fields the auth API returns - and should be read through `useAuth()` rather than re-derived from raw auth responses. */
@@ -147,15 +147,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     try {
+      // Read from storage, not `token` state: the request goes out with the
+      // stored token, and the reply may only replace that one (it is gone if
+      // the user signed out while this request was in flight).
+      const sentWithToken = readStoredToken();
       const response = await api.auth.refresh();
       if (!response.ok) {
         return;
       }
 
       const payload = await parseJsonSafely<AuthSessionPayload>(response);
-      if (isValidRefreshedToken(payload?.token)) {
+      if (isValidRefreshedToken(payload?.token) && storeRefreshedAuthToken(payload.token, sentWithToken)) {
         setToken(payload.token);
-        persistToken(payload.token);
       }
     } catch (caughtError) {
       // A transient network failure must not sign the user out. Focus/visibility
@@ -183,6 +186,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
       window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleSessionExpired);
     };
   }, [clearSession, t]);
+
+  // Signing out in one tab only clears that tab's state; every other open tab
+  // would keep a working session until it next hit a 401. The `storage` event
+  // fires in those other tabs when the token is removed (or when storage is
+  // cleared outright, which arrives with a null key), so they sign out too.
+  // A new token arriving from another tab's refresh is not a sign-out. Platform
+  // mode has no local session, and clearing its user would only drop the chat
+  // socket without ever showing a sign-in screen.
+  useEffect(() => {
+    if (IS_PLATFORM) {
+      return undefined;
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      // sessionStorage changes fire the same event, also with a null key on clear().
+      if (event.storageArea !== localStorage) {
+        return;
+      }
+      const tokenRemoved = event.key === AUTH_TOKEN_STORAGE_KEY && event.newValue === null;
+      if (!tokenRemoved && event.key !== null) {
+        return;
+      }
+      // Storage events are queued for other tabs, so this one can arrive after
+      // another tab has already signed in again. Its new token must survive.
+      if (readStoredToken()) {
+        return;
+      }
+      clearSession();
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [clearSession]);
 
   // The startup check below needs `t` only for its failure message.
   // react-i18next gives `t` a new identity on every language change, so
@@ -226,6 +264,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const userPayload = await parseJsonSafely<AuthUserPayload>(userResponse);
       if (!userPayload?.user) {
         clearSession();
+        return;
+      }
+
+      // Another tab may have signed out while the user request was in flight;
+      // publishing the user now would bring back a workspace with no token.
+      if (!readStoredToken()) {
         return;
       }
 
