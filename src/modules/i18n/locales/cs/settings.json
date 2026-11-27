@@ -207,6 +207,71 @@
       "label": "Tmavý režim",
       "description": "Přepínání mezi světlým a tmavým motivem"
     },
+    "colorTheme": {
+      "description": "Jedna paleta pro světlý režim a jedna pro tmavý",
+      "remove": "Odebrat motiv",
+      "removeConfirm": "Odebrat {{name}} se všemi jeho motivy?",
+      "removeCancel": "Zrušit",
+      "removeButton": "Odebrat",
+      "importFailed": "Tento motiv se nepodařilo importovat.",
+      "slots": {
+        "light": "Světlý",
+        "dark": "Tmavý",
+        "active": "Zobrazeno"
+      },
+      "list": {
+        "lightTitle": "Motivy pro světlý režim",
+        "darkTitle": "Motivy pro tmavý režim",
+        "lightOnly": "Jen světlé: {{names}}",
+        "darkOnly": "Jen tmavé: {{names}}"
+      },
+      "add": {
+        "button": "Přidat motiv",
+        "title": "Přidat motiv",
+        "description": "Nainstalujte barevný motiv VS Code z Open VSX, nebo importujte vlastní.",
+        "close": "Zavřít",
+        "tabs": {
+          "browse": "Procházet Open VSX",
+          "import": "Importovat"
+        },
+        "browse": {
+          "recommended": "Doporučené",
+          "downloadCount": "Nejoblíbenější",
+          "timestamp": "Nedávno aktualizované"
+        },
+        "search": {
+          "placeholder": "Hledat na Open VSX nebo vložit odkaz z Marketplace / Open VSX…",
+          "results": "Výsledky",
+          "sort": {
+            "label": "Řadit",
+            "downloadCount": "Nejstahovanější",
+            "rating": "Nejlépe hodnocené",
+            "timestamp": "Nedávno aktualizované",
+            "relevance": "Nejrelevantnější"
+          },
+          "downloads": "Staženo {{value}}×",
+          "empty": "Pro „{{query}}“ nebyly nalezeny žádné barevné motivy.",
+          "failed": "Vyhledávání na Open VSX je momentálně nedostupné.",
+          "source": "Zdrojový kód",
+          "install": "Instalovat",
+          "update": "Aktualizovat",
+          "installed": "Nainstalováno",
+          "installing": "Instaluje se…",
+          "fromUrl": "Nainstaluje {{id}} přímo z tohoto odkazu"
+        },
+        "file": {
+          "label": "Sem přetáhněte soubory motivů",
+          "description": "Barevné motivy .json nebo celá rozšíření .vsix",
+          "button": "Vybrat soubory"
+        },
+        "json": {
+          "label": "JSON motivu",
+          "description": "Vložte obsah souboru *-color-theme.json z VS Code"
+        },
+        "submit": "Přidat motiv",
+        "notice": "Hledání a stahování probíhá přes váš server CloudCLI; ikony rozšíření se načítají z open-vsx.org."
+      }
+    },
     "projectSorting": {
       "label": "Řazení projektů",
       "description": "Pořadí projektů v postranním panelu",

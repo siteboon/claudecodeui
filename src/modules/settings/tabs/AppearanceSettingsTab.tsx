@@ -1,13 +1,13 @@
 import { useTranslation } from 'react-i18next';
 
 import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
-import { useTheme } from '@/shared/context/ThemeContext';
-import type { CodeEditorSettingsState, ProjectSortOrder, ThemeMode } from '@/shared/types';
+import type { CodeEditorSettingsState, ProjectSortOrder } from '@/shared/types';
 import { LanguageSelector } from '@/modules/i18n';
 import SettingsCard from '@/modules/settings/SettingsCard';
 import SettingsRow from '@/modules/settings/SettingsRow';
 import SettingsSection from '@/modules/settings/SettingsSection';
 import SettingsToggle from '@/modules/settings/SettingsToggle';
+import ColorThemeSection from '@/modules/settings/tabs/appearance-settings/ColorThemeSection';
 
 type AppearanceSettingsTabProps = {
   projectSortOrder: ProjectSortOrder;
@@ -30,31 +30,12 @@ export default function AppearanceSettingsTab({
   onCodeEditorFontSizeChange,
 }: AppearanceSettingsTabProps) {
   const { t } = useTranslation('settings');
-  const { themeMode, setThemeMode } = useTheme();
   const preferences = useUiPreferences();
   const setPreference = useSetUiPreference();
 
   return (
     <div className="space-y-8">
-      <SettingsSection title={t('appearanceSettings.theme.label')}>
-        <SettingsCard>
-          <SettingsRow
-            label={t('appearanceSettings.theme.label')}
-            description={t('appearanceSettings.theme.description')}
-          >
-            <select
-              value={themeMode}
-              onChange={(event) => setThemeMode(event.target.value as ThemeMode)}
-              aria-label={t('appearanceSettings.theme.label')}
-              className="w-full touch-manipulation rounded-lg border border-input bg-card p-2.5 text-sm text-foreground focus:border-primary focus:ring-1 focus:ring-primary sm:w-36"
-            >
-              <option value="light">{t('appearanceSettings.theme.light')}</option>
-              <option value="dark">{t('appearanceSettings.theme.dark')}</option>
-              <option value="system">{t('appearanceSettings.theme.system')}</option>
-            </select>
-          </SettingsRow>
-        </SettingsCard>
-      </SettingsSection>
+      <ColorThemeSection />
 
       <SettingsSection title={t('mainTabs.appearance')}>
         <SettingsCard>

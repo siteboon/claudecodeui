@@ -18,6 +18,9 @@ import { CODE_EDITOR_STORAGE_KEYS } from '@/shared/constants';
 /** Every setting the server stores for a user. */
 export type UserPreferences = {
   theme: 'light' | 'dark';
+  lightColorTheme: string;
+  darkColorTheme: string;
+  importedThemes: unknown;
   userLanguage: string;
   tasksEnabled: boolean;
   projectSortOrder: 'name' | 'date';
@@ -55,6 +58,11 @@ const SERVER_WRITE_DEBOUNCE_MS = 400;
  */
 const LEGACY_STORAGE_KEYS: Record<UserPreferenceKey, string> = {
   theme: 'theme',
+  // Unused: the colour theme and imported themes were introduced after this
+  // module, so they have never lived anywhere but the server.
+  lightColorTheme: '',
+  darkColorTheme: '',
+  importedThemes: '',
   userLanguage: 'userLanguage',
   tasksEnabled: 'tasks-enabled',
   projectSortOrder: 'claude-settings',

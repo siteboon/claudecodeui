@@ -201,6 +201,71 @@
       "label": "Темная тема",
       "description": "Переключение между светлой и темной темами"
     },
+    "colorTheme": {
+      "description": "Одна палитра для светлого режима и одна для тёмного",
+      "remove": "Удалить тему",
+      "removeConfirm": "Удалить {{name}} со всеми темами?",
+      "removeCancel": "Отмена",
+      "removeButton": "Удалить",
+      "importFailed": "Не удалось импортировать эту тему.",
+      "slots": {
+        "light": "Светлая",
+        "dark": "Тёмная",
+        "active": "Активна"
+      },
+      "list": {
+        "lightTitle": "Темы для светлого режима",
+        "darkTitle": "Темы для тёмного режима",
+        "lightOnly": "Только светлые: {{names}}",
+        "darkOnly": "Только тёмные: {{names}}"
+      },
+      "add": {
+        "button": "Добавить тему",
+        "title": "Добавить тему",
+        "description": "Установите цветовую тему VS Code из Open VSX или импортируйте свою.",
+        "close": "Закрыть",
+        "tabs": {
+          "browse": "Обзор Open VSX",
+          "import": "Импорт"
+        },
+        "browse": {
+          "recommended": "Рекомендуемые",
+          "downloadCount": "Самые популярные",
+          "timestamp": "Недавно обновлённые"
+        },
+        "search": {
+          "placeholder": "Поиск в Open VSX или ссылка на Marketplace / Open VSX…",
+          "results": "Результаты",
+          "sort": {
+            "label": "Сортировка",
+            "downloadCount": "Больше всего загрузок",
+            "rating": "Лучшие оценки",
+            "timestamp": "Недавно обновлённые",
+            "relevance": "Наиболее релевантные"
+          },
+          "downloads": "Загрузок: {{value}}",
+          "empty": "Цветовые темы по запросу «{{query}}» не найдены.",
+          "failed": "Поиск в Open VSX сейчас недоступен.",
+          "source": "Исходный код",
+          "install": "Установить",
+          "update": "Обновить",
+          "installed": "Установлено",
+          "installing": "Установка…",
+          "fromUrl": "Устанавливает {{id}} прямо по этой ссылке"
+        },
+        "file": {
+          "label": "Перетащите файлы тем сюда",
+          "description": "Цветовые темы .json или целые расширения .vsix",
+          "button": "Выбрать файлы"
+        },
+        "json": {
+          "label": "JSON темы",
+          "description": "Вставьте содержимое файла *-color-theme.json из VS Code"
+        },
+        "submit": "Добавить тему",
+        "notice": "Поиск и загрузка идут через ваш сервер CloudCLI; значки расширений загружаются с open-vsx.org."
+      }
+    },
     "theme": {
       "label": "Тема",
       "description": "Выберите светлое или тёмное оформление либо следуйте настройке операционной системы",

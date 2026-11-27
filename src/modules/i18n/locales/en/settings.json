@@ -227,6 +227,71 @@
       "label": "Dark Mode",
       "description": "Toggle between light and dark themes"
     },
+    "colorTheme": {
+      "description": "One palette for light mode and one for dark mode",
+      "remove": "Remove theme",
+      "removeConfirm": "Remove {{name}} and all its themes?",
+      "removeCancel": "Cancel",
+      "removeButton": "Remove",
+      "importFailed": "That theme could not be imported.",
+      "slots": {
+        "light": "Light",
+        "dark": "Dark",
+        "active": "Showing"
+      },
+      "list": {
+        "lightTitle": "Themes for light mode",
+        "darkTitle": "Themes for dark mode",
+        "lightOnly": "Light only: {{names}}",
+        "darkOnly": "Dark only: {{names}}"
+      },
+      "add": {
+        "button": "Add theme",
+        "title": "Add a theme",
+        "description": "Install a VS Code colour theme from Open VSX, or import your own.",
+        "close": "Close",
+        "tabs": {
+          "browse": "Browse Open VSX",
+          "import": "Import"
+        },
+        "browse": {
+          "recommended": "Recommended",
+          "downloadCount": "Most popular",
+          "timestamp": "Recently updated"
+        },
+        "search": {
+          "placeholder": "Search Open VSX or paste a Marketplace / Open VSX link…",
+          "results": "Results",
+          "sort": {
+            "label": "Sort",
+            "downloadCount": "Most downloaded",
+            "rating": "Top rated",
+            "timestamp": "Recently updated",
+            "relevance": "Most relevant"
+          },
+          "downloads": "{{value}} downloads",
+          "empty": "No colour themes found for “{{query}}”.",
+          "failed": "Open VSX search is unavailable right now.",
+          "source": "Source code",
+          "install": "Install",
+          "update": "Update",
+          "installed": "Installed",
+          "installing": "Installing…",
+          "fromUrl": "Installs {{id}} straight from this link"
+        },
+        "file": {
+          "label": "Drop theme files here",
+          "description": ".json colour themes or whole .vsix extensions",
+          "button": "Choose files"
+        },
+        "json": {
+          "label": "Theme JSON",
+          "description": "Paste the contents of a VS Code *-color-theme.json file"
+        },
+        "submit": "Add theme",
+        "notice": "Searches and downloads go through your CloudCLI server; extension icons load from open-vsx.org."
+      }
+    },
     "theme": {
       "label": "Theme",
       "description": "Choose a light or dark appearance, or follow your operating system",

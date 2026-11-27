@@ -227,6 +227,71 @@
       "label": "Mode Gelap",
       "description": "Beralih antara tema terang dan gelap"
     },
+    "colorTheme": {
+      "description": "Satu palet untuk mode terang dan satu untuk mode gelap",
+      "remove": "Hapus tema",
+      "removeConfirm": "Hapus {{name}} beserta semua temanya?",
+      "removeCancel": "Batal",
+      "removeButton": "Hapus",
+      "importFailed": "Tema tersebut tidak dapat diimpor.",
+      "slots": {
+        "light": "Terang",
+        "dark": "Gelap",
+        "active": "Tampil"
+      },
+      "list": {
+        "lightTitle": "Tema untuk mode terang",
+        "darkTitle": "Tema untuk mode gelap",
+        "lightOnly": "Hanya terang: {{names}}",
+        "darkOnly": "Hanya gelap: {{names}}"
+      },
+      "add": {
+        "button": "Tambah tema",
+        "title": "Tambah tema",
+        "description": "Pasang tema warna VS Code dari Open VSX, atau impor milik Anda sendiri.",
+        "close": "Tutup",
+        "tabs": {
+          "browse": "Jelajahi Open VSX",
+          "import": "Impor"
+        },
+        "browse": {
+          "recommended": "Rekomendasi",
+          "downloadCount": "Terpopuler",
+          "timestamp": "Baru diperbarui"
+        },
+        "search": {
+          "placeholder": "Cari di Open VSX atau tempel tautan Marketplace / Open VSX…",
+          "results": "Hasil",
+          "sort": {
+            "label": "Urutkan",
+            "downloadCount": "Paling banyak diunduh",
+            "rating": "Rating tertinggi",
+            "timestamp": "Baru diperbarui",
+            "relevance": "Paling relevan"
+          },
+          "downloads": "{{value}} unduhan",
+          "empty": "Tidak ada tema warna untuk “{{query}}”.",
+          "failed": "Pencarian Open VSX sedang tidak tersedia.",
+          "source": "Kode sumber",
+          "install": "Pasang",
+          "update": "Perbarui",
+          "installed": "Terpasang",
+          "installing": "Memasang…",
+          "fromUrl": "Memasang {{id}} langsung dari tautan ini"
+        },
+        "file": {
+          "label": "Letakkan file tema di sini",
+          "description": "Tema warna .json atau ekstensi .vsix lengkap",
+          "button": "Pilih berkas"
+        },
+        "json": {
+          "label": "JSON tema",
+          "description": "Tempel isi berkas *-color-theme.json VS Code"
+        },
+        "submit": "Tambah tema",
+        "notice": "Pencarian dan unduhan melalui server CloudCLI Anda; ikon ekstensi dimuat dari open-vsx.org."
+      }
+    },
     "theme": {
       "label": "Tema",
       "description": "Pilih tampilan terang atau gelap, atau ikuti sistem operasi Anda",

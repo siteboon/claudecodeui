@@ -202,6 +202,71 @@
       "label": "深色模式",
       "description": "切換淺色和深色佈景主題"
     },
+    "colorTheme": {
+      "description": "為淺色模式與深色模式各選一套配色",
+      "remove": "移除佈景主題",
+      "removeConfirm": "刪除 {{name}} 及其所有主題？",
+      "removeCancel": "取消",
+      "removeButton": "刪除",
+      "importFailed": "無法匯入該佈景主題。",
+      "slots": {
+        "light": "淺色",
+        "dark": "深色",
+        "active": "目前顯示"
+      },
+      "list": {
+        "lightTitle": "淺色模式主題",
+        "darkTitle": "深色模式主題",
+        "lightOnly": "僅淺色：{{names}}",
+        "darkOnly": "僅深色：{{names}}"
+      },
+      "add": {
+        "button": "新增佈景主題",
+        "title": "新增佈景主題",
+        "description": "從 Open VSX 安裝 VS Code 色彩主題，或匯入你自己的主題。",
+        "close": "關閉",
+        "tabs": {
+          "browse": "瀏覽 Open VSX",
+          "import": "匯入"
+        },
+        "browse": {
+          "recommended": "推薦",
+          "downloadCount": "最受歡迎",
+          "timestamp": "最近更新"
+        },
+        "search": {
+          "placeholder": "搜尋 Open VSX，或貼上 Marketplace / Open VSX 連結…",
+          "results": "搜尋結果",
+          "sort": {
+            "label": "排序",
+            "downloadCount": "下載最多",
+            "rating": "評分最高",
+            "timestamp": "最近更新",
+            "relevance": "最相關"
+          },
+          "downloads": "{{value}} 次下載",
+          "empty": "找不到符合「{{query}}」的配色佈景主題。",
+          "failed": "目前無法使用 Open VSX 搜尋。",
+          "source": "原始碼",
+          "install": "安裝",
+          "update": "更新",
+          "installed": "已安裝",
+          "installing": "正在安裝…",
+          "fromUrl": "直接從此連結安裝 {{id}}"
+        },
+        "file": {
+          "label": "將主題檔案拖放到這裡",
+          "description": ".json 色彩主題或完整的 .vsix 擴充功能",
+          "button": "選擇檔案"
+        },
+        "json": {
+          "label": "佈景主題 JSON",
+          "description": "貼上 VS Code *-color-theme.json 檔案的內容"
+        },
+        "submit": "新增佈景主題",
+        "notice": "搜尋與下載會透過你的 CloudCLI 伺服器進行；擴充功能圖示從 open-vsx.org 載入。"
+      }
+    },
     "theme": {
       "label": "佈景主題",
       "description": "選擇淺色或深色外觀，或跟隨作業系統設定",
