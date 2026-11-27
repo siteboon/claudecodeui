@@ -172,6 +172,12 @@ describe('chat_run_started', () => {
     assert.equal(lastSeqRef.current.get('viewed-session'), 2);
   });
 
+  it('补读断线期间已结束而没有看到开始通知的轮次', () => {
+    const { dispatch, reloads } = renderHandlers();
+    dispatch({ kind: 'chat_subscribed', sessionId: 'viewed-session', isProcessing: false, runId: 'completed-run' });
+    assert.deepEqual(reloads, [{ sessionId: 'viewed-session', allowNetwork: true }]);
+  });
+
   it('接受断线期间启动的新轮回放，即使新轮序号已经超过旧游标', () => {
     const { dispatch, lastSeqRef, resubscribed } = renderHandlers({
       initialLastSeq: [['viewed-session', 10]],
