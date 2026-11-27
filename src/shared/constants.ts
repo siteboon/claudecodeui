@@ -28,6 +28,13 @@ export const CLOUDCLI_WORDMARK_FONT_FAMILY =
 
 // ---------------------------
 
+//----------------- PAGE TITLE NOTIFICATIONS ------------
+
+/** Marker shared by chat completion notifications and workspace title synchronization. */
+export const COMPLETION_TITLE_INDICATOR = '[Done]';
+
+// ---------------------------
+
 //----------------- APPLICATION VERSION ------------
 
 /**
