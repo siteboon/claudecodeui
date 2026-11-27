@@ -93,6 +93,8 @@ function ChatInterface({
   // on every sequenced frame, read whenever a `chat.subscribe` is sent so the
   // server replays only the events this client actually missed.
   const lastSeqRef = useRef(new Map<string, number>());
+  // 序号每轮从零开始，重连时和轮次 ID 一起发送才能续传正确的内容。
+  const lastRunIdRef = useRef(new Map<string, string>());
 
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
@@ -178,6 +180,7 @@ function ChatInterface({
     resetStreamingState,
     statusCheckSentAtRef,
     lastSeqRef,
+    lastRunIdRef,
     sessionStore,
   });
 
@@ -332,6 +335,7 @@ function ChatInterface({
       sessions: [{
         sessionId: selectedSession.id,
         lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
+        runId: lastRunIdRef.current.get(selectedSession.id) ?? null,
       }],
     });
   }, [isActive, requestLatestMessages, selectedProject, selectedSession, sendMessage]);
@@ -366,6 +370,7 @@ function ChatInterface({
     streamTimerRef,
     accumulatedStreamRef,
     lastSeqRef,
+    lastRunIdRef,
     statusCheckSentAtRef,
     onSessionProcessing,
     onSessionIdle,

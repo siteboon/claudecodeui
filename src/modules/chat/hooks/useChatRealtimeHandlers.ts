@@ -35,6 +35,8 @@ type UseChatRealtimeHandlersArgs = {
    * frame; read wherever a `chat.subscribe` is sent (session open, reconnect).
    */
   lastSeqRef: MutableRefObject<Map<string, number>>;
+  /** 记录游标对应的运行轮次，用于重连补收消息。 */
+  lastRunIdRef?: MutableRefObject<Map<string, string>>;
   /** When each session's `chat.subscribe` was last sent; guards stale idle acks. */
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
   onSessionProcessing?: MarkSessionProcessing;
@@ -85,6 +87,7 @@ export function useChatRealtimeHandlers({
   streamTimerRef,
   accumulatedStreamRef,
   lastSeqRef,
+  lastRunIdRef,
   statusCheckSentAtRef,
   onSessionProcessing,
   onSessionIdle,
@@ -136,6 +139,16 @@ export function useChatRealtimeHandlers({
 
       const activeViewSessionId = activeViewSessionIdRef.current;
       const sid = (typeof msg.sessionId === 'string' && msg.sessionId) || activeViewSessionId;
+
+      if (sid && typeof msg.runId === 'string' && lastRunIdRef && lastRunIdRef.current.get(sid) !== msg.runId) {
+        lastRunIdRef.current.set(sid, msg.runId);
+        lastSeqRef.current.delete(sid);
+        if (sid === activeViewSessionId) {
+          if (streamTimerRef.current !== null) window.clearTimeout(streamTimerRef.current);
+          streamTimerRef.current = null;
+          accumulatedStreamRef.current = '';
+        }
+      }
 
       if (msg.kind === 'chat_run_started') {
         // A run that started somewhere other than this composer: the
@@ -198,7 +211,7 @@ export function useChatRealtimeHandlers({
             // server's run cursor can be below our stale one; reset and
             // resubscribe from 0 so missed early events still replay.
             const known = lastSeqRef.current.get(sid) ?? 0;
-            if (typeof msg.lastSeq === 'number' && Number.isFinite(msg.lastSeq) && msg.lastSeq < known) {
+            if (typeof msg.runId !== 'string' && typeof msg.lastSeq === 'number' && Number.isFinite(msg.lastSeq) && msg.lastSeq < known) {
               lastSeqRef.current.delete(sid);
               if (sid === activeViewSessionId && requestResubscribe) {
                 runStartedAckPendingRef.current.set(sid, Date.now());
@@ -547,6 +560,7 @@ export function useChatRealtimeHandlers({
     setPendingPermissionRequests,
     streamTimerRef,
     accumulatedStreamRef,
+    lastRunIdRef,
     lastSeqRef,
     statusCheckSentAtRef,
     onSessionProcessing,

@@ -117,6 +117,35 @@ test('a tab that subscribes to an idle session is not attached to its old run', 
   });
 });
 
+test('重连时旧轮的游标不会跳过新轮开头的事件', async () => {
+  await withIsolatedDatabase(async () => {
+    const previous = startAndCompleteRun(createFakeSocket());
+    const current = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: 'native-1',
+      connection: null,
+      userId: 1,
+    });
+    assert.ok(current);
+    for (const content of ['first', ' second']) {
+      current.writer.send({ kind: 'stream_delta', sessionId: 'native-1', content } as never);
+    }
+    const socket = createFakeSocket();
+    handleChatConnection(socket as never, { user: { id: 1 } } as never, {
+      runtime: { hasBackgroundWork: () => false, getPendingApprovalsForSession: () => [] } as never,
+    });
+    socket.emit('message', JSON.stringify({
+      type: 'chat.subscribe',
+      sessions: [{ sessionId: SESSION_ID, runId: previous.runId, lastSeq: previous.lastSeq }],
+    }));
+    await settle();
+
+    assert.equal(socket.frames[0]?.runId, current.runId);
+    assert.deepEqual(socket.frames.slice(1).map((frame) => frame.content), ['first', ' second']);
+  });
+});
+
 test('a completed run stays registered while its session still has background work', async () => {
   mock.timers.enable({ apis: ['setTimeout'] });
   try {

@@ -107,6 +107,8 @@ type UseChatSessionStateArgs = {
   statusCheckSentAtRef: MutableRefObject<Map<string, number>>;
   /** Highest live seq observed per session; sent as `lastSeq` on subscribe. */
   lastSeqRef: MutableRefObject<Map<string, number>>;
+  /** 记录游标对应的运行轮次，用于重连补收消息。 */
+  lastRunIdRef?: MutableRefObject<Map<string, string>>;
   sessionStore: SessionStore;
 };
 
@@ -205,6 +207,7 @@ export function useChatSessionState({
   resetStreamingState,
   statusCheckSentAtRef,
   lastSeqRef,
+  lastRunIdRef,
   sessionStore,
 }: UseChatSessionStateArgs) {
   const { t } = useTranslation('chat');
@@ -693,9 +696,10 @@ export function useChatSessionState({
       sessions: [{
         sessionId: selectedSession.id,
         lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
+        ...(lastRunIdRef ? { runId: lastRunIdRef.current.get(selectedSession.id) ?? null } : {}),
       }],
     });
-  }, [lastSeqRef, selectedProject, selectedSession, sendMessage, statusCheckSentAtRef, ws]);
+  }, [lastRunIdRef, lastSeqRef, selectedProject, selectedSession, sendMessage, statusCheckSentAtRef, ws]);
 
   // Main session loading effect — store-based.
   //

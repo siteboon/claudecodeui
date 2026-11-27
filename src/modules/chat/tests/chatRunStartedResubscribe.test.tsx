@@ -29,6 +29,7 @@ const renderHandlers = (options: HarnessOptions = {}) => {
   const streamed: string[] = [];
   const lastSeqRef = { current: new Map<string, number>(options.initialLastSeq) };
   const statusCheckSentAtRef = { current: new Map<string, number>() };
+  const lastRunIdRef = { current: new Map<string, string>() };
   const streamTimerRef = { current: null as number | null };
   const accumulatedStreamRef = { current: '' };
 
@@ -49,6 +50,7 @@ const renderHandlers = (options: HarnessOptions = {}) => {
       streamTimerRef,
       accumulatedStreamRef,
       lastSeqRef,
+      lastRunIdRef,
       statusCheckSentAtRef,
       onSessionProcessing: (sessionId, activity) => {
         if (sessionId) processing.push(sessionId);
@@ -168,6 +170,17 @@ describe('chat_run_started', () => {
     } as unknown as ServerEvent);
 
     assert.equal(lastSeqRef.current.get('viewed-session'), 2);
+  });
+
+  it('接受断线期间启动的新轮回放，即使新轮序号已经超过旧游标', () => {
+    const { dispatch, lastSeqRef, resubscribed } = renderHandlers({
+      initialLastSeq: [['viewed-session', 10]],
+    });
+    dispatch({ kind: 'chat_subscribed', sessionId: 'viewed-session', runId: 'new-run', isProcessing: true, lastSeq: 15 });
+    dispatch({ kind: 'stream_delta', sessionId: 'viewed-session', runId: 'new-run', seq: 1, content: '开头' });
+
+    assert.equal(lastSeqRef.current.get('viewed-session'), 1);
+    assert.deepEqual(resubscribed, []);
   });
 
   it('drops duplicate replayed deltas within the same run while still playing detached replays', () => {
