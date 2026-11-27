@@ -29,6 +29,8 @@ type Scripted = {
   end: () => void;
   released: () => boolean;
   stopped: string[];
+  /** Interrupt, stdin end and close, in the order the CLI saw them. */
+  events: string[];
   /** When set, stop_task is recorded but never answered. */
   stopHangs: boolean;
 };
@@ -39,12 +41,14 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
   let wake: (() => void) | null = null;
   let released = false;
   const stopped: string[] = [];
+  const events: string[] = [];
 
   const script: Scripted = {
     emit: (message) => { queue.push(message); wake?.(); },
     end: () => { queue.push(null); wake?.(); },
     released: () => released,
     stopped,
+    events,
     stopHangs: false,
   };
 
@@ -52,6 +56,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     void (async () => {
       for await (const _message of prompt) { /* the CLI reads its stdin */ }
       released = true;
+      events.push('stdin-ended');
     })();
 
     const iterator = (async function* () {
@@ -70,7 +75,11 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     })();
 
     return Object.assign(iterator, {
-      interrupt: async () => {},
+      interrupt: async () => {
+        // The SDK writes the request synchronously and drops it once stdin has ended.
+        events.push(released ? 'interrupt-dropped' : 'interrupt');
+      },
+      close: () => { events.push('closed'); },
       stopTask: async (taskId: string) => {
         stopped.push(taskId);
         if (script.stopHangs) await new Promise(() => {});
@@ -290,6 +299,7 @@ test('a new turn stops the tasks the held process still has going before letting
     await settle();
     assert.deepEqual(first.script.stopped, ['a1'], 'the held process is told to stop its agent');
     assert.equal(first.script.released(), true, 'and is then let go');
+    assert.deepEqual(first.script.events, ['interrupt', 'stdin-ended'], 'the interrupt reaches it before stdin ends');
     assert.deepEqual(second.script.stopped, [], 'the new process is untouched');
 
     first.script.emit(taskNotification('a1', 'toolu_agent', 'stopped'));
