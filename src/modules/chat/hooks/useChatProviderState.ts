@@ -516,7 +516,14 @@ export function useChatProviderState({
     ? getSessionSelectionKey(provider, selectedSessionId)
     : null;
   const selectedSessionKeyRef = useRef<string | null>(selectedSessionKey);
-  selectedSessionKeyRef.current = selectedSessionKey;
+  useLayoutEffect(() => {
+    if (selectedSessionKeyRef.current !== selectedSessionKey) {
+      // Returning to a session must not revive mutations from its earlier visit.
+      selectedSessionKeyRef.current = selectedSessionKey;
+      sessionModelMutationIdRef.current += 1;
+      sessionEffortMutationIdRef.current += 1;
+    }
+  }, [selectedSessionKey]);
 
   const activeSessionSelection = sessionSelection
     && selectedSessionId
