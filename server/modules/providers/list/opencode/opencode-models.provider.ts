@@ -301,11 +301,18 @@ export const OPENCODE_PREDEFINED_MODELS: ProviderModelsDefinition = {
   DEFAULT: 'opencode/gpt-5.6-terra',
 };
 
-/** Provider API keys OpenCode reads straight from the environment. */
+/**
+ * Provider API keys OpenCode reads straight from the environment. Include the
+ * keys recognized by auth status so connecting Wally keeps their models too.
+ */
 const OPENCODE_ENV_PROVIDER_IDS: Record<string, string> = {
   OPENCODE_API_KEY: 'opencode',
   ANTHROPIC_API_KEY: 'anthropic',
   OPENAI_API_KEY: 'openai',
+  GOOGLE_GENERATIVE_AI_API_KEY: 'google',
+  GROQ_API_KEY: 'groq',
+  OPENROUTER_API_KEY: 'openrouter',
+  WALLY_API_KEY: 'wally',
 };
 
 /**

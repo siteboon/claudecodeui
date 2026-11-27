@@ -17,6 +17,10 @@ const OPENCODE_ENV_KEYS = [
   'OPENCODE_API_KEY',
   'ANTHROPIC_API_KEY',
   'OPENAI_API_KEY',
+  'GOOGLE_GENERATIVE_AI_API_KEY',
+  'GROQ_API_KEY',
+  'OPENROUTER_API_KEY',
+  'WALLY_API_KEY',
   'OPENCODE_CONFIG',
   'OPENCODE_CONFIG_CONTENT',
   'OPENCODE_CONFIG_DIR',
@@ -921,3 +925,60 @@ test('OpenCode composes the provider prefix into session model ids', async () =>
     await rm(tempSessionsDirectory, { recursive: true, force: true });
   }
 });
+
+// Wally is discovered by the CLI; no static model IDs or prices are needed.
+for (const otherKey of ['OPENAI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY']) {
+  const providerId = {
+    OPENAI_API_KEY: 'openai',
+    GOOGLE_GENERATIVE_AI_API_KEY: 'google',
+    GROQ_API_KEY: 'groq',
+    OPENROUTER_API_KEY: 'openrouter',
+  }[otherKey]!;
+  test(`OpenCode keeps Wally and ${providerId} models with both environment keys`, async () => {
+    await withOpenCodeHome(
+      async () => {
+        process.env.WALLY_API_KEY = 'fake-wally-key';
+        process.env[otherKey] = 'fake-other-key';
+      },
+      async (adapter) => {
+        const catalog = await adapter.getSupportedModels();
+        assert.deepEqual(catalog.OPTIONS.map(option => option.value), [
+          'wally/test-model', `${providerId}/test-model`,
+        ]);
+      },
+      async () => ['wally/test-model', `${providerId}/test-model`, 'unconnected/test-model'],
+    );
+  });
+}
+
+test('OpenCode keeps Wally models beside an auth-store provider', async () => {
+  await withOpenCodeHome(
+    async (homeDir) => {
+      process.env.WALLY_API_KEY = 'fake-wally-key';
+      await writeOpenCodeAuth(homeDir, { anthropic: { type: 'api', key: 'fake-key' } });
+    },
+    async (adapter) => {
+      assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(option => option.value), [
+        'wally/test-model', 'anthropic/test-model',
+      ]);
+    },
+    async () => ['wally/test-model', 'anthropic/test-model', 'unconnected/test-model'],
+  );
+});
+
+for (const wallyKey of [undefined, '', '  \t ']) {
+  test(`OpenCode excludes Wally models with an unset or blank key (${JSON.stringify(wallyKey)})`, async () => {
+    await withOpenCodeHome(
+      async () => {
+        process.env.OPENAI_API_KEY = 'fake-openai-key';
+        if (wallyKey !== undefined) process.env.WALLY_API_KEY = wallyKey;
+      },
+      async (adapter) => {
+        assert.deepEqual((await adapter.getSupportedModels()).OPTIONS.map(option => option.value), [
+          'openai/test-model',
+        ]);
+      },
+      async () => ['wally/test-model', 'openai/test-model'],
+    );
+  });
+}
