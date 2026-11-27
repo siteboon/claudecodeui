@@ -144,18 +144,22 @@ export function ActionMenu({
     };
   }, [isOpen, portal, setMenuOpen]);
 
+  const focusMenuEdge = React.useCallback((edge: 'first' | 'last') => {
+    const menu = menuRef.current;
+    const items = menu?.querySelectorAll<HTMLButtonElement>(
+      '[role="menuitem"]:not([disabled]), [role="menuitemradio"]:not([disabled])',
+    );
+    const index = edge === 'last' ? (items?.length ?? 1) - 1 : 0;
+    (items?.[index] ?? menu)?.focus();
+  }, []);
+
   // Move focus into the menu on open and back to the trigger on a keyboard or
   // selection close, so keyboard and screen-reader navigation match the menu role.
   React.useEffect(() => {
     if (isOpen) {
       wasOpenRef.current = true;
       if (focusMenuOnOpenRef.current) {
-        const menu = menuRef.current;
-        const enabledItems = menu?.querySelectorAll<HTMLButtonElement>(
-          '[role="menuitem"]:not([disabled]), [role="menuitemradio"]:not([disabled])',
-        );
-        const itemIndex = focusMenuOnOpenRef.current === 'last' ? (enabledItems?.length ?? 1) - 1 : 0;
-        (enabledItems?.[itemIndex] ?? menu)?.focus();
+        focusMenuEdge(focusMenuOnOpenRef.current);
       }
       return;
     }
@@ -167,7 +171,7 @@ export function ActionMenu({
       }
       restoreFocusRef.current = false;
     }
-  }, [isOpen]);
+  }, [focusMenuEdge, isOpen]);
 
   const runItem = (item: ActionMenuItem) => {
     if (item.disabled || item.loading) {
@@ -311,8 +315,12 @@ export function ActionMenu({
         onKeyDown={(event) => {
           if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
           event.preventDefault();
-          if (isOpen) return;
-          focusMenuOnOpenRef.current = event.key === 'ArrowUp' ? 'last' : 'first';
+          const edge = event.key === 'ArrowUp' ? 'last' : 'first';
+          if (isOpen) {
+            focusMenuEdge(edge);
+            return;
+          }
+          focusMenuOnOpenRef.current = edge;
           toggleMenu();
         }}
         onClick={(event) => {

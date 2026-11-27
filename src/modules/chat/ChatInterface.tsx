@@ -159,6 +159,8 @@ function ChatInterface({
     currentProviderEffortOptions,
     currentProviderModel,
     currentProviderModelOptions,
+    sessionHasModelSelection,
+    sessionHasEffortSelection,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -310,6 +312,8 @@ function ChatInterface({
     cyclePermissionMode,
     currentProviderModel,
     currentProviderEffort,
+    sessionHasModelSelection,
+    sessionHasEffortSelection,
     isLoading: isProcessing,
     processingSessions,
     canAbortSession,
@@ -440,12 +444,17 @@ function ChatInterface({
     const scheduled = await scheduleMessage({
       content,
       scheduledFor,
-      options: { model: currentProviderModel, effort: currentProviderEffort, permissionMode },
+      options: {
+        ...(sessionHasModelSelection && { model: currentProviderModel }),
+        ...(sessionHasEffortSelection && { effort: currentProviderEffort }),
+        explicitModelAndEffort: true,
+        permissionMode,
+      },
     });
     if (scheduled) {
       setInput('');
     }
-  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, setInput]);
+  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, sessionHasEffortSelection, sessionHasModelSelection, setInput]);
 
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,

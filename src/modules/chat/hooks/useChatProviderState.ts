@@ -1315,6 +1315,8 @@ export function useChatProviderState({
     currentProviderEffortOptions,
     currentProviderModel,
     currentProviderModelOptions,
+    sessionHasModelSelection: sessionModel !== null,
+    sessionHasEffortSelection: activeSessionSelection?.effort != null,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,

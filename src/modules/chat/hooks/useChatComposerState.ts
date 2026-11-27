@@ -54,6 +54,8 @@ type UseChatComposerStateArgs = {
    */
   currentProviderModel: string;
   currentProviderEffort: string;
+  sessionHasModelSelection?: boolean;
+  sessionHasEffortSelection?: boolean;
   isLoading: boolean;
   processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
@@ -244,6 +246,8 @@ export function useChatComposerState({
   resolvePermissionModeForProvider,
   currentProviderModel,
   currentProviderEffort,
+  sessionHasModelSelection = true,
+  sessionHasEffortSelection = true,
   isLoading,
   processingSessions,
   canAbortSession,
@@ -758,8 +762,8 @@ export function useChatComposerState({
     const toolsSettings = getToolsSettings();
 
     return {
-      model: currentProviderModel,
-      effort: currentProviderEffort,
+      ...((!sessionKey || sessionHasModelSelection) && { model: currentProviderModel }),
+      ...((!sessionKey || sessionHasEffortSelection) && { effort: currentProviderEffort }),
       explicitModelAndEffort: true,
       permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
       toolsSettings,
@@ -773,6 +777,9 @@ export function useChatComposerState({
     provider,
     resolvePermissionModeForProvider,
     selectedSession,
+    sessionHasEffortSelection,
+    sessionHasModelSelection,
+    sessionKey,
   ]);
 
   // Read at send time through a ref: the map changes on every poll, and a
