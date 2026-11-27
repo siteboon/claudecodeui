@@ -34,7 +34,7 @@ test('git installations update from the application root', async () => {
   const result = await service.updateSystem();
 
   assert.deepEqual(calls, [[
-    'git checkout main && git pull && npm install',
+    'git checkout main && git pull && npm install --include=dev && npm run build',
     '/app/cloudcli',
     dependencies.environment,
   ]]);
