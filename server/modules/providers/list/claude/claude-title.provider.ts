@@ -91,7 +91,22 @@ function buildShortenSystemPrompt(): string {
 }
 
 /**
- * Loads only auth/env/model keys from `~/.claude/settings.json` while disabling
+ * The user's settings file, at the path the CLI itself reads. `CLAUDE_CONFIG_DIR`
+ * selects another profile, and the server forwards its whole env to every CLI it
+ * spawns, so the same override has to apply here — otherwise a title query runs
+ * with the default profile's auth and model while the session runs with the
+ * selected profile's.
+ */
+function userSettingsPath(): string {
+  const configDirectory = process.env.CLAUDE_CONFIG_DIR?.trim();
+  const baseDirectory = configDirectory && path.isAbsolute(configDirectory)
+    ? configDirectory
+    : path.join(os.homedir(), '.claude');
+  return path.join(baseDirectory, 'settings.json');
+}
+
+/**
+ * Loads only auth/env/model keys from the user's settings file while disabling
  * hooks and thinking, so `settingSources: []` keeps CLAUDE.md, hooks, and
  * plugins completely isolated from title generation.
  */
@@ -102,7 +117,7 @@ async function loadSanitizedUserSettings(): Promise<Settings> {
   };
 
   try {
-    const raw = await readFile(path.join(os.homedir(), '.claude', 'settings.json'), 'utf8');
+    const raw = await readFile(userSettingsPath(), 'utf8');
     const parsed = JSON.parse(raw) as AnyRecord;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return base;
@@ -122,6 +137,14 @@ async function loadSanitizedUserSettings(): Promise<Settings> {
     return base;
   }
 }
+
+// One emoji the way it is written, not just its base code point: a skin-tone
+// modifier, a variation selector, or a ZWJ-joined sequence all belong to the
+// pictograph and have to go with it. Removing only `\p{Extended_Pictographic}`
+// leaves the modifier behind, which is not a pictograph and survives the width check.
+const EMOJI_CLUSTER = String.raw`\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F|\u200D\p{Extended_Pictographic}(?:\p{Emoji_Modifier})?)*`;
+const LEADING_EMOJI = new RegExp(`^(?:\\s|${EMOJI_CLUSTER}|[•·:：-])+`, 'gu');
+const TRAILING_EMOJI = new RegExp(`(?:\\s|${EMOJI_CLUSTER}|[.。;；:：!！?？…])+$`, 'gu');
 
 /**
  * Strips formatting noise (tool XML leaks, prefixes, quotes, emojis, trailing
@@ -148,8 +171,8 @@ function cleanModelTitle(rawValue: string): string | null {
     previous = candidate;
     candidate = candidate
       .replace(/^["'“”‘’《》「」【】`]+|["'“”‘’《》「」【】`]+$/gu, '')
-      .replace(/^(?:\s|\p{Extended_Pictographic}|\uFE0F|\u200D|[•·:：-])+/gu, '')
-      .replace(/(?:\s|\p{Extended_Pictographic}|\uFE0F|\u200D|[.。;；:：!！?？…])+$/gu, '')
+      .replace(LEADING_EMOJI, '')
+      .replace(TRAILING_EMOJI, '')
       .replace(/\.{2,}$/u, '')
       .trim();
   }

@@ -1113,6 +1113,12 @@ const TITLE_TRAILING_BREAKS = /[\s,.:;!?，。：；、！？]+$/u;
 /**
  * Reports whether one character renders at double width, which is what makes an
  * eight-character budget in Chinese equal to sixteen Latin letters.
+ *
+ * The code-point ranges cover CJK and the emoji blocks, but emoji also live
+ * outside them — `⏱` is U+23F1, `⌚` U+231A, `⏳` U+23F3 — and those render two
+ * columns wide like the rest. `\p{Extended_Pictographic}` names them without
+ * another hand-maintained range list, so a title made of one of them is not
+ * measured a column short and left to overflow the sidebar.
  */
 function isWideTitleCharacter(char: string): boolean {
   const code = char.codePointAt(0) ?? 0;
@@ -1126,6 +1132,7 @@ function isWideTitleCharacter(char: string): boolean {
     || (code >= 0xff00 && code <= 0xff60)
     || (code >= 0xffe0 && code <= 0xffe6)
     || (code >= 0x1f300 && code <= 0x1faff)
+    || /\p{Extended_Pictographic}/u.test(char)
   );
 }
 

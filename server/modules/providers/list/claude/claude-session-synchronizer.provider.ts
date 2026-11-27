@@ -160,16 +160,27 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       };
     }
 
-    let sessionName = await this.extractSessionTitle(filePath, parsed.sessionId);
-    if (!sessionName) {
-      sessionName = nameMap.get(parsed.sessionId);
+    const extracted = await this.extractSessionTitle(filePath, parsed.sessionId);
+    if (!extracted) {
+      // No transcript title at all: the prompt text is all there is, and it is
+      // an automatic name.
+      return {
+        ...parsed,
+        sessionName: normalizeAutoSessionName(
+          nameMap.get(parsed.sessionId),
+          'Untitled Claude Session',
+        ),
+      };
     }
 
-    // These titles come from the transcript's own prompt text, which runs to
-    // whole paragraphs; cutting them here keeps the sidebar readable.
+    // A `custom-title` is a name the user typed through `/rename`, so it is kept
+    // exactly as entered. Only the automatic sources — the model's `ai-title`
+    // and the raw prompt — get the sidebar width cap.
     return {
       ...parsed,
-      sessionName: normalizeAutoSessionName(sessionName, 'Untitled Claude Session'),
+      sessionName: extracted.isManual
+        ? normalizeSessionName(extracted.title, 'Untitled Claude Session')
+        : normalizeAutoSessionName(extracted.title, 'Untitled Claude Session'),
     };
   }
 
@@ -181,12 +192,14 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * Claude writes `custom-title` immediately before `ai-title`, so a reverse
    * scan that returns its first hit would always lose the manual rename.
    *
-   * Returns undefined on a missing or unreadable file so sync can continue.
+   * `isManual` reports whether the title came from a `custom-title`, because
+   * the caller must not apply the automatic-name width cap to a name the user
+   * typed. Returns undefined on a missing or unreadable file so sync can continue.
    */
   private async extractSessionTitle(
     filePath: string,
     sessionId: string
-  ): Promise<string | undefined> {
+  ): Promise<{ title: string; isManual: boolean } | undefined> {
     try {
       const content = await readFile(filePath, 'utf8');
       const lines = content.split(/\r?\n/);
@@ -234,7 +247,11 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         }
       }
 
-      return foundCustomTitle || foundAiTitle || foundLastPrompt;
+      if (foundCustomTitle) {
+        return { title: foundCustomTitle, isManual: true };
+      }
+      const automatic = foundAiTitle || foundLastPrompt;
+      return automatic ? { title: automatic, isManual: false } : undefined;
     } catch {
       // Ignore missing/unreadable files so sync can continue.
     }

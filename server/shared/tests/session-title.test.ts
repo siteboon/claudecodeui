@@ -63,3 +63,12 @@ test('emoji prefixes count as double-width so fallback cuts never spill past the
   assert.equal(truncateSessionTitle('🔍 红包发放资质调研'), '🔍 红包发放资…');
   assert.ok(measureTitleWidth(truncateSessionTitle('🔍 红包发放资质调研')) <= SESSION_TITLE_MAX_WIDTH);
 });
+
+test('emoji outside the pictograph blocks still count as double-width', () => {
+  // U+23F1 (⏱) is an emoji but sits outside the ranges the width table used to
+  // list; measuring it as one column let a 17-unit title pass the fit check.
+  assert.equal(measureTitleWidth('⏱️ abcdefghijklmn'), 17);
+  assert.ok(measureTitleWidth(truncateSessionTitle('⏱️ abcdefghijklmn')) <= SESSION_TITLE_MAX_WIDTH);
+  // The variation selector that follows it stays zero-width.
+  assert.equal(measureTitleWidth('⏱️'), 2);
+});

@@ -138,6 +138,24 @@ test('title generation strips mode emojis, quotes, and prefixes without chopping
   assert.equal(seenSettings[0]?.disableAllHooks, true);
 });
 
+test('a skin-tone modifier leaves with its emoji instead of becoming the title', async () => {
+  // Stripping only the base pictograph left `🏽` behind, which is not an emoji
+  // and so passed the width check as the start of the title.
+  const title = await generateClaudeSessionTitle('修复登录失败的问题', {
+    runPrompt: async () => '👍🏽 Fix login',
+  });
+
+  assert.equal(title, 'Fix login');
+});
+
+test('a ZWJ-joined emoji leaves as one cluster', async () => {
+  const title = await generateClaudeSessionTitle('修复登录失败的问题', {
+    runPrompt: async () => '👨‍👩‍👧 Family calendar',
+  });
+
+  assert.equal(title, 'Family calendar');
+});
+
 test('a Chinese message under ten characters still gets an AI title when its width exceeds the greeting floor', async () => {
   let called = 0;
   const title = await generateClaudeSessionTitle('帮我看看这个怎么修', {
