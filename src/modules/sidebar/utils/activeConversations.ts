@@ -7,11 +7,12 @@ import { getSessionName, getSessionTime } from '@/modules/sidebar/utils/sidebarP
 const RECENT_ACTIVITY_WINDOW_MS = 60 * 60 * 1000;
 
 /**
- * When each session joined the Active list during this page load. Rows join as
- * they become active but only leave on a reload, and keep the order they joined
- * in, so the list never reorders or shrinks under the pointer.
+ * Each admitted session's place in the Active list for this page load, higher
+ * first. Rows join as they become active but only leave on a reload, and keep
+ * their rank, so the list never reorders or shrinks under the pointer.
  */
-const joinedAtBySessionId = new Map<string, number>();
+const rankBySessionId = new Map<string, number>();
+let nextRank = 0;
 
 /** Sessions running, waiting on the user or used within the last hour, across every project, newest to join first. */
 export function getActiveConversations(
@@ -25,20 +26,21 @@ export function getActiveConversations(
     lastActivity: getSessionTime(session),
   })));
 
-  for (const { session, lastActivity } of rows) {
-    const isActive = activeSessions.has(session.id)
-      || attentionSessionIds.has(session.id)
-      || now - new Date(lastActivity).getTime() < RECENT_ACTIVITY_WINDOW_MS;
-    if (isActive && !joinedAtBySessionId.has(session.id)) {
-      joinedAtBySessionId.set(session.id, now);
-    }
-  }
+  const isActive = ({ session, lastActivity }: (typeof rows)[number]) => activeSessions.has(session.id)
+    || attentionSessionIds.has(session.id)
+    || now - new Date(lastActivity).getTime() < RECENT_ACTIVITY_WINDOW_MS;
 
-  const joinedAt = (sessionId: string) => joinedAtBySessionId.get(sessionId) ?? 0;
+  // A batch that joins together (the whole list on page load) is ranked once by
+  // activity, oldest first, so its most recent session lands on top.
+  rows
+    .filter((row) => !rankBySessionId.has(row.session.id) && isActive(row))
+    .sort((a, b) => a.lastActivity.localeCompare(b.lastActivity))
+    .forEach(({ session }) => rankBySessionId.set(session.id, nextRank++));
+
+  const rank = (sessionId: string) => rankBySessionId.get(sessionId) ?? -1;
   return rows
-    .filter(({ session }) => joinedAtBySessionId.has(session.id))
-    // Rows that joined together (on page load) fall back to their last activity.
-    .sort((a, b) => joinedAt(b.session.id) - joinedAt(a.session.id) || b.lastActivity.localeCompare(a.lastActivity))
+    .filter(({ session }) => rankBySessionId.has(session.id))
+    .sort((a, b) => rank(b.session.id) - rank(a.session.id))
     .map(({ project, session, lastActivity }) => ({
       sessionId: session.id,
       provider: session.__provider,

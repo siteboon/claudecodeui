@@ -136,18 +136,31 @@ export default function SidebarRecentConversations({
   const visibleConversations = isPinnedList || !pins || !excludePinned
     ? conversations
     : conversations.filter((conversation) => !pins.pinnedIds.has(conversation.sessionId));
-  // Status never moves a row in Active or Pinned, so each header says how many need a reply.
-  const needsReplyCount = !isRecentList
+  // Status never moves a row in Active or Pinned, so each header says how many need attention.
+  const attentionCount = !isRecentList
     ? visibleConversations.filter((conversation) => (
       sessionActions.attentionSessionIds.has(conversation.sessionId) && String(selectedSession?.id ?? '') !== conversation.sessionId
     )).length
     : 0;
+  // Every state keeps the header: in the date view it holds the only toggle back to projects.
+  const withHeader = (content: ReactNode) => (
+    <div data-testid={`${listKind}-conversations-list`}>
+      <SidebarSectionHeader
+        label={title ?? t('recent.title', 'Recent')}
+        count={!isRecentList ? visibleConversations.length : excludePinned ? Math.max(0, total - (pins?.sessions.length ?? 0)) : total}
+        note={attentionCount > 0 ? t('sections.needsAttention', { count: attentionCount, defaultValue: '{{count}} need attention' }) : undefined}
+        action={headerAction}
+      />
+      {content}
+    </div>
+  );
+
   if (isLoading && conversations.length === 0) {
-    return <RecentConversationSkeleton />;
+    return withHeader(<RecentConversationSkeleton />);
   }
 
   if (hasError && conversations.length === 0) {
-    return (
+    return withHeader(
       <div className="px-4 py-10 text-center">
         <MessageSquare className="mx-auto mb-3 h-6 w-6 text-muted-foreground" />
         <p className="text-sm font-medium text-foreground">
@@ -156,16 +169,17 @@ export default function SidebarRecentConversations({
         <Button variant="ghost" size="sm" className="mt-2" onClick={onRetry}>
           {t('buttons.retry', { ns: 'common', defaultValue: 'Try again' })}
         </Button>
-      </div>
+      </div>,
     );
   }
 
   if (!isPinnedList && excludePinned && pins && pins.sessions.length > 0 && visibleConversations.length === 0 && !hasMore) {
-    return null;
+    // Active disappears when Pinned holds all its rows; Recent keeps its header and toggle.
+    return isRecentList ? withHeader(null) : null;
   }
 
   if (conversations.length === 0) {
-    return (
+    return withHeader(
       <div className="px-4 py-10 text-center">
         <MessageSquare className="mx-auto mb-3 h-6 w-6 text-muted-foreground" />
         <p className="text-sm font-medium text-foreground">
@@ -174,19 +188,12 @@ export default function SidebarRecentConversations({
         <p className="mt-1 text-xs text-muted-foreground">
           {t('recent.emptyDescription', 'Your most recently updated conversations will appear here.')}
         </p>
-      </div>
+      </div>,
     );
   }
 
-  return (
-    <div data-testid={`${listKind}-conversations-list`}>
-      <SidebarSectionHeader
-        label={title ?? t('recent.title', 'Recent')}
-        count={isRecentList && excludePinned ? Math.max(0, total - (pins?.sessions.length ?? 0)) : visibleConversations.length}
-        note={needsReplyCount > 0 ? t('sections.needsReply', { count: needsReplyCount, defaultValue: '{{count}} needs reply' }) : undefined}
-        action={headerAction}
-      />
-
+  return withHeader(
+    <>
       <div className="space-y-0.5">
         {visibleConversations.map((conversation) => {
           const isSelected = String(selectedSession?.id ?? '') === conversation.sessionId;
@@ -299,6 +306,6 @@ export default function SidebarRecentConversations({
           </Button>
         </div>
       )}
-    </div>
+    </>,
   );
 }

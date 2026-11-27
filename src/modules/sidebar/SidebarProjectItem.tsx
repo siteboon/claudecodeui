@@ -186,7 +186,7 @@ function SidebarProjectItem({
           <div className="relative bg-background">
             <button
               type="button"
-              className="flex h-[34px] w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors hover:bg-accent/50 max-md:h-11 [@media(hover:none)]:pr-[4.25rem]"
+              className="flex h-[34px] w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors hover:bg-accent/50 group-focus-within:pr-[4.25rem] group-hover:pr-[4.25rem] max-md:h-11 [@media(hover:none)]:pr-[4.25rem]"
               onClick={toggleProject}
               aria-expanded={isExpanded}
               title={project.fullPath}
@@ -243,7 +243,9 @@ function SidebarProjectItem({
                     onSelect: toggleStarProject,
                   },
                   { key: 'rename', label: t('actions.rename'), icon: Edit3, onSelect: () => onStartEditingProject(project) },
-                  { key: 'select', label: t('sessions.select'), icon: CheckSquare, onSelect: startSelectingSessions },
+                  ...(selectedSessionIds === null
+                    ? [{ key: 'select', label: t('sessions.select'), icon: CheckSquare, onSelect: startSelectingSessions }]
+                    : []),
                   {
                     key: 'delete',
                     label: t('projects.deleteProject'),

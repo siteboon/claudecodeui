@@ -248,7 +248,7 @@ test.each(['project-session-tree', 'pinned-sessions-section'])('renaming a pinne
   assert.ok(within(list).getByRole('textbox'));
 });
 
-test('a pinned session that is also active shows only under Pinned, which counts it as needing a reply', async () => {
+test('a pinned session that is also active shows only under Pinned, which counts it as needing attention', async () => {
   // Ids of their own: Active remembers sessions for the page load, i.e. across tests here.
   const both = conversation('pinned-and-active'), onlyActive = conversation('only-active');
   const projects: Project[] = [{ ...PROJECTS[0], sessions: [
@@ -262,7 +262,7 @@ test('a pinned session that is also active shows only under Pinned, which counts
   render(<SessionPinsProvider projects={projects}><SidebarContent {...props} /></SessionPinsProvider>);
   const pinned = await screen.findByTestId('pinned-sessions-section');
   assert.ok(within(pinned).getByText(both.sessionTitle));
-  assert.ok(within(pinned).getByText(/needs reply/));
+  assert.ok(within(pinned).getByText(/need attention/));
   const active = screen.getByTestId('active-conversations-list');
   assert.equal(within(active).queryByText(both.sessionTitle), null);
   assert.ok(within(active).getByText(onlyActive.sessionTitle));

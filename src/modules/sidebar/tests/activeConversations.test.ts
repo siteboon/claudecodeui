@@ -51,3 +51,10 @@ test('a session that becomes active joins at the top, and nothing leaves until r
   const later = new Date(NOW.getTime() + 60 * 60_000);
   assert.deepEqual(ids(listProps(sessions, { currentTime: later, activeSessions: new Set(['c']) })), ['c', 'a', 'b']);
 });
+
+test('new activity on a row that joined with others never moves it', () => {
+  const props = (b: ProjectSession) => listProps([session('a', minutesAgo(5)), b]);
+  assert.deepEqual(ids(props(session('b', minutesAgo(10)))), ['a', 'b']);
+
+  assert.deepEqual(ids(props(session('b', minutesAgo(0)))), ['a', 'b']);
+});

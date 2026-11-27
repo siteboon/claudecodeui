@@ -196,6 +196,7 @@
   },
   "sections": {
     "active": "Active",
-    "needsReply": "{{count}} needs reply"
+    "needsAttention_one": "{{count}} needs attention",
+    "needsAttention_other": "{{count}} need attention"
   }
 }

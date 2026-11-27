@@ -1,8 +1,9 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { Archive, Clock, Folder, FolderPlus, FolderTree, MessageSquare, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button, LLMProviderLogo, ScrollArea } from '@/shared/ui';
+import { getPageTitle } from '@/shared/utils';
 import type { LLMProvider, ArchivedProjectListItem, ArchivedSessionListItem, ConversationSearchResults, Project, RecentConversationListItem, ReleaseInfo, SearchProgress, SidebarProjectListProps, SidebarSearchMode } from '@/shared/types';
 import { formatCompactAge, getAllSessions } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { getActiveConversations } from '@/modules/sidebar/utils/activeConversations';
@@ -154,7 +155,7 @@ export default function SidebarContent({
   onClearSearchFilter,
   searchMode,
   onSearchModeChange,
-  conversationResults,
+  conversationResults: latestConversationResults,
   isSearching,
   searchProgress,
   onRestoreArchivedProject,
@@ -179,6 +180,8 @@ export default function SidebarContent({
 }: SidebarContentProps) {
   // One search box covers both views: project matches first, then hits in conversation titles and contents.
   const showConversationSearch = searchMode !== 'archived' && searchFilter.trim().length >= 2;
+  // Results for an earlier query stay hidden while the debounced search for the current one starts.
+  const conversationResults = latestConversationResults?.query === searchFilter.trim() ? latestConversationResults : null;
   const hasSearchResults = Boolean(
     conversationResults
     && (conversationResults.titleResults.length > 0 || conversationResults.results.length > 0),
@@ -187,8 +190,14 @@ export default function SidebarContent({
   const visibleArchivedItemsCount = archivedProjects.length + archivedSessions.length;
   const isRenamingOnMobile = isMobile && projectListProps.activeRename !== null;
   const { selectedProject, onNewSession } = projectListProps;
+  const pageTitle = getPageTitle(selectedProject, projectListProps.selectedSession);
+
+  useEffect(() => {
+    document.title = pageTitle;
+  }, [pageTitle]);
   const showActiveSessions = searchMode !== 'archived' && !searchFilter.trim();
-  const activeConversations = showActiveSessions ? getActiveConversations(projectListProps, t) : [];
+  // Computed on every render so sessions are admitted even while Active is hidden.
+  const activeConversations = getActiveConversations(projectListProps, t);
   const hasProjectMatches = projectListProps.filteredProjects.length > 0;
 
   // The date view (the Recent list) and the project tree trade places from one
@@ -229,7 +238,7 @@ export default function SidebarContent({
       />
 
       <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-2.5 md:py-2 [&>div]:[scrollbar-color:transparent_transparent] [&>div]:[scrollbar-width:thin] hover:[&>div]:[scrollbar-color:hsl(var(--muted-foreground)/0.35)_transparent]">
-        {activeConversations.length > 0 && (
+        {showActiveSessions && activeConversations.length > 0 && (
           <div className="mb-5 empty:hidden">
             <SidebarRecentConversations
               listKind="active"

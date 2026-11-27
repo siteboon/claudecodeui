@@ -119,7 +119,7 @@ function SidebarSessionItem({
         aria-disabled={isSelecting && !isSelectable ? true : undefined}
         className={cn(
           buttonVariants({ variant: 'ghost' }),
-          'h-[34px] w-full justify-start rounded-lg px-2.5 text-left font-normal max-md:h-11 [@media(hover:none)]:pr-9',
+          'h-[34px] w-full justify-start rounded-lg px-2.5 text-left font-normal max-md:h-11 group-hover:pr-9 [@media(hover:none)]:pr-9',
           isSelected ? 'bg-accent' : 'hover:bg-accent/50',
           isChecked && 'bg-primary/10',
         )}
