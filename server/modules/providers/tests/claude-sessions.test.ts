@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import nodeFs from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -1888,6 +1888,94 @@ test('buildLookupMap skips rows with non-string key or value', async () => {
 });
 
 // ---------------------------------------------------------------------------
+test('Desktop forks keep separate session paths and show only linked inherited turns', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-desktop-fork-'));
+  const restoreHome = patchHomeDir(tempRoot);
+  const project = path.join(tempRoot, '.claude', 'projects', 'demo');
+  const parentId = '10000000-0000-4000-8000-000000000001';
+  const forkId = '10000000-0000-4000-8000-000000000002';
+  const parentPath = path.join(project, `${parentId}.jsonl`);
+  const forkPath = path.join(project, `${forkId}.jsonl`);
+  const row = (sessionId: string, uuid: string, parentUuid: string | null, role: 'user' | 'assistant', text: string) => ({
+    sessionId, uuid, parentUuid, type: role, cwd: project, isSidechain: false,
+    timestamp: '2026-01-01T00:00:00.000Z', message: { role, content: [{ type: 'text', text }] },
+  });
+  const sharedPrompt = row(parentId, 'shared-user', null, 'user', 'Shared prompt');
+  const sharedReply = row(parentId, 'shared-reply', 'shared-user', 'assistant', 'Shared reply');
+  const originalReply = row(parentId, 'parent-reply', 'shared-reply', 'assistant', 'Original ending');
+  const unrelated = row(parentId, 'unrelated', null, 'assistant', 'Unlinked copied row');
+  const forkPrompt = row(forkId, 'fork-user', 'shared-reply', 'user', 'Fork prompt');
+  const forkReply = row(forkId, 'fork-reply', 'fork-user', 'assistant', 'Fork ending');
+  try {
+    await mkdir(project, { recursive: true });
+    const writeRows = (filePath: string, rows: object[]) =>
+      writeFile(filePath, rows.map((entry) => JSON.stringify(entry)).join('\n') + '\n');
+    await writeRows(parentPath, [sharedPrompt, sharedReply, originalReply]);
+    await writeRows(forkPath, [sharedPrompt, sharedReply, unrelated]);
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new ClaudeSessionSynchronizer();
+      // Simulate the index already corrupted by an older release, with both files
+      // older than the incremental scan cursor.
+      sessionsDb.createSession(parentId, 'claude', project, 'Original', undefined, undefined, forkPath);
+      assert.equal(await synchronizer.synchronizeFile(forkPath), null);
+      await writeRows(forkPath, [
+        sharedPrompt, sharedReply, unrelated, forkPrompt, forkReply,
+        { type: 'custom-title', sessionId: forkId, customTitle: 'Desktop fork' },
+      ]);
+      await synchronizer.synchronize(new Date('2100-01-01T00:00:00.000Z'));
+      assert.equal(sessionsDb.getSessionById(parentId)?.jsonl_path, parentPath);
+      assert.equal(sessionsDb.getSessionById(forkId)?.jsonl_path, forkPath);
+      assert.equal(sessionsDb.getSessionById(forkId)?.custom_name, 'Desktop fork');
+      const provider = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+      const text = async (id: string) => (await provider.fetchHistory(id)).messages
+        .filter((message) => message.kind === 'text')
+        .map((message) => message.content);
+      assert.deepEqual(await text(parentId), ['Shared prompt', 'Shared reply', 'Original ending']);
+      assert.deepEqual(await text(forkId), ['Shared prompt', 'Shared reply', 'Fork prompt', 'Fork ending']);
+      // If the original file is gone, the stale parent row must never keep
+      // claiming a transcript that the fork now owns.
+      await rm(parentPath);
+      sessionsDb.createSession(parentId, 'claude', project, 'Original', undefined, undefined, forkPath);
+      await synchronizer.synchronize(new Date('2100-01-01T00:00:00.000Z'));
+      assert.equal(sessionsDb.getSessionById(parentId)?.jsonl_path, null);
+      assert.equal(sessionsDb.getSessionById(forkId)?.jsonl_path, forkPath);
+
+    });
+  } finally {
+    restoreHome();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('incremental sync indexes a Desktop fork when its first own row is appended', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-desktop-fork-scan-'));
+  const restoreHome = patchHomeDir(tempRoot);
+  const project = path.join(tempRoot, '.claude', 'projects', 'demo');
+  const parentId = '10000000-0000-4000-8000-000000000011';
+  const forkId = '10000000-0000-4000-8000-000000000012';
+  const forkPath = path.join(project, `${forkId}.jsonl`);
+  const copiedRow = JSON.stringify({ type: 'user', sessionId: parentId, cwd: project });
+  try {
+    await mkdir(project, { recursive: true });
+    await writeFile(forkPath, copiedRow + '\n');
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new ClaudeSessionSynchronizer();
+      assert.equal(await synchronizer.synchronize(), 0);
+      const cursor = new Date(Date.now() + 5_000);
+      const modified = new Date(cursor.getTime() + 5_000);
+      const firstOwnRow = JSON.stringify({ type: 'user', sessionId: forkId, cwd: project });
+      await writeFile(forkPath, [copiedRow, firstOwnRow, ''].join('\n'));
+      await utimes(forkPath, modified, modified);
+      assert.equal(await synchronizer.synchronize(cursor), 1);
+      assert.equal(sessionsDb.getSessionById(forkId)?.jsonl_path, forkPath);
+      assert.equal(sessionsDb.getSessionById(parentId), null);
+    });
+  } finally {
+    restoreHome();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 // extractSessionTitle — tested via synchronizeFile
 // ---------------------------------------------------------------------------
 

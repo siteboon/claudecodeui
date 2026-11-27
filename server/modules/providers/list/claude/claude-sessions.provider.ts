@@ -478,6 +478,9 @@ function replaceLaunchToolResultContent(message: AnyRecord, replacement: string)
  */
 async function readTranscriptRows(jsonlPath: string, providerSessionId: string): Promise<AnyRecord[]> {
   const rows: AnyRecord[] = [];
+  const inherited = new Map<string, AnyRecord>();
+  const orderedRows: AnyRecord[] = [];
+  const canInherit = path.basename(jsonlPath, '.jsonl') === providerSessionId;
   const fileStream = fs.createReadStream(jsonlPath);
   const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
@@ -487,15 +490,40 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
     }
     try {
       const entry = JSON.parse(line) as AnyRecord;
-      if (entry.sessionId === providerSessionId && !isClaudeNonTurnMessageRow(entry)) {
+      if (isClaudeNonTurnMessageRow(entry)) {
+        continue;
+      }
+      if (entry.sessionId === providerSessionId) {
         rows.push(entry);
+        orderedRows.push(entry);
+      } else if (canInherit && entry.sessionId && typeof entry.uuid === 'string') {
+        inherited.set(entry.uuid, entry);
+        orderedRows.push(entry);
       }
     } catch {
       // A row can be half-written while the CLI is streaming into the file.
     }
   }
 
-  return rows;
+  if (!inherited.size || !rows.length) {
+    return rows;
+  }
+
+  // Only carry forward copied ancestors actually referenced by the fork.
+  const selected = new Set(rows);
+  const ownIds = new Set(rows.map((row) => row.uuid).filter(Boolean));
+  for (const row of rows) {
+    let parent = row.parentUuid;
+    while (typeof parent === 'string' && !ownIds.has(parent)) {
+      const ancestor = inherited.get(parent);
+      if (!ancestor || selected.has(ancestor)) {
+        break;
+      }
+      selected.add(ancestor);
+      parent = ancestor.parentUuid;
+    }
+  }
+  return orderedRows.filter((row) => selected.has(row));
 }
 
 /** True for a row the user typed, as opposed to a tool result or an injected note. */

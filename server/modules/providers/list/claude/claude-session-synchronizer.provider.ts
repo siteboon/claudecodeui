@@ -12,6 +12,8 @@ import {
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
 
+const SESSION_UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
 type ParsedSession = {
   sessionId: string;
   projectPath: string;
@@ -47,13 +49,27 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    */
   async synchronize(since?: Date): Promise<number> {
     const nameMap = await buildLookupMap(path.join(this.claudeHome, 'history.jsonl'), 'sessionId', 'display');
-    const files = await findFilesRecursivelyCreatedAfter(
-      path.join(this.claudeHome, 'projects'),
-      '.jsonl',
-      since ?? null
-    );
+    const projectsRoot = path.join(this.claudeHome, 'projects');
+    const files = new Set(await findFilesRecursivelyCreatedAfter(projectsRoot, '.jsonl', since ?? null, {
+      includeModified: true,
+    }));
+    const repairs: Array<{ sessionId: string; canonicalPath: string; stalePath: string }> = [];
 
-    let processed = 0;
+    // Revisit paths a previous scan associated with a copied ancestor, even
+    // if both transcripts are older than the incremental scan cursor.
+    for (const { session_id: appSessionId, provider, provider_session_id: sessionId, jsonl_path: filePath } of sessionsDb.getSessionsWithTranscriptPath()) {
+      const fileId = path.basename(filePath, '.jsonl');
+      const relativePath = path.relative(projectsRoot, filePath);
+      if (provider === this.provider && sessionId && SESSION_UUID.test(sessionId)
+        && SESSION_UUID.test(fileId) && fileId !== sessionId
+        && !path.isAbsolute(relativePath) && !relativePath.startsWith(`..${path.sep}`)) {
+        const canonicalPath = path.join(path.dirname(filePath), `${sessionId}.jsonl`);
+        files.add(canonicalPath);
+        files.add(filePath);
+        repairs.push({ sessionId: appSessionId, canonicalPath, stalePath: filePath });
+      }
+    }
+    const indexedFiles = new Set<string>();
     for (const filePath of files) {
       if (this.isSubagentTranscript(filePath)) {
         continue;
@@ -74,10 +90,18 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         timestamps.updatedAt,
         filePath
       );
-      processed += 1;
+      indexedFiles.add(filePath);
     }
 
-    return processed;
+    // A validated fork owns its file even if the original is missing. Keep
+    // the old session metadata and clear only the proven stale pointer.
+    for (const { sessionId, canonicalPath, stalePath } of repairs) {
+      if (indexedFiles.has(stalePath) && !indexedFiles.has(canonicalPath)) {
+        sessionsDb.clearTranscriptPathIfMatches(sessionId, stalePath);
+      }
+    }
+
+    return indexedFiles.size;
   }
 
   /**
@@ -116,12 +140,16 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     filePath: string,
     nameMap: Map<string, string>
   ): Promise<ParsedSession | null> {
+    // Desktop forks copy earlier rows with the parent session's ID. Wait for
+    // a row belonging to the UUID named by the file before indexing it.
+    const transcriptId = path.basename(filePath, '.jsonl');
+    const hasCanonicalId = SESSION_UUID.test(transcriptId);
     const parsed = await extractFirstValidJsonlData(filePath, (rawData) => {
       const data = rawData as Record<string, unknown>;
       const sessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined;
       const projectPath = typeof data.cwd === 'string' ? data.cwd : undefined;
 
-      if (!sessionId || !projectPath) {
+      if (!sessionId || !projectPath || (hasCanonicalId && sessionId !== transcriptId)) {
         return null;
       }
 
