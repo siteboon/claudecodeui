@@ -156,9 +156,9 @@ function readRequiredSessionId(data: AnyRecord): string | null {
 }
 
 /**
- * Handles `chat.send`: resolves the session row (provider, project path, and
- * provider-native id all come from the database — never from the client),
- * registers the run, and dispatches to the provider runtime.
+ * Handles `chat.send` and deployment-only `chat.recover`: resolves the session
+ * row (provider, project path, and provider-native id all come from the database,
+ * never from the client), registers the run, and dispatches to the runtime.
  */
 async function handleChatSend(
   ws: WebSocket,
@@ -166,9 +166,29 @@ async function handleChatSend(
   data: AnyRecord,
   dependencies: ChatWebSocketDependencies
 ): Promise<void> {
-  const resolved = resolveSendTarget(ws, data, dependencies, 'chat.send');
+  const recovering = data.type === 'chat.recover';
+  const resolved = resolveSendTarget(ws, data, dependencies, recovering ? 'chat.recover' : 'chat.send');
   if (!resolved) {
     return;
+  }
+
+  if (recovering) {
+    const expected = data.expectedProviderMapping;
+    if (!expected || typeof expected !== 'object' || Array.isArray(expected) ||
+        typeof expected.provider !== 'string' || !expected.provider ||
+        typeof expected.providerSessionId !== 'string' || !expected.providerSessionId) {
+      sendProtocolError(ws, 'RECOVERY_MAPPING_REQUIRED', 'chat.recover requires the captured provider mapping.', resolved.sessionId);
+      return;
+    }
+    if (expected.provider !== resolved.session.provider ||
+        expected.providerSessionId !== resolved.session.provider_session_id) {
+      sendProtocolError(ws, 'RECOVERY_MAPPING_CHANGED', 'The session no longer matches its captured provider mapping.', resolved.sessionId);
+      return;
+    }
+    // No await between the database read, comparison, and dispatchRun's
+    // synchronous startRun reservation. Edits must reserve that same run
+    // before rewinding, so they cannot repoint the mapping after this check.
+    // The runtime still receives only the app id, never a client-native id.
   }
 
   await dispatchRun(ws, userId, resolved.sessionId, resolved.session, data, dependencies);
@@ -835,6 +855,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *
  * Inbound protocol (client to server):
  * - `chat.send`                { sessionId, content, options? }
+ * - `chat.recover`             { sessionId, content, options?, expectedProviderMapping: { provider, providerSessionId } }
  * - `chat.side_question`       { sessionId, sideQuestionId, question, options?: { model? } }
  * - `chat.steer`               { sessionId, messageId, content, options? }
  * - `chat.abort`               { sessionId }
@@ -912,6 +933,7 @@ export async function runDetachedChatTurn(
   );
 }
 
+/** Used by the websocket server and protocol tests to attach authenticated chat clients. */
 export function handleChatConnection(
   ws: WebSocket,
   request: AuthenticatedWebSocketRequest,
@@ -936,6 +958,7 @@ export function handleChatConnection(
         case 'chat.edit-send':
           await handleChatEditSend(ws, userId, data, dependencies);
           return;
+        case 'chat.recover':
         case 'chat.send':
           await handleChatSend(ws, userId, data, dependencies);
           return;
