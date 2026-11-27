@@ -10,6 +10,7 @@ import SidebarHeader from '@/modules/sidebar/SidebarHeader';
 import SidebarProjectList from '@/modules/sidebar/SidebarProjectList';
 import SidebarRecentConversations from '@/modules/sidebar/SidebarRecentConversations';
 import SidebarPinnedSessions from '@/modules/sidebar/SidebarPinnedSessions';
+import SessionPinButton from '@/modules/sidebar/SessionPinButton';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
   const parts: ReactNode[] = [];
@@ -177,6 +178,7 @@ export default function SidebarContent({
   t,
 }: SidebarContentProps) {
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
+  const showPinsAboveLists = (searchMode === 'projects' || searchMode === 'conversations') && !searchFilter.trim();
   const hasSearchResults = Boolean(
     conversationResults
     && (conversationResults.titleResults.length > 0 || conversationResults.results.length > 0),
@@ -211,9 +213,9 @@ export default function SidebarContent({
       />
 
       <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
-        {(searchMode === 'projects' || searchMode === 'conversations') && !searchFilter.trim() && (
+        {(showPinsAboveLists || showConversationSearch) && (
           <SidebarPinnedSessions
-            showSessions={searchMode === 'conversations'}
+            showSessions={showPinsAboveLists && searchMode === 'conversations'}
             selectedSession={projectListProps.selectedSession}
             currentTime={projectListProps.currentTime}
             sessionActions={projectListProps}
@@ -262,36 +264,41 @@ export default function SidebarContent({
                     const age = formatCompactAge(session.lastActivity, projectListProps.currentTime);
 
                     return (
-                      <button
+                      <div
                         key={`${session.provider}-${session.sessionId}`}
-                        type="button"
-                        className="group flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-accent/60"
-                        onClick={() => onConversationResultClick(
-                          session.projectId,
-                          session.sessionId,
-                          session.provider,
-                        )}
+                        className="flex items-center rounded-lg pr-2 transition-colors hover:bg-accent/60"
                       >
-                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-muted/60">
-                          <LLMProviderLogo provider={session.provider} className="h-3.5 w-3.5" />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-normal leading-4 text-foreground">
-                            {session.sessionTitle}
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left"
+                          onClick={() => onConversationResultClick(
+                            session.projectId,
+                            session.sessionId,
+                            session.provider,
+                          )}
+                        >
+                          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-muted/60">
+                            <LLMProviderLogo provider={session.provider} className="h-3.5 w-3.5" />
                           </span>
-                          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] leading-3 text-muted-foreground">
-                            <span className="truncate">{session.projectDisplayName}</span>
-                            {age && (
-                              <>
-                                <span className="flex-shrink-0 text-muted-foreground/40">·</span>
-                                <time className="flex-shrink-0 tabular-nums" dateTime={session.lastActivity ?? undefined}>
-                                  {age}
-                                </time>
-                              </>
-                            )}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] font-normal leading-4 text-foreground">
+                              {session.sessionTitle}
+                            </span>
+                            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] leading-3 text-muted-foreground">
+                              <span className="truncate">{session.projectDisplayName}</span>
+                              {age && (
+                                <>
+                                  <span className="flex-shrink-0 text-muted-foreground/40">·</span>
+                                  <time className="flex-shrink-0 tabular-nums" dateTime={session.lastActivity ?? undefined}>
+                                    {age}
+                                  </time>
+                                </>
+                              )}
+                            </span>
                           </span>
-                        </span>
-                      </button>
+                        </button>
+                        <SessionPinButton sessionId={session.sessionId} sessionName={session.sessionTitle} t={t} />
+                      </div>
                     );
                   })}
                 </section>
@@ -341,44 +348,52 @@ export default function SidebarContent({
                         </span>
                       </div>
                       {projectResult.sessions.map((session) => (
-                        <button
+                        <div
                           key={`${projectResult.projectId ?? projectResult.projectName}-${session.sessionId}`}
-                          className="w-full rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/50"
-                          onClick={() => onConversationResultClick(
-                            // Pass the DB projectId (preferred) so the parent can
-                            // cross-reference with the loaded projects list.
-                            projectResult.projectId,
-                            session.sessionId,
-                            session.provider || session.matches[0]?.provider || 'claude',
-                            session.matches[0]?.timestamp,
-                            session.matches[0]?.snippet
-                          )}
+                          className="flex items-start rounded-md pr-2 transition-colors hover:bg-accent/50"
                         >
-                          <div className="mb-1 flex items-center gap-1.5">
-                            <MessageSquare className="h-3 w-3 flex-shrink-0 text-primary" />
-                            <span className="truncate text-xs font-normal text-foreground">
-                              {session.sessionSummary}
-                            </span>
-                            {session.provider && session.provider !== 'claude' && (
-                              <span className="flex-shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] uppercase text-muted-foreground">
-                                {session.provider}
-                              </span>
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 rounded-md px-2 py-2 text-left"
+                            onClick={() => onConversationResultClick(
+                              // Pass the DB projectId (preferred) so the parent can
+                              // cross-reference with the loaded projects list.
+                              projectResult.projectId,
+                              session.sessionId,
+                              session.provider || session.matches[0]?.provider || 'claude',
+                              session.matches[0]?.timestamp,
+                              session.matches[0]?.snippet
                             )}
-                          </div>
-                          <div className="space-y-1 pl-4">
-                            {session.matches.map((match, idx) => (
-                              <div key={idx} className="flex items-start gap-1">
-                                <span className="mt-0.5 flex-shrink-0 text-[10px] font-normal uppercase text-muted-foreground/60">
-                                  {match.role === 'user' ? 'U' : 'A'}
+                          >
+                            <div className="mb-1 flex min-h-5 items-center gap-1.5">
+                              <MessageSquare className="h-3 w-3 flex-shrink-0 text-primary" />
+                              <span className="truncate text-xs font-normal text-foreground">
+                                {session.sessionSummary}
+                              </span>
+                              {session.provider && session.provider !== 'claude' && (
+                                <span className="flex-shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] uppercase text-muted-foreground">
+                                  {session.provider}
                                 </span>
-                                <HighlightedSnippet
-                                  snippet={match.snippet}
-                                  highlights={match.highlights}
-                                />
-                              </div>
-                            ))}
+                              )}
+                            </div>
+                            <div className="space-y-1 pl-4">
+                              {session.matches.map((match, idx) => (
+                                <div key={idx} className="flex items-start gap-1">
+                                  <span className="mt-0.5 flex-shrink-0 text-[10px] font-normal uppercase text-muted-foreground/60">
+                                    {match.role === 'user' ? 'U' : 'A'}
+                                  </span>
+                                  <HighlightedSnippet
+                                    snippet={match.snippet}
+                                    highlights={match.highlights}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </button>
+                          <div className="pt-1">
+                            <SessionPinButton sessionId={session.sessionId} sessionName={session.sessionSummary} t={t} />
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   ))}
