@@ -389,14 +389,12 @@ export function useChatRealtimeHandlers({
           if (!msg.requestId) break;
 
           if (sid && sid === activeViewSessionId) {
-            // PermissionAttentionProvider owns alerts for off-screen sessions;
-            // only play the inline sound here for the currently viewed session.
-            if (isActionablePermissionRequest({ toolName: msg.toolName })) {
-              void playNotificationSound();
-            }
-
             const previousPendingPermissionRequests = pendingPermissionRequestsRef.current;
             if (!previousPendingPermissionRequests.some((request) => request.requestId === msg.requestId)) {
+              // 订阅快照可能已经提醒过；回放同一请求时应保持安静。
+              if (isActionablePermissionRequest({ toolName: msg.toolName })) {
+                void playNotificationSound();
+              }
               const nextPendingPermissionRequests = [...previousPendingPermissionRequests, {
                 requestId: msg.requestId as string,
                 toolName: (msg.toolName as string) || 'UnknownTool',
