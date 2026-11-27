@@ -23,6 +23,7 @@ function ProjectMainRegion({
     newSessionTrigger,
     registerOptimisticSession,
     handleProjectSelect,
+    handleNewSession,
     refreshProjectsSilently,
     renameSession,
   } = useProjectMainState();
@@ -67,6 +68,7 @@ function ProjectMainRegion({
       newSessionTrigger={newSessionTrigger}
       onProjectSelect={handleProjectSelect}
       onProjectsRefresh={handleProjectsRefresh}
+      onStartNewSession={handleNewSession}
       onRenameSession={renameSession}
     />
   );
