@@ -321,7 +321,16 @@
     "model": "模型",
     "effortDefault": "默认",
     "loadingModels": "正在加载模型…",
-    "modelMenu": "选择模型和推理强度"
+    "modelMenu": "选择模型和推理强度",
+    "commands": {
+      "help": "显示 Claude Code 的帮助文档",
+      "models": "查看当前服务商可用的模型",
+      "clear": "清空本次会话的上下文，保留历史记录",
+      "cost": "显示 token 使用情况",
+      "memory": "打开 CLAUDE.md 记忆文件进行编辑",
+      "config": "打开设置与配置",
+      "status": "显示系统状态与版本信息"
+    }
   },
   "export": {
     "trigger": "导出对话",

@@ -139,6 +139,21 @@ export default function CommandMenu({
 }: CommandMenuProps) {
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // Built-in command descriptions arrive from the backend in English.
+  // Translate them through the chat locale so the menu reads in the user's
+  // language; other commands (skills, project, user) keep their original text.
+  const getCommandDescription = (command: CommandMenuCommand): string | undefined => {
+    if (!command.description) {
+      return undefined;
+    }
+    const isBuiltin = getNamespace(command) === 'builtin' || command.metadata?.type === 'builtin';
+    if (!isBuiltin) {
+      return command.description;
+    }
+    const key = command.name.replace(/^\//, '');
+    return t(`chat:composer.commands.${key}`, { defaultValue: command.description });
+  };
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
   const menuPosition = getMenuPosition(position);
 
@@ -271,6 +286,7 @@ export default function CommandMenu({
             const isSelected = commandIndex === selectedIndex;
             const NamespaceIcon = getNamespaceIcon(namespace);
             const accentClass = getNamespaceAccentClass(namespace);
+            const description = getCommandDescription(command);
             return (
               <div
                 key={renderKey}
@@ -293,7 +309,7 @@ export default function CommandMenu({
                   <NamespaceIcon aria-hidden="true" size={14} strokeWidth={2.2} />
                 </span>
                 <div className="min-w-0 flex-1 pr-1">
-                  <div className={`flex min-w-0 items-center gap-2 ${command.description ? 'mb-1' : 'mb-0'}`}>
+                  <div className={`flex min-w-0 items-center gap-2 ${description ? 'mb-1' : 'mb-0'}`}>
                     <span
                       className="min-w-0 truncate font-mono text-[13px] font-semibold text-foreground"
                       title={command.name}
@@ -306,12 +322,12 @@ export default function CommandMenu({
                       </span>
                     )}
                   </div>
-                  {command.description && (
+                  {description && (
                     <div
                       className="truncate whitespace-nowrap text-[12px] leading-4 text-muted-foreground"
-                      title={command.description}
+                      title={description}
                     >
-                      {command.description}
+                      {description}
                     </div>
                   )}
                 </div>
