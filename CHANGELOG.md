@@ -3,6 +3,19 @@
 All notable changes to CloudCLI UI will be documented in this file.
 
 
+## [1.37.11](https://github.com/siteboon/claudecodeui/compare/v1.37.10...v1.37.11) (2026-11-27)
+
+### New Features
+
+* **agent-api:** permission mode per run, capabilities and session status ([#1863](https://github.com/siteboon/claudecodeui/issues/1863)) ([06eb312](https://github.com/siteboon/claudecodeui/commit/06eb312a371b7da839aa08b4182e87c4ba414ffe))
+* **chat:** remember the permission mode per session and start new chats from the project's last selection ([#1850](https://github.com/siteboon/claudecodeui/issues/1850)) ([1e9558d](https://github.com/siteboon/claudecodeui/commit/1e9558dc0dd29f1f9f4d10fc9fbf92a420507210)), closes [#1740](https://github.com/siteboon/claudecodeui/issues/1740)
+* **plugins:** let plugins render the chat rows of their tools ([#1862](https://github.com/siteboon/claudecodeui/issues/1862)) ([8026251](https://github.com/siteboon/claudecodeui/commit/802625193deb419055eba6a7bd54deb0cfd677c6))
+* **sidebar:** pin sessions from conversation search results ([#1865](https://github.com/siteboon/claudecodeui/issues/1865)) ([12af41e](https://github.com/siteboon/claudecodeui/commit/12af41eb90094346f20f0a21dc7f1dcd6cadecdd))
+
+### Bug Fixes
+
+* **chat:** restore full-width composer on narrow panes and align activity tabs ([#1876](https://github.com/siteboon/claudecodeui/issues/1876)) ([a2b8d44](https://github.com/siteboon/claudecodeui/commit/a2b8d4489cc2be4e27e3ceb176f9649a9db2c8b5)), closes [#1830](https://github.com/siteboon/claudecodeui/issues/1830) [pre-#1830](https://github.com/siteboon/pre-/issues/1830)
+
 ## [1.37.10](https://github.com/siteboon/claudecodeui/compare/v1.37.9...v1.37.10) (2026-11-25)
 
 ### New Features
