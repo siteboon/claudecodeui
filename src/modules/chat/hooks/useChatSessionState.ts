@@ -1017,12 +1017,21 @@ export function useChatSessionState({
       // Resolve the target against the loaded transcript rather than the DOM.
       // The store is the freshest source here: the `fetchFromServer` above has
       // landed but `chatMessages` is from the render that scheduled this effect.
-      const messagesForSearch = activeSessionIdRef.current
-        ? normalizedToChatMessages(sessionStore.getMessages(activeSessionIdRef.current))
+      const storeRows = activeSessionIdRef.current
+        ? sessionStore.getMessages(activeSessionIdRef.current)
+        : null;
+      // 侧问对会插进渲染列表，索引和窗口都必须按同一份合并结果算：只按原始行算窗口，
+      // 目标之后若有足够多的侧问行，渲染出的尾部就切掉了目标，滚动会落空。
+      const messagesForSearch = storeRows
+        ? mergeSideQuestions(
+          normalizedToChatMessages(storeRows),
+          sideQuestionStore.forSession(activeSessionIdRef.current!),
+          { hasOlder: hasMoreMessages, failedText: t('sideQuestion.failed') },
+        )
         : chatMessages;
-      const persistedTarget = target.persistedMessage?.provider === 'codex' && activeSessionIdRef.current
-        ? sessionStore.getMessages(activeSessionIdRef.current).find((message) => message.id === target.messageId)
-          ?? sessionStore.getMessages(activeSessionIdRef.current).find((message) => messagesRepresentSamePersistedRow(message, target.persistedMessage!))
+      const persistedTarget = target.persistedMessage?.provider === 'codex' && storeRows
+        ? storeRows.find((message) => message.id === target.messageId)
+          ?? storeRows.find((message) => messagesRepresentSamePersistedRow(message, target.persistedMessage!))
         : null;
       const resolvedMessageId = persistedTarget?.id ?? target.messageId;
       const targetIndex = target.loadOlderPages

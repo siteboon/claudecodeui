@@ -25,9 +25,13 @@ function toChatMessage(message: NormalizedMessage): ChatMessage {
 
 /** 按原始记录的顺序定位边界；同时间戳的后续用户提问不属于当前轮次。 */
 function findPrompt(rows: NormalizedMessage[], beforeTime: number, beforeMessageId?: string, beforeMessage?: NormalizedMessage): ChatMessage | null {
-  // 尚未写入历史的实时行只能采用严格更早的历史，不能把同时间的后续行算进去。
-  let reached = !beforeMessageId || (rows.length > 0 && new Date(rows[rows.length - 1].timestamp).getTime() < beforeTime);
   const hasExactId = Boolean(beforeMessageId && rows.some((row) => row.id === beforeMessageId));
+  const hasEquivalentRow = !hasExactId && Boolean(beforeMessage?.provider === 'codex'
+    && rows.some((row) => messagesRepresentSamePersistedRow(row, beforeMessage)));
+  // 边界行本身在历史里时，只能从它开始往回找：provider 回退分支会让后面的行带更早的时间戳，
+  // 按时间戳提前放行会选中边界之后的提问。时间戳兜底只留给历史里找不到边界行的情况。
+  let reached = !hasExactId && !hasEquivalentRow
+    && (!beforeMessageId || (rows.length > 0 && new Date(rows[rows.length - 1].timestamp).getTime() < beforeTime));
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     const row = rows[index];
     if (row.id === beforeMessageId || (!hasExactId && beforeMessage?.provider === 'codex' && messagesRepresentSamePersistedRow(row, beforeMessage))) reached = true;

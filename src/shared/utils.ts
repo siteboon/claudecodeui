@@ -273,17 +273,27 @@ export const isSkillCommand = (command: SlashCommand): boolean =>
 const CONTINUED_SESSION_PREFIX = 'This session is being continued from a previous conversation';
 
 /**
+ * True when a user turn is a background task's completion notice rather than
+ * something the person typed. The harness injects these as user-role rows, and
+ * the transcript draws them as assistant notifications, so anything that picks
+ * a prompt out of raw rows has to skip them the same way.
+ */
+export const isTaskNotificationContent = (content: unknown): boolean =>
+  typeof content === 'string' && content.trimStart().startsWith('<task-notification>');
+
+/**
  * True for a turn the person actually typed, as opposed to the aside half of a
- * side question, a slash command the transcript draws as a divider, or the
- * compaction summary that opens a continued session. The previous-message bar
- * and the session hook that feeds its transcript fallback both read it, so the
- * two agree on what counts as a prompt.
+ * side question, a slash command the transcript draws as a divider, the
+ * compaction summary that opens a continued session, or a background task's
+ * notification. The previous-message bar and the session hook that feeds its
+ * transcript fallback both read it, so the two agree on what counts as a prompt.
  */
 export const isUserPromptMessage = (message: ChatMessage): boolean =>
   message.type === 'user'
   && !message.sideQuestion
   && !message.isCompactSummary
   && !message.isLocalCommand
+  && !isTaskNotificationContent(message.content)
   && !String(message.content ?? '').trim().startsWith(CONTINUED_SESSION_PREFIX);
 
 // ---------------------------

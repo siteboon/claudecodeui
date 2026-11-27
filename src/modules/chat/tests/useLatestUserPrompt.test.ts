@@ -197,6 +197,40 @@ describe('the latest user prompt peek', () => {
     expect(sessionMessages).toHaveBeenCalledTimes(2);
   });
 
+  it('后台任务完成通知不当作提问显示', async () => {
+    // 这类行由 harness 以 user 角色写入，转成聊天记录时会画成助手通知；
+    // 固定条若照搬原始行，就会把整段 XML 当成用户提问。
+    sessionMessages.mockReturnValueOnce(page([
+      row({ id: 'u1', content: '真正的问题' }),
+      assistantRow({ id: 'a1' }),
+      row({ id: 'n1', content: '<task-notification>\n<status>completed</status>\n<summary>Background task finished</summary>\n</task-notification>' }),
+    ], false));
+
+    const { result } = renderHook(() => useLatestUserPrompt(props));
+
+    await waitFor(() => expect(result.current?.content).toBe('真正的问题'));
+    expect(result.current?.sourceMessageId).toBe('u1');
+  });
+
+  it('边界行在历史里时只从该行往回找，不被更早时间戳的后续行带偏', async () => {
+    // Codex 回退会让后写入的行带更早的时间戳：按时间戳提前放行，
+    // 会选中边界之后那一轮的提问。
+    sessionMessages.mockReturnValueOnce(page([
+      row({ id: 'u1', content: '当前轮次', timestamp: '2026-11-26T10:00:00.000Z' }),
+      assistantRow({ id: 'a1', timestamp: '2026-11-26T11:00:00.000Z' }),
+      row({ id: 'u2', content: '回退后的下一轮', timestamp: '2026-11-26T09:00:00.000Z' }),
+    ], false));
+
+    const { result } = renderHook(() => useLatestUserPrompt({
+      ...props,
+      beforeTimestamp: '2026-11-26T11:00:00.000Z',
+      beforeMessageId: 'a1',
+    }));
+
+    await waitFor(() => expect(result.current?.content).toBe('当前轮次'));
+    expect(result.current?.sourceMessageId).toBe('u1');
+  });
+
   it('names an attachment-only turn', async () => {
     sessionMessages.mockReturnValueOnce(page([
       row({ content: '', files: [{ name: 'spec.pdf' }] }),

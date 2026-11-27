@@ -315,6 +315,45 @@ describe('deferred scroll-to-bottom', () => {
 });
 
 describe('search jump ownership', () => {
+  it('侧问行挤在目标之后时，窗口仍按渲染列表计算，目标不会被切出视口', async () => {
+    // 侧问对会插进渲染列表。窗口若按原始行算，目标之后的侧问行越多，
+    // 算出的条数就越少，尾部切片把目标切掉，跳转落空。
+    const rows: NormalizedMessage[] = [];
+    for (let index = 0; index < 200; index += 1) {
+      rows.push(buildMessage(index, `2026-01-01T00:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`));
+    }
+    // 目标固定在原始第 50 条；之后插入 40 组侧问（80 行）。
+    const target = rows[50];
+    const messages = new Map([[SESSION_A, rows]]);
+    const store = createStore(messages);
+    const { sideQuestionStore } = await import('@/modules/chat/hooks/useSideQuestions');
+    sideQuestionStore.replaceForSession(SESSION_A, Array.from({ length: 40 }, (_, index) => ({
+      id: `q-${index}`,
+      sessionId: SESSION_A,
+      question: `侧问 ${index}`,
+      answer: '答',
+      status: 'done' as const,
+      error: null,
+      model: null,
+      createdAt: rows[51 + index].timestamp,
+      finishedAt: null,
+    })));
+    const searchSession = {
+      id: SESSION_A,
+      __searchTargetSnippet: target.content,
+      __searchTargetTimestamp: target.timestamp,
+    } as unknown as ProjectSession;
+
+    const { result } = await renderChatSessionState({ session: searchSession, store });
+    const container = createContainer(5000, 500);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+
+    // 合并后共 280 行，目标位于第 50 条，窗口必须覆盖到它。
+    expect(result.current.visibleMessageCount).toBeGreaterThanOrEqual(280 - 50 + 20);
+  });
+
   it('does not follow the user into the next session', { timeout: 20_000 }, async () => {
     const messages = new Map<string, NormalizedMessage[]>([
       [SESSION_A, [buildMessage(0, '2026-01-01T00:00:00.000Z')]],
