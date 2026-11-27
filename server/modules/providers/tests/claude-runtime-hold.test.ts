@@ -359,6 +359,13 @@ test('a stop still in progress leaves the turn that started meanwhile alone', as
     answerStop?.();
     assert.equal(await stop, true);
     assert.equal(isClaudeSDKSessionActive(SESSION_ID), true, 'the new turn is still registered, so Stop can reach it');
+
+    // What the stopped process still reports after the Stop returned is not the new turn's either.
+    first.script.emit(taskStarted('late', 'toolu_late', 'local_bash'));
+    first.script.emit(result());
+    await settle();
+    assert.deepEqual(listClaudeSDKBackgroundWork(), [], 'a task of the replaced process is not tracked for the new one');
+    assert.equal(completes(), 2);
     first.script.end();
     await firstRun;
     second.script.end();

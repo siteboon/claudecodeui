@@ -1742,7 +1742,11 @@ async function queryClaudeSDK(
       if (message.type === 'system' && message.subtype === 'task_started') {
         sawTaskEventThisTurn = true;
       }
-      backgroundWork.apply(sessionKey()!, message);
+      // The tracker is keyed by session. A process that a newer run replaced
+      // can still report a task, and that task must not hold the newer one.
+      if (!supersededInstances.has(queryInstance)) {
+        backgroundWork.apply(sessionKey()!, message);
+      }
 
       // A task the user stopped gets no follow-up turn from the CLI — only its
       // `stopped` notification — so when that was the last outstanding task
