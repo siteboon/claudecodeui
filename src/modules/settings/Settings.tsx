@@ -195,7 +195,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
         role="dialog"
         aria-modal="true"
         aria-label={t('title')}
-        className="flex h-full w-full flex-col overflow-hidden border border-border bg-background shadow-2xl md:h-[90vh] md:max-w-4xl md:rounded-xl"
+        className="flex h-full w-full flex-col border border-border bg-background shadow-2xl md:h-[90vh] md:max-w-4xl md:rounded-xl"
       >
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between border-b border-border px-4 py-3 md:px-5">

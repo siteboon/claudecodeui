@@ -61,7 +61,8 @@ export function ActionMenu({
 }: ActionMenuProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [portalPosition, setPortalPosition] = React.useState<{ top: number; left: number } | null>(null);
-  const [insideDialog, setInsideDialog] = React.useState(false);
+  // 模态框中的菜单留在 dialog 子树内，避免被辅助阅读工具当作框外内容。
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
@@ -69,7 +70,7 @@ export function ActionMenu({
   // (Escape) and item selection, but left false for outside pointer clicks so
   // focus is not stolen from wherever the user clicked.
   const restoreFocusRef = React.useRef(false);
-  const focusMenuOnOpenRef = React.useRef(false);
+  const focusMenuOnOpenRef = React.useRef<'first' | 'last' | null>(null);
   const wasOpenRef = React.useRef(false);
   const menuId = React.useId();
 
@@ -81,9 +82,9 @@ export function ActionMenu({
     onOpenChange?.(open);
   }, [onOpenChange]);
 
-  // A portal menu inside the Settings dialog (z-[9999]) must stack above it.
+  // Settings 的 dialog 外层不裁切内容，既保留正确层级，也保留可访问性。
   React.useLayoutEffect(() => {
-    setInsideDialog(Boolean(rootRef.current?.closest('[role="dialog"]')));
+    setPortalContainer(rootRef.current?.closest<HTMLElement>('[role="dialog"]') ?? null);
   }, []);
 
   React.useEffect(() => {
@@ -148,10 +149,11 @@ export function ActionMenu({
       wasOpenRef.current = true;
       if (focusMenuOnOpenRef.current) {
         const menu = menuRef.current;
-        const firstItem = menu?.querySelector<HTMLButtonElement>(
+        const enabledItems = menu?.querySelectorAll<HTMLButtonElement>(
           '[role="menuitem"]:not([disabled]), [role="menuitemradio"]:not([disabled])',
         );
-        (firstItem ?? menu)?.focus();
+        const itemIndex = focusMenuOnOpenRef.current === 'last' ? (enabledItems?.length ?? 1) - 1 : 0;
+        (enabledItems?.[itemIndex] ?? menu)?.focus();
       }
       return;
     }
@@ -205,8 +207,25 @@ export function ActionMenu({
       role="menu"
       tabIndex={-1}
       data-escape-layer
+      onKeyDown={(event) => {
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const enabledItems = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(
+          '[role="menuitem"]:not([disabled]), [role="menuitemradio"]:not([disabled])',
+        ));
+        if (!enabledItems.length) return;
+        const currentIndex = enabledItems.indexOf(document.activeElement as HTMLButtonElement);
+        const nextIndex = event.key === 'Home' ? 0
+          : event.key === 'End' ? enabledItems.length - 1
+            : event.key === 'ArrowDown' ? (currentIndex + 1) % enabledItems.length
+              : (currentIndex <= 0 ? enabledItems.length : currentIndex) - 1;
+        const nextItem = enabledItems[nextIndex];
+        nextItem.focus();
+        nextItem.scrollIntoView?.({ block: 'nearest' });
+      }}
       className={cn(
-        portal ? (insideDialog ? 'fixed z-[10000]' : 'fixed z-[70]') : 'absolute top-full z-50 mt-2',
+        portal ? (portalContainer ? 'fixed z-[10000]' : 'fixed z-[70]') : 'absolute top-full z-50 mt-2',
         'min-w-[220px] rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg',
         'animate-in fade-in-0 zoom-in-95',
         !portal && (align === 'right' ? 'right-0' : 'left-0'),
@@ -235,6 +254,7 @@ export function ActionMenu({
               role={isChoice ? 'menuitemradio' : 'menuitem'}
               aria-checked={isChoice ? item.isSelected : undefined}
               disabled={item.disabled || item.loading}
+              tabIndex={-1}
               onClick={() => runItem(item)}
               className={cn(
                 'flex w-full items-start gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors',
@@ -283,8 +303,15 @@ export function ActionMenu({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-controls={isOpen ? menuId : undefined}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          event.preventDefault();
+          if (isOpen) return;
+          focusMenuOnOpenRef.current = event.key === 'ArrowUp' ? 'last' : 'first';
+          toggleMenu();
+        }}
         onClick={(event) => {
-          focusMenuOnOpenRef.current = event.detail === 0;
+          focusMenuOnOpenRef.current = event.detail === 0 ? 'first' : null;
           toggleMenu();
         }}
       >
@@ -297,7 +324,7 @@ export function ActionMenu({
         )}
       </Button>
 
-      {portal && typeof document !== 'undefined' ? createPortal(menu, document.body) : menu}
+      {portal && typeof document !== 'undefined' ? createPortal(menu, portalContainer ?? document.body) : menu}
     </div>
   );
 }

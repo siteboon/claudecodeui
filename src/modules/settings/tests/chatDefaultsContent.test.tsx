@@ -118,6 +118,30 @@ test('the selected model is exposed to assistive technology', async () => {
   expect(screen.getByRole('menuitemradio', { name: 'Sonnet' }).getAttribute('aria-checked')).toBe('false');
 });
 
+test('方向键在弹窗内打开和浏览模型菜单，Escape 将焦点还给触发按钮', async () => {
+  render(
+    <div role="dialog" aria-modal="true">
+      <ChatDefaultsContent agent="claude" defaults={{}} onDefaultsChange={vi.fn()} />
+    </div>,
+  );
+  const trigger = await screen.findByRole('button', { name: /default model/i });
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+  trigger.focus();
+  fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+
+  const menu = screen.getByRole('menu');
+  const items = screen.getAllByRole('menuitemradio');
+  expect(screen.getByRole('dialog').contains(menu)).toBe(true);
+  expect(document.activeElement).toBe(items[0]);
+  fireEvent.keyDown(items[0], { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(items[1]);
+  fireEvent.keyDown(items[1], { key: 'ArrowUp' });
+  expect(document.activeElement).toBe(items[0]);
+  fireEvent.keyDown(items[0], { key: 'Escape' });
+  expect(screen.queryByRole('menu')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+});
+
 test('a provider without effort support says so instead of offering a menu', async () => {
   renderContent({ claude: { model: 'haiku' } });
 
