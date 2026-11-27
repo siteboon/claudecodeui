@@ -195,16 +195,9 @@ export function useChatProviderState({
   // must restore the model that provider was last used with, and the catalogue
   // that validates them arrives asynchronously per provider.
   const [providerModels, setProviderModels] = useState<Record<LLMProvider, string>>(() => {
-    // The saved default wins over the last manual pick: it is the answer for
-    // "what should a new chat start with", while localStorage only remembers
-    // what the composer last showed.
     const storedDefaults = readChatDefaults();
     return PROVIDERS.reduce<Record<LLMProvider, string>>((acc, targetProvider) => {
       const model = storedDefaults[targetProvider]?.model;
-      if (model) {
-        // Keep the catalog reconciliation from restoring a stale manual pick.
-        localStorage.setItem(providerModelStorageKey(targetProvider), model);
-      }
       acc[targetProvider] = model
         || localStorage.getItem(providerModelStorageKey(targetProvider))
         || FALLBACK_DEFAULT_MODEL[targetProvider];
@@ -215,9 +208,6 @@ export function useChatProviderState({
     const storedDefaults = readChatDefaults();
     return PROVIDERS.reduce<Partial<Record<LLMProvider, string>>>((acc, targetProvider) => {
       const effort = storedDefaults[targetProvider]?.effort;
-      if (effort) {
-        localStorage.setItem(`${targetProvider}-effort`, effort);
-      }
       acc[targetProvider] = effort
         || localStorage.getItem(`${targetProvider}-effort`)
         || DEFAULT_EFFORT_VALUE;
@@ -371,21 +361,6 @@ export function useChatProviderState({
     return Boolean(FALLBACK_PROVIDER_EFFORT_VALUES[targetProvider]?.length);
   }, [providerCapabilities]);
 
-  const pickStoredOrCurrent = (
-    storageKey: string,
-    current: string,
-    def: ProviderModelsDefinition,
-  ): string => {
-    const stored = localStorage.getItem(storageKey);
-    if (stored && def.OPTIONS.some((o) => o.value === stored)) {
-      return stored;
-    }
-    if (current && def.OPTIONS.some((o) => o.value === current)) {
-      return current;
-    }
-    return def.DEFAULT;
-  };
-
   const getModelOption = useCallback((
     targetProvider: LLMProvider,
     model: string,
@@ -453,15 +428,12 @@ export function useChatProviderState({
         continue;
       }
 
-      const storageKey = providerModelStorageKey(targetProvider);
       const currentModel = providerModels[targetProvider];
-      const nextModel = pickStoredOrCurrent(storageKey, currentModel, catalog);
+      const nextModel = catalog.OPTIONS.some((option) => option.value === currentModel)
+        ? currentModel : catalog.DEFAULT;
 
       if (nextModel !== currentModel) {
         reconciledModels[targetProvider] = nextModel;
-      }
-      if (localStorage.getItem(storageKey) !== nextModel) {
-        localStorage.setItem(storageKey, nextModel);
       }
     }
 
@@ -482,7 +454,6 @@ export function useChatProviderState({
       }
 
       nextEfforts[targetProvider] = nextEffort;
-      localStorage.setItem(`${targetProvider}-effort`, nextEffort);
       hasUpdates = true;
     }
 
@@ -500,26 +471,15 @@ export function useChatProviderState({
     const storedDefaults = readChatDefaults();
     appliedDefaultsRef.current = storedDefaults;
 
-    // The catalog reconciliation below trusts localStorage over the current
-    // state, so mirror the defaults there too or it would restore the model the
-    // user picked in a previous chat.
-    for (const targetProvider of PROVIDERS) {
-      const model = storedDefaults[targetProvider]?.model;
-      if (model) {
-        localStorage.setItem(providerModelStorageKey(targetProvider), model);
-      }
-      const effort = storedDefaults[targetProvider]?.effort;
-      if (effort) {
-        localStorage.setItem(`${targetProvider}-effort`, effort);
-      }
-    }
-
+    // 设置页的默认值只影响本次显示，浏览器的最后手选留给解除默认值后的新会话。
     setProviderModels((previous) => {
       let changed = false;
       const next = { ...previous };
       for (const targetProvider of PROVIDERS) {
-        const model = storedDefaults[targetProvider]?.model;
-        if (model && model !== previous[targetProvider]) {
+        const model = storedDefaults[targetProvider]?.model
+          ?? localStorage.getItem(providerModelStorageKey(targetProvider))
+          ?? FALLBACK_DEFAULT_MODEL[targetProvider];
+        if (model !== previous[targetProvider]) {
           next[targetProvider] = model;
           changed = true;
         }
@@ -531,8 +491,10 @@ export function useChatProviderState({
       let changed = false;
       const next = { ...previous };
       for (const targetProvider of PROVIDERS) {
-        const effort = storedDefaults[targetProvider]?.effort;
-        if (effort && effort !== previous[targetProvider]) {
+        const effort = storedDefaults[targetProvider]?.effort
+          ?? localStorage.getItem(`${targetProvider}-effort`)
+          ?? DEFAULT_EFFORT_VALUE;
+        if (effort !== previous[targetProvider]) {
           next[targetProvider] = effort;
           changed = true;
         }

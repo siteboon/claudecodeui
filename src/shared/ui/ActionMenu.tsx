@@ -207,6 +207,9 @@ export function ActionMenu({
       role="menu"
       tabIndex={-1}
       data-escape-layer
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
+      }}
       onKeyDown={(event) => {
         if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();

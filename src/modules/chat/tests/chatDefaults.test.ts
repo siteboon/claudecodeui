@@ -133,6 +133,21 @@ test('changing the saved defaults updates a blank composer', async () => {
   });
 });
 
+test('清空设置后恢复最后手选的值', async () => {
+  localStorage.setItem('claude-model', 'default');
+  localStorage.setItem('claude-effort', 'low');
+  userSettings.writeUserPreference('chatDefaults', { claude: { model: 'best', effort: 'max' } });
+  const { result } = await renderProviderState();
+  await waitFor(() => assert.equal(result.current.currentProviderEffort, 'max'));
+
+  act(() => userSettings.writeUserPreference('chatDefaults', {}));
+
+  await waitFor(() => {
+    assert.equal(result.current.currentProviderModel, 'default');
+    assert.equal(result.current.currentProviderEffort, 'low');
+  });
+});
+
 test('without saved defaults the composer keeps its previous behaviour', async () => {
   localStorage.setItem('claude-effort', 'medium');
 

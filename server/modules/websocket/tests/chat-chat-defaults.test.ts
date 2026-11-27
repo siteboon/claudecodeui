@@ -139,6 +139,16 @@ test('the composer sentinel "default" is treated as unspecified', async () => {
   assert.equal(session?.effort, 'max');
 });
 
+test('输入框明确选用 Default 时仍使用供应商默认值', async () => {
+  const { runs, session } = await sendOneTurn(
+    { savedDefaults: SAVED_DEFAULTS },
+    { model: 'default', effort: 'default', explicitModelAndEffort: true },
+  );
+  assert.equal(runs[0]?.model, 'default');
+  assert.equal(runs[0]?.effort, 'default');
+  assert.equal(session?.effort, 'default');
+});
+
 test('an existing session keeps its recorded model and effort over the saved defaults', async () => {
   const { runs, session } = await sendOneTurn(
     { savedDefaults: SAVED_DEFAULTS, sessionSelection: { model: 'sonnet', effort: 'low' } },
