@@ -37,13 +37,14 @@ type RenderArgs = {
   session: ProjectSession | null;
   routeSessionId?: string | null;
   isLoading?: boolean;
+  supportsSideQuestions?: boolean;
 };
 
 const renderComposer = (initial: RenderArgs) => {
-  const sent: Array<{ type: string; sessionId?: string; content?: string }> = [];
+  const sent: Array<{ type: string; sessionId?: string; content?: string; question?: string }> = [];
   const established: string[] = [];
   const messages: Array<{ type: string; content: unknown }> = [];
-  const view = renderHook(({ session, routeSessionId, isLoading }: RenderArgs) =>
+  const view = renderHook(({ session, routeSessionId, isLoading, supportsSideQuestions }: RenderArgs) =>
     useChatComposerState({
       selectedProject: PROJECT,
       selectedSession: session,
@@ -58,6 +59,8 @@ const renderComposer = (initial: RenderArgs) => {
       isLoading: isLoading ?? false,
       canAbortSession: false,
       tokenBudget: null,
+      supportsSideQuestions: supportsSideQuestions ?? true,
+      isConnected: true,
       sendMessage: (message) => { sent.push(message as { type: string }); },
       onSessionEstablished: (sessionId) => { established.push(sessionId); },
       scrollToBottom: () => undefined,
@@ -72,6 +75,7 @@ const renderComposer = (initial: RenderArgs) => {
     messages,
     sent,
     chatSends: () => sent.filter((message) => message.type === 'chat.send'),
+    sideQuestions: () => sent.filter((message) => message.type === 'chat.side_question'),
   };
 };
 
@@ -222,4 +226,85 @@ test('once the route session resolves, sending goes to that session', async () =
   assert.equal(createRequests(fetchMock).length, 0, 'the existing session is used, never a new one');
   assert.deepEqual(established, []);
   assert.deepEqual(chatSends().map((message) => [message.sessionId, message.content]), [[ROUTE_SESSION, 'hello']]);
+});
+
+test('side-question submissions (/btw, send menu, Alt+Enter) refuse a mismatched or unresolved route without clearing text', async () => {
+  const { view, messages, sideQuestions } = renderComposer({
+    session: { id: 'previous-session' } as ProjectSession,
+    routeSessionId: ROUTE_SESSION,
+  });
+
+  // 1. /btw command while bound session differs from the route.
+  await act(async () => { view.result.current.setInput('/btw explain this'); });
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  assert.equal(sideQuestions().length, 0, '/btw must not hit the previous session');
+  assert.equal(view.result.current.input, '/btw explain this');
+
+  // 2. Send menu side-question action.
+  await act(async () => { view.result.current.setInput('explain via menu'); });
+  await act(async () => {
+    await view.result.current.handleSendMenuChoice('sideQuestion');
+  });
+  assert.equal(sideQuestions().length, 0, 'send menu sideQuestion must not hit the previous session');
+  assert.equal(view.result.current.input, 'explain via menu');
+
+  // 3. Option/Alt+Enter shortcut.
+  await act(async () => {
+    view.result.current.handleKeyDown({
+      key: 'Enter',
+      altKey: true,
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      preventDefault: () => undefined,
+      nativeEvent: { isComposing: false },
+    } as unknown as Parameters<typeof view.result.current.handleKeyDown>[0]);
+  });
+  assert.equal(sideQuestions().length, 0, 'Alt+Enter must not hit the previous session');
+  assert.equal(view.result.current.input, 'explain via menu');
+  assert.equal(messages.filter((message) => message.type === 'error').length, 3);
+
+  // Matching route sends the side question normally.
+  await act(async () => {
+    view.rerender({ session: { id: ROUTE_SESSION } as ProjectSession, routeSessionId: ROUTE_SESSION });
+  });
+  await act(async () => {
+    view.result.current.setInput('/btw explain on target');
+  });
+  await act(async () => {
+    await view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  assert.deepEqual(
+    sideQuestions().map((message) => [message.sessionId, message.question]),
+    [[ROUTE_SESSION, 'explain on target']],
+  );
+  assert.equal(view.result.current.input, '');
+});
+
+test('a side question refused while the route session is unresolved stays parked until binding', async () => {
+  const { view, sideQuestions } = renderComposer({
+    session: null,
+    routeSessionId: ROUTE_SESSION,
+  });
+
+  await act(async () => { view.result.current.setInput('what broke?'); });
+  await act(async () => {
+    await view.result.current.handleSendMenuChoice('sideQuestion');
+  });
+  assert.equal(sideQuestions().length, 0);
+
+  await act(async () => {
+    view.rerender({ session: { id: ROUTE_SESSION } as ProjectSession, routeSessionId: ROUTE_SESSION });
+  });
+  assert.equal(view.result.current.input, 'what broke?');
+
+  await act(async () => {
+    await view.result.current.handleSendMenuChoice('sideQuestion');
+  });
+  assert.deepEqual(
+    sideQuestions().map((message) => [message.sessionId, message.question]),
+    [[ROUTE_SESSION, 'what broke?']],
+  );
 });

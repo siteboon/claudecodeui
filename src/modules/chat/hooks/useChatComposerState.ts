@@ -845,6 +845,37 @@ export function useChatComposerState({
     }
   }, [resetCommandMenuState, setInput]);
 
+  // The route names a conversation this view has not bound yet, or names one
+  // while the view still holds another. Shared by normal submits, `/btw`, the
+  // send menu's side-question row, and Alt+Enter so no path can deliver into
+  // the wrong conversation or lose what the user typed once the route binds.
+  const refuseUnresolvedRouteSession = useCallback(
+    (textToPark: string): boolean => {
+      const boundSessionId = selectedSession?.id || currentSessionId || null;
+      if (!routeSessionId || boundSessionId === routeSessionId) {
+        return false;
+      }
+      if (!boundSessionId && textToPark.trim()) {
+        // The scope is about to become the routed session, and that swap
+        // replaces the composer with that session's saved draft. Park the
+        // refused text there so the refusal does not eat what was typed.
+        const parked = readDraftText(routeSessionId);
+        if (!parked.trim()) {
+          writeDraftText(routeSessionId, textToPark);
+        } else if (!parked.includes(textToPark)) {
+          writeDraftText(routeSessionId, `${parked}\n\n${textToPark}`);
+        }
+      }
+      addMessage({
+        type: 'error',
+        content: t('input.routeSessionUnresolved'),
+        timestamp: new Date(),
+      });
+      return true;
+    },
+    [addMessage, currentSessionId, routeSessionId, selectedSession?.id, t],
+  );
+
   // Shared by the `/btw` command, Option/Alt+Enter, the background-send
   // dialog's side question choice and the send menu's side question row: all
   // four ask the same way and clear the composer the same way on success, and
@@ -857,6 +888,9 @@ export function useChatComposerState({
   // each needing its own copy of the check.
   const askSideQuestionAndClear = useCallback(
     (sessionId: string | null, text: string, scope?: string | null) => {
+      if (refuseUnresolvedRouteSession(inputValueRef.current || text)) {
+        return;
+      }
       if (!supportsSideQuestions) {
         addMessage({
           type: 'error',
@@ -877,7 +911,7 @@ export function useChatComposerState({
         clearComposerAfterSideQuestion(text, scope);
       }
     },
-    [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, supportsSideQuestions, t],
+    [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, refuseUnresolvedRouteSession, supportsSideQuestions, t],
   );
 
   // Persist a message to send "when this finishes" and show it as the queued
@@ -1161,6 +1195,13 @@ export function useChatComposerState({
       // chat switch, and the cleanup at the end must not empty whichever chat is open by then.
       const submittedScope = draftScopeRef.current;
 
+      // Check route binding before `/btw`, queue, steer, and normal send so
+      // neither side questions nor turn submissions can land in a stale chat
+      // or allocate a duplicate session while the routed session resolves.
+      if (refuseUnresolvedRouteSession(currentInput)) {
+        return;
+      }
+
       // `/btw <question>` never becomes a turn: checked before the in-flight
       // queue below, since that branch runs before slash-command
       // interception ever would. Recognised in every state, including a
@@ -1176,33 +1217,6 @@ export function useChatComposerState({
           askSideQuestionAndClear(sessionKey, btwMatch[1] ?? '');
           return;
         }
-      }
-
-      // The route names a conversation this view has not bound yet, or names one
-      // while the view still holds another. Either way the send below would land
-      // in the wrong chat — including the queue and steer paths taken while a
-      // turn is running. Refuse before those branches, not after them.
-      const boundSessionId = selectedSession?.id || currentSessionId || null;
-      if (routeSessionId && boundSessionId !== routeSessionId) {
-        if (!boundSessionId) {
-          // The scope is about to become the routed session, and that swap
-          // replaces the composer with that session's saved draft. Park the
-          // refused text there so the refusal does not eat what was typed.
-          const parked = readDraftText(routeSessionId);
-          if (!parked.trim()) {
-            writeDraftText(routeSessionId, currentInput);
-          } else if (!parked.includes(currentInput)) {
-            writeDraftText(routeSessionId, `${parked}
-
-${currentInput}`);
-          }
-        }
-        addMessage({
-          type: 'error',
-          content: t('input.routeSessionUnresolved'),
-          timestamp: new Date(),
-        });
-        return;
       }
 
       // A turn is already in flight: stash this message instead of sending it.
@@ -1321,7 +1335,7 @@ ${currentInput}`);
       // BEFORE the first websocket send: brand-new chats allocate one here
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
-      let targetSessionId = boundSessionId;
+      let targetSessionId = selectedSession?.id || currentSessionId || null;
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
@@ -1493,7 +1507,6 @@ ${currentInput}`);
       queueMessage,
       recordSentMessage,
       resetCommandMenuState,
-      routeSessionId,
       scrollToBottom,
       selectedProject,
       sendMessage,
@@ -1503,6 +1516,7 @@ ${currentInput}`);
       slashCommands,
       steerIntoRunningTurn,
       supportsSteering,
+      refuseUnresolvedRouteSession,
       t,
     ],
   );
