@@ -4,7 +4,7 @@ import type { AuthenticatedWebSocketRequest } from '@/shared/types.js';
 
 type WebSocketAuthDependencies = {
   isPlatform: boolean;
-  authenticateWebSocket: (token: string | null) => {
+  authenticateWebSocket: (token: string | null, platformSecret?: string | null) => {
     id?: string | number;
     userId?: string | number;
     username?: string;
@@ -30,9 +30,16 @@ export function verifyWebSocketClient(
 
   // Platform mode: use the first DB user and skip token checks.
   if (dependencies.isPlatform) {
-    const user = dependencies.authenticateWebSocket(null);
+    // Same opt-in gate as the REST middleware: when PLATFORM_SHARED_SECRET is
+    // configured, the upgrade must carry it, otherwise any page on the network
+    // could open a shell-capable socket.
+    const platformSecret =
+      upgradeUrl.searchParams.get('platform_secret') ??
+      request.headers['x-platform-secret'] ??
+      null;
+    const user = dependencies.authenticateWebSocket(null, platformSecret);
     if (!user) {
-      console.log('[WARN] Platform mode: No user found in database');
+      console.log('[WARN] Platform mode: No user found in database or platform secret rejected');
       return false;
     }
 
