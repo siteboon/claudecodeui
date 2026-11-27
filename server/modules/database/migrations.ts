@@ -477,6 +477,19 @@ const addSessionAutoContinueColumn = (db: Database): void => {
 };
 
 /**
+ * Adds the `permission_mode` column that records a session's permission mode.
+ *
+ * Existing rows stay NULL; the composer then falls back to the mode it kept in
+ * browser storage for that session before this column existed.
+ */
+const addSessionPermissionModeColumn = (db: Database): void => {
+  const sessionsTableInfo = getTableInfo(db, 'sessions');
+  const columnNames = sessionsTableInfo.map((column) => column.name);
+
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'permission_mode', 'TEXT');
+};
+
+/**
  * Adds the reasoning-effort metadata columns to the custom-model library.
  *
  * Existing rows stay NULL on purpose: no effort levels were ever declared for
@@ -553,6 +566,7 @@ export const runMigrations = (db: Database) => {
     addSessionModelColumn(db);
     addSessionEffortColumn(db);
     addSessionAutoContinueColumn(db);
+    addSessionPermissionModeColumn(db);
     addForkedFromSessionIdColumn(db);
     // Create after legacy session-table repairs so the foreign key names the canonical app id.
     db.exec(SESSION_PINS_TABLE_SCHEMA_SQL);

@@ -141,6 +141,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- 1 when a turn stopped by the claude.ai usage limit should be continued
     -- automatically once the limit resets. Opt-in per session.
     auto_continue INTEGER NOT NULL DEFAULT 0,
+    -- Permission mode this session runs with, recorded the same way so it
+    -- follows the session to every browser instead of living in one.
+    permission_mode TEXT,
     -- The app session this one was branched from, NULL for sessions created
     -- normally. Informational only: a fork is a fully independent provider
     -- session, and deleting the source does not affect it.

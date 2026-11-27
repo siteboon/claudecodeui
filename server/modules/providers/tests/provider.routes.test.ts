@@ -81,6 +81,31 @@ test('session creation route names a CloudCLI session from the initial message',
   });
 });
 
+test('session creation records the composer selection on the new row', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    const response = await fetch(`${baseUrl}/api/providers/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider: 'codex',
+        projectPath: workspacePath,
+        initialMessage: 'hello',
+        model: 'gpt-5.4',
+        effort: 'high',
+        // Codex has no plan mode, so this one is not recorded.
+        permissionMode: 'plan',
+      }),
+    });
+    const payload = await response.json() as { data: { sessionId: string } };
+    const row = sessionsDb.getSessionById(payload.data.sessionId);
+
+    assert.equal(response.status, 201);
+    assert.equal(row?.model, 'gpt-5.4');
+    assert.equal(row?.effort, 'high');
+    assert.equal(row?.permission_mode, null);
+  });
+});
+
 test('conversation search streams title matches before transcript results', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     sessionsDb.createAppSession(
@@ -229,6 +254,47 @@ test('turning auto-continue off drops the session\'s waiting continue at once', 
     });
 
     assert.equal(scheduledMessagesDb.listForSession(userId, 'auto-session')[0].status, 'cancelled');
+  });
+});
+
+test('permission mode is persisted per session and seeds the project selection', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createAppSession('mode-session', 'codex', workspacePath);
+    const postMode = (permissionMode: string) => fetch(
+      `${baseUrl}/api/providers/codex/sessions/mode-session/active-permission-mode`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ permissionMode }),
+      },
+    );
+
+    // Codex has no plan mode.
+    assert.equal((await postMode('plan')).status, 400);
+    assert.equal((await postMode('acceptEdits')).status, 200);
+    assert.equal(sessionsDb.getSessionById('mode-session')?.permission_mode, 'acceptEdits');
+    // A Claude URL cannot store Claude's plan mode on this Codex session.
+    const crossProvider = await fetch(
+      `${baseUrl}/api/providers/claude/sessions/mode-session/active-permission-mode`,
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ permissionMode: 'plan' }) },
+    );
+    assert.equal(crossProvider.status, 400);
+    assert.equal(sessionsDb.getSessionById('mode-session')?.permission_mode, 'acceptEdits');
+
+    const readResponse = await fetch(
+      `${baseUrl}/api/providers/codex/sessions/mode-session/active-model`,
+    );
+    const readPayload = await readResponse.json() as { data: { permissionMode: string | null } };
+    assert.equal(readPayload.data.permissionMode, 'acceptEdits');
+
+    const projectResponse = await fetch(
+      `${baseUrl}/api/providers/codex/project-selection?workspacePath=${encodeURIComponent(workspacePath)}`,
+    );
+    const projectPayload = await projectResponse.json() as { data: { permissionMode: string | null } };
+    assert.equal(projectResponse.status, 200);
+    assert.equal(projectPayload.data.permissionMode, 'acceptEdits');
+
+    assert.equal((await fetch(`${baseUrl}/api/providers/codex/project-selection`)).status, 400);
   });
 });
 

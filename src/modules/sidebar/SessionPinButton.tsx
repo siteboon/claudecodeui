@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import { cn } from '@/shared/utils';
 import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
 
-/** Shared by desktop/mobile Projects rows and Conversations controls, including the pinned shortcuts. */
+/** Shared by Projects rows, Conversations controls and sidebar conversation search results. */
 export default function SessionPinButton({ sessionId, sessionName, t }: {
   sessionId: string;
   sessionName: string;
