@@ -1633,7 +1633,14 @@ async function queryClaudeSDK(
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(sessionKey()!, queryInstance, ws, releasePromptStream, steerIntoTurn);
+        // Registers a run that had no session key until now. A process that
+        // was stopped or replaced before its first message must not take the
+        // session back from the run that has it.
+        const holder = getSession(sessionKey()!);
+        const stoppedOrReplaced = abortedInstances.has(queryInstance) || supersededInstances.has(queryInstance);
+        if (holder ? holder.instance === queryInstance : !stoppedOrReplaced) {
+          addSession(sessionKey()!, queryInstance, ws, releasePromptStream, steerIntoTurn);
+        }
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {

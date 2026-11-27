@@ -422,6 +422,52 @@ test('a task that a stopped process reports late is not tracked for the next tur
   }
 });
 
+test('a replaced process whose first message comes late does not take the session back', async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-runtime-hold-'));
+  const first = createScriptedQuery();
+  const second = createScriptedQuery();
+  let secondInterrupts = 0;
+  const secondCreateQuery: typeof second.createQuery = (input) => Object.assign(second.createQuery(input), {
+    interrupt: async () => { secondInterrupts += 1; },
+  });
+  const sent: NormalizedMessage[] = [];
+  const writer = { send: (message: NormalizedMessage) => { sent.push(message); }, userId: null };
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  const context: Omit<ProviderRuntimeContext, 'createQuery'> = {
+    resolveProviderSessionId: () => null,
+    resolveResumeModel: async () => undefined,
+    getProviderModels: async () => CLAUDE_PREDEFINED_MODELS as never,
+    normalizeMessage: (raw, sessionId) => sessions.normalizeMessage(raw, sessionId),
+    isProviderInstalled: async () => true,
+  };
+
+  try {
+    // The first process has said nothing yet when the next turn replaces it.
+    const firstRun = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: first.createQuery });
+    await settle();
+    const secondRun = queryClaudeSDK('Continue', { sessionId: SESSION_ID, cwd }, writer as never, { ...context, createQuery: secondCreateQuery });
+    await settle();
+    second.script.emit(init());
+    second.script.emit(toolUse('toolu_agent', 'Agent', { prompt: 'sleep 90', subagent_type: 'general-purpose', run_in_background: true }));
+    second.script.emit(taskStarted('a2', 'toolu_agent', 'local_agent'));
+    await waitFor(() => listClaudeSDKBackgroundWork().length === 1);
+
+    first.script.emit(init());
+    await settle();
+    assert.equal(secondInterrupts, 0, 'the new turn is not interrupted');
+    assert.equal(listClaudeSDKBackgroundWork().length, 1, 'and keeps its task tracking');
+
+    first.script.end();
+    await firstRun;
+    second.script.emit(taskNotification('a2', 'toolu_agent', 'completed'));
+    second.script.emit(result());
+    second.script.end();
+    await secondRun;
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test('a held process is still let go when stopping its tasks throws', async () => {
   // Stopping is best effort; a stop that throws on the spot must not keep the
   // held process alive or take the new turn down with it.
