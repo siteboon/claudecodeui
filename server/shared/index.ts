@@ -15,3 +15,10 @@ export { sliceTailPage } from './utils.js';
 // Session persistence uses canonical path normalization and fork/history metadata.
 export { normalizeProjectPath } from './utils.js';
 export type { SessionForkAncestor } from './types.js';
+
+// Providers reads native Codex rollout metadata and normalizes transcript rows.
+export { parseFilesInputTag, toImageAttachments } from './image-attachments.js';
+export { prepareTranscriptMessages } from './message-unification.js';
+export { extractFirstValidJsonlData, generateMessageId, readObjectRecord, truncateSubagentActivity } from './utils.js';
+export type { IProviderSessions } from './interfaces.js';
+export type { MemoryCitation, SubagentActivity, SubagentInfo } from './types.js';
