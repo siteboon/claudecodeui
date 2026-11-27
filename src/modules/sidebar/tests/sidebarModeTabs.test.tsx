@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { TFunction } from 'i18next';
-import { test, vi } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 
 import type { SidebarSearchMode } from '@/shared/types';
 import SidebarModeTabs from '@/modules/sidebar/SidebarModeTabs';
@@ -22,7 +22,29 @@ const LABELS: Record<string, string> = {
   'search.modeMore': 'More',
 };
 
-const t = ((key: string, fallback?: string) => LABELS[key] ?? fallback ?? key) as unknown as TFunction;
+type TranslateOptions = { defaultValue?: string; tab?: string; count?: number };
+
+const interpolate = (template: string, options?: TranslateOptions): string => (
+  template
+    .replace('{{tab}}', options?.tab ?? '')
+    .replace('{{count}}', options?.count !== undefined ? String(options.count) : '')
+);
+
+const t = ((key: string, fallback?: string | TranslateOptions) => {
+  const fallbackText = typeof fallback === 'string' ? fallback : fallback?.defaultValue;
+  const raw = LABELS[key] ?? fallbackText ?? key;
+  return typeof fallback === 'object' && fallback !== null ? interpolate(raw, fallback) : raw;
+}) as unknown as TFunction;
+
+const awaitingInput = vi.hoisted(() => ({ sessionIds: new Set<string>() }));
+
+vi.mock('@/shared/context/PermissionAttentionContext', () => ({
+  useAwaitingInputSessionIdSet: () => awaitingInput.sessionIds,
+}));
+
+beforeEach(() => {
+  awaitingInput.sessionIds.clear();
+});
 
 const stubLayout = (rowWidth: number) => {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function measure(this: HTMLElement) {
@@ -81,4 +103,17 @@ test('the section on screen keeps its place in the row', () => {
   assert.equal(archive.getAttribute('aria-pressed'), 'true');
   assert.equal(screen.queryByRole('button', { name: 'Conversations' }), null);
   assert.ok(screen.getByRole('button', { name: 'More' }));
+});
+
+test('a session waiting on an answer is counted on both lists with global accessible labels', () => {
+  awaitingInput.sessionIds.add('s1');
+  awaitingInput.sessionIds.add('s2');
+  renderTabs(400, 'projects');
+
+  // Both lists can contain the blocked session, so both carry the count and announce its workspace scope.
+  const projectsTab = screen.getByRole('button', { name: /Projects, 2 waiting/i });
+  const conversationsTab = screen.getByRole('button', { name: /Conversations, 2 waiting/i });
+  assert.equal(projectsTab.textContent, 'Projects2');
+  assert.equal(conversationsTab.textContent, 'Conversations2');
+  assert.equal(projectsTab.getAttribute('title'), '2 waiting for your answer across all sessions');
 });

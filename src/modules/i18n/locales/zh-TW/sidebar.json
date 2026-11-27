@@ -58,6 +58,22 @@
     "attentionRequiredIndicator": "工作階段需要處理",
     "awaitingInputIndicator": "等待你的選擇"
   },
+  "badges": {
+    "awaitingAnswer": "等待回答"
+  },
+  "attention": {
+    "title": "需要你的回答",
+    "body": "有會話正在等待你的回答。",
+    "bodyNamed": "會話「{{session}}」正在等待你的回答。",
+    "more_one": "另有 {{count}} 個會話在等待",
+    "more_other": "另有 {{count}} 個會話在等待",
+    "globalWaitingTooltip_one": "全域共有 {{count}} 個工作階段正在等待你的回答",
+    "globalWaitingTooltip_other": "全域共有 {{count}} 個工作階段正在等待你的回答",
+    "tabWaitingLabel_one": "{{tab}}，全域共有 {{count}} 個工作階段正在等待你的回答",
+    "tabWaitingLabel_other": "{{tab}}，全域共有 {{count}} 個工作階段正在等待你的回答",
+    "open": "前往",
+    "dismiss": "關閉"
+  },
   "navigation": {
     "chat": "聊天",
     "files": "檔案",

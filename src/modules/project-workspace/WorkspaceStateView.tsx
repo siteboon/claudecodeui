@@ -1,6 +1,7 @@
 import { Folder } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import AttentionToast from '@/modules/project-workspace/AttentionToast';
 import MobileMenuButton from '@/modules/project-workspace/MobileMenuButton';
 
 type WorkspaceStateViewProps = {
@@ -23,8 +24,9 @@ export default function WorkspaceStateView({ mode, isMobile, onMenuClick }: Work
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex flex-1 items-center justify-center">
+      <div className="relative flex flex-1 items-center justify-center">
+        <AttentionToast />
+        {isLoading ? (
           <div className="text-center text-muted-foreground">
             <div className="mx-auto mb-4 h-10 w-10">
               <div
@@ -39,9 +41,7 @@ export default function WorkspaceStateView({ mode, isMobile, onMenuClick }: Work
             <h2 className="mb-1 text-lg font-semibold text-foreground">{t('mainContent.loading')}</h2>
             <p className="text-sm">{t('mainContent.settingUpWorkspace')}</p>
           </div>
-        </div>
-      ) : (
-        <div className="flex flex-1 items-center justify-center">
+        ) : (
           <div className="mx-auto max-w-md px-6 text-center">
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/50">
               <Folder className="h-7 w-7 text-muted-foreground" />
@@ -54,8 +54,8 @@ export default function WorkspaceStateView({ mode, isMobile, onMenuClick }: Work
               </p>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

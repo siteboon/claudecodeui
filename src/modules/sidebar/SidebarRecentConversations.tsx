@@ -8,6 +8,7 @@ import { cn } from '@/shared/utils';
 import type { ProjectSession, RecentConversationListItem, SessionRowActions } from '@/shared/types';
 import { useAwaitingInputSessionIdSet } from '@/shared/context/PermissionAttentionContext';
 import { formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import AwaitingAnswerBadge from '@/modules/sidebar/AwaitingAnswerBadge';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
 import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
 
@@ -227,10 +228,7 @@ export default function SidebarRecentConversations({
                       aria-label={isAwaitingInput
                         ? t('tooltips.awaitingInputIndicator', { defaultValue: 'Waiting for your answer' })
                         : t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })}
-                      className={cn(
-                        'h-2 w-2 animate-pulse rounded-full',
-                        isAwaitingInput ? 'bg-primary' : 'bg-amber-500',
-                      )}
+                      className="h-2 w-2 animate-pulse rounded-full bg-amber-500"
                     />
                   </Tooltip>
                 </div>
@@ -260,6 +258,7 @@ export default function SidebarRecentConversations({
                     {conversation.sessionTitle}
                   </span>
                   <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] leading-3 text-muted-foreground">
+                    {isAwaitingInput && <AwaitingAnswerBadge t={t} />}
                     <span className="truncate">{conversation.projectDisplayName}</span>
                     {isProcessing ? (
                       <>

@@ -11,6 +11,7 @@ import { useAwaitingInputSessionIdSet } from '@/shared/context/PermissionAttenti
 import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
+import AwaitingAnswerBadge from '@/modules/sidebar/AwaitingAnswerBadge';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
 import SessionPinButton from '@/modules/sidebar/SessionPinButton';
 import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
@@ -180,11 +181,9 @@ function SidebarSessionItem({
               aria-label={indicatorLabel}
               className={cn(
                 'h-2 w-2 animate-pulse rounded-full',
-                showAwaitingInputIndicator
-                  ? 'bg-primary'
-                  : showAttentionIndicator
-                    ? 'bg-amber-500'
-                    : showBackgroundIndicator
+                showAwaitingInputIndicator || showAttentionIndicator
+                  ? 'bg-amber-500'
+                  : showBackgroundIndicator
                     ? 'bg-purple-500 dark:bg-purple-400'
                     : 'bg-green-500',
               )}
@@ -246,7 +245,8 @@ function SidebarSessionItem({
                   <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">{compactSessionAge}</span>
                 )}
               </div>
-              <div className="mt-0.5 flex items-center">
+              <div className="mt-0.5 flex items-center gap-1.5">
+                {showAwaitingInputIndicator && <AwaitingAnswerBadge t={t} />}
                 {sessionView.messageCount > 0 && (
                   <Badge variant="secondary" className="px-1 py-0 text-xs">
                     {sessionView.messageCount}
@@ -531,7 +531,8 @@ function SidebarSessionItem({
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 flex items-center">
+              <div className="mt-0.5 flex items-center gap-1.5">
+                {showAwaitingInputIndicator && <AwaitingAnswerBadge t={t} />}
                 {sessionView.messageCount > 0 && <Badge variant="secondary" className="px-1 py-0 text-xs">{sessionView.messageCount}</Badge>}
               </div>
             </div>

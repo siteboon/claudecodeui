@@ -6,6 +6,7 @@ import type { TFunction } from 'i18next';
 import { ActionMenu, Tooltip } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { SidebarSearchMode } from '@/shared/types';
+import { useAwaitingInputSessionIdSet } from '@/shared/context/PermissionAttentionContext';
 import { useTabOverflow } from '@/modules/sidebar/hooks/useTabOverflow';
 
 type ModeTab = {
@@ -48,18 +49,36 @@ export default function SidebarModeTabs({
   const { rowRef, mirrorRef, visibleIndexes } = useTabOverflow(tabs.length, activeIndex);
   const hiddenTabs = tabs.filter((_, index) => !visibleIndexes.includes(index));
   const runningBadgeText = runningSessionsCount > 99 ? '99+' : String(runningSessionsCount);
+  // A blocked session is the one thing the strip must surface even when the
+  // user is browsing another section: a run waiting on an answer is stopped.
+  const awaitingInputCount = useAwaitingInputSessionIdSet().size;
+  const awaitingBadgeText = awaitingInputCount > 99 ? '99+' : String(awaitingInputCount);
+  const awaitingGlobalHint = awaitingInputCount > 0
+    ? t('attention.globalWaitingTooltip', {
+      count: awaitingInputCount,
+      defaultValue: '{{count}} waiting for your answer across all sessions',
+    })
+    : undefined;
   const moreLabel = t('search.modeMore', 'More');
 
   const renderTab = (tab: ModeTab, canGrow: boolean) => {
     const isActive = tab.mode === searchMode;
     const Icon = tab.icon;
+    const showAwaitingBadge = tab.showLabel && awaitingInputCount > 0;
+    const accessibleLabel = showAwaitingBadge
+      ? t('attention.tabWaitingLabel', {
+        tab: tab.label,
+        count: awaitingInputCount,
+        defaultValue: '{{tab}}, {{count}} waiting for your answer across all sessions',
+      })
+      : (tab.showLabel ? undefined : tab.label);
 
     const button = (
       <button
         onClick={() => onSearchModeChange(tab.mode)}
         aria-pressed={isActive}
-        aria-label={tab.showLabel ? undefined : tab.label}
-        title={tab.showLabel ? undefined : tab.label}
+        aria-label={accessibleLabel}
+        title={showAwaitingBadge ? awaitingGlobalHint : (tab.showLabel ? undefined : tab.label)}
         className={cn(
           'flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-normal transition-all',
           tab.mode === 'archived' && 'px-2.5',
@@ -83,6 +102,14 @@ export default function SidebarModeTabs({
           <Icon className="h-3 w-3" />
         )}
         {tab.showLabel && <span className="truncate">{tab.label}</span>}
+        {showAwaitingBadge && (
+          <span
+            aria-hidden="true"
+            className="flex h-4 min-w-4 flex-shrink-0 items-center justify-center rounded-full bg-amber-700 px-1 text-[10px] font-semibold leading-none text-white shadow-sm dark:bg-amber-400 dark:text-amber-950"
+          >
+            {awaitingBadgeText}
+          </span>
+        )}
       </button>
     );
 
