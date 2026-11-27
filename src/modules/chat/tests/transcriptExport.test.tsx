@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ChatMessage } from '@/shared/types';
 import { buildTranscriptExport, toExportFileStem } from '@/modules/chat/utils/chatExport';
+import { buildHandoffMarkdown } from '@/modules/chat/export/buildTranscriptMarkdown';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 
 const createDiff = createCachedDiffCalculator();
@@ -182,5 +183,119 @@ describe('html export', () => {
 
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
     expect(html).not.toContain('<img src=x');
+  });
+});
+
+describe('handoff digest', () => {
+  const turn = (type: 'user' | 'assistant', content: string): ChatMessage =>
+    ({ type, content, timestamp: new Date('2026-08-24T09:00:00.000Z') }) as ChatMessage;
+
+  it('keeps the task, lists touched files and drops tool payloads', () => {
+    const digest = buildHandoffMarkdown(input);
+
+    expect(digest).toContain('Claude session ("Rename the helper")');
+    expect(digest).toContain('## Original task\n\nPlease rename the helper');
+    expect(digest).toContain('- `/repo/src/helper.js`');
+    expect(digest).toContain('### Claude\n\nDone. Here is the change:');
+    expect(digest).not.toContain('Applied 1 edit');
+    expect(digest).not.toContain('old_string');
+    expect(digest).not.toContain('omitted');
+  });
+
+  it('keeps the newest turns in order within the cap and marks the rest omitted', () => {
+    const messages = [turn('user', 'the task')];
+    for (let index = 1; index <= 20; index += 1) {
+      messages.push(turn(index % 2 ? 'assistant' : 'user', `turn-${index} ${'x'.repeat(400)}`));
+    }
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'codex', maxChars: 2500 });
+
+    expect(digest.length).toBeLessThanOrEqual(2500);
+    expect(digest).toContain('the task');
+    expect(digest).toMatch(/_…\d+ earlier turn\(s\) omitted_/);
+    expect(digest).not.toContain('turn-1 ');
+    expect(digest.indexOf('turn-19 ')).toBeGreaterThan(-1);
+    expect(digest.indexOf('turn-19 ')).toBeLessThan(digest.indexOf('turn-20 '));
+  });
+
+  it('keeps the tail of an oversized latest turn instead of dropping it', () => {
+    const messages = [turn('user', 'the task'), turn('assistant', `${'y'.repeat(5000)} where it got to`)];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude', maxChars: 1000 });
+
+    expect(digest.length).toBeLessThanOrEqual(1000);
+    expect(digest).toContain('### Claude\n\n…y');
+    expect(digest.endsWith('where it got to')).toBe(true);
+  });
+
+  it('carries a compaction summary and caps the files list', () => {
+    const edits = Array.from({ length: 300 }, (_, index) => ({
+      type: 'assistant',
+      isToolUse: true,
+      toolName: 'MultiEdit',
+      toolInput: { file_path: `/repo/src/very/long/path/to/module-${index}.ts`, edits: [] },
+      timestamp: new Date('2026-08-24T09:00:00.000Z'),
+    }) as unknown as ChatMessage);
+    const compaction = { ...turn('assistant', ''), compact: { phase: 'done' }, compactSummary: 'Did steps 1-3.' } as ChatMessage;
+    const messages = [turn('user', 'the task'), ...edits, compaction, turn('assistant', 'latest reply')];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude' });
+
+    expect(digest.length).toBeLessThanOrEqual(16000);
+    expect(digest).toContain('Summary of the earlier conversation:\n\nDid steps 1-3.');
+    expect(digest).toContain('module-299.ts');
+    expect(digest).not.toContain('module-0.ts');
+    expect(digest).toContain('- _…260 more_');
+    expect(digest).toContain('latest reply');
+  });
+
+  it('keeps a file touched again late inside the newest-files cap', () => {
+    const edit = (path: string) => ({
+      type: 'assistant',
+      isToolUse: true,
+      toolName: 'Edit',
+      toolInput: { file_path: path, old_string: '', new_string: '' },
+      timestamp: new Date('2026-08-24T09:00:00.000Z'),
+    }) as unknown as ChatMessage;
+    const early = Array.from({ length: 50 }, (_, index) => edit(`/repo/module-${index}.ts`));
+    const messages = [turn('user', 'the task'), ...early, edit('/repo/module-0.ts')];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude' });
+
+    expect(digest).toContain('- `/repo/module-0.ts`');
+    expect(digest).not.toContain('- `/repo/module-1.ts`');
+  });
+
+  it('leaves out side-question asides', () => {
+    const aside = { ...turn('user', 'what does X mean?'), sideQuestion: { id: 'q1' } } as unknown as ChatMessage;
+    const messages = [turn('user', 'the task'), aside, turn('assistant', 'latest reply')];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude' });
+
+    expect(digest).not.toContain('what does X mean?');
+    expect(digest).toContain('latest reply');
+  });
+
+  it('keeps the latest turn when the task and files fill the head', () => {
+    const edits = Array.from({ length: 40 }, (_, index) => ({
+      type: 'assistant',
+      isToolUse: true,
+      toolName: 'MultiEdit',
+      toolInput: { file_path: `/repo/${'deep/'.repeat(60)}module-${index}.ts`, edits: [] },
+      timestamp: new Date('2026-08-24T09:00:00.000Z'),
+    }) as unknown as ChatMessage);
+    const messages = [turn('user', 't'.repeat(5000)), ...edits, turn('assistant', `${'r'.repeat(9000)} where it got to`)];
+
+    const digest = buildHandoffMarkdown({ messages, sessionTitle: 'T', provider: 'claude' });
+
+    expect(digest.endsWith('where it got to')).toBe(true);
+    expect(digest.length).toBeLessThanOrEqual(16000);
+    expect(digest).toContain('module-39.ts');
+    expect(digest).toMatch(/- _…\d+ more_/);
+  });
+
+  it('handles an empty transcript', () => {
+    expect(buildHandoffMarkdown({ messages: [], sessionTitle: 'T', provider: 'claude' }))
+      .toBe('I am continuing a Claude session ("T") here. The context is below. Pick up where it left off.');
   });
 });

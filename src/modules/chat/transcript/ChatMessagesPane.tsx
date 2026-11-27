@@ -81,6 +81,8 @@ type ChatMessagesPaneProps = {
   onForkFromMessage?: (message: ChatMessage) => void;
   /** Fetches the whole transcript for an export, which otherwise only sees the loaded page. */
   onLoadFullTranscript?: () => Promise<ChatMessage[]>;
+  /** Opens a new chat in the project, for the export menu's "Continue in new chat". */
+  onNewSession?: (project: Project) => void;
 };
 
 /**
@@ -139,6 +141,7 @@ function ChatMessagesPane({
   onEditMessage,
   onForkFromMessage,
   onLoadFullTranscript,
+  onNewSession,
   onFileOpen,
   onShowSettings,
   onGrantToolPermission,
@@ -211,10 +214,12 @@ function ChatMessagesPane({
             <ChatExportMenu
               messages={chatMessages}
               sessionTitle={selectedSession?.summary || selectedSession?.title}
+              sessionId={selectedSession?.id || currentSessionId}
               provider={provider}
               selectedProject={selectedProject}
               createDiff={createDiff}
               onLoadFullTranscript={onLoadFullTranscript}
+              onNewSession={onNewSession}
             />
           </div>
         </div>
