@@ -14,6 +14,8 @@ type SessionRow = {
   model: string | null;
   /** Reasoning effort this session runs with; NULL until the app records one. */
   effort: string | null;
+  /** 1 when a turn stopped by the usage limit is continued automatically after the reset. */
+  auto_continue: number;
   /** Permission mode this session runs with; NULL until the app records one. */
   permission_mode: string | null;
   /** The app session this one was branched from; NULL unless it is a fork. */
@@ -41,7 +43,7 @@ function preservePinsOnReplacement(sourceId: string, targetId: string, replace: 
 }
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, permission_mode, forked_from_session_id, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, permission_mode, auto_continue, forked_from_session_id, isArchived, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -531,6 +533,12 @@ export const sessionsDb = {
        SET effort = ?
        WHERE session_id = ?`
     ).run(effort, sessionId);
+  },
+
+  setSessionAutoContinue(sessionId: string, enabled: boolean): void {
+    getConnection()
+      .prepare('UPDATE sessions SET auto_continue = ? WHERE session_id = ?')
+      .run(enabled ? 1 : 0, sessionId);
   },
 
   /** Records the permission mode one session runs with, like `setSessionEffort`. */

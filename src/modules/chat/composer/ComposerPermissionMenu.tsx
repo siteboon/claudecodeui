@@ -6,6 +6,7 @@ import {
   Bot,
   ClipboardList,
   Hand,
+  RotateCw,
   ShieldQuestion,
   Smile,
   type LucideIcon,
@@ -17,6 +18,7 @@ import { usePermissionNameFit } from '@/modules/chat/hooks/usePermissionNameFit'
 import {
   ComposerMenuHeading,
   ComposerMenuItem,
+  ComposerMenuSeparator,
   ComposerMenuSurface,
 } from '@/modules/chat/composer/ComposerMenuPrimitives';
 
@@ -84,6 +86,9 @@ type ComposerPermissionMenuProps = {
   permissionModes: PermissionMode[];
   onSelectPermissionMode: (mode: PermissionMode) => void;
   providerLabel: string;
+  /** This session's "continue after the usage limit" switch; both absent where it does not apply. */
+  autoContinueEnabled?: boolean;
+  onAutoContinueChange?: (enabled: boolean) => void;
 };
 
 /**
@@ -95,6 +100,8 @@ function ComposerPermissionMenu({
   permissionModes,
   onSelectPermissionMode,
   providerLabel,
+  autoContinueEnabled = false,
+  onAutoContinueChange,
 }: ComposerPermissionMenuProps) {
   const { t } = useTranslation('chat');
   const [isOpen, setIsOpen] = useState(false);
@@ -123,6 +130,8 @@ function ComposerPermissionMenu({
     provider: providerLabel,
     defaultValue: 'How should {{provider}} actions be approved?',
   });
+  const isAutoContinueShown = Boolean(onAutoContinueChange) && autoContinueEnabled;
+  const autoContinueNote = isAutoContinueShown ? ` — ${t('autoContinue.on')}` : '';
 
   return (
     <>
@@ -133,7 +142,7 @@ function ComposerPermissionMenu({
           updateAnchor();
           setIsOpen((current) => !current);
         }}
-        className={`flex h-8 min-w-8 max-w-40 shrink-0 items-center justify-center gap-1.5 rounded-lg border text-xs font-medium transition-colors sm:max-w-48 ${isNameShown ? 'px-2' : 'w-8'} ${activeAppearance.trigger}`}
+        className={`relative flex h-8 min-w-8 max-w-40 shrink-0 items-center justify-center gap-1.5 rounded-lg border text-xs font-medium transition-colors sm:max-w-48 ${isNameShown ? 'px-2' : 'w-8'} ${activeAppearance.trigger}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         // The mode name leads the accessible name, so what a screen reader
@@ -142,12 +151,18 @@ function ComposerPermissionMenu({
           mode: activeModeLabel,
           heading,
           defaultValue: '{{mode}}: {{heading}}',
-        })}
-        title={t('input.clickToChangeMode')}
+        }) + autoContinueNote}
+        title={t('input.clickToChangeMode') + autoContinueNote}
       >
         <ActiveIcon className="h-4 w-4 shrink-0" />
         {/* Named, not just drawn: the mode decides what the next message may change. */}
         {isNameShown && <span className="truncate">{activeModeLabel}</span>}
+        {/* Overlaid, so the switch being on never widens the controls row. */}
+        {isAutoContinueShown && (
+          <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <RotateCw className="h-2.5 w-2.5" aria-hidden />
+          </span>
+        )}
       </button>
 
       {isOpen && anchor && createPortal(
@@ -174,6 +189,22 @@ function ComposerPermissionMenu({
           <ComposerMenuHeading>
             {t('composer.permissionCycleHint', { defaultValue: 'Press Tab in the message box to switch modes' })}
           </ComposerMenuHeading>
+          {onAutoContinueChange && (
+            // Lives here rather than as its own composer button, which pushed
+            // the controls onto a second row on phones. Set apart below the
+            // modes, so it never reads as a second selected mode.
+            <>
+              <ComposerMenuSeparator />
+              <ComposerMenuItem
+                role="menuitemcheckbox"
+                icon={<RotateCw className="h-4 w-4" />}
+                label={t('autoContinue.toggle')}
+                description={t('autoContinue.description')}
+                isSelected={autoContinueEnabled}
+                onSelect={() => onAutoContinueChange(!autoContinueEnabled)}
+              />
+            </>
+          )}
         </ComposerMenuSurface>,
         document.body,
       )}

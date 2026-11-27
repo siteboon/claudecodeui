@@ -43,6 +43,7 @@ import {
   getReportedClaudeContextWindow,
   rememberClaudeContextWindow
 } from '@/modules/providers/services/provider-token-usage.service.js';
+import { scheduledMessagesDb, sessionsDb } from '@/modules/database/index.js';
 import { createCompleteMessage, createNormalizedMessage, errorMessage } from '@/shared/utils.js';
 import type {
   AnyRecord,
@@ -1147,6 +1148,107 @@ async function loadMcpConfig(cwd: string | undefined): Promise<AnyRecord | null>
 }
 
 /**
+ * Watches a run for a claude.ai usage limit that stopped the turn.
+ *
+ * The SDK reports the reset time in a `rate_limit_event` and the stop itself
+ * as a synthetic assistant message with `error: 'rate_limit'`. Claude Code's
+ * own "continue automatically at usage limit" only runs in interactive
+ * sessions, never in SDK runs, so the app schedules the "continue" itself.
+ *
+ * Returns a function that takes each SDK message and answers when to
+ * continue, once per limit hit, or null.
+ */
+export function createUsageLimitWatcher(): (sdkMessage: AnyRecord, now?: number) => Date | null {
+  // Reset time per limit window that currently rejects (five_hour, seven_day, ...).
+  const rejectedResets = new Map<string, number>();
+  let stopped = false;
+  return (sdkMessage, now = Date.now()) => {
+    if (sdkMessage?.type === 'rate_limit_event') {
+      const info = sdkMessage.rate_limit_info;
+      const window = info?.rateLimitType ?? 'default';
+      if (info?.status === 'rejected' && typeof info.resetsAt === 'number') {
+        // Epoch seconds per the CLI; milliseconds accepted in case that changes.
+        rejectedResets.set(window, info.resetsAt < 1e12 ? info.resetsAt * 1000 : info.resetsAt);
+      } else {
+        rejectedResets.delete(window);
+      }
+    } else if (
+      sdkMessage?.type === 'assistant'
+      && sdkMessage.error === 'rate_limit'
+      // A subagent's limit error is the main turn's to handle.
+      && !sdkMessage.parent_tool_use_id
+    ) {
+      stopped = true;
+    } else if (sdkMessage?.type === 'result') {
+      // The turn is over; half a signal must not pair with a later turn's.
+      rejectedResets.clear();
+      stopped = false;
+    }
+    // The two can arrive in either order; answer once both are in.
+    if (!stopped || rejectedResets.size === 0) {
+      return null;
+    }
+    // Requests go through again once every rejecting window has reset.
+    const resetAt = Math.max(...rejectedResets.values());
+    rejectedResets.clear();
+    stopped = false;
+    // Like Claude Code itself: a weekly limit is not waited out unattended.
+    if (!(resetAt > now) || resetAt - now > 24 * 60 * 60 * 1000) {
+      return null;
+    }
+    // A minute of slack so the first request after the reset is not refused again.
+    return new Date(resetAt + 60_000);
+  };
+}
+
+/** Loaded on use: the scheduled-messages module imports the provider runtimes, so a static import is circular. */
+function announceScheduledChange(sessionId: string): void {
+  void import('@/modules/scheduled-messages/index.js')
+    .then(({ announceScheduledMessagesChanged }) => announceScheduledMessagesChanged(sessionId))
+    .catch((error) => console.error('[Claude] Could not announce the scheduled-message change:', error));
+}
+
+/**
+ * Schedules the "continue" for a turn the usage limit stopped, if the session
+ * has auto-continue turned on. It shows up as a pending scheduled message the user
+ * can cancel.
+ *
+ * Returns whether a continue was scheduled.
+ */
+export function scheduleUsageLimitContinue({ userId, sessionId, runOptions, continueAt }: {
+  userId: number;
+  sessionId: string;
+  runOptions: AnyRecord;
+  continueAt: Date;
+}): boolean {
+  if (sessionsDb.getSessionById(sessionId)?.auto_continue !== 1) {
+    return false;
+  }
+  // At most one waits per session; the latest limit hit has the current reset.
+  // Created first, so a failed insert leaves the earlier one in place.
+  const { id } = scheduledMessagesDb.create({
+    userId,
+    sessionId,
+    content: 'continue',
+    // Tool permissions are added when it fires, from the user's settings then.
+    options: {
+      model: runOptions.model,
+      effort: runOptions.effort,
+      permissionMode: runOptions.permissionMode,
+      autoContinue: true,
+    },
+    scheduledFor: continueAt,
+  });
+  try {
+    scheduledMessagesDb.cancelPendingAutoContinue(sessionId, id);
+  } finally {
+    // The new continue exists either way; clients must see it.
+    announceScheduledChange(sessionId);
+  }
+  return true;
+}
+
+/**
  * Executes a Claude query using the SDK
  * @param {string} command - User prompt/command
  * @param {Object} options - Query options
@@ -1198,6 +1300,8 @@ async function queryClaudeSDK(
   // The client is told the turn is over as soon as `result` lands, even though
   // the process lingers, so the UI never waits out the idle hold.
   let turnCompleteSent = false;
+  const watchUsageLimit = createUsageLimitWatcher();
+  let autoContinueDropped = false;
   // Set when a turn starts background work, cleared when the next `result`
   // arrives — only turns with work still outstanding hold their process open.
   let backgroundWorkPending = false;
@@ -1628,6 +1732,40 @@ async function queryClaudeSDK(
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const rawMessage of queryInstance) {
       const message = rawMessage as AnyRecord;
+      // Once per query: the CLI is up, so the user took over before the reset
+      // fired the waiting continue. Later inits (follow-up turns of held-open
+      // background work) are not the user. A turn still refused by the limit
+      // schedules a fresh continue below.
+      // A run another run replaced must neither drop nor schedule the newer one's continue.
+      const supersededRun = supersededInstances.has(queryInstance);
+      if (!autoContinueDropped && !supersededRun && message.type === 'system' && message.subtype === 'init' && sessionId) {
+        try {
+          if (scheduledMessagesDb.cancelPendingAutoContinue(sessionId) > 0) {
+            announceScheduledChange(sessionId);
+          }
+          autoContinueDropped = true;
+        } catch (error) {
+          console.error('[Claude] Could not drop the waiting continue:', error instanceof Error ? error.message : error);
+        }
+      }
+      const continueAt = watchUsageLimit(message);
+      if (continueAt && sessionId && ws?.userId != null && !supersededRun) {
+        try {
+          const scheduled = scheduleUsageLimitContinue({
+            userId: Number(ws.userId),
+            sessionId,
+            runOptions: options,
+            continueAt,
+          });
+          // Whatever this query's init could still drop is now its own continue.
+          if (scheduled) {
+            autoContinueDropped = true;
+          }
+        } catch (error) {
+          // Best effort: the turn's own stream must not die over the follow-up.
+          console.error('[Claude] Could not schedule the continue after the usage limit:', error instanceof Error ? error.message : error);
+        }
+      }
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 

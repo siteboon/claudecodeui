@@ -1,4 +1,4 @@
-import { scheduledMessagesDb, sessionDraftsDb } from '@/modules/database/index.js';
+import { scheduledMessagesDb, sessionDraftsDb, sessionsDb, userPreferencesDb } from '@/modules/database/index.js';
 import type { QueuedSessionMessageRecord, ScheduledMessageRow } from '@/modules/database/index.js';
 import { announceScheduledMessagesChanged } from '@/modules/scheduled-messages/services/scheduled-messages.service.js';
 import { chatRunRegistry, onRunSettled, runDetachedChatTurn } from '@/modules/websocket/index.js';
@@ -20,6 +20,20 @@ import { readQueuedChatMessage } from '@/shared/utils.js';
  */
 const POLL_INTERVAL_MS = 30_000;
 
+/**
+ * How long an automatic continue may wait for background work the stopped
+ * turn left running. Past this the conversation has moved on; the CLI stops
+ * holding background work after 30 minutes anyway.
+ */
+const AUTO_CONTINUE_MAX_WAIT_MS = 60 * 60_000;
+
+/**
+ * How late an automatic continue may still go out at all, e.g. after the
+ * server was down. Past a day the conversation has moved on, the same reason
+ * the runtime does not wait out a limit that resets more than a day away.
+ */
+const AUTO_CONTINUE_MAX_LATE_MS = 24 * 60 * 60_000;
+
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let unsubscribeRunSettled: (() => void) | null = null;
 /**
@@ -38,6 +52,26 @@ function readOptions(raw: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/**
+ * The user's stored tool permissions in the shape the runtime expects. Read
+ * more strictly than an interactive send: nobody watches this run, so
+ * anything malformed grants nothing.
+ */
+function readToolsSettings(raw: unknown): { allowedTools: string[]; disallowedTools: string[]; skipPermissions: boolean } {
+  const stored = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
+  return {
+    allowedTools: strings(stored.allowedTools),
+    disallowedTools: strings(stored.disallowedTools),
+    skipPermissions: stored.skipPermissions === true,
+  };
+}
+
+/** For logs: the stack when there is one, so a failure can be traced. */
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.stack || error.message : String(error);
 }
 
 async function sendClaimedQueuedMessage(
@@ -117,21 +151,87 @@ function recordFailure(row: ScheduledMessageRow, reason: string): void {
   announceScheduledMessagesChanged(row.session_id);
 }
 
+/** An automatic continue dropped quietly; its banner comes down like a failure's. */
+function recordCancelled(row: ScheduledMessageRow): void {
+  scheduledMessagesDb.markCancelled(row.id);
+  announceScheduledMessagesChanged(row.session_id);
+}
+
+function isAutoContinue(row: ScheduledMessageRow): boolean {
+  return readOptions(row.options).autoContinue === true;
+}
+
+/**
+ * An automatic continue held back by background work the stopped turn left
+ * going. Waits up to a limit; past it the conversation has moved on.
+ */
+function waitsForBackgroundWork(row: ScheduledMessageRow, runtime: ProviderRuntimeGateway, now: number): boolean {
+  return isAutoContinue(row)
+    && now - Date.parse(row.scheduled_for) <= AUTO_CONTINUE_MAX_WAIT_MS
+    && runtime.hasBackgroundWork(row.session_id);
+}
+
+/** Whether the message's turn started. */
 async function sendClaimedMessage(
   row: ScheduledMessageRow,
   runtime: ProviderRuntimeGateway,
-): Promise<void> {
+): Promise<boolean> {
   try {
+    const options = readOptions(row.options);
+    // The automatic continue after a usage limit is not the user's pick, so it
+    // is dropped quietly when auto-continue was turned off for the session
+    // since, or when another turn is running (someone took the session over).
+    // One over a day late is not sent either, and says so. One waiting for
+    // background work the stopped turn left going is only claimed once it has
+    // waited too long (see dispatchDueScheduledMessages).
+    const autoContinue = options.autoContinue === true;
+    if (autoContinue && (
+      sessionsDb.getSessionById(row.session_id)?.auto_continue !== 1
+      || chatRunRegistry.isProcessing(row.session_id)
+    )) {
+      recordCancelled(row);
+      return false;
+    }
+    // Measured when this row is reached: earlier rows for the same session may
+    // have run for a while. NaN (an unreadable time) counts as too late.
+    const late = Date.now() - Date.parse(row.scheduled_for);
+    if (autoContinue && !(late <= AUTO_CONTINUE_MAX_LATE_MS)) {
+      recordFailure(row, 'Not sent: it was more than a day late, so the conversation had moved on.');
+      return false;
+    }
+    if (autoContinue && runtime.hasBackgroundWork(row.session_id)) {
+      if (late > AUTO_CONTINUE_MAX_WAIT_MS) {
+        recordFailure(row, `Not sent: the session was still busy with background work ${Math.round(AUTO_CONTINUE_MAX_WAIT_MS / 60_000)} minutes after it was due.`);
+      } else {
+        // The work started after the claim: a turn of the user's started it,
+        // which takes the session over.
+        recordCancelled(row);
+      }
+      return false;
+    }
+    if (autoContinue) {
+      // Unattended, so it needs tool permissions or it stalls on an approval
+      // nobody sees: the user's current ones, so revoked ones never run.
+      options.toolsSettings = readToolsSettings(userPreferencesDb.getPreferences(row.user_id).claudePermissions);
+      // The session's current selection, not the one at the limit hit: the
+      // run records what it uses back onto the session, which would undo a
+      // change the user made while waiting.
+      const session = sessionsDb.getSessionById(row.session_id);
+      if (session?.model) options.model = session.model;
+      // NULL is meaningful here: deleting a custom model clears the effort chosen for it.
+      if (session?.model) options.effort = session.effort ?? undefined;
+      if (session?.permission_mode) options.permissionMode = session.permission_mode;
+    }
     const result = await runDetachedChatTurn(
       {
         sessionId: row.session_id,
         userId: row.user_id,
         content: row.content,
-        options: readOptions(row.options),
+        options,
         // The user picked this time on purpose; a run that happens to be going
         // is aborted so the scheduled message lands when it was due, instead
         // of being recorded as "not sent — session was busy".
-        interruptActiveRun: true,
+        interruptActiveRun: !autoContinue,
       },
       { runtime },
     );
@@ -140,12 +240,31 @@ async function sendClaimedMessage(
     // (deleted session, unavailable provider) or started and then failed.
     // Silently dropping a message the user scheduled is worse than telling
     // them it did not go.
-    if (!result.started || result.error) {
+    if (autoContinue && !result.started && result.error?.includes('already in progress')) {
+      // Lost the start to another run: someone took the session over.
+      recordCancelled(row);
+    } else if (!result.started || result.error) {
       recordFailure(row, result.error ?? 'The session was unavailable when this was due.');
     }
+    return result.started;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    recordFailure(row, message);
+    console.error('[ScheduledMessages] Scheduled send failed', {
+      id: row.id,
+      sessionId: row.session_id,
+      userId: row.user_id,
+      error: describeError(error),
+    });
+    // Never rejects, so a session's later rows still go out.
+    try {
+      recordFailure(row, message);
+    } catch (recordError) {
+      console.error('[ScheduledMessages] Could not record a failed send; the message stays marked sent', {
+        id: row.id,
+        recordError: describeError(recordError),
+      });
+    }
+    return false;
   }
 }
 
@@ -160,7 +279,12 @@ export async function dispatchDueScheduledMessages(
 ): Promise<number> {
   // Claimed before any of them runs, so a long turn cannot let the next poll
   // pick the same message up again.
-  const due = scheduledMessagesDb.claimDue(now, sessionsSending);
+  // An automatic continue still waiting for background work the stopped turn
+  // left going is not claimed: it stays pending, so a turn the user starts
+  // meanwhile drops it, and nothing flickers on every poll. Past the wait
+  // limit it is claimed, to be dropped.
+  const shouldClaim = (row: ScheduledMessageRow) => !waitsForBackgroundWork(row, runtime, now.getTime());
+  const due = scheduledMessagesDb.claimDue(now, sessionsSending, shouldClaim);
   if (due.length === 0) {
     return 0;
   }
@@ -183,11 +307,19 @@ export async function dispatchDueScheduledMessages(
     const sessionId = first.session_id;
     sessionsSending.add(sessionId);
     try {
+      // A message the user scheduled takes the session over, like a turn of
+      // their own would: the automatic continue after it is dropped.
+      let userTookOver = false;
       let row: ScheduledMessageRow | null = first;
       while (row) {
-        await sendClaimedMessage(row, runtime);
+        if (userTookOver && isAutoContinue(row)) {
+          recordCancelled(row);
+        } else {
+          const started = await sendClaimedMessage(row, runtime);
+          userTookOver ||= started && !isAutoContinue(row);
+        }
         sent += 1;
-        row = scheduledMessagesDb.claimNextDue(sessionId, now);
+        row = scheduledMessagesDb.claimNextDue(sessionId, now, shouldClaim);
         if (row) announceScheduledMessagesChanged(sessionId);
       }
     } catch (error) {

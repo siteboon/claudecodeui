@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, test, vi } from 'vitest';
 
 import type { PermissionMode } from '@/shared/types';
@@ -263,4 +263,92 @@ test('the menu ends by saying Tab in the message box switches modes', () => {
   fireEvent.click(getByRole('button'));
 
   assert.equal(getByRole('menu').lastElementChild?.textContent, 'Press Tab in the message box to switch modes');
+});
+
+test('auto-continue after the usage limit is switched from the permission menu', () => {
+  // A separate composer button pushed the controls onto a second row on phones.
+  const onAutoContinueChange = vi.fn();
+  const { getByRole } = render(
+    <ComposerPermissionMenu
+      permissionMode="default"
+      permissionModes={[...MODES]}
+      onSelectPermissionMode={() => {}}
+      providerLabel="Claude"
+      autoContinueEnabled={false}
+      onAutoContinueChange={onAutoContinueChange}
+    />,
+  );
+  fireEvent.click(getByRole('button'));
+  const item = getByRole('menuitemcheckbox', { name: /usage limit/i });
+  assert.equal(item.getAttribute('aria-checked'), 'false');
+  fireEvent.click(item);
+
+  assert.deepEqual(onAutoContinueChange.mock.calls, [[true]]);
+});
+
+test('the closed menu shows that auto-continue is on', () => {
+  const renderButton = (autoContinueEnabled: boolean) => render(
+    <ComposerPermissionMenu
+      permissionMode="default"
+      permissionModes={[...MODES]}
+      onSelectPermissionMode={() => {}}
+      providerLabel="Claude"
+      autoContinueEnabled={autoContinueEnabled}
+      onAutoContinueChange={() => {}}
+    />,
+  ).getByRole('button');
+  const off = renderButton(false);
+  const offLabel = off.getAttribute('aria-label');
+  const offTitle = off.getAttribute('title');
+  assert.ok(offLabel && offTitle);
+  cleanup();
+
+  const on = renderButton(true);
+  // A missing key would come back as the key itself on both sides.
+  assert.ok(i18n.exists('chat:autoContinue.on'));
+  const note = ` — ${i18n.t('chat:autoContinue.on')}`;
+  assert.equal(on.getAttribute('aria-label'), `${offLabel}${note}`);
+  assert.equal(on.getAttribute('title'), `${offTitle}${note}`);
+});
+
+test('the closed menu says nothing about auto-continue while it is off', () => {
+  const { getByRole } = render(
+    <ComposerPermissionMenu
+      permissionMode="default"
+      permissionModes={[...MODES]}
+      onSelectPermissionMode={() => {}}
+      providerLabel="Claude"
+      autoContinueEnabled={false}
+      onAutoContinueChange={() => {}}
+    />,
+  );
+  assert.doesNotMatch(getByRole('button').getAttribute('aria-label') ?? '', /usage limit/i);
+  assert.doesNotMatch(getByRole('button').getAttribute('title') ?? '', /usage limit/i);
+});
+
+test('a provider without the switch never claims auto-continue is on', () => {
+  const { getByRole } = render(
+    <ComposerPermissionMenu
+      permissionMode="default"
+      permissionModes={[...MODES]}
+      onSelectPermissionMode={() => {}}
+      providerLabel="Codex"
+      autoContinueEnabled
+    />,
+  );
+  assert.doesNotMatch(getByRole('button').getAttribute('aria-label') ?? '', /usage limit/i);
+  assert.doesNotMatch(getByRole('button').getAttribute('title') ?? '', /usage limit/i);
+});
+
+test('the permission menu has no auto-continue entry where it does not apply', () => {
+  const { getByRole, queryByRole } = render(
+    <ComposerPermissionMenu
+      permissionMode="default"
+      permissionModes={[...MODES]}
+      onSelectPermissionMode={() => {}}
+      providerLabel="Codex"
+    />,
+  );
+  fireEvent.click(getByRole('button'));
+  assert.equal(queryByRole('menuitemcheckbox'), null);
 });

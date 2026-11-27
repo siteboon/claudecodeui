@@ -68,10 +68,11 @@ const looksDestructive = (row: HTMLElement) =>
   [row, ...Array.from(row.querySelectorAll<HTMLElement>('*'))]
     .some((element) => /destructive|red-/.test(element.getAttribute('class') ?? ''));
 
-// The separator is the menu's only aria-hidden element outside a row (icons
-// inside rows are aria-hidden too and do not count).
+// The separator is a role="separator" (or, drawn bare, the menu's only
+// aria-hidden element) outside a row; icons inside rows are aria-hidden too
+// and do not count.
 const separatorsBetween = (menu: HTMLElement, before: HTMLElement, after: HTMLElement) =>
-  Array.from(menu.querySelectorAll<HTMLElement>('[aria-hidden="true"], [aria-hidden=""]'))
+  Array.from(menu.querySelectorAll<HTMLElement>('[role="separator"], [aria-hidden="true"], [aria-hidden=""]'))
     .filter((element) => !element.closest('[role^="menuitem"]') && element.tagName.toLowerCase() !== 'svg')
     .filter((element) =>
       Boolean(before.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING)

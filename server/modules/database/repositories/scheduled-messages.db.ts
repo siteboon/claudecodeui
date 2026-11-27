@@ -68,8 +68,9 @@ export const scheduledMessagesDb = {
   },
 
   /**
-   * Claims the earliest message whose time has passed for each session not in
-   * `skipSessionIds`, marking them in the same transaction that selects them.
+   * Claims the earliest message whose time has passed and that `shouldClaim`
+   * accepts, for each session not in `skipSessionIds`, marking them in the same
+   * transaction that selects them.
    * A session's later due messages stay pending (cancellable, banner up) until
    * claimNextDue takes them, so none is recorded as sent before it actually goes.
    *
@@ -78,7 +79,11 @@ export const scheduledMessagesDb = {
    * message up instead of skipping it. Doing it in one transaction is what
    * stops two overlapping polls from sending the same message twice.
    */
-  claimDue(now: Date, skipSessionIds: ReadonlySet<string> = new Set()): ScheduledMessageRow[] {
+  claimDue(
+    now: Date,
+    skipSessionIds: ReadonlySet<string> = new Set(),
+    shouldClaim: (row: ScheduledMessageRow) => boolean = () => true,
+  ): ScheduledMessageRow[] {
     const db = getConnection();
     const nowIso = now.toISOString();
 
@@ -93,6 +98,9 @@ export const scheduledMessagesDb = {
       const sessions = new Set(skipSessionIds);
       const claimed = due.filter((row) => {
         if (sessions.has(row.session_id)) return false;
+        // Rows left out stay pending for a later poll, untouched, and do not
+        // hold back the session's other due rows.
+        if (!shouldClaim(row)) return false;
         sessions.add(row.session_id);
         return true;
       });
@@ -107,24 +115,52 @@ export const scheduledMessagesDb = {
     })();
   },
 
-  /** Claims one session's earliest due message, once its earlier send is done. */
-  claimNextDue(sessionId: string, now: Date): ScheduledMessageRow | null {
+  /**
+   * Claims one session's earliest due message that `shouldClaim` accepts (as
+   * claimDue does), once its earlier send is done.
+   */
+  claimNextDue(
+    sessionId: string,
+    now: Date,
+    shouldClaim: (row: ScheduledMessageRow) => boolean = () => true,
+  ): ScheduledMessageRow | null {
     const db = getConnection();
     return db.transaction(() => {
-      const row = db
+      const row = (db
         .prepare(
           `SELECT ${COLUMNS} FROM scheduled_messages
            WHERE session_id = ? AND status = 'pending' AND scheduled_for <= ?
-           ORDER BY scheduled_for ASC, created_at ASC, rowid ASC
-           LIMIT 1`
+           ORDER BY scheduled_for ASC, created_at ASC, rowid ASC`
         )
-        .get(sessionId, now.toISOString()) as ScheduledMessageRow | undefined;
+        .all(sessionId, now.toISOString()) as ScheduledMessageRow[]).find(shouldClaim);
       if (!row) return null;
       db.prepare(
         `UPDATE scheduled_messages SET status = 'sent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
       ).run(row.id);
       return row;
     })();
+  },
+
+  /** Settles a claimed message that was deliberately not sent, without a failure banner. */
+  markCancelled(id: string): void {
+    getConnection()
+      .prepare(`UPDATE scheduled_messages SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(id);
+  },
+
+  /**
+   * Drops the session's waiting automatic "continue" after a usage limit, except `keepId`.
+   * Returns how many were cancelled.
+   */
+  cancelPendingAutoContinue(sessionId: string, keepId = ''): number {
+    return getConnection()
+      .prepare(
+        `UPDATE scheduled_messages
+         SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+         WHERE session_id = ? AND id != ? AND status = 'pending'
+           AND json_extract(options, '$.autoContinue') = 1`
+      )
+      .run(sessionId, keepId).changes;
   },
 
   markFailed(id: string, reason: string): void {

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import { projectsDb, sessionPinsDb, sessionsDb } from '@/modules/database/index.js';
+import { projectsDb, scheduledMessagesDb, sessionPinsDb, sessionsDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
@@ -950,6 +950,47 @@ export const sessionsService = {
 
     sessionsDb.updateSessionIsArchived(sessionId, false);
     return { sessionId, isArchived: false };
+  },
+
+  /** Whether a turn stopped by the usage limit is continued automatically in this session. */
+  getAutoContinueById(sessionId: string): { sessionId: string; enabled: boolean } {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+    return { sessionId, enabled: session.auto_continue === 1 };
+  },
+
+  /** Turns the automatic continue after the usage limit on or off for one session. */
+  setAutoContinueById(sessionId: string, enabled: boolean): { sessionId: string; enabled: boolean } {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+    // Only the Claude runtime notices a usage limit and schedules the continue.
+    if (enabled && session.provider !== 'claude') {
+      throw new AppError('Auto-continue after the usage limit is only available for Claude sessions.', {
+        code: 'AUTO_CONTINUE_UNSUPPORTED',
+        statusCode: 400,
+      });
+    }
+    sessionsDb.setSessionAutoContinue(sessionId, enabled);
+    if (!enabled) {
+      // A continue already waiting must not keep showing as pending, or fire.
+      if (scheduledMessagesDb.cancelPendingAutoContinue(sessionId) > 0) {
+        // Loaded on use: the scheduled-messages module imports the provider runtimes.
+        void import('@/modules/scheduled-messages/index.js')
+          .then(({ announceScheduledMessagesChanged }) => announceScheduledMessagesChanged(sessionId))
+          .catch((error) => console.error('[Sessions] Could not announce the scheduled-message change:', error));
+      }
+    }
+    return { sessionId, enabled };
   },
 
   /**

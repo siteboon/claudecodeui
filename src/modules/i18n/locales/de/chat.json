@@ -297,6 +297,11 @@
     },
     "includeSideQuestions": "Nebenfragen mitexportieren"
   },
+  "autoContinue": {
+    "on": "Automatisch fortsetzen nach Nutzungslimit ist an",
+    "description": "Sendet „continue“, sobald das Limit zurückgesetzt ist",
+    "toggle": "Nach Nutzungslimit automatisch fortsetzen"
+  },
   "schedule": {
     "trigger": "Nachricht planen",
     "heading": "Später senden",

@@ -18,6 +18,7 @@ import type {
   SessionNavigationOptions,
 } from '@/shared/types';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
+import { useSessionAutoContinue } from '@/modules/chat/composer/useSessionAutoContinue';
 import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '@/modules/chat/hooks/useChatRealtimeHandlers';
@@ -426,8 +427,16 @@ function ChatInterface({
     }
   }, [onNavigateToSession, selectedSession?.id]);
 
+  // The chat on screen: `currentSessionId` can still name the chat left behind.
+  const autoContinueSessionId = selectedSession?.id || currentSessionId || null;
+  // The server announces every change to this list, the automatic continue included.
   const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
-    useScheduledMessages(selectedSession?.id || currentSessionId || null, subscribe);
+    useScheduledMessages(autoContinueSessionId, subscribe);
+
+  // Only Claude chats are continued after a usage limit.
+  const sessionAutoContinue = useSessionAutoContinue(
+    provider === 'claude' ? autoContinueSessionId : null,
+  );
 
   /**
    * Hands the composer's current text to the server to send later, and clears
@@ -616,6 +625,9 @@ function ChatInterface({
           scheduledMessages={scheduledMessages}
           onScheduleMessage={handleScheduleMessage}
           onCancelScheduledMessage={cancelScheduledMessage}
+          autoContinue={provider === 'claude' && autoContinueSessionId
+            ? { enabled: sessionAutoContinue.enabled, onChange: sessionAutoContinue.setEnabled }
+            : undefined}
           slashCommandsCount={slashCommandsCount}
           onToggleCommandMenu={handleToggleCommandMenu}
           hasInput={Boolean(input.trim())}

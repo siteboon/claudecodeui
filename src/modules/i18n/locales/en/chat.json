@@ -412,6 +412,11 @@
     },
     "includeSideQuestions": "Include side questions"
   },
+  "autoContinue": {
+    "on": "Auto-continue after the usage limit is on",
+    "description": "Sends “continue” once the limit resets",
+    "toggle": "Auto-continue after usage limit"
+  },
   "schedule": {
     "trigger": "Schedule this message",
     "heading": "Send later",

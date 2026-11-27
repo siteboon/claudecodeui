@@ -23,6 +23,7 @@ const harness = vi.hoisted(() => ({
     scheduledMessages: [],
     schedule: async () => null,
     cancel: async () => false,
+    refresh: async () => {},
   })),
 }));
 

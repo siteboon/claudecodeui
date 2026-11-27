@@ -469,6 +469,13 @@ const addSessionEffortColumn = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'sessions', columnNames, 'effort', 'TEXT');
 };
 
+/** Adds the per-session opt-in for continuing automatically after the usage limit. */
+const addSessionAutoContinueColumn = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'auto_continue', 'INTEGER NOT NULL DEFAULT 0');
+};
+
 /**
  * Adds the `permission_mode` column that records a session's permission mode.
  *
@@ -558,6 +565,7 @@ export const runMigrations = (db: Database) => {
     addProviderSessionIdMapping(db);
     addSessionModelColumn(db);
     addSessionEffortColumn(db);
+    addSessionAutoContinueColumn(db);
     addSessionPermissionModeColumn(db);
     addForkedFromSessionIdColumn(db);
     // Create after legacy session-table repairs so the foreign key names the canonical app id.

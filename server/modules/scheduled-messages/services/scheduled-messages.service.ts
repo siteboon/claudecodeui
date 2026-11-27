@@ -67,6 +67,15 @@ export function announceScheduledMessagesChanged(sessionId: string): void {
   });
 }
 
+/** `autoContinue` marks the server's own continue after a usage limit; clients cannot claim it. */
+function withoutAutoContinue(options: unknown): unknown {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    return options ?? {};
+  }
+  const { autoContinue: _autoContinue, ...rest } = options as Record<string, unknown>;
+  return rest;
+}
+
 export function toScheduledMessage(row: ScheduledMessageRow): ScheduledMessage {
   return {
     id: row.id,
@@ -134,7 +143,7 @@ export const scheduledMessagesService = {
       userId: input.userId,
       sessionId: input.sessionId,
       content,
-      options: input.options ?? {},
+      options: withoutAutoContinue(input.options),
       scheduledFor,
     }));
     announceScheduledMessagesChanged(scheduled.sessionId);

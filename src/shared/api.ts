@@ -295,6 +295,11 @@ export const api = {
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/clear-context`),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
+  // Whether a turn stopped by the usage limit continues automatically once it resets.
+  sessionAutoContinue: (sessionId: string) =>
+    get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/auto-continue`),
+  setSessionAutoContinue: (sessionId: string, enabled: boolean) =>
+    put(`/api/providers/sessions/${encodeURIComponent(sessionId)}/auto-continue`, { enabled }),
   // What one agent of a workflow run did, read from its transcript on demand
   // when its row in the workflow card is opened.
   workflowAgentActivity: (sessionId: string, runId: string, agentId: string) =>

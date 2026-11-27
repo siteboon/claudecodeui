@@ -8,7 +8,7 @@ import test from 'node:test';
 
 import express, { type NextFunction, type Request, type Response } from 'express';
 
-import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { closeConnection, initializeDatabase, scheduledMessagesDb, sessionsDb, userDb } from '@/modules/database/index.js';
 import providerRouter from '@/modules/providers/provider.routes.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import type { IProvider } from '@/shared/interfaces.js';
@@ -197,6 +197,63 @@ test('reasoning effort is persisted and returned with the active session model',
     assert.equal(readResponse.status, 200);
     assert.equal(readPayload.data.sessionId, 'effort-session');
     assert.equal(readPayload.data.effort, 'ultra');
+  });
+});
+
+test('auto-continue after the usage limit is off per session until turned on', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createAppSession('auto-session', 'claude', workspacePath);
+    const url = `${baseUrl}/api/providers/sessions/auto-session/auto-continue`;
+    const put = (body: unknown) => fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const initial = await (await fetch(url)).json() as { data: { enabled: boolean } };
+    assert.equal(initial.data.enabled, false);
+
+    assert.equal((await put({ enabled: true })).status, 200);
+    const turnedOn = await (await fetch(url)).json() as { data: { enabled: boolean } };
+    assert.equal(turnedOn.data.enabled, true);
+
+    assert.equal((await put({ enabled: 'yes' })).status, 400);
+    assert.equal((await fetch(`${baseUrl}/api/providers/sessions/missing/auto-continue`)).status, 404);
+  });
+});
+
+test('auto-continue is refused for sessions of providers that never continue', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createAppSession('codex-session', 'codex', workspacePath);
+    const response = await fetch(`${baseUrl}/api/providers/sessions/codex-session/auto-continue`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    assert.equal(response.status, 400);
+    assert.equal(sessionsDb.getSessionById('codex-session')?.auto_continue, 0);
+  });
+});
+
+test('turning auto-continue off drops the session\'s waiting continue at once', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    sessionsDb.createAppSession('auto-session', 'claude', workspacePath);
+    const userId = Number(userDb.createUser('auto', 'hash').id);
+    scheduledMessagesDb.create({
+      userId,
+      sessionId: 'auto-session',
+      content: 'continue',
+      options: { autoContinue: true },
+      scheduledFor: new Date(Date.now() + 3_600_000),
+    });
+
+    await fetch(`${baseUrl}/api/providers/sessions/auto-session/auto-continue`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    });
+
+    assert.equal(scheduledMessagesDb.listForSession(userId, 'auto-session')[0].status, 'cancelled');
   });
 });
 
