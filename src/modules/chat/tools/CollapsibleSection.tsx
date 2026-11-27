@@ -10,6 +10,8 @@ type CollapsibleSectionProps = {
   titleClassName?: string;
   toolName?: string;
   open?: boolean;
+  /** Mount large tool bodies only while their section is expanded. */
+  unmountOnClose?: boolean;
   action?: React.ReactNode;
   badge?: React.ReactNode;
   onTitleClick?: () => void;
@@ -28,6 +30,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   titleClassName,
   toolName,
   open = false,
+  unmountOnClose = false,
   action,
   badge,
   onTitleClick,
@@ -93,7 +96,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         </CollapsibleTrigger>
       )}
 
-      <CollapsibleContent>
+      <CollapsibleContent unmountOnClose={unmountOnClose}>
         <div className="mt-1.5 pl-[18px]">
           {children}
         </div>

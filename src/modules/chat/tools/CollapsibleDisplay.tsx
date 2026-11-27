@@ -60,6 +60,7 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
         titleClassName={titleClassName}
         toolName={toolName}
         open={defaultOpen}
+        unmountOnClose={toolCategory === 'default'}
         action={action}
         badge={badge}
         onTitleClick={onTitleClick}
