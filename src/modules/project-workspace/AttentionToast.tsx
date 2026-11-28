@@ -86,7 +86,28 @@ export default function AttentionToast({
     navigate(`/session/${encodeURIComponent(notice.sessionId)}`);
   }, [navigate, notice, onRevealChat, setActiveTab, setSidebarOpen]);
 
-  if (!notice || !awaitingInputSessionIds.has(notice.sessionId)) {
+  // The restore action is not a notice action: once Open hides the editor and
+  // navigates to the waiting chat, the notice disappears but the retained
+  // buffer still needs a way back. Keep it mounted whenever an editor is hidden.
+  if (!onRestoreEditor && (!notice || !awaitingInputSessionIds.has(notice.sessionId))) {
+    return null;
+  }
+
+  if (notice && !awaitingInputSessionIds.has(notice.sessionId)) {
+    return (
+      <div className="pointer-events-none absolute inset-x-3 top-3 z-[10000] flex justify-end md:inset-x-5">
+        <button
+          type="button"
+          onClick={onRestoreEditor}
+          className="pointer-events-auto inline-flex min-h-9 items-center justify-center rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-lg transition-colors hover:bg-muted"
+        >
+          {t('attention.restoreEditor', { defaultValue: 'Back to editor' })}
+        </button>
+      </div>
+    );
+  }
+
+  if (!notice) {
     return null;
   }
 

@@ -268,8 +268,9 @@ test('collapsing an expanded editor reveals the workspace without discarding its
   assert.equal(screen.getByTestId('workspace').getAttribute('data-expanded'), 'false');
   assert.equal(toolbarPanels.at(-1)?.isExpanded, false);
   assert.ok(editor.closest('.hidden'), 'the editor must no longer cover chat');
+  const savesBeforeCtrlS = saveFile.mock.calls.length;
   fireEvent.keyDown(document, { key: 's', ctrlKey: true });
-  assert.equal(readFile.mock.calls.length, 1, 'a hidden editor must not save on Ctrl+S');
+  assert.equal(saveFile.mock.calls.length, savesBeforeCtrlS, 'a hidden editor must not save on Ctrl+S');
   fireEvent.click(screen.getByRole('button', { name: 'Restore editor' }));
   assert.equal(editor.closest('.hidden'), null);
   assertBufferSurvived();
