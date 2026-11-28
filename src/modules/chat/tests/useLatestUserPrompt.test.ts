@@ -36,9 +36,9 @@ const row = (overrides: Partial<NormalizedMessage> = {}): NormalizedMessage => (
 const assistantRow = (overrides: Partial<NormalizedMessage> = {}): NormalizedMessage =>
   row({ role: 'assistant', content: '回复', ...overrides });
 
-const page = (messages: NormalizedMessage[], hasMore: boolean) => Promise.resolve({
+const page = (messages: NormalizedMessage[], hasMore: boolean, total?: number) => Promise.resolve({
   ok: true,
-  json: async () => ({ success: true, data: { messages, hasMore } }),
+  json: async () => ({ success: true, data: { messages, hasMore, ...(total !== undefined ? { total } : {}) } }),
 } as Response);
 
 const props = {
@@ -270,5 +270,134 @@ describe('the latest user prompt peek', () => {
     rerender({ ...props });
     expect(sessionMessages).toHaveBeenCalledTimes(1);
     expect(result.current?.content).toBe('唯一一条提问');
+  });
+
+  it('运行中尾部新增消息导致 total 增长且与已查页重叠时，直接拼接不重置偏移', async () => {
+    const a1 = assistantRow({ id: 'a1', timestamp: '2026-11-26T10:00:01.000Z', content: '回复1' });
+    const a2 = assistantRow({ id: 'a2', timestamp: '2026-11-26T10:00:02.000Z', content: '回复2' });
+    const a3 = assistantRow({ id: 'a3', timestamp: '2026-11-26T10:00:03.000Z', content: '回复3' });
+    const u0 = row({ id: 'u0', timestamp: '2026-11-26T09:59:59.000Z', content: '长轮次原提问' });
+    const a0 = assistantRow({ id: 'a0', timestamp: '2026-11-26T10:00:00.000Z', content: '回复0' });
+
+    sessionMessages
+      .mockReturnValueOnce(page([a1, a2, a3], true, 50))
+      .mockReturnValueOnce(page([u0, a0, a1], false, 51));
+
+    const { result } = renderHook(() => useLatestUserPrompt({
+      ...props,
+      beforeMessageId: 'a3',
+      totalMessages: 50,
+    }));
+
+    await waitFor(() => expect(result.current?.content).toBe('长轮次原提问'));
+    expect(sessionMessages).toHaveBeenCalledTimes(2);
+    expect(sessionMessages).toHaveBeenNthCalledWith(1, 'session-1', { limit: 100, offset: 0 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(sessionMessages).toHaveBeenNthCalledWith(2, 'session-1', { limit: 100, offset: 3 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it('边界行仍在缓存内而 totalMessages 增长时，沿当前偏移续查并拼接', async () => {
+    const a1 = assistantRow({ id: 'a1', timestamp: '2026-11-26T10:00:01.000Z', content: '回复1' });
+    const boundary = assistantRow({ id: 'boundary', timestamp: '2026-11-26T10:00:02.000Z', content: '边界回复' });
+    const u0 = row({ id: 'u0', timestamp: '2026-11-26T09:59:59.000Z', content: '边界外原提问' });
+
+    sessionMessages
+      .mockReturnValueOnce(page([a1, boundary], true, 50))
+      .mockReturnValueOnce(page([u0, a1], false, 52));
+
+    const { result, rerender } = renderHook(
+      (nextProps) => useLatestUserPrompt(nextProps),
+      {
+        initialProps: {
+          ...props,
+          beforeMessageId: 'boundary',
+          totalMessages: 50,
+        },
+      },
+    );
+
+    await waitFor(() => expect(sessionMessages).toHaveBeenCalledTimes(1));
+    rerender({
+      ...props,
+      beforeMessageId: 'boundary',
+      totalMessages: 52,
+    });
+
+    await waitFor(() => expect(result.current?.content).toBe('边界外原提问'));
+    expect(sessionMessages).toHaveBeenCalledTimes(2);
+    expect(sessionMessages).toHaveBeenNthCalledWith(2, 'session-1', { limit: 100, offset: 2 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it('尾部一次性增长过多导致新旧页无重叠时，重置并从最新页重新对齐', async () => {
+    const a1 = assistantRow({ id: 'a1', timestamp: '2026-11-26T10:00:01.000Z', content: '回复1' });
+    const a2 = assistantRow({ id: 'a2', timestamp: '2026-11-26T10:00:02.000Z', content: '回复2' });
+    const a10 = assistantRow({ id: 'a10', timestamp: '2026-11-26T10:00:10.000Z', content: '回复10' });
+    const a11 = assistantRow({ id: 'a11', timestamp: '2026-11-26T10:00:11.000Z', content: '回复11' });
+    const u0 = row({ id: 'u0', timestamp: '2026-11-26T09:59:59.000Z', content: '重对齐后的提问' });
+    const a20 = assistantRow({ id: 'a20', timestamp: '2026-11-26T10:00:20.000Z', content: '回复20' });
+
+    sessionMessages
+      .mockReturnValueOnce(page([a1, a2], true, 50))
+      .mockReturnValueOnce(page([a10, a11], true, 200))
+      .mockReturnValueOnce(page([u0, a20], false, 200));
+
+    const { result } = renderHook(() => useLatestUserPrompt({
+      ...props,
+      beforeMessageId: 'a2',
+      totalMessages: 50,
+    }));
+
+    await waitFor(() => expect(result.current?.content).toBe('重对齐后的提问'));
+    expect(sessionMessages).toHaveBeenCalledTimes(3);
+    expect(sessionMessages).toHaveBeenNthCalledWith(3, 'session-1', { limit: 100, offset: 0 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it('历史回退导致 total 变小时，重置并从最新页重新对齐', async () => {
+    const a1 = assistantRow({ id: 'a1', timestamp: '2026-11-26T10:00:01.000Z', content: '回复1' });
+    const a2 = assistantRow({ id: 'a2', timestamp: '2026-11-26T10:00:02.000Z', content: '回复2' });
+    const a0 = assistantRow({ id: 'a0', timestamp: '2026-11-26T10:00:00.000Z', content: '回复0' });
+    const uRewound = row({ id: 'u-rewound', timestamp: '2026-11-26T09:59:50.000Z', content: '回退后的提问' });
+    const aRewound = assistantRow({ id: 'a-rewound', timestamp: '2026-11-26T09:59:55.000Z', content: '回退后的回复' });
+
+    sessionMessages
+      .mockReturnValueOnce(page([a1, a2], true, 50))
+      .mockReturnValueOnce(page([a0, a1], true, 45))
+      .mockReturnValueOnce(page([uRewound, aRewound], false, 45));
+
+    const { result } = renderHook(() => useLatestUserPrompt({
+      ...props,
+      beforeMessageId: 'a2',
+      totalMessages: 50,
+    }));
+
+    await waitFor(() => expect(result.current?.content).toBe('回退后的提问'));
+    expect(sessionMessages).toHaveBeenCalledTimes(3);
+    expect(sessionMessages).toHaveBeenNthCalledWith(3, 'session-1', { limit: 100, offset: 0 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it('连续多页回读期间尾部持续增长时，保持偏移递进并逐页重叠拼接', async () => {
+    const a4 = assistantRow({ id: 'a4', timestamp: '2026-11-26T10:00:04.000Z', content: '回复4' });
+    const a5 = assistantRow({ id: 'a5', timestamp: '2026-11-26T10:00:05.000Z', content: '回复5' });
+    const a6 = assistantRow({ id: 'a6', timestamp: '2026-11-26T10:00:06.000Z', content: '回复6' });
+    const a2 = assistantRow({ id: 'a2', timestamp: '2026-11-26T10:00:02.000Z', content: '回复2' });
+    const a3 = assistantRow({ id: 'a3', timestamp: '2026-11-26T10:00:03.000Z', content: '回复3' });
+    const u0 = row({ id: 'u0', timestamp: '2026-11-26T09:59:59.000Z', content: '三页外的原提问' });
+    const a1 = assistantRow({ id: 'a1', timestamp: '2026-11-26T10:00:01.000Z', content: '回复1' });
+
+    sessionMessages
+      .mockReturnValueOnce(page([a4, a5, a6], true, 50))
+      .mockReturnValueOnce(page([a2, a3, a4], true, 51))
+      .mockReturnValueOnce(page([u0, a1, a2], false, 53));
+
+    const { result } = renderHook(() => useLatestUserPrompt({
+      ...props,
+      beforeMessageId: 'a6',
+      totalMessages: 50,
+    }));
+
+    await waitFor(() => expect(result.current?.content).toBe('三页外的原提问'));
+    expect(sessionMessages).toHaveBeenCalledTimes(3);
+    expect(sessionMessages).toHaveBeenNthCalledWith(1, 'session-1', { limit: 100, offset: 0 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(sessionMessages).toHaveBeenNthCalledWith(2, 'session-1', { limit: 100, offset: 3 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(sessionMessages).toHaveBeenNthCalledWith(3, 'session-1', { limit: 100, offset: 6 }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 });

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/shared/api';
 import type { ChatMessage, NormalizedMessage } from '@/shared/types';
 import { isUserPromptMessage } from '@/shared/utils';
-import { messagesRepresentSamePersistedRow } from '@/modules/chat/utils/sessionMessagePagination';
+import { mergeOlderServerPage, messagesRepresentSamePersistedRow } from '@/modules/chat/utils/sessionMessagePagination';
 
 /** 回读保留分页，读取结果只用于固定条，不扩大会话的渲染窗口。 */
 const PEEK_PAGE_SIZE = 100;
@@ -63,6 +63,33 @@ type PromptPages = {
   hasMore: boolean;
 };
 
+/** 把新拉回的旧页拼回已有缓存；历史回退或跨度过大无法衔接时返回 null 以重对齐。 */
+function reconcileOlderPromptPage(
+  previous: PromptPages | null,
+  rows: NormalizedMessage[],
+  reportedTotal: number | undefined,
+): NormalizedMessage[] | null {
+  if (!previous) {
+    return rows;
+  }
+
+  if (
+    typeof reportedTotal === 'number'
+    && typeof previous.responseTotal === 'number'
+    && reportedTotal !== previous.responseTotal
+  ) {
+    if (reportedTotal < previous.responseTotal) {
+      return null;
+    }
+    if (previous.rows.length > 0) {
+      const merged = mergeOlderServerPage(previous.rows, rows);
+      return merged.overlapLength > 0 ? merged.messages : null;
+    }
+  }
+
+  return [...rows, ...previous.rows];
+}
+
 /** 供会话 Hook 查询当前阅读位置之前尚未加载的提问，同一轮内上下滚动复用已查页。 */
 export function useLatestUserPrompt({
   sessionId,
@@ -86,8 +113,10 @@ export function useLatestUserPrompt({
   useEffect(() => {
     if (!isActive || !sessionId || hasLoadedUserPrompt || totalMessages <= 0 || !Number.isFinite(beforeTime) || !needsPage) return undefined;
     const controller = new AbortController();
-    // 继续向前查页时若总数变化，原来的尾部偏移已失效，从最新页重新对齐。
-    const previous = current?.total === totalMessages ? current : null;
+    // 已拿到后端总数时，即使边界内的消息总数继续增加，也先沿当前偏移续查并在响应里按重叠拼接。
+    const previous = current && (current.total === totalMessages || typeof current.responseTotal === 'number')
+      ? current
+      : null;
     const offset = previous?.offset ?? 0;
     const readPage = async () => {
       try {
@@ -95,19 +124,19 @@ export function useLatestUserPrompt({
         if (!response.ok) return;
         const payload = await response.json() as { data?: { messages?: NormalizedMessage[]; hasMore?: boolean; total?: number } };
         if (controller.signal.aborted) return;
-        const reportedTotal = payload.data?.total;
-        if (previous && typeof reportedTotal === 'number' && reportedTotal !== previous.responseTotal) {
-          // 历史在两次请求之间增长或回退时，旧偏移可能跳过目标记录。
+        const reportedTotal = typeof payload.data?.total === 'number' ? payload.data.total : undefined;
+        const rows = Array.isArray(payload.data?.messages) ? payload.data.messages : [];
+        const nextRows = reconcileOlderPromptPage(previous, rows, reportedTotal);
+        if (nextRows === null) {
           setPages(null);
           return;
         }
-        const rows = Array.isArray(payload.data?.messages) ? payload.data.messages : [];
         setPages({
           sessionId,
-          rows: [...rows, ...(previous?.rows ?? [])],
+          rows: nextRows,
           offset: offset + rows.length,
           total: totalMessages,
-          responseTotal: typeof reportedTotal === 'number' ? reportedTotal : undefined,
+          responseTotal: reportedTotal ?? previous?.responseTotal,
           hasMore: rows.length > 0 && Boolean(payload.data?.hasMore),
         });
       } catch {
