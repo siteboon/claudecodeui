@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 
 import { afterEach, beforeEach, test, vi } from 'vitest';
 
-import { cloneWorkspaceWithProgress } from '@/modules/project-creation-wizard/utils/workspaceApi';
+import {
+  cloneWorkspaceWithProgress,
+  createProjectRequest,
+  resolveExistingProjectConflict,
+} from '@/modules/project-creation-wizard/utils/workspaceApi';
+import { ApiRequestError } from '@/shared/api';
+import type { Project } from '@/shared/types';
 
 /**
  * A stand-in for the browser's EventSource: records the URL it was opened
@@ -121,4 +127,65 @@ test('cloneWorkspaceWithProgress rejects with the server error and never opens a
     { message: 'Invalid githubUrl' },
   );
   assert.equal(FakeEventSource.opened.length, 0);
+});
+
+test('createProjectRequest preserves conflict code and project details on 409 ApiRequestError', async () => {
+  respondToStart(409, {
+    success: false,
+    error: {
+      code: 'PROJECT_ALREADY_EXISTS',
+      message: 'Project path already exists and is active',
+      details: {
+        projectId: 'proj-1',
+        displayName: 'demo-app',
+        projectPath: 'F:\\Workspaces\\demo-app',
+      },
+    },
+  });
+
+  await assert.rejects(
+    createProjectRequest({ path: 'F:\\Workspaces\\demo-app' }),
+    (error: unknown) => {
+      assert.ok(error instanceof ApiRequestError);
+      assert.equal(error.code, 'PROJECT_ALREADY_EXISTS');
+      assert.equal(error.status, 409);
+      assert.deepEqual(
+        resolveExistingProjectConflict(error, [], ''),
+        {
+          projectId: 'proj-1',
+          displayName: 'demo-app',
+          projectPath: 'F:\\Workspaces\\demo-app',
+        },
+      );
+      return true;
+    },
+  );
+});
+
+test('resolveExistingProjectConflict falls back to existingProjects path match for legacy string details', () => {
+  const projects: Project[] = [
+    {
+      projectId: 'proj-legacy',
+      displayName: 'demo-app',
+      fullPath: 'F:\\Workspaces\\demo-app',
+    },
+  ];
+  const error = new ApiRequestError('Project path already exists: f:/Workspaces/demo-app/', {
+    code: 'PROJECT_ALREADY_EXISTS',
+    status: 409,
+    details: 'Project path already exists: f:/Workspaces/demo-app/',
+  });
+
+  assert.deepEqual(
+    resolveExistingProjectConflict(error, projects, ''),
+    {
+      projectId: 'proj-legacy',
+      displayName: 'demo-app',
+      projectPath: 'F:\\Workspaces\\demo-app',
+    },
+  );
+  assert.equal(
+    resolveExistingProjectConflict(new ApiRequestError('Bad path', { code: 'INVALID_PROJECT_PATH', status: 400 }), projects, ''),
+    null,
+  );
 });

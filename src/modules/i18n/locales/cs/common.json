@@ -256,13 +256,16 @@
       "next": "Další",
       "createProject": "Vytvořit projekt",
       "creating": "Vytváření...",
-      "cloning": "Klonování..."
+      "cloning": "Klonování...",
+      "openExistingProject": "Otevřít projekt"
     },
     "errors": {
       "selectType": "Vyberte, zda máte existující pracovní prostor, nebo chcete vytvořit nový",
       "providePath": "Zadejte cestu k pracovnímu prostoru",
       "failedToCreate": "Nepodařilo se vytvořit pracovní prostor",
-      "failedToCreateFolder": "Nepodařilo se vytvořit složku"
+      "failedToCreateFolder": "Nepodařilo se vytvořit složku",
+      "alreadyExistsNamed": "Pracovní prostor již existuje jako „{{name}}“.",
+      "alreadyExists": "Tento pracovní prostor již existuje v seznamu projektů."
     }
   },
   "notifications": {

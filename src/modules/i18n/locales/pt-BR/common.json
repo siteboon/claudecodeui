@@ -204,13 +204,16 @@
       "next": "Próximo",
       "createProject": "Criar projeto",
       "creating": "Criando...",
-      "cloning": "Clonando..."
+      "cloning": "Clonando...",
+      "openExistingProject": "Abrir projeto"
     },
     "errors": {
       "selectType": "Selecione se você tem um espaço de trabalho existente ou quer criar um novo",
       "providePath": "Forneça um caminho para o espaço de trabalho",
       "failedToCreate": "Falha ao criar espaço de trabalho",
-      "failedToCreateFolder": "Falha ao criar pasta"
+      "failedToCreateFolder": "Falha ao criar pasta",
+      "alreadyExistsNamed": "Este espaço de trabalho já existe como \"{{name}}\".",
+      "alreadyExists": "Este espaço de trabalho já existe na sua lista de projetos."
     }
   },
   "notifications": {

@@ -629,6 +629,24 @@ export function useSidebarController({
     [searchMode, keepProjectsExpanded],
   );
 
+  const ensureProjectExpanded = useCallback(
+    (projectId: string) => {
+      // Called when jumping directly to a project across sidebar tabs so Projects-mode
+      // expansion updates without depending on the current tab closure or collapsing it.
+      setSessionSelection(null);
+      setExpandedProjects((prev) => {
+        if (prev.has(projectId) && (keepProjectsExpanded || prev.size === 1)) {
+          return prev;
+        }
+
+        const next = keepProjectsExpanded ? new Set(prev) : new Set<string>();
+        next.add(projectId);
+        return next;
+      });
+    },
+    [keepProjectsExpanded],
+  );
+
   const isProjectExpanded = useCallback(
     (projectId: string) =>
       searchMode === 'running'
@@ -1337,6 +1355,7 @@ export function useSidebarController({
     reloadRecentConversations,
     loadMoreRecentConversations,
     toggleProject,
+    ensureProjectExpanded,
     handleSessionClick,
     forkSession,
     toggleStarProject,

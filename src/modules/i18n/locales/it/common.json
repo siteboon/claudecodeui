@@ -201,13 +201,16 @@
       "next": "Avanti",
       "createProject": "Crea progetto",
       "creating": "Creazione...",
-      "cloning": "Clonazione..."
+      "cloning": "Clonazione...",
+      "openExistingProject": "Apri progetto"
     },
     "errors": {
       "selectType": "Seleziona se hai un'area di lavoro esistente o vuoi crearne una nuova",
       "providePath": "Fornisci un percorso per l'area di lavoro",
       "failedToCreate": "Impossibile creare l'area di lavoro",
-      "failedToCreateFolder": "Impossibile creare la cartella"
+      "failedToCreateFolder": "Impossibile creare la cartella",
+      "alreadyExistsNamed": "Questa area di lavoro esiste già con il nome \"{{name}}\".",
+      "alreadyExists": "Questa area di lavoro esiste già nella tua lista di progetti."
     }
   },
   "notifications": {

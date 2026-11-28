@@ -201,13 +201,16 @@
       "next": "次へ",
       "createProject": "プロジェクトを作成",
       "creating": "作成中...",
-      "cloning": "クローン中..."
+      "cloning": "クローン中...",
+      "openExistingProject": "プロジェクトを開く"
     },
     "errors": {
       "selectType": "既存のワークスペースか新規作成かを選択してください",
       "providePath": "ワークスペースのパスを入力してください",
       "failedToCreate": "ワークスペースの作成に失敗しました",
-      "failedToCreateFolder": "フォルダの作成に失敗しました"
+      "failedToCreateFolder": "フォルダの作成に失敗しました",
+      "alreadyExistsNamed": "このワークスペースは「{{name}}」として既に存在します。",
+      "alreadyExists": "このワークスペースは既にプロジェクト一覧に存在します。"
     }
   },
   "notifications": {

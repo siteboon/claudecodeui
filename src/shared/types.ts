@@ -1402,6 +1402,13 @@ export type WizardFormState = {
   newGithubToken: string;
 };
 
+/** Metadata for an already-active project returned when adding a duplicate path, used by the creation wizard to show its name and jump directly to it. */
+export type ExistingProjectConflict = {
+  projectId: string;
+  displayName: string;
+  projectPath?: string;
+};
+
 // ---------------------------
 
 //----------------- PROJECT WORKSPACE ------------

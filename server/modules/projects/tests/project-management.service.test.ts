@@ -46,7 +46,7 @@ test('createProject throws when path validation fails', async () => {
   );
 });
 
-test('createProject throws conflict when active project path already exists', async () => {
+test('createProject throws conflict with existing project identity when active project path already exists', async () => {
   await assert.rejects(
     async () =>
       createProject(
@@ -54,7 +54,13 @@ test('createProject throws conflict when active project path already exists', as
         {
           validatePath: async () => ({ valid: true, resolvedPath: '/workspace/my-project' }),
           ensureWorkspaceDirectory: async () => undefined,
-          persistProjectPath: () => ({ outcome: 'active_conflict', project: projectRow }),
+          persistProjectPath: () => ({
+            outcome: 'active_conflict',
+            project: {
+              ...projectRow,
+              custom_project_name: 'Custom Display Name',
+            },
+          }),
           getProjectByPath: () => projectRow,
         },
       ),
@@ -62,7 +68,49 @@ test('createProject throws conflict when active project path already exists', as
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'PROJECT_ALREADY_EXISTS');
       assert.equal(error.statusCode, 409);
-      assert.equal(error.details, 'Project path already exists: /workspace/my-project');
+      assert.deepEqual(error.details, {
+        projectId: 'project-1',
+        displayName: 'Custom Display Name',
+        projectPath: '/workspace/my-project',
+      });
+      return true;
+    },
+  );
+});
+
+test('createProject falls back to getProjectByPath when active_conflict omits project row', async () => {
+  let queriedPath = '';
+
+  await assert.rejects(
+    async () =>
+      createProject(
+        { projectPath: '/workspace/fallback-project' },
+        {
+          validatePath: async () => ({ valid: true, resolvedPath: '/workspace/fallback-project' }),
+          ensureWorkspaceDirectory: async () => undefined,
+          persistProjectPath: () => ({ outcome: 'active_conflict', project: null }),
+          getProjectByPath: (resolvedPath) => {
+            queriedPath = resolvedPath;
+            return {
+              project_id: 'project-2',
+              project_path: resolvedPath,
+              custom_project_name: null,
+              isStarred: 0,
+              isArchived: 0,
+            };
+          },
+        },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'PROJECT_ALREADY_EXISTS');
+      assert.equal(error.statusCode, 409);
+      assert.ok(queriedPath.endsWith('fallback-project'));
+      assert.deepEqual(error.details, {
+        projectId: 'project-2',
+        displayName: 'fallback-project',
+        projectPath: queriedPath,
+      });
       return true;
     },
   );

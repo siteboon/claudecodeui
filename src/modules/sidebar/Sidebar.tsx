@@ -1,5 +1,6 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
@@ -75,6 +76,17 @@ function Sidebar({
   const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
   const { tasksEnabled } = useTasksSettings();
   const paletteOps = usePaletteOps();
+  // 409 返回的项目可能不在当前分页中；刷新到它后再完成用户的打开请求。
+  const [pendingExistingProject, setPendingExistingProject] = useState<{
+    id: string;
+    requestId: number;
+  } | null>(null);
+  const location = useLocation();
+  const existingProjectRequestRef = useRef(0);
+  // 只在导航真正提交后作废请求。即使用户从 A 切到 B 再切回 A，旧回包也不会跳页。
+  useLayoutEffect(() => () => {
+    existingProjectRequestRef.current += 1;
+  }, [location, selectedProject?.projectId, selectedSession?.id]);
   // Only membership is rendered here, so subscribing to the full activity map
   // would re-render the whole tree on every provider status frame.
   const activeSessions = useBusySessionIdSet();
@@ -113,6 +125,7 @@ function Sidebar({
     reloadRecentConversations,
     loadMoreRecentConversations,
     toggleProject,
+    ensureProjectExpanded,
     handleSessionClick,
     toggleStarProject,
     isProjectStarred,
@@ -182,6 +195,62 @@ function Sidebar({
     void paletteOps.refreshProjects();
   };
 
+  const handleOpenExistingProject = useCallback(
+    (projectId: string) => {
+      const existingProject = projects.find((project) => project.projectId === projectId);
+      setShowNewProject(false);
+      setSearchMode('projects');
+      setSearchFilter('');
+      const requestId = ++existingProjectRequestRef.current;
+      setPendingExistingProject(null);
+      if (!existingProject) {
+        void (async () => {
+          try {
+            await paletteOps.refreshProjects();
+            if (requestId === existingProjectRequestRef.current) {
+              setPendingExistingProject({ id: projectId, requestId });
+            }
+          } catch {
+            // 保留当前项目，用户可再次尝试打开。
+          }
+        })();
+        return;
+      }
+
+      ensureProjectExpanded(existingProject.projectId);
+      handleProjectSelect(existingProject);
+    },
+    [
+      ensureProjectExpanded,
+      handleProjectSelect,
+      paletteOps,
+      projects,
+      setSearchFilter,
+      setSearchMode,
+      setShowNewProject,
+    ],
+  );
+
+  useEffect(() => {
+    if (!pendingExistingProject) return;
+    const timer = window.setTimeout(() => setPendingExistingProject(null), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [pendingExistingProject]);
+
+  useEffect(() => {
+    if (!pendingExistingProject) return;
+    if (pendingExistingProject.requestId !== existingProjectRequestRef.current) {
+      setPendingExistingProject(null);
+      return;
+    }
+    // A newer, overlapping refresh may still be applying its project list.
+    const existingProject = projects.find((project) => project.projectId === pendingExistingProject.id);
+    if (!existingProject) return;
+    setPendingExistingProject(null);
+    ensureProjectExpanded(existingProject.projectId);
+    handleProjectSelect(existingProject);
+  }, [ensureProjectExpanded, handleProjectSelect, location, pendingExistingProject, projects, selectedProject?.projectId, selectedSession?.id]);
+
   // Stable so memo() on the row components can bail out; an inline arrow here
   // would give every row a new callback on each sidebar render.
   const handleSaveProjectName = useCallback((projectId: string, nextName: string) => {
@@ -250,6 +319,7 @@ function Sidebar({
         showNewProject={showNewProject}
         onCloseNewProject={() => setShowNewProject(false)}
         onProjectCreated={handleProjectCreated}
+        onOpenExistingProject={handleOpenExistingProject}
         pendingDeletion={pendingDeletion}
         onCancelDeletion={() => setPendingDeletion(null)}
         onConfirmDeleteProject={confirmDeleteProject}

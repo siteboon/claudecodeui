@@ -250,13 +250,16 @@
       "next": "הבא",
       "createProject": "יצירת פרויקט",
       "creating": "יוצר…",
-      "cloning": "משכפל…"
+      "cloning": "משכפל…",
+      "openExistingProject": "פתיחת פרויקט"
     },
     "errors": {
       "selectType": "יש לבחור אם יש סביבת עבודה קיימת או ליצור סביבה חדשה",
       "providePath": "יש להזין נתיב לסביבת העבודה",
       "failedToCreate": "יצירת סביבת העבודה נכשלה",
-      "failedToCreateFolder": "יצירת התיקייה נכשלה"
+      "failedToCreateFolder": "יצירת התיקייה נכשלה",
+      "alreadyExistsNamed": "סביבת עבודה זו כבר קיימת בשם \"{{name}}\".",
+      "alreadyExists": "סביבת עבודה זו כבר קיימת ברשימת הפרויקטים שלך."
     }
   },
   "notifications": {

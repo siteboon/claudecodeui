@@ -201,13 +201,16 @@
       "next": "下一步",
       "createProject": "建立專案",
       "creating": "建立中...",
-      "cloning": "正在複製..."
+      "cloning": "正在複製...",
+      "openExistingProject": "開啟此專案"
     },
     "errors": {
       "selectType": "請選擇您已有現有工作區還是想建立新工作區",
       "providePath": "請提供工作區路徑",
       "failedToCreate": "建立工作區失敗",
-      "failedToCreateFolder": "建立資料夾失敗"
+      "failedToCreateFolder": "建立資料夾失敗",
+      "alreadyExistsNamed": "此專案已存在，名稱為「{{name}}」。",
+      "alreadyExists": "此專案路徑已存在於您的專案列表中。"
     }
   },
   "notifications": {
