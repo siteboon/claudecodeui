@@ -92,7 +92,7 @@ export default function AttentionToast({
   const dismissLabel = t('attention.dismiss', { defaultValue: 'Dismiss' });
 
   return (
-    <div className="pointer-events-none absolute inset-x-3 top-3 z-40 flex justify-end md:inset-x-5">
+    <div className="pointer-events-none absolute inset-x-3 top-3 z-[10000] flex justify-end md:inset-x-5">
       <div
         role="status"
         aria-live="polite"

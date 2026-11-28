@@ -19,6 +19,8 @@ export const useEditorSidebar = ({
   const [editingFile, setEditingFile] = useState<CodeEditorFile | null>(null);
   const [editorWidth, setEditorWidth] = useState(initialWidth);
   const [editorExpanded, setEditorExpanded] = useState(false);
+  // Opening an attention notice hides the editor without losing its unsaved buffer.
+  const [editorHidden, setEditorHidden] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [hasManualWidth, setHasManualWidth] = useState(false);
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
@@ -63,6 +65,7 @@ export const useEditorSidebar = ({
         return false;
       }
 
+      setEditorHidden(false);
       const normalizedPath = filePath.replace(/\\/g, '/');
       const fileName = normalizedPath.split('/').pop() || filePath;
 
@@ -83,6 +86,7 @@ export const useEditorSidebar = ({
   const handleCloseEditor = useCallback(() => {
     setEditingFile(null);
     setEditorExpanded(false);
+    setEditorHidden(false);
   }, []);
 
   const handleToggleEditorExpand = useCallback(() => {
@@ -92,6 +96,11 @@ export const useEditorSidebar = ({
   const handleCollapseEditor = useCallback(() => {
     setEditorExpanded(false);
   }, []);
+
+  const handleRevealChat = useCallback(() => {
+    handleCollapseEditor();
+    setEditorHidden(true);
+  }, [handleCollapseEditor]);
 
   const handleResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -193,6 +202,8 @@ export const useEditorSidebar = ({
     handleCloseEditor,
     handleToggleEditorExpand,
     handleCollapseEditor,
+    editorHidden,
+    handleRevealChat,
     handleResizeStart,
     handleUnsavedChangesChange,
   };

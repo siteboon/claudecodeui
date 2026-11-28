@@ -83,7 +83,8 @@ function WorkspaceMain({
     handleFileOpen,
     handleCloseEditor,
     handleToggleEditorExpand,
-    handleCollapseEditor,
+    editorHidden,
+    handleRevealChat,
     handleResizeStart,
     handleUnsavedChangesChange,
   } = useEditorSidebar({
@@ -136,11 +137,11 @@ function WorkspaceMain({
   usePaletteOpsRegister({ openFile, openFileInEditor, openDirectory });
 
   if (isLoading) {
-    return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
+    return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} onRevealChat={handleRevealChat} />;
   }
 
   if (!selectedProject) {
-    return <WorkspaceStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
+    return <WorkspaceStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} onRevealChat={handleRevealChat} />;
   }
 
   return (
@@ -157,7 +158,7 @@ function WorkspaceMain({
         onRenameSession={onRenameSession}
       />
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      <div className="relative isolate flex min-h-0 flex-1 overflow-hidden">
         <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
             <WorkspaceErrorBoundary showDetails>
@@ -235,6 +236,7 @@ function WorkspaceMain({
 
         <EditorSidebar
           editingFile={editingFile}
+          editorHidden={editorHidden}
           isMobile={isMobile}
           editorExpanded={editorExpanded}
           editorWidth={editorWidth}
@@ -248,8 +250,8 @@ function WorkspaceMain({
           fillSpace={activeTab === 'files'}
         />
         <AttentionToast
-          isChatVisible={activeTab === 'chat' && !editorExpanded}
-          onRevealChat={handleCollapseEditor}
+          isChatVisible={activeTab === 'chat' && !editorExpanded && !(isMobile && editingFile && !editorHidden)}
+          onRevealChat={handleRevealChat}
         />
       </div>
     </div>

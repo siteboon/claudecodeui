@@ -184,10 +184,11 @@ test('a session id containing percent signs in the route does not throw URIError
 });
 
 test('mobile WorkspaceStateView mounts AttentionToast inside the body container below the menu bar', () => {
+  const onRevealChat = vi.fn();
   render(
     <MemoryRouter initialEntries={['/']}>
       <PermissionAttentionProvider>
-        <WorkspaceStateView mode="empty" isMobile onMenuClick={() => {}} />
+        <WorkspaceStateView mode="empty" isMobile onMenuClick={() => {}} onRevealChat={onRevealChat} />
       </PermissionAttentionProvider>
     </MemoryRouter>,
   );
@@ -203,6 +204,8 @@ test('mobile WorkspaceStateView mounts AttentionToast inside the body container 
   assert.equal(headerBar.contains(card), false, 'toast must sit below the mobile header bar, never inside it');
   assert.equal(toastWrapper.className.includes('absolute'), true);
   assert.equal(toastWrapper.className.includes('fixed'), false);
+  fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+  assert.equal(onRevealChat.mock.calls.length, 1);
 });
 
 test('shows remaining waiting session count when multiple sessions are blocked', () => {
