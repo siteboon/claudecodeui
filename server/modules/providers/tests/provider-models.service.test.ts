@@ -23,7 +23,7 @@ const createSessionStore = (
 ) => {
   const sessions = new Map(Object.entries(rows).map(([sessionId, model]) => [
     sessionId,
-    { model, effort: efforts[sessionId] ?? null },
+    { model, effort: efforts[sessionId] ?? null, permission_mode: null as string | null },
   ]));
   return {
     sessions,
@@ -41,6 +41,14 @@ const createSessionStore = (
         session.effort = effort;
       }
     },
+    setSessionPermissionMode: (sessionId: string, permissionMode: string) => {
+      const session = sessions.get(sessionId);
+      if (session) {
+        session.permission_mode = permissionMode;
+      }
+    },
+    // Stands in for "the project's latest session": the last row inserted.
+    getLatestProjectSelection: () => [...sessions.values()].at(-1) ?? null,
   };
 };
 
@@ -561,6 +569,62 @@ test('setSessionEffort ignores sessions that have no row yet', () => {
 
   assert.equal(service.setSessionEffort('codex', 'missing-session', 'high'), null);
   assert.equal(sessions.sessions.size, 0);
+});
+
+test('setSessionPermissionMode records a mode the provider offers', () => {
+  const sessions = createSessionStore({ 'session-1': 'opus' });
+  const { service } = createTestService({ sessions });
+
+  const stored = service.setSessionPermissionMode('claude', 'session-1', 'acceptEdits');
+
+  assert.deepEqual(stored, {
+    provider: 'claude',
+    sessionId: 'session-1',
+    permissionMode: 'acceptEdits',
+    source: 'session',
+  });
+  assert.equal(service.readSessionPermissionMode('session-1'), 'acceptEdits');
+});
+
+test('setSessionPermissionMode ignores unsupported modes and sessions without a row', () => {
+  const sessions = createSessionStore({ 'session-1': 'gpt-5.4' });
+  const { service } = createTestService({ sessions });
+
+  // Codex has no plan mode.
+  assert.equal(service.setSessionPermissionMode('codex', 'session-1', 'plan'), null);
+  assert.equal(service.setSessionPermissionMode('codex', 'missing-session', 'acceptEdits'), null);
+  assert.equal(service.readSessionPermissionMode('session-1'), null);
+});
+
+test('setSessionPermissionMode checks the mode against the session row provider', () => {
+  const sessions = createSessionStore({ 'session-1': 'gpt-5.4' });
+  Object.assign(sessions.sessions.get('session-1')!, { provider: 'codex' });
+  const { service } = createTestService({ sessions });
+
+  // A Claude URL cannot store Claude's plan mode on a Codex session.
+  assert.equal(service.setSessionPermissionMode('claude', 'session-1', 'plan'), null);
+  assert.equal(service.readSessionPermissionMode('session-1'), null);
+});
+
+test('resolveProjectSelection returns the latest session selection, or nulls', () => {
+  const empty = createTestService({ sessions: createSessionStore() }).service;
+  assert.deepEqual(empty.resolveProjectSelection('claude', '/repo'), {
+    provider: 'claude',
+    model: null,
+    effort: null,
+    permissionMode: null,
+  });
+
+  const sessions = createSessionStore({ 'session-1': 'opus' }, { 'session-1': 'high' });
+  const { service } = createTestService({ sessions });
+  service.setSessionPermissionMode('claude', 'session-1', 'plan');
+
+  assert.deepEqual(service.resolveProjectSelection('claude', '/repo'), {
+    provider: 'claude',
+    model: 'opus',
+    effort: 'high',
+    permissionMode: 'plan',
+  });
 });
 
 test('resolveSessionModel prefers the recorded session model', async () => {

@@ -9,7 +9,9 @@
     "copied": "消息已复制",
     "selectFormat": "选择复制格式",
     "copyAsMarkdown": "复制为 Markdown",
-    "copyAsText": "复制为纯文本"
+    "copyAsText": "复制为纯文本",
+    "markdownShort": "MD",
+    "textShort": "文本"
   },
   "messageTypes": {
     "user": "U",
@@ -66,7 +68,13 @@
     "diffUnavailable": "（无法获取此命令的文件差异）",
     "partUnavailable": "（部分差异无法获取）",
     "skipped": "（已跳过此 git 命令的文件差异）",
-    "shared": "（同一时间有另一个命令在此仓库中运行；任一命令所做的更改都可能显示在任一结果下）"
+    "shared": "（同一时间有另一个命令在此仓库中运行；任一命令所做的更改都可能显示在任一结果下）",
+    "moreLines_one": "… 还有 {{count}} 行",
+    "moreFiles_one": "… 另有 {{count}} 个文件已更改",
+    "filesNotShown_one": "{{count}} 个文件已更改（二进制、仅模式变更或过大无法显示）",
+    "filesUnavailable_one": "{{count}} 个文件已更改（无法获取差异）",
+    "filesChanged_one": "{{count}} 个文件已更改",
+    "morePaths_one": "另有 {{count}} 个"
   },
   "thinking": {
     "title": "思考中...",
@@ -152,6 +160,20 @@
       "willSend": "将在当前完成后发送",
       "edit": "编辑排队消息",
       "delete": "删除排队消息"
+    },
+    "attachmentRejected": {
+      "title_one": "{{count}} 个文件无法添加为附件",
+      "title_other": "{{count}} 个文件无法添加为附件",
+      "tooLarge": "超过了 {{maxSize}} MB 的大小限制",
+      "tooMany": "超出了最多 {{maxCount}} 个附件的数量限制",
+      "dismiss": "关闭"
+    },
+    "steer": {
+      "label": "追加指令",
+      "sending": "发送中…",
+      "willRead": "{{provider}} 将在下次调用工具时读取",
+      "attachments_one": "已附加 {{count}} 个文件",
+      "attachments_other": "已附加 {{count}} 个文件"
     }
   },
   "providerSelection": {
@@ -172,7 +194,15 @@
       "default": "请在上方选择一个提供者以开始"
     },
     "pressToSearch": "按 <kbd>{{shortcut}}</kbd> 搜索会话、文件和提交",
-    "chooseModelDescriptionCustomOnly": "{{providers, list}} 仅列出您的模型"
+    "chooseModelDescriptionCustomOnly": "{{providers, list}} 仅列出您的模型",
+    "chooseModel": "选择模型",
+    "chooseModelDescription": "在同一列表中查看内置模型和自定义模型",
+    "addModel": "添加模型",
+    "searchModels": "搜索模型...",
+    "manageModels": "管理模型",
+    "noModelsFound": "未找到模型。",
+    "loadingModels": "正在加载模型…",
+    "clickToChange": "点击切换模型"
   },
   "session": {
     "continue": {
@@ -226,30 +256,45 @@
   },
   "claudeStatus": {
     "actions": {
-      "thinking": "Thinking",
-      "processing": "Processing",
-      "analyzing": "Analyzing",
-      "working": "Working",
-      "computing": "Computing",
-      "reasoning": "Reasoning"
+      "thinking": "思考中",
+      "processing": "处理中",
+      "analyzing": "分析中",
+      "working": "执行中",
+      "computing": "计算中",
+      "reasoning": "推理中"
     },
     "state": {
-      "live": "Live",
-      "paused": "Paused"
+      "live": "运行中",
+      "paused": "已暂停"
     },
     "elapsed": {
-      "seconds": "{{count}}s",
-      "minutesSeconds": "{{minutes}}m {{seconds}}s",
-      "label": "{{time}} elapsed",
-      "startingNow": "Starting now"
+      "seconds": "{{count}} 秒",
+      "minutesSeconds": "{{minutes}} 分 {{seconds}} 秒",
+      "label": "已用时 {{time}}",
+      "startingNow": "正在启动"
     },
     "stop": "停止",
     "controls": {
-      "stopGeneration": "Stop Generation",
-      "pressEscToStop": "Press Esc anytime to stop"
+      "stopGeneration": "停止生成",
+      "pressEscToStop": "随时按 Esc 停止"
     },
     "providers": {
-      "assistant": "Assistant"
+      "assistant": "助手"
+    },
+    "backgroundWork": "后台任务",
+    "backgroundTask": {
+      "workflow": "工作流 {{name}}",
+      "agent": "智能体 {{description}}",
+      "command": "命令 {{description}}",
+      "count": "{{count}} 个任务",
+      "prompt": {
+        "title": "此会话仍有后台任务正在运行",
+        "description": "发送新消息会开始新一轮对话，并停止这些后台任务；尚未返回的结果将丢失。可将消息加入队列，等任务结束后再发送。",
+        "cancel": "取消",
+        "queue": "排队发送",
+        "sendAnyway": "仍然发送",
+        "sideQuestion": "临时提问"
+      }
     }
   },
   "projectSelection": {
@@ -271,6 +316,20 @@
       "title": "正在替换先前的消息",
       "filesNotReverted": "已修改的文件不会被还原",
       "cancel": "取消"
+    },
+    "reasoning": "推理强度",
+    "model": "模型",
+    "effortDefault": "默认",
+    "loadingModels": "正在加载模型…",
+    "modelMenu": "选择模型和推理强度",
+    "commands": {
+      "help": "显示 Claude Code 的帮助文档",
+      "models": "查看当前服务商可用的模型",
+      "clear": "清空本次会话的上下文，保留历史记录",
+      "cost": "显示 token 使用情况",
+      "memory": "打开 CLAUDE.md 记忆文件进行编辑",
+      "config": "打开设置与配置",
+      "status": "显示系统状态与版本信息"
     }
   },
   "export": {
@@ -288,7 +347,8 @@
     "json": {
       "label": "JSON (.json)",
       "description": "全部消息原样输出，供工具使用。"
-    }
+    },
+    "includeSideQuestions": "包含临时提问"
   },
   "schedule": {
     "trigger": "定时发送这条消息",
@@ -314,5 +374,131 @@
     "customModelsOnlyHint": "在所有模型选择器中隐藏 {{provider}} 的内置模型，并将您的第一个模型设为默认模型。在您添加模型之前，内置模型仍会显示。",
     "builtInModelsHidden": "开启“仅使用我的模型”时，这些模型不会出现在模型选择器中。",
     "customModelsOnlyFailed": "无法更改此设置。"
+  },
+  "interactive": {
+    "title": "交互提示",
+    "waiting": "等待您在 CLI 中回复",
+    "instruction": "请在运行 Claude 的终端中选择一个选项。",
+    "selectedOption": "✓ Claude 已选择选项 {{number}}",
+    "instructionDetail": "在 CLI 中，可以使用方向键或输入编号来选择选项。"
+  },
+  "mcpElicitation": {
+    "asks": "{{server}} 需要您提供信息",
+    "submit": "提交",
+    "decline": "拒绝",
+    "openLink": "打开链接",
+    "unsafeUrl": "此处仅支持打开 http 和 https 链接。",
+    "optional": "选填",
+    "choose": "请选择…",
+    "required": "必填",
+    "notANumber": "请输入数字",
+    "notAnInteger": "请输入整数",
+    "tooSmall": "不得小于 {{value}}",
+    "tooLarge": "不得大于 {{value}}",
+    "tooShort": "至少需要 {{count}} 个字符",
+    "tooLong": "最多允许 {{count}} 个字符",
+    "tooFew": "请至少选择 {{count}} 项",
+    "tooMany": "最多可选择 {{count}} 项",
+    "notAnEmail": "请输入电子邮箱地址",
+    "notAUri": "请输入完整地址，例如 https://example.com",
+    "notADate": "请输入日期",
+    "notADateTime": "请输入日期和时间",
+    "notTheFormat": "{{format}} 格式无效"
+  },
+  "sideQuestion": {
+    "label": "临时提问 · 不计入会话",
+    "pending": "正在回答临时提问",
+    "failed": "临时提问失败。",
+    "dismiss": "关闭",
+    "unsupported": "此供应商不支持临时提问。",
+    "noSession": "需要先开始对话才能临时提问，当前对话尚未开始。"
+  },
+  "sendMenu": {
+    "trigger": "发送选项",
+    "queue": {
+      "label": "排队发送",
+      "descriptionResponding": "本轮回复结束后发送",
+      "descriptionBackground": "后台任务结束后发送"
+    },
+    "steer": {
+      "label": "追加指令",
+      "description": "追加到本轮，在下次调用工具时读取"
+    },
+    "sideQuestion": {
+      "label": "临时提问",
+      "description": "立即单独提问，内容不会传入会话"
+    },
+    "stop": {
+      "label": "停止",
+      "description": "停止生成当前回复"
+    },
+    "sendAnyway": {
+      "label": "仍然发送",
+      "description": "立即发送，并停止后台任务"
+    }
+  },
+  "misc": {
+    "copyToClipboard": "复制到剪贴板",
+    "copyCommand": "复制命令",
+    "runningTask": "正在运行任务",
+    "userAskedRevise": "用户要求修改计划",
+    "typeAnswer": "请输入您的回答...",
+    "skipOne": "跳过",
+    "skipAll": "全部跳过",
+    "exportChat": "导出对话",
+    "closeImagePreview": "关闭图片预览",
+    "availableCommands": "可用命令",
+    "filterCommands": "筛选命令...",
+    "closeModal": "关闭命令结果窗口",
+    "noDescription": "暂无说明。",
+    "modelChangeFailed": "暂时无法切换模型。",
+    "choiceSavedHint": "您的选择已在当前会话中保存，并将作为新对话的默认设置。",
+    "docsSearchSubtitle": "无需离开对话，即可搜索内置命令、语法和用法。",
+    "enterModelInfo": "请输入模型名称和模型 ID。",
+    "modelSaveFailed": "无法保存此模型。",
+    "modelDeleteFailed": "无法删除此模型。",
+    "cancelEditing": "取消编辑",
+    "userDeniedTool": "用户拒绝了工具调用",
+    "showTokenUsage": "显示 Token 用量",
+    "fallbackCommands": {
+      "models": "浏览当前供应商的可用模型。",
+      "cost": "查看当前会话的 Token 用量。",
+      "status": "查看运行时、版本、供应商和环境状态。",
+      "memory": "打开项目的 CLAUDE.md 记忆文件。",
+      "config": "打开设置和配置。",
+      "help": "显示命令文档和语法。"
+    },
+    "modalMeta": {
+      "helpEyebrow": "命令中心",
+      "helpTitle": "帮助与快捷键",
+      "helpSubtitle": "无需离开对话，即可搜索内置命令、语法和用法。",
+      "modelsEyebrow": "模型选择",
+      "modelsTitle": "选择模型",
+      "modelsSubtitle": "选择此供应商要使用的模型。",
+      "costEyebrow": "会话用量统计",
+      "costTitle": "Token 用量",
+      "costSubtitle": "查看本次会话的输入、输出及 Token 总用量。",
+      "statusEyebrow": "运行状态",
+      "statusTitle": "系统状态",
+      "statusSubtitle": "集中查看版本、供应商、运行时和环境信息。",
+      "commandResult": "命令结果"
+    },
+    "choiceSavedSession": "您的选择已在当前会话中保存，并将作为新对话的默认设置。",
+    "choiceSavedDefault": "您的选择将作为新对话的默认模型。",
+    "tokensUsed_one": "已使用 {{count}} 个 Token",
+    "tokensUsed_other": "已使用 {{count}} 个 Token",
+    "compacted": "已压缩",
+    "contextCleared": "上下文已清空",
+    "clearContext": "清空上下文",
+    "clearContextConfirm": "清空此会话的上下文？聊天记录会保留，但下一条消息将不再携带之前的上下文。",
+    "clearContextEmpty": "上下文已经是空的。",
+    "clearContextFailed": "无法清空上下文：{{message}}",
+    "clearContextUnsupported": "此供应商不支持清空上下文。",
+    "compactionSummary": "完整摘要",
+    "expandImage": "展开 {{name}}",
+    "tokensLabel_one": "个 Token",
+    "tokensLabel_other": "个 Token",
+    "escClosesModal": "按 Esc 关闭窗口。",
+    "close": "关闭"
   }
 }
