@@ -4,6 +4,9 @@ import path from 'node:path';
 
 import TOML from '@iarna/toml';
 
+import { sessionsDb } from '@/modules/database/index.js';
+import { readCodexRolloutLines } from './codex-sessions.provider.js';
+
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
@@ -171,7 +174,30 @@ export class CodexProviderModels implements IProviderModels {
     return CODEX_PREDEFINED_MODELS;
   }
 
-  async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
+  async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
+    if (sessionId) {
+      const transcript = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+      let model: string | undefined;
+      try {
+        if (transcript) {
+          for await (const line of readCodexRolloutLines(transcript)) {
+            try {
+              const entry = readObjectRecord(JSON.parse(line));
+              if (entry?.type === 'turn_context') {
+                model = readOptionalString(readObjectRecord(entry.payload)?.model) || model;
+              }
+            } catch (error) {
+              if (!(error instanceof SyntaxError)) throw error;
+            }
+          }
+        }
+      } catch {
+        return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+      }
+      if (model) return { model };
+      return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+    }
+
     try {
       const raw = await readFile(CODEX_CONFIG_PATH, 'utf8');
       const parsed = readObjectRecord(TOML.parse(raw));

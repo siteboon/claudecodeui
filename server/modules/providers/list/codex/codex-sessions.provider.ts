@@ -186,11 +186,10 @@ async function findCodexHistorySource(filePath: string, threadId: string): Promi
 
 /**
  * Codex 0.160 paginated forks keep a frozen prefix in `history_base` instead
- * of copying it. Read each ancestor only through its recorded byte boundary,
- * then the child's own rows. `forked_from_id` alone also appears on copied
- * legacy rollouts and must never cause history to be included twice.
+ * of copying it. The Codex model adapter and history reader share the same
+ * frozen prefix. `forked_from_id` alone must never include history twice.
  */
-async function* readCodexRolloutLines(
+export async function* readCodexRolloutLines(
   filePath: string,
   endByteOffset?: number,
   ancestors = new Set<string>(),

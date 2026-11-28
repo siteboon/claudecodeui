@@ -28,6 +28,7 @@ type ChatRun = {
   provider: LLMProvider;
   providerSessionId: string | null;
   status: ChatRunStatus;
+  execution: 'preparing' | 'cancelled' | 'running';
   lastSeq: number;
   events: NormalizedMessage[];
   writer: ChatSessionWriter;
@@ -246,6 +247,7 @@ export const chatRunRegistry = {
       provider: input.provider,
       providerSessionId: input.providerSessionId,
       status: 'running',
+      execution: 'preparing',
       lastSeq: 0,
       events: [],
       writer: null as unknown as ChatSessionWriter,

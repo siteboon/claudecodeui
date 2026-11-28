@@ -377,8 +377,9 @@ async function dispatchRun(
   const recordedEffort = session.effort?.trim() || null;
   const explicitDefaults = clientOptions.explicitModelAndEffort === true;
   const explicitModel = readExplicitOption(clientOptions.model, explicitDefaults);
+  const hasProviderHistory = Boolean(session.provider_session_id || session.jsonl_path);
   let importedModel: string | null = null;
-  if (!explicitModel && !recordedModel && (session.provider_session_id || session.jsonl_path)) {
+  if (!explicitModel && !recordedModel && hasProviderHistory) {
     try {
       const importedSelection = await providerModelsService.resolveSessionModel(provider, { sessionId });
       if (importedSelection.source !== 'default') importedModel = importedSelection.model;
@@ -386,8 +387,15 @@ async function dispatchRun(
       console.warn('Could not read the existing session model:', error);
     }
   }
-  const resolvedModel = explicitModel ?? recordedModel ?? importedModel ?? chatDefaults.model;
-  const resolvedEffort = readExplicitOption(clientOptions.effort, explicitDefaults) ?? recordedEffort ?? chatDefaults.effort;
+  const resolvedModel = explicitModel ?? recordedModel ?? importedModel ?? (hasProviderHistory ? null : chatDefaults.model);
+  const resolvedEffort = readExplicitOption(clientOptions.effort, explicitDefaults) ?? recordedEffort
+    ?? (hasProviderHistory ? null : chatDefaults.effort);
+
+  const wasCancelled = () => run.execution === 'cancelled';
+  if (wasCancelled()) {
+    chatRunRegistry.completeRunIfCurrent(run, { exitCode: 0, aborted: true });
+    return { started: true, error: null };
+  }
 
   const uniqueAttachments = readVerifiedAttachments(clientOptions);
 
@@ -430,7 +438,10 @@ async function dispatchRun(
     // be taken back. Inside the try so a rewind that throws still releases the
     // run instead of leaving the session processing forever.
     await beforeRun?.(run);
-    await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
+    if (!wasCancelled()) {
+      run.execution = 'running';
+      await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
+    }
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
     console.error(`[Chat] Provider runtime "${provider}" failed`, { sessionId, error: failure });
@@ -440,7 +451,7 @@ async function dispatchRun(
     // "processing" forever on every connected client. Scoped to THIS run —
     // a queued message can start the session's next run before this promise
     // settles, and the session-keyed completeRun would kill that new run.
-    chatRunRegistry.completeRunIfCurrent(run, { exitCode: 1 });
+    chatRunRegistry.completeRunIfCurrent(run, wasCancelled() ? { exitCode: 0, aborted: true } : { exitCode: 1 });
   }
 
   return { started: true, error: failure };
@@ -795,6 +806,11 @@ async function handleChatAbort(
     return;
   }
 
+  if (run.execution !== 'running') {
+    run.execution = 'cancelled';
+    return;
+  }
+
   const success = await dependencies.runtime.abort(run.provider, sessionId);
 
   // Scoped to the run that was stopped: a stop can take a round trip, and a
@@ -1006,7 +1022,7 @@ export async function runDetachedChatTurn(
 
   const activeRun = chatRunRegistry.getRun(input.sessionId);
   if (activeRun && activeRun.status === 'running') {
-    if (!input.interruptActiveRun) {
+    if (!input.interruptActiveRun || activeRun.execution !== 'running') {
       return { started: false, error: 'A run was already in progress for this session.' };
     }
     // Same shape as `chat.abort`: cancel the provider run and emit the

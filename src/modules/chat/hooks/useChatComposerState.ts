@@ -368,19 +368,21 @@ export function useChatComposerState({
     };
   }, []);
 
-  // Track writes made while a scheduled message is being saved.
-  const inputRevisionRef = useRef(0);
+  // Keep a separate draft revision for each chat.
+  const inputRevisionRef = useRef(new Map<string | null, number>());
+  const readInputRevision = useCallback((scope = draftScopeRef.current) => inputRevisionRef.current.get(scope) ?? 0, []);
   const setInput = useCallback<Dispatch<SetStateAction<string>>>((next) => {
-    inputRevisionRef.current += 1;
+    const scope = draftScopeRef.current;
+    inputRevisionRef.current.set(scope, readInputRevision(scope) + 1);
     if (typeof next === 'string') inputValueRef.current = next;
     setInputState((previous) => ({
-      scope: draftScopeRef.current,
+      scope,
       value: typeof next === 'function' ? next(previous.value) : next,
     }));
-  }, []);
+  }, [readInputRevision]);
   const submitDraftAction = useCallback(async (action: (text: string) => Promise<boolean>) => {
     const scope = draftScopeRef.current;
-    const revision = inputRevisionRef.current;
+    const revision = readInputRevision();
     const text = inputValueRef.current;
     if (!text.trim() || !(await action(text.trim()))) return;
 
@@ -388,11 +390,11 @@ export function useChatComposerState({
       if (scope && readDraftText(scope) === text) writeDraftText(scope, '');
       return;
     }
-    if (inputRevisionRef.current === revision && inputValueRef.current === text) {
+    if (readInputRevision() === revision && inputValueRef.current === text) {
       if (scope) writeDraftText(scope, '');
       setInput('');
     }
-  }, [setInput]);
+  }, [readInputRevision, setInput]);
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
 
