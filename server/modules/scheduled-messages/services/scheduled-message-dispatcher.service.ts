@@ -157,6 +157,7 @@ async function sendClaimedMessage(
 export async function dispatchDueScheduledMessages(
   runtime: ProviderRuntimeGateway,
   now: Date = new Date(),
+  onlySessionId?: string,
 ): Promise<number> {
   // Claimed before any of them runs, so a long turn cannot let the next poll
   // pick the same message up again.
@@ -168,7 +169,12 @@ export async function dispatchDueScheduledMessages(
   for (const { sessionId } of chatRunRegistry.listRunningRuns()) {
     if (isPreparing(sessionId)) waitingSessions.add(sessionId);
   }
-  const due = scheduledMessagesDb.claimDue(now, waitingSessions);
+  const firstForSession = onlySessionId && !waitingSessions.has(onlySessionId)
+    ? scheduledMessagesDb.claimNextDue(onlySessionId, now)
+    : null;
+  const due = onlySessionId
+    ? (firstForSession ? [firstForSession] : [])
+    : scheduledMessagesDb.claimDue(now, waitingSessions);
   if (due.length === 0) {
     return 0;
   }
@@ -266,10 +272,10 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   // the settled session, so several runs ending together do not each rescan
   // every queued turn.
   unsubscribeRunSettled = onRunSettled((appSessionId) => {
-    void dispatchQueuedMessages(runtime, appSessionId).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error('[ScheduledMessages] Run-settled dispatch failed', { error: message });
-    });
+    // A due message held during preparation takes its place before the queue.
+    // Claiming it synchronously reserves this session for the scheduled sends.
+    void dispatchDueScheduledMessages(runtime, new Date(), appSessionId).catch(logPassFailure);
+    void dispatchQueuedMessages(runtime, appSessionId).catch(logPassFailure);
   });
 
   // Catch up on anything that came due while the server was not running.
