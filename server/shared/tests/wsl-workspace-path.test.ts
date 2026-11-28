@@ -160,6 +160,15 @@ test('canonicalizes DrvFS casing and resolves ancestor symlinks when multiple tr
 
     const mountsContent = `F:\\134 ${mountRoot} 9p rw,noatime,aname=drvfs;path=F:\\;uid=1000 0 0\n`;
 
+    const spacedPath = path.posix.join(workspacesRoot, 'notes ');
+    await mkdir(spacedPath);
+    for (const nativePath of [spacedPath, path.posix.join(spacedPath, 'draft ')]) {
+      assert.deepEqual(await utilsModule.validateWorkspacePath(nativePath, { platform: 'linux', mountsContent }), {
+        valid: true,
+        resolvedPath: nativePath,
+      });
+    }
+
     const wrongCaseMissingMulti = await utilsModule.validateWorkspacePath('F:\\workspaces\\new\\app', {
       platform: 'linux',
       mountsContent,

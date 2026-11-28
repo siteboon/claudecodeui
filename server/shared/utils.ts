@@ -796,6 +796,11 @@ async function canonicalizeDrvfsPathCase(
   return currentPath;
 }
 
+/** Canonical POSIX paths retain legal whitespace in directory names. */
+function normalizeResolvedWorkspacePath(inputPath: string, platform: NodeJS.Platform): string {
+  return platform === 'win32' ? normalizeProjectPathForPlatform(inputPath, platform) : path.posix.normalize(inputPath);
+}
+
 async function resolveDeepestExistingAncestor(
   targetPath: string,
   platform: NodeJS.Platform,
@@ -806,9 +811,9 @@ async function resolveDeepestExistingAncestor(
 
   while (true) {
     try {
-      const rawAncestorRealPath = normalizeProjectPathForPlatform(await realpath(cursor), platform);
+      const rawAncestorRealPath = normalizeResolvedWorkspacePath(await realpath(cursor), platform);
       return missingSegments.length > 0
-        ? normalizeProjectPathForPlatform(pathOps.join(rawAncestorRealPath, ...missingSegments), platform)
+        ? normalizeResolvedWorkspacePath(pathOps.join(rawAncestorRealPath, ...missingSegments), platform)
         : rawAncestorRealPath;
     } catch (error) {
       const fileError = error as NodeJS.ErrnoException;
@@ -819,7 +824,7 @@ async function resolveDeepestExistingAncestor(
 
     const parentPath = pathOps.dirname(cursor);
     if (parentPath === cursor) {
-      return normalizeProjectPathForPlatform(targetPath, platform);
+      return normalizeResolvedWorkspacePath(targetPath, platform);
     }
 
     missingSegments.unshift(pathOps.basename(cursor));
@@ -834,7 +839,7 @@ async function resolveExistingPathOrMissingTail(
 ): Promise<string> {
   try {
     await access(absolutePath);
-    const rawResolved = normalizeProjectPathForPlatform(await realpath(absolutePath), platform);
+    const rawResolved = normalizeResolvedWorkspacePath(await realpath(absolutePath), platform);
     return mounts.length > 0
       ? await canonicalizeDrvfsPathCase(rawResolved, mounts)
       : rawResolved;
@@ -877,14 +882,17 @@ export async function validateWorkspacePath(
 ): Promise<WorkspacePathValidationResult> {
   try {
     const platform = hostContext?.platform ?? process.platform;
-    const hostResolution = resolveWorkspacePathForHost(requestedPath, hostContext);
-    if (!hostResolution.path) {
+    const input = typeof requestedPath === 'string' ? requestedPath.trim() : '';
+    if (!input) {
       return {
         valid: false,
         error: 'Workspace path is required',
       };
     }
 
+    const hostResolution = platform === 'win32' || isWindowsStylePath(stripWindowsLongPathPrefix(input))
+      ? resolveWorkspacePathForHost(requestedPath, hostContext)
+      : { path: requestedPath, isWindowsPath: false };
     if (hostResolution.error) {
       return {
         valid: false,
@@ -900,7 +908,7 @@ export async function validateWorkspacePath(
 
     const pathOps = platform === 'win32' ? path.win32 : path.posix;
     const absolutePath = pathOps.resolve(hostResolution.path);
-    const normalizedPath = normalizeProjectPathForPlatform(absolutePath, platform);
+    const normalizedPath = normalizeResolvedWorkspacePath(absolutePath, platform);
 
     const inputError = workspaceSystemDirectoryError(normalizedPath, {
       platform,
@@ -928,7 +936,7 @@ export async function validateWorkspacePath(
       };
     }
 
-    const rawWorkspaceRoot = normalizeProjectPathForPlatform(await realpath(WORKSPACES_ROOT), platform);
+    const rawWorkspaceRoot = normalizeResolvedWorkspacePath(await realpath(WORKSPACES_ROOT), platform);
     const resolvedWorkspaceRoot = mounts.length > 0
       ? await canonicalizeDrvfsPathCase(rawWorkspaceRoot, mounts)
       : rawWorkspaceRoot;
@@ -945,7 +953,7 @@ export async function validateWorkspacePath(
       if (pathStats.isSymbolicLink()) {
         const symlinkTarget = await readlink(absolutePath);
         const resolvedSymlinkPath = pathOps.resolve(pathOps.dirname(absolutePath), symlinkTarget);
-        const rawSymlinkPath = normalizeProjectPathForPlatform(await realpath(resolvedSymlinkPath), platform);
+        const rawSymlinkPath = normalizeResolvedWorkspacePath(await realpath(resolvedSymlinkPath), platform);
         const realSymlinkPath = mounts.length > 0
           ? await canonicalizeDrvfsPathCase(rawSymlinkPath, mounts)
           : rawSymlinkPath;
