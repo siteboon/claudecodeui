@@ -199,6 +199,7 @@ function Sidebar({
       setSearchMode('projects');
       setSearchFilter('');
       const requestId = ++existingProjectRequestRef.current;
+      setPendingExistingProject(null);
       if (!existingProject) {
         void (async () => {
           try {
@@ -213,7 +214,6 @@ function Sidebar({
         return;
       }
 
-      setPendingExistingProject(null);
       ensureProjectExpanded(existingProject.projectId);
       handleProjectSelect(existingProject);
     },
