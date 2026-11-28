@@ -1186,6 +1186,7 @@ export function useChatSessionState({
 
     const container = scrollContainerRef.current;
     const scrollRestoreState = container ? captureScrollRestoreState(container) : null;
+    const restoreGeneration = promptNavigationRef.current.generation;
 
     try {
       const slot = await sessionStore.fetchFromServer(requestSessionId, {
@@ -1200,7 +1201,7 @@ export function useChatSessionState({
       if (currentSessionId !== requestSessionId) return;
 
       if (slot) {
-        if (scrollRestoreState) {
+        if (scrollRestoreState && promptNavigationRef.current.generation === restoreGeneration) {
           pendingScrollRestoreRef.current = scrollRestoreState;
         }
 

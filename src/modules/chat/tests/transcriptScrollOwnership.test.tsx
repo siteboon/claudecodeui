@@ -414,14 +414,65 @@ describe('加载旧消息期间主动跳转', () => {
     const tail = buildMessage(1, '2026-01-01T00:02:00.000Z');
     const messages = new Map([[SESSION_A, [tail]]]);
     const store = createStore(messages);
-    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
-    store.getSessionSlot.mockImplementation(() => slot);
+    const pageSlot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => pageSlot);
+    store.fetchFromServer.mockImplementation(async () => pageSlot);
     let finishFetch = () => {};
     store.fetchMore.mockImplementation(async () => {
       await new Promise<void>((resolve) => { finishFetch = resolve; });
       messages.set(SESSION_A, [prompt, tail]);
-      slot.offset += 20;
-      return { slot, prependedCount: 20 };
+      pageSlot.offset += 20;
+      return { slot: pageSlot, prependedCount: 20 };
+    });
+    const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    const container = createContainer(5000, 500);
+    container.element.scrollTop = 20;
+    const row = document.createElement('div');
+    row.setAttribute('data-message-id', prompt.id);
+    row.setAttribute('data-message-timestamp', prompt.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    await act(async () => { await Promise.resolve(); });
+    let started = false;
+    store.fetchMore.mockImplementation(async (...args) => {
+      started = true;
+      await new Promise<void>((resolve) => { finishFetch = resolve; });
+      messages.set(SESSION_A, [prompt, tail]);
+      pageSlot.offset += 20;
+      return { slot: pageSlot, prependedCount: 20 };
+    });
+    await act(async () => {
+      result.current.handleScroll();
+      await Promise.resolve();
+    });
+    assert.equal(started, true, 'history loading must start before the jump');
+    await act(async () => {
+      await result.current.revealUserPrompt({ type: 'user', content: prompt.content, timestamp: prompt.timestamp, sourceMessageId: prompt.id });
+    });
+    const jumpPosition = container.element.scrollTop;
+    await act(async () => { finishFetch(); });
+    assert.equal(container.element.scrollTop, jumpPosition, 'the completed page must not restore the pre-jump viewport');
+  });
+
+  it('跳转后完成的全量加载不会恢复跳转前的滚动位置', async () => {
+    const prompt = buildMessage(0, '2026-01-01T00:00:00.000Z');
+    const tail = buildMessage(1, '2026-01-01T00:02:00.000Z');
+    const messages = new Map([[SESSION_A, [tail]]]);
+    const store = createStore(messages);
+    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 0, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => slot);
+    let finishFetch = () => {};
+    const originalFetch = store.fetchFromServer.getMockImplementation();
+    let fullLoadCount = 0;
+    store.fetchFromServer.mockImplementation(async (sessionId) => {
+      if (fullLoadCount > 0) {
+        fullLoadCount += 1;
+        await new Promise<void>((resolve) => { finishFetch = resolve; });
+        messages.set(SESSION_A, [prompt, tail]);
+        return { ...slot, hasMore: false, offset: 2 };
+      }
+      return originalFetch?.(sessionId) ?? slot;
     });
     const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
     const container = createContainer(5000, 500);
@@ -431,15 +482,14 @@ describe('加载旧消息期间主动跳转', () => {
     row.scrollIntoView = vi.fn();
     container.element.appendChild(row);
     (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
-    await act(async () => { result.current.handleUserHistoryScroll(); });
+    fullLoadCount = 1;
+    await act(async () => { void result.current.loadAllMessages(); });
+    assert.ok(store.fetchFromServer.mock.calls.length > 1, 'full-history loading must start before the jump');
     await act(async () => {
       await result.current.revealUserPrompt({ type: 'user', content: prompt.content, timestamp: prompt.timestamp, sourceMessageId: prompt.id });
     });
-    container.element.scrollTop = 1234;
+    const jumpPosition = container.element.scrollTop;
     await act(async () => { finishFetch(); });
-    container.element.scrollTop = 4321;
-    act(() => { result.current.handleUserHistoryScroll(); });
-    await act(async () => { await Promise.resolve(); });
-    expect(container.element.scrollTop).toBe(4321);
+    assert.equal(container.element.scrollTop, jumpPosition, 'the completed full load must not restore the pre-jump viewport');
   });
 });
