@@ -138,3 +138,17 @@ test('a second new chat opened in the same project counts as leaving the first',
   // The second chat's composer does not keep the sent text.
   assert.equal(composer.view.result.current.input, '');
 });
+
+test('a new chat whose composer unmounted meanwhile counts as left', async () => {
+  const composer = renderComposer();
+  await act(async () => { composer.view.result.current.setInput('first message'); });
+  await act(async () => {
+    void composer.view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  // Deselecting the project unmounts the chat; the refs keep the old scope.
+  composer.view.unmount();
+  await answerCreate(jsonResponse({ success: true, data: { sessionId: 'session-new' } }, 201));
+
+  assert.deepEqual(composer.established.map(([id, context]) => [id, context.chatLeft]), [['session-new', true]]);
+  assert.deepEqual(composer.added, []);
+});

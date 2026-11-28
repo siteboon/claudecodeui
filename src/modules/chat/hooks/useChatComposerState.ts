@@ -803,9 +803,15 @@ export function useChatComposerState({
   }, []);
 
   // An unmounted composer cannot answer; let the pending submit finish.
-  useEffect(() => () => {
-    backgroundSendResolverRef.current?.('cancel');
-    backgroundSendResolverRef.current = null;
+  // A send still running then has left its chat (e.g. the project was deselected).
+  const unmountedRef = useRef(false);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      backgroundSendResolverRef.current?.('cancel');
+      backgroundSendResolverRef.current = null;
+    };
   }, []);
 
   // A side question never touches the session: on a successful ask, the
@@ -1278,7 +1284,8 @@ export function useChatComposerState({
       // a brand-new chat moving from its project scope to its session id has not left.
       // New Session only leaves a send that started a new chat: an existing chat keeps its own scope.
       const startsNewChat = targetSessionId === null;
-      const leftChat = () => (startsNewChat && newSessionTriggerRef.current !== sendNewSessionTrigger)
+      const leftChat = () => unmountedRef.current
+        || (startsNewChat && newSessionTriggerRef.current !== sendNewSessionTrigger)
         || (draftScopeRef.current !== submittedScope
           && (targetSessionId === null || draftScopeRef.current !== targetSessionId));
 
