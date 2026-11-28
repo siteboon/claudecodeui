@@ -368,7 +368,7 @@ Useful tests in this repo:
 - `server/modules/providers/tests/pi-registry.test.ts`
 - `server/modules/providers/tests/pi-facets.test.ts`
 - `server/modules/providers/tests/pi-session-synchronizer.test.ts`
-- `server/modules/providers/list/pi/pi-runtime.provider.test.js`
+- `server/modules/providers/list/pi/pi-runtime.provider.test.ts`
 - `server/modules/providers/list/pi/pi-sessions.provider.test.ts`
 
 If you touch sessions or session synchronization, add or update focused tests

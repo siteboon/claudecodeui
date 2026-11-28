@@ -75,9 +75,11 @@ const buildPiTokenUsage = (usage: AnyRecord): AnyRecord | undefined => {
 };
 
 /**
- * Maps one live `pi -p --mode json` event onto zero or more normalized
- * messages. This is the real body behind the runtime's
- * `context.normalizeMessage` callback (pi-runtime.provider.js).
+ * Maps one live pi session event onto zero or more normalized messages.
+ * This is the real body behind the runtime's `context.normalizeMessage`
+ * callback (pi-runtime.provider.ts). JSON and RPC mode stream the same
+ * session events, so one mapping serves the transcript probes and the live
+ * `pi --mode rpc` stream alike.
  *
  * Event → message mapping (verified against probe/*.jsonl, pi 0.85.1):
  * - `message_update` + `text_delta`     → `stream_delta` (content = delta)
@@ -458,7 +460,7 @@ export const normalizeTranscriptEntry = (entry: AnyRecord, sessionId: string | n
 
 export class PiSessionsProvider implements IProviderSessions {
   /**
-   * Normalizes live `pi -p --mode json` events into frontend messages.
+   * Normalizes live pi session events (RPC mode) into frontend messages.
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
     return mapPiEventToMessages(rawMessage, sessionId);
