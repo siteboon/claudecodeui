@@ -173,6 +173,20 @@ test('compact mode keeps quick actions and model picker visible, toggles seconda
   assert.ok(secondaryActions?.contains(screen.getByRole('button', { name: 'Select model and reasoning effort' })));
 });
 
+test('compact mode closes the More menu on Escape when focus leaves the composer', () => {
+  const abort = vi.fn();
+  render(view(props({ compactMode: true, isLoading: true, onAbortSession: abort })));
+  renderHook(() => useEscapeToAbortSession({
+    canAbortSession: true, onAbortSession: abort, composerRef: { current: null },
+  }));
+  const more = screen.getByRole('button', { name: 'More chat tools' });
+  fireEvent.click(more);
+  assert.equal(more.getAttribute('aria-expanded'), 'true');
+  fireEvent.keyDown(document.body, { key: 'Escape', bubbles: true });
+  assert.equal(more.getAttribute('aria-expanded'), 'false');
+  assert.equal(abort.mock.calls.length, 0);
+});
+
 test('compact mode stop button immediately invokes the abort handler', () => {
   const abort = vi.fn();
   render(view(props({ compactMode: true, isLoading: true, input: '', hasInput: false, onAbortSession: abort })));

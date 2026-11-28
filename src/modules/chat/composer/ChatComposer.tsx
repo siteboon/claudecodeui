@@ -235,6 +235,19 @@ export default function ChatComposer({
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsId = useId();
 
+  // Compact mode hides the tool drawer behind a shell-level escape layer, so
+  // Escape from a transcript control never reaches the composer's own handler.
+  useEffect(() => {
+    if (!compactMode || !toolsOpen || typeof document === 'undefined') return undefined;
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.stopPropagation();
+      setToolsOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => document.removeEventListener('keydown', closeOnEscape, true);
+  }, [compactMode, toolsOpen]);
+
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) {
@@ -467,7 +480,7 @@ export default function ChatComposer({
         {showFileDropdown && filteredFiles.length > 0 && (
           <div
             ref={fileDropdownRef}
-            className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card/95 shadow-lg backdrop-blur-md"
+            className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card shadow-lg"
           >
             {filteredFiles.map((file, index) => (
               <div
