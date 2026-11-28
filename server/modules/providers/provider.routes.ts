@@ -964,7 +964,10 @@ router.post(
     const provider = parseProvider(body.provider);
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
     const initialMessage = typeof body.initialMessage === 'string' ? body.initialMessage : '';
-    const result = sessionsService.createAppSession(provider, projectPath, initialMessage);
+    const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : undefined;
+    const rawUserId = Number((req as Request & { user?: { id?: unknown } }).user?.id);
+    const userId = Number.isSafeInteger(rawUserId) && rawUserId > 0 ? rawUserId : undefined;
+    const result = sessionsService.createAppSession(provider, projectPath, initialMessage, { model, userId });
     // The client switches to the new id before its first send records the
     // selection, so the row has to answer with it from the start.
     providerModelsService.recordSessionSelection(provider, result.sessionId, body);

@@ -290,7 +290,8 @@ test('OpenCode session synchronizer indexes sqlite sessions without deletable tr
         const indexed = sessionsDb.getSessionById('open-session-1');
         assert.equal(indexed?.provider, 'opencode');
         assert.equal(indexed?.project_path, workspacePath);
-        assert.equal(indexed?.custom_name, 'OpenCode indexed title');
+        // The provider title is kept, then cut to the shared width budget.
+        assert.equal(indexed?.custom_name, 'OpenCode…');
         assert.equal(indexed?.jsonl_path, null);
         assert.equal(sessionsDb.getSessionById('app-child-session-1'), null);
         assert.equal(sessionsDb.getSessionByProviderSessionId('open-child-session-1'), null);
@@ -759,7 +760,7 @@ test('OpenCode synchronizer keeps the stored title for indexed sessions', { conc
     await withIsolatedDatabase(async () => {
       await new OpenCodeSessionSynchronizer().synchronize();
 
-      assert.equal(sessionsDb.getSessionById('oc-indexed-1')?.custom_name, 'OpenCode generated title');
+      assert.equal(sessionsDb.getSessionById('oc-indexed-1')?.custom_name, 'OpenCode…');
     });
   } finally {
     restoreHomeDir();

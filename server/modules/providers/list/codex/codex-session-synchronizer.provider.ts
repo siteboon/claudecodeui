@@ -7,6 +7,7 @@ import {
   buildLookupMap,
   extractFirstValidJsonlData,
   findFilesRecursivelyCreatedAfter,
+  normalizeAutoSessionName,
   normalizeSessionName,
   readFileTimestamps,
 } from '@/shared/utils.js';
@@ -143,14 +144,18 @@ export class CodexSessionSynchronizer implements IProviderSessionSynchronizer {
       };
     }
 
-    let sessionName = nameMap.get(parsed.sessionId);
-    if (!sessionName) {
-      sessionName = await this.extractLastAgentMessageFromEnd(filePath);
+    const indexedName = nameMap.get(parsed.sessionId);
+    if (indexedName?.trim()) {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(indexedName, 'Untitled Codex Session'),
+      };
     }
 
+    const fallbackName = await this.extractLastAgentMessageFromEnd(filePath);
     return {
       ...parsed,
-      sessionName: normalizeSessionName(sessionName, 'Untitled Codex Session'),
+      sessionName: normalizeAutoSessionName(fallbackName, 'Untitled Codex Session'),
     };
   }
 

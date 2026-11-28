@@ -1909,7 +1909,7 @@ test('synchronizeFile uses ai-title from JSONL when no DB custom_name exists', {
 
     // Write session JSONL with ai-title before last-prompt.
     await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
-      JSON.stringify({ type: 'ai-title', aiTitle: 'AI generated title', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'ai-title', aiTitle: 'AI generated…', sessionId: 'test-session-1' }),
       JSON.stringify({
         parentUuid: 'msg-1',
         isSidechain: false,
@@ -1928,7 +1928,7 @@ test('synchronizeFile uses ai-title from JSONL when no DB custom_name exists', {
 
       assert.ok(result, 'synchronizeFile should return a session id');
       const session = sessionsDb.getSessionById(result!);
-      assert.equal(session?.custom_name, 'AI generated title');
+      assert.equal(session?.custom_name, 'AI generated…');
     });
   } finally {
     restoreHomeDir();
@@ -1975,6 +1975,47 @@ test('synchronizeFile uses custom-title from JSONL when no DB custom_name and no
   }
 });
 
+test('synchronizeFile keeps a long manual custom-title in full', { concurrency: false }, async () => {
+  // A `custom-title` is what the user typed through `/rename`. Applying the
+  // automatic 16-unit cap to it silently shortened names on first index.
+  const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-longtitle-'));
+  const workspacePath = path.join(tmp, 'workspace');
+  await mkdir(workspacePath, { recursive: true });
+  const restoreHomeDir = patchHomeDir(tmp);
+  const manualTitle = '这是我手动设置并且需要完整保留的会话名称';
+
+  try {
+    const claudeHome = path.join(tmp, '.claude');
+    await mkdir(claudeHome, { recursive: true });
+    await writeFile(path.join(claudeHome, 'history.jsonl'), '', 'utf8');
+
+    await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
+      JSON.stringify({
+        parentUuid: 'msg-1',
+        isSidechain: false,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'done' }] },
+        type: 'assistant',
+        uuid: 'msg-2',
+      }),
+      JSON.stringify({ type: 'custom-title', customTitle: manualTitle, sessionId: 'test-session-1' }),
+    ]);
+
+    await withIsolatedDatabase(async () => {
+      const synchronizer = new ClaudeSessionSynchronizer();
+      const result = await synchronizer.synchronizeFile(
+        path.join(workspacePath, 'test-session-1.jsonl'),
+      );
+
+      assert.ok(result);
+      const session = sessionsDb.getSessionById(result!);
+      assert.equal(session?.custom_name, manualTitle);
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test('synchronizeFile falls back to history.jsonl display when JSONL has no title events', { concurrency: false }, async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), 'claude-sync-fallback-'));
   const workspacePath = path.join(tmp, 'workspace');
@@ -1986,7 +2027,7 @@ test('synchronizeFile falls back to history.jsonl display when JSONL has no titl
     await mkdir(claudeHome, { recursive: true });
     await writeFile(
       path.join(claudeHome, 'history.jsonl'),
-      JSON.stringify({ sessionId: 'test-session-1', display: 'fallback display name' }) + '\n',
+      JSON.stringify({ sessionId: 'test-session-1', display: 'fallback…' }) + '\n',
       'utf8',
     );
 
@@ -2009,7 +2050,7 @@ test('synchronizeFile falls back to history.jsonl display when JSONL has no titl
 
       assert.ok(result);
       const session = sessionsDb.getSessionById(result!);
-      assert.equal(session?.custom_name, 'fallback display name');
+      assert.equal(session?.custom_name, 'fallback…');
     });
   } finally {
     restoreHomeDir();
@@ -2118,7 +2159,7 @@ test('synchronizeFile does NOT treat "Untitled Claude Session" in DB as a real c
 
     // Session JSONL with an ai-title that should win over the DB default.
     await writeSessionJsonl(workspacePath, 'test-session-1.jsonl', [
-      JSON.stringify({ type: 'ai-title', aiTitle: 'Real AI title from JSONL', sessionId: 'test-session-1' }),
+      JSON.stringify({ type: 'ai-title', aiTitle: 'Real AI title…', sessionId: 'test-session-1' }),
       JSON.stringify({ type: 'last-prompt', lastPrompt: 'first prompt', sessionId: 'test-session-1' }),
     ]);
 
@@ -2138,7 +2179,7 @@ test('synchronizeFile does NOT treat "Untitled Claude Session" in DB as a real c
 
       assert.ok(result);
       const session = sessionsDb.getSessionById(result!);
-      assert.equal(session?.custom_name, 'Real AI title from JSONL');
+      assert.equal(session?.custom_name, 'Real AI title…');
     });
   } finally {
     restoreHomeDir();

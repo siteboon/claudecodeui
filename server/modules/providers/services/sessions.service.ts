@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-import { projectsDb, sessionPinsDb, sessionsDb } from '@/modules/database/index.js';
+import { projectsDb, sessionPinsDb, sessionsDb, userPreferencesDb } from '@/modules/database/index.js';
 import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
+import { scheduleSessionTitleGeneration } from '@/modules/providers/services/session-title.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import type {
   BackgroundTaskSummary,
@@ -17,7 +18,12 @@ import type {
   NormalizedMessage,
   WorkflowAgentActivity,
 } from '@/shared/index.js';
-import { AppError, createNormalizedMessage, sliceTailPage } from '@/shared/index.js';
+import {
+  AppError,
+  createNormalizedMessage,
+  sliceTailPage,
+  truncateSessionTitle,
+} from '@/shared/index.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -100,11 +106,12 @@ type SessionDetails = {
   } | null;
 };
 
-const MAX_CLOUDCLI_SESSION_NAME_WORDS = 4;
-
 function buildCloudCliSessionName(initialMessage: string): string {
-  const words = initialMessage.trim().split(/\s+/).filter(Boolean);
-  return words.slice(0, MAX_CLOUDCLI_SESSION_NAME_WORDS).join(' ') || 'Untitled Session';
+  // Word counting is meaningless for Chinese, where a whole sentence is one
+  // word: the name became the entire first message and filled the sidebar
+  // row. Cut by rendered width instead so every language gets the same
+  // readable length.
+  return truncateSessionTitle(initialMessage) || 'Untitled Session';
 }
 
 /**
@@ -283,6 +290,43 @@ async function readCurrentContextHistory(
   };
 }
 
+/**
+ * Picks the fallback model for background title naming: explicit session model
+ * first, then the user's saved per-provider default, ignoring `'default'`.
+ */
+function resolveTitleFallbackModel(
+  provider: LLMProvider,
+  options: { model?: string | null; userId?: number | null },
+): string | undefined {
+  const explicitModel = typeof options.model === 'string' ? options.model.trim() : '';
+  if (explicitModel && explicitModel !== 'default') {
+    return explicitModel;
+  }
+
+  const userId = options.userId;
+  if (typeof userId !== 'number' || !Number.isInteger(userId) || userId <= 0) {
+    return undefined;
+  }
+
+  try {
+    const chatDefaults = userPreferencesDb.getPreferences(userId).chatDefaults;
+    if (!chatDefaults || typeof chatDefaults !== 'object' || Array.isArray(chatDefaults)) {
+      return undefined;
+    }
+    const providerDefaults = (chatDefaults as Record<string, unknown>)[provider];
+    if (!providerDefaults || typeof providerDefaults !== 'object' || Array.isArray(providerDefaults)) {
+      return undefined;
+    }
+    const storedModel = (providerDefaults as Record<string, unknown>).model;
+    if (typeof storedModel !== 'string') {
+      return undefined;
+    }
+    const trimmed = storedModel.trim();
+    return trimmed && trimmed !== 'default' ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
+}
 export const sessionsService = {
   /**
    * Lists provider ids that can load session history and normalize live messages.
@@ -464,6 +508,12 @@ export const sessionsService = {
     provider: LLMProvider,
     projectPath: string,
     initialMessage: string,
+    options: {
+      model?: string | null;
+      userId?: number | null;
+      /** Test seam replacing background title scheduling; production callers omit this. */
+      scheduleTitle?: typeof scheduleSessionTitleGeneration;
+    } = {},
   ): CreateAppSessionResult {
     const normalizedProjectPath = projectPath.trim();
     if (!normalizedProjectPath) {
@@ -476,6 +526,17 @@ export const sessionsService = {
     const sessionId = randomUUID();
     const sessionName = buildCloudCliSessionName(initialMessage);
     sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath, sessionName);
+    // The truncated name is what the sidebar shows this instant; the model's
+    // own title replaces it moments later, once it has read the message.
+    const scheduleTitle = options.scheduleTitle ?? scheduleSessionTitleGeneration;
+    scheduleTitle({
+      sessionId,
+      provider,
+      projectPath: normalizedProjectPath,
+      firstMessage: initialMessage,
+      initialName: sessionName,
+      model: resolveTitleFallbackModel(provider, options),
+    });
 
     return {
       sessionId,

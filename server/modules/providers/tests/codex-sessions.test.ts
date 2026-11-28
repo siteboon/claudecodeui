@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -145,6 +145,25 @@ test('Codex synchronizer leaves indexed sessions untitled when no name is availa
       await synchronizer.synchronize();
 
       assert.equal(sessionsDb.getSessionById('codex-indexed-1')?.custom_name, 'Untitled Codex Session');
+    });
+  } finally {
+    restoreHomeDir();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Codex 从转录提取的自动标题遵循 16 个半角单位的上限', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'codex-session-sync-title-'));
+  const restoreHomeDir = patchHomeDir(tempRoot);
+  try {
+    const transcriptPath = await writeCodexTranscript(tempRoot, 'codex-title', tempRoot);
+    await appendFile(transcriptPath, `${JSON.stringify({
+      type: 'event_msg',
+      payload: { type: 'task_complete', last_agent_message: '检查登录错误并修复重定向问题' },
+    })}\n`, 'utf8');
+    await withIsolatedDatabase(async () => {
+      await new CodexSessionSynchronizer().synchronize();
+      assert.equal(sessionsDb.getSessionById('codex-title')?.custom_name, '检查登录错误并…');
     });
   } finally {
     restoreHomeDir();
