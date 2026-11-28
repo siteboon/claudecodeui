@@ -368,7 +368,11 @@ export function useChatComposerState({
     };
   }, []);
 
+  // Track writes made while a scheduled message is being saved.
+  const inputRevisionRef = useRef(0);
   const setInput = useCallback<Dispatch<SetStateAction<string>>>((next) => {
+    inputRevisionRef.current += 1;
+    if (typeof next === 'string') inputValueRef.current = next;
     setInputState((previous) => ({
       scope: draftScopeRef.current,
       value: typeof next === 'function' ? next(previous.value) : next,
