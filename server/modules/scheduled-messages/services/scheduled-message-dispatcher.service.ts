@@ -156,7 +156,7 @@ async function sendClaimedMessage(
  */
 export async function dispatchDueScheduledMessages(
   runtime: ProviderRuntimeGateway,
-  now: Date = new Date(),
+  now?: Date,
   onlySessionId?: string,
 ): Promise<number> {
   // Claimed before any of them runs, so a long turn cannot let the next poll
@@ -165,16 +165,18 @@ export async function dispatchDueScheduledMessages(
     const run = chatRunRegistry.getRun(sessionId);
     return run?.status === 'running' && run.execution !== 'running';
   };
-  const waitingSessions = new Set(sessionsSending);
-  for (const { sessionId } of chatRunRegistry.listRunningRuns()) {
-    if (isPreparing(sessionId)) waitingSessions.add(sessionId);
+  let due: ScheduledMessageRow[];
+  if (onlySessionId) {
+    if (sessionsSending.has(onlySessionId) || isPreparing(onlySessionId)) return 0;
+    const first = scheduledMessagesDb.claimNextDue(onlySessionId, now ?? new Date());
+    due = first ? [first] : [];
+  } else {
+    const waitingSessions = new Set(sessionsSending);
+    for (const { sessionId } of chatRunRegistry.listRunningRuns()) {
+      if (isPreparing(sessionId)) waitingSessions.add(sessionId);
+    }
+    due = scheduledMessagesDb.claimDue(now ?? new Date(), waitingSessions);
   }
-  const firstForSession = onlySessionId && !waitingSessions.has(onlySessionId)
-    ? scheduledMessagesDb.claimNextDue(onlySessionId, now)
-    : null;
-  const due = onlySessionId
-    ? (firstForSession ? [firstForSession] : [])
-    : scheduledMessagesDb.claimDue(now, waitingSessions);
   if (due.length === 0) {
     return 0;
   }
@@ -186,11 +188,9 @@ export async function dispatchDueScheduledMessages(
   }
 
   // Sessions side by side, since a turn can stay open a long time (see
-  // runDispatchPass). A session's rows that were due at `now` go one after
-  // another in this pass, each claimed only when the earlier send ends, so
-  // none is recorded as sent while it still waits and no poll gap opens
-  // between them. A turn the user starts meanwhile is still interrupted, as
-  // any scheduled send interrupts the active run.
+  // runDispatchPass). Claim the next row when the current send ends. The
+  // current time includes messages that became due during that send, so
+  // they keep their place ahead of the queued turn.
   // shortcut: a session's next row waits for the whole earlier send, background work included (the runtime ends that hold after 30 idle minutes); interrupt instead if timeliness matters more.
   let sent = 0;
   await Promise.all(due.map(async (first) => {
@@ -201,7 +201,7 @@ export async function dispatchDueScheduledMessages(
       while (row) {
         await sendClaimedMessage(row, runtime);
         sent += 1;
-        row = isPreparing(sessionId) ? null : scheduledMessagesDb.claimNextDue(sessionId, now);
+        row = isPreparing(sessionId) ? null : scheduledMessagesDb.claimNextDue(sessionId, now ?? new Date());
         if (row) announceScheduledMessagesChanged(sessionId);
       }
     } catch (error) {
@@ -274,7 +274,7 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   unsubscribeRunSettled = onRunSettled((appSessionId) => {
     // A due message held during preparation takes its place before the queue.
     // Claiming it synchronously reserves this session for the scheduled sends.
-    void dispatchDueScheduledMessages(runtime, new Date(), appSessionId).catch(logPassFailure);
+    void dispatchDueScheduledMessages(runtime, undefined, appSessionId).catch(logPassFailure);
     void dispatchQueuedMessages(runtime, appSessionId).catch(logPassFailure);
   });
 
