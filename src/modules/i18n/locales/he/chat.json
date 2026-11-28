@@ -290,6 +290,11 @@
   "tasks": {
     "nextTaskPrompt": "להתחיל את המשימה הבאה"
   },
+  "previousMessage": {
+    "label": "ההודעה הקודמת",
+    "jump": "מעבר להודעה הקודמת ששלחת",
+    "attachmentsOnly": "הודעה עם קובץ מצורף"
+  },
   "message": {
     "editAndResend": "עריכה ושליחה מחדש",
     "forkFromHere": "פיצול מכאן",

@@ -29,6 +29,7 @@ import {
   useSessionProtectionActions,
 } from '@/shared/context/SessionProtectionContext';
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
+import { PreviousUserMessageBar } from '@/modules/chat/transcript/PreviousUserMessageBar';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
@@ -123,6 +124,10 @@ function ChatInterface({
     visibleMessages,
     loadEarlierMessages,
     revealMessage,
+    latestUserPrompt,
+    latestUserPromptBoundary,
+    onUserPromptViewportChange,
+    revealUserPrompt,
     loadAllMessages,
     loadFullTranscript,
     allMessagesLoaded,
@@ -133,7 +138,7 @@ function ChatInterface({
     scrollContainerRef,
     scrollToBottom,
     scrollToBottomAndReset,
-    handleScroll,
+    handleUserHistoryScroll,
     requestLatestMessages,
   } = useChatSessionState({
     isActive,
@@ -513,6 +518,16 @@ function ChatInterface({
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div className="flex h-full min-h-0 flex-col">
+        {/* Sits above the transcript so a prompt that scrolled away stays one click from reach. */}
+        <PreviousUserMessageBar
+          key={selectedSession?.id || currentSessionId || 'draft'}
+          scrollContainerRef={scrollContainerRef}
+          messages={chatMessages}
+          latestUserPrompt={latestUserPrompt}
+          latestUserPromptBoundary={latestUserPromptBoundary}
+          onViewportChange={onUserPromptViewportChange}
+          onReveal={revealUserPrompt}
+        />
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>
             <ChatMessagesPane
@@ -522,8 +537,8 @@ function ChatInterface({
               // hidden while more pages exist — so a short transcript is often not
               // scrollable at all and never emits `scroll`. Wheel and touch are
               // then the only way to reach the top pager or the "load all" overlay.
-              onWheel={handleScroll}
-              onTouchMove={handleScroll}
+              onWheel={handleUserHistoryScroll}
+              onTouchMove={handleUserHistoryScroll}
               isLoadingSessionMessages={isLoadingSessionMessages}
               isProcessing={isProcessing}
               hasActivityIndicator={hasActivityIndicator}

@@ -100,9 +100,9 @@ async function renderChatSessionState(options: {
   const { useChatSessionState } = await import('@/modules/chat/hooks/useChatSessionState');
 
   return renderHook(
-    ({ session }: { session: ProjectSession }) =>
+    ({ session, isActive = true }: { session: ProjectSession; isActive?: boolean }) =>
       useChatSessionState({
-        isActive: true,
+        isActive,
         selectedProject: project,
         selectedSession: session,
         ws: null,
@@ -112,7 +112,7 @@ async function renderChatSessionState(options: {
         lastSeqRef: { current: new Map() },
         sessionStore: options.store as never,
       }),
-    { initialProps: { session: options.session } },
+    { initialProps: { session: options.session } as { session: ProjectSession; isActive?: boolean } },
   );
 }
 
@@ -131,6 +131,117 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   vi.resetModules();
+});
+
+describe('上一条提问跨页定位', () => {
+  it('只补到目标所在页，更早的历史保留分页，不加载全量', async () => {
+    const prompt = buildMessage(0, '2026-01-01T00:00:00.000Z');
+    const tail = buildMessage(1, '2026-01-01T00:02:00.000Z');
+    const messages = new Map([[SESSION_A, [tail]]]);
+    const store = createStore(messages);
+    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => slot);
+    store.fetchMore.mockImplementation(async () => {
+      slot.offset += 20;
+      if (slot.offset === 60) messages.set(SESSION_A, [prompt, tail]);
+      return { slot, prependedCount: 20 };
+    });
+    const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    store.fetchFromServer.mockClear();
+    const container = createContainer(5000, 500);
+    const row = document.createElement('div');
+    row.setAttribute('data-message-timestamp', prompt.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    await act(async () => {
+      result.current.revealUserPrompt({ type: 'user', content: prompt.content, timestamp: prompt.timestamp });
+    });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(2);
+    expect(store.fetchMore).toHaveBeenCalledWith(SESSION_A, expect.objectContaining({ limit: 20 }));
+    expect(store.fetchFromServer).not.toHaveBeenCalled();
+    expect(result.current.hasMoreMessages).toBe(true);
+    expect(result.current.allMessagesLoaded).toBe(false);
+    expect(row.scrollIntoView).toHaveBeenCalled();
+    expect(row.classList.contains('search-highlight-flash')).toBe(true);
+    container.element.scrollTop = 0;
+    await act(async () => { await result.current.handleScroll(); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(2);
+    await act(async () => { result.current.handleUserHistoryScroll(); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(3);
+  });
+
+  it('连续点击同一缺失提问合并请求，并按标识避开同时间戳的后续提问', async () => {
+    const prompt = buildMessage(0, '2026-01-01T00:00:00.000Z');
+    const later = { ...prompt, id: 'later', content: '同时间但在后面的提问' };
+    const tail = buildMessage(1, '2026-01-01T00:02:00.000Z');
+    const messages = new Map([[SESSION_A, [later, tail]]]);
+    const store = createStore(messages);
+    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => slot);
+    let finish = () => {};
+    store.fetchMore.mockImplementation(async () => {
+      await new Promise<void>((resolve) => { finish = resolve; });
+      messages.set(SESSION_A, [prompt, later, tail]);
+      slot.offset += 20;
+      return { slot, prependedCount: 20 };
+    });
+    const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    const container = createContainer(5000, 500);
+    const row = document.createElement('div');
+    row.setAttribute('data-message-id', prompt.id);
+    row.setAttribute('data-message-timestamp', prompt.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    const target = { type: 'user', content: prompt.content, timestamp: prompt.timestamp, sourceMessageId: prompt.id };
+    await act(async () => { result.current.revealUserPrompt(target); });
+    await act(async () => { result.current.revealUserPrompt(target); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(); });
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(1);
+    expect(row.scrollIntoView).toHaveBeenCalled();
+  });
+});
+
+describe('分页定位的恢复与供应商兼容', () => {
+  it('Codex 目标 id 变化时停在目标页，隐藏标签后可继续完成 DOM 定位，键盘可恢复翻页', async () => {
+    const saved = { ...buildMessage(0, '2026-01-01T00:00:00.000Z'), provider: 'codex' as const, id: 'peek-id' };
+    const persisted = { ...saved, id: 'loaded-id' };
+    const tail = { ...buildMessage(1, '2026-01-01T00:02:00.000Z'), provider: 'codex' as const };
+    const messages = new Map([[SESSION_A, [tail]]]);
+    const store = createStore(messages);
+    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => slot);
+    store.fetchMore.mockImplementation(async () => {
+      messages.set(SESSION_A, [persisted, tail]);
+      slot.offset += 20;
+      return { slot, prependedCount: 20 };
+    });
+    const session = { id: SESSION_A } as ProjectSession;
+    const { result, rerender } = await renderChatSessionState({ session, store });
+    const container = createContainer(5000, 500);
+    const row = document.createElement('div');
+    row.setAttribute('data-message-id', persisted.id);
+    row.setAttribute('data-message-timestamp', persisted.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    await act(async () => { result.current.revealUserPrompt({ type: 'user', timestamp: saved.timestamp, content: saved.content, sourceMessageId: saved.id, sourceMessage: saved }); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(1);
+    act(() => { rerender({ session, isActive: false }); });
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(row.scrollIntoView).not.toHaveBeenCalled();
+    await act(async () => { rerender({ session, isActive: true }); });
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(row.scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(store.fetchMore).toHaveBeenCalledTimes(1);
+    container.element.scrollTop = 0;
+    await act(async () => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })); });
+    expect(store.fetchMore).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('deferred scroll-to-bottom', () => {
@@ -204,6 +315,45 @@ describe('deferred scroll-to-bottom', () => {
 });
 
 describe('search jump ownership', () => {
+  it('侧问行挤在目标之后时，窗口仍按渲染列表计算，目标不会被切出视口', async () => {
+    // 侧问对会插进渲染列表。窗口若按原始行算，目标之后的侧问行越多，
+    // 算出的条数就越少，尾部切片把目标切掉，跳转落空。
+    const rows: NormalizedMessage[] = [];
+    for (let index = 0; index < 200; index += 1) {
+      rows.push(buildMessage(index, `2026-01-01T00:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`));
+    }
+    // 目标固定在原始第 50 条；之后插入 40 组侧问（80 行）。
+    const target = rows[50];
+    const messages = new Map([[SESSION_A, rows]]);
+    const store = createStore(messages);
+    const { sideQuestionStore } = await import('@/modules/chat/hooks/useSideQuestions');
+    sideQuestionStore.replaceForSession(SESSION_A, Array.from({ length: 40 }, (_, index) => ({
+      id: `q-${index}`,
+      sessionId: SESSION_A,
+      question: `侧问 ${index}`,
+      answer: '答',
+      status: 'done' as const,
+      error: null,
+      model: null,
+      createdAt: rows[51 + index].timestamp,
+      finishedAt: null,
+    })));
+    const searchSession = {
+      id: SESSION_A,
+      __searchTargetSnippet: target.content,
+      __searchTargetTimestamp: target.timestamp,
+    } as unknown as ProjectSession;
+
+    const { result } = await renderChatSessionState({ session: searchSession, store });
+    const container = createContainer(5000, 500);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+
+    // 合并后共 280 行，目标位于第 50 条，窗口必须覆盖到它。
+    expect(result.current.visibleMessageCount).toBeGreaterThanOrEqual(280 - 50 + 20);
+  });
+
   it('does not follow the user into the next session', { timeout: 20_000 }, async () => {
     const messages = new Map<string, NormalizedMessage[]>([
       [SESSION_A, [buildMessage(0, '2026-01-01T00:00:00.000Z')]],
@@ -255,5 +405,91 @@ describe('search jump ownership', () => {
       0,
       'and must not flash the search highlight on one of its rows',
     );
+  });
+});
+
+describe('加载旧消息期间主动跳转', () => {
+  it('跳转后完成的旧页加载不会恢复跳转前的滚动位置', async () => {
+    const prompt = buildMessage(0, '2026-01-01T00:00:00.000Z');
+    const tail = buildMessage(1, '2026-01-01T00:02:00.000Z');
+    const messages = new Map([[SESSION_A, [tail]]]);
+    const store = createStore(messages);
+    const pageSlot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => pageSlot);
+    store.fetchFromServer.mockImplementation(async () => pageSlot);
+    let finishFetch = () => {};
+    store.fetchMore.mockImplementation(async () => {
+      await new Promise<void>((resolve) => { finishFetch = resolve; });
+      messages.set(SESSION_A, [prompt, tail]);
+      pageSlot.offset += 20;
+      return { slot: pageSlot, prependedCount: 20 };
+    });
+    const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    const container = createContainer(5000, 500);
+    container.element.scrollTop = 20;
+    const row = document.createElement('div');
+    row.setAttribute('data-message-id', prompt.id);
+    row.setAttribute('data-message-timestamp', prompt.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    await act(async () => { await Promise.resolve(); });
+    let started = false;
+    store.fetchMore.mockImplementation(async (...args) => {
+      started = true;
+      await new Promise<void>((resolve) => { finishFetch = resolve; });
+      messages.set(SESSION_A, [prompt, tail]);
+      pageSlot.offset += 20;
+      return { slot: pageSlot, prependedCount: 20 };
+    });
+    await act(async () => {
+      result.current.handleScroll();
+      await Promise.resolve();
+    });
+    assert.equal(started, true, 'history loading must start before the jump');
+    await act(async () => {
+      await result.current.revealUserPrompt({ type: 'user', content: prompt.content, timestamp: prompt.timestamp, sourceMessageId: prompt.id });
+    });
+    const jumpPosition = container.element.scrollTop;
+    await act(async () => { finishFetch(); });
+    assert.equal(container.element.scrollTop, jumpPosition, 'the completed page must not restore the pre-jump viewport');
+  });
+
+  it('跳转后完成的全量加载不会恢复跳转前的滚动位置', async () => {
+    const prompt = buildMessage(0, '2026-01-01T00:00:00.000Z');
+    const tail = buildMessage(1, '2026-01-01T00:02:00.000Z');
+    const messages = new Map([[SESSION_A, [tail]]]);
+    const store = createStore(messages);
+    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 0, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => slot);
+    let finishFetch = () => {};
+    const originalFetch = store.fetchFromServer.getMockImplementation();
+    let fullLoadCount = 0;
+    store.fetchFromServer.mockImplementation(async (sessionId) => {
+      if (fullLoadCount > 0) {
+        fullLoadCount += 1;
+        await new Promise<void>((resolve) => { finishFetch = resolve; });
+        messages.set(SESSION_A, [prompt, tail]);
+        return { ...slot, hasMore: false, offset: 2 };
+      }
+      return originalFetch?.(sessionId) ?? slot;
+    });
+    const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    const container = createContainer(5000, 500);
+    const row = document.createElement('div');
+    row.setAttribute('data-message-id', prompt.id);
+    row.setAttribute('data-message-timestamp', prompt.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    fullLoadCount = 1;
+    await act(async () => { void result.current.loadAllMessages(); });
+    assert.ok(store.fetchFromServer.mock.calls.length > 1, 'full-history loading must start before the jump');
+    await act(async () => {
+      await result.current.revealUserPrompt({ type: 'user', content: prompt.content, timestamp: prompt.timestamp, sourceMessageId: prompt.id });
+    });
+    const jumpPosition = container.element.scrollTop;
+    await act(async () => { finishFetch(); });
+    assert.equal(container.element.scrollTop, jumpPosition, 'the completed full load must not restore the pre-jump viewport');
   });
 });

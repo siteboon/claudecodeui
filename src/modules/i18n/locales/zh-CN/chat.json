@@ -303,6 +303,11 @@
   "tasks": {
     "nextTaskPrompt": "开始下一个任务"
   },
+  "previousMessage": {
+    "label": "上一条消息",
+    "jump": "跳转到你上一条发送的消息",
+    "attachmentsOnly": "附件消息"
+  },
   "message": {
     "editAndResend": "编辑并重新发送",
     "forkFromHere": "从此处派生",

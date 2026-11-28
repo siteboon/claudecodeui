@@ -228,6 +228,11 @@
       "assistant": "Assistant"
     }
   },
+  "previousMessage": {
+    "label": "前のメッセージ",
+    "jump": "以前に送信したメッセージへ移動",
+    "attachmentsOnly": "添付ファイル付きメッセージ"
+  },
   "message": {
     "editAndResend": "編集して再送信",
     "forkFromHere": "ここから分岐",
