@@ -27,7 +27,10 @@ type ProjectMainState = Pick<
   | 'handleProjectSelect'
   | 'refreshProjectsSilently'
   | 'renameSession'
->;
+> & {
+  /** The session id the route names; null on the project-only route. */
+  routeSessionId: string | null;
+};
 
 type ProjectCommandState = Pick<
   ProjectsState,
@@ -99,8 +102,10 @@ export function ProjectsStateProvider({
       handleProjectSelect: state.handleProjectSelect,
       refreshProjectsSilently: state.refreshProjectsSilently,
       renameSession: state.renameSession,
+      routeSessionId: sessionId ?? null,
     }),
     [
+      sessionId,
       state.activeTab,
       state.externalMessageUpdate,
       state.handleProjectSelect,

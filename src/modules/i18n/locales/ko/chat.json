@@ -152,7 +152,8 @@
       "willSend": "완료되면 전송됩니다",
       "edit": "대기 중인 메시지 편집",
       "delete": "대기 중인 메시지 삭제"
-    }
+    },
+    "routeSessionUnresolved": "이 대화는 아직 불러오는 중입니다. 잠시 기다리거나 사이드바에서 다시 연 뒤 전송하세요."
   },
   "providerSelection": {
     "title": "AI 어시스턴트 선택",

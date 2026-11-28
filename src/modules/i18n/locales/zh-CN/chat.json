@@ -161,6 +161,7 @@
       "edit": "编辑排队消息",
       "delete": "删除排队消息"
     },
+    "routeSessionUnresolved": "这个对话还在加载中。请稍等一下，或从侧边栏重新打开它，然后再发送。",
     "attachmentRejected": {
       "title_one": "{{count}} 个文件无法添加为附件",
       "title_other": "{{count}} 个文件无法添加为附件",

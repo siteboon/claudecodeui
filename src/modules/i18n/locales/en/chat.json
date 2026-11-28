@@ -204,7 +204,8 @@
       "willRead": "{{provider}} reads it at its next tool call",
       "attachments_one": "{{count}} file attached",
       "attachments_other": "{{count}} files attached"
-    }
+    },
+    "routeSessionUnresolved": "This conversation is still loading. Please wait a moment, or reopen it from the sidebar, then send again."
   },
   "composer": {
     "reasoning": "Reasoning",

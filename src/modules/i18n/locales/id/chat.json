@@ -159,7 +159,8 @@
       "willSend": "Akan dikirim setelah proses ini selesai",
       "edit": "Edit pesan antrean",
       "delete": "Hapus pesan antrean"
-    }
+    },
+    "routeSessionUnresolved": "Percakapan ini masih dimuat. Tunggu sebentar atau buka lagi dari bilah samping, lalu kirim ulang."
   },
   "composer": {
     "reasoning": "Penalaran",

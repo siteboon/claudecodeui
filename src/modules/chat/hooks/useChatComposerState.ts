@@ -73,6 +73,17 @@ type UseChatComposerStateArgs = {
    * /session/:id and records it as the current session.
    */
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
+  /**
+   * The session id the route names, when there is one.
+   *
+   * A `/session/<id>` URL is the user saying which conversation this is. Until
+   * that id is resolved into `selectedSession`, the composer has no session to
+   * send to, and treating that gap as "brand-new chat" allocated a second
+   * session and sent the same message into it, leaving the conversation the
+   * user was looking at untouched (two sessions, one task). Sending is refused
+   * while the route names a session this view has not bound yet.
+   */
+  routeSessionId?: string | null;
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
   /** Runs the `/clear` command: clears the open session's context. */
@@ -262,6 +273,7 @@ export function useChatComposerState({
   addMessage,
   setIsUserScrolledUp,
   setPendingPermissionRequests,
+  routeSessionId = null,
 }: UseChatComposerStateArgs) {
   const { t } = useTranslation('chat');
   // The composer text together with the chat scope it belongs to. They are one
@@ -336,6 +348,8 @@ export function useChatComposerState({
   const draftScope = sessionKey ?? (selectedProjectId ? `project:${selectedProjectId}` : null);
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
+  const commandTargetRef = useRef({ routeSessionId, boundSessionId: sessionKey });
+  commandTargetRef.current = { routeSessionId, boundSessionId: sessionKey };
   // Composition is tracked on `window` in the capture phase rather than on the textarea, so a
   // composition that starts in one field and ends after focus moves still closes cleanly.
   const isComposingRef = useRef(false);
@@ -407,6 +421,33 @@ export function useChatComposerState({
   // renders: a refusal can follow an acceptance before React re-renders.
   // Written only through `updatePendingSteers` below, with the state.
   const pendingSteersRef = useRef(pendingSteers);
+
+  const refuseUnresolvedRouteSession = useCallback(
+    (textToPark: string): boolean => {
+      const { routeSessionId, boundSessionId } = commandTargetRef.current;
+      if (!routeSessionId || boundSessionId === routeSessionId) {
+        return false;
+      }
+      if (!boundSessionId && textToPark.trim()) {
+        // The scope is about to become the routed session, and that swap
+        // replaces the composer with that session's saved draft. Park the
+        // refused text there so the refusal does not eat what was typed.
+        const parked = readDraftText(routeSessionId);
+        if (!parked.trim()) {
+          writeDraftText(routeSessionId, textToPark);
+        } else if (!parked.includes(textToPark)) {
+          writeDraftText(routeSessionId, `${parked}\n\n${textToPark}`);
+        }
+      }
+      addMessage({
+        type: 'error',
+        content: t('input.routeSessionUnresolved'),
+        timestamp: new Date(),
+      });
+      return true;
+    },
+    [addMessage, t],
+  );
 
   const handleBuiltInCommand = useCallback(
     (result: CommandExecutionResult) => {
@@ -480,7 +521,10 @@ export function useChatComposerState({
     setCommandModalPayload(null);
   }, []);
 
-  const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {
+  const handleCustomCommand = useCallback(async (
+    result: CommandExecutionResult,
+    isCurrentTarget: () => boolean,
+  ) => {
     const { content, hasBashCommands } = result;
 
     if (hasBashCommands) {
@@ -504,7 +548,7 @@ export function useChatComposerState({
     // Defer submit to next tick so the command text is reflected in UI before dispatching.
     // The expanded body is the message itself: it skips slash-command interception.
     setTimeout(() => {
-      if (handleSubmitRef.current) {
+      if (isCurrentTarget() && inputValueRef.current === commandContent && handleSubmitRef.current) {
         handleSubmitRef.current(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
       }
     }, 0);
@@ -512,12 +556,17 @@ export function useChatComposerState({
 
   const executeCommand = useCallback(
     async (command: SlashCommand, rawInput?: string, options?: { preserveInput?: boolean }) => {
-      if (!command || !selectedProject) {
+      const effectiveInput = rawInput ?? input;
+      if (!command || !selectedProject || refuseUnresolvedRouteSession(effectiveInput)) {
         return;
       }
+      const scope = draftScopeRef.current;
+      const originalInput = inputValueRef.current;
+      const route = commandTargetRef.current.routeSessionId;
+      const isCurrentTarget = () => draftScopeRef.current === scope
+        && commandTargetRef.current.routeSessionId === route;
 
       try {
-        const effectiveInput = rawInput ?? input;
         // Everything typed after the command name is its argument text, line
         // breaks included (`[\s\S]`, unlike `.`), trimmed as the Claude Code CLI
         // does. `$ARGUMENTS` gets it verbatim; `$1`, `$2`, … get its tokens.
@@ -562,6 +611,13 @@ export function useChatComposerState({
         }
 
         const result = (await response.json()) as CommandExecutionResult;
+        if (!isCurrentTarget()) {
+          if (scope && result.type === 'custom') {
+            const saved = readDraftText(scope);
+            if (!saved || saved === originalInput) writeDraftText(scope, result.content || '');
+          }
+          return;
+        }
         if (result.type === 'builtin') {
           handleBuiltInCommand(result);
           if (!options?.preserveInput) {
@@ -569,7 +625,7 @@ export function useChatComposerState({
             inputValueRef.current = '';
           }
         } else if (result.type === 'custom') {
-          await handleCustomCommand(result);
+          await handleCustomCommand(result, isCurrentTarget);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -588,6 +644,7 @@ export function useChatComposerState({
       handleCustomCommand,
       input,
       provider,
+      refuseUnresolvedRouteSession,
       selectedProject,
       selectedSession?.id,
       addMessage,
@@ -844,6 +901,10 @@ export function useChatComposerState({
     }
   }, [resetCommandMenuState, setInput]);
 
+  // The route names a conversation this view has not bound yet, or names one
+  // while the view still holds another. Shared by normal submits, `/btw`, the
+  // send menu's side-question row, and Alt+Enter so no path can deliver into
+  // the wrong conversation or lose what the user typed once the route binds.
   // Shared by the `/btw` command, Option/Alt+Enter, the background-send
   // dialog's side question choice and the send menu's side question row: all
   // four ask the same way and clear the composer the same way on success, and
@@ -856,6 +917,9 @@ export function useChatComposerState({
   // each needing its own copy of the check.
   const askSideQuestionAndClear = useCallback(
     (sessionId: string | null, text: string, scope?: string | null) => {
+      if (refuseUnresolvedRouteSession(inputValueRef.current || text)) {
+        return;
+      }
       if (!supportsSideQuestions) {
         addMessage({
           type: 'error',
@@ -876,7 +940,7 @@ export function useChatComposerState({
         clearComposerAfterSideQuestion(text, scope);
       }
     },
-    [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, supportsSideQuestions, t],
+    [addMessage, askSideQuestion, clearComposerAfterSideQuestion, currentProviderModel, isConnected, refuseUnresolvedRouteSession, supportsSideQuestions, t],
   );
 
   // Persist a message to send "when this finishes" and show it as the queued
@@ -1160,6 +1224,13 @@ export function useChatComposerState({
       // The chat this send belongs to: the upload and session allocation below can outlast a
       // chat switch, and the cleanup at the end must not empty whichever chat is open by then.
       const submittedScope = draftScopeRef.current;
+
+      // Check route binding before `/btw`, queue, steer, and normal send so
+      // neither side questions nor turn submissions can land in a stale chat
+      // or allocate a duplicate session while the routed session resolves.
+      if (refuseUnresolvedRouteSession(currentInput)) {
+        return;
+      }
 
       // `/btw <question>` never becomes a turn: checked before the in-flight
       // queue below, since that branch runs before slash-command
@@ -1486,6 +1557,7 @@ export function useChatComposerState({
       slashCommands,
       steerIntoRunningTurn,
       supportsSteering,
+      refuseUnresolvedRouteSession,
       t,
     ],
   );

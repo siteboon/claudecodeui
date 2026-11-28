@@ -150,7 +150,8 @@
       "willRead": "{{provider}} liest es beim nächsten Tool-Aufruf",
       "attachments_one": "{{count}} Datei angehängt",
       "attachments_other": "{{count}} Dateien angehängt"
-    }
+    },
+    "routeSessionUnresolved": "Diese Unterhaltung wird noch geladen. Bitte kurz warten oder sie in der Seitenleiste erneut öffnen und dann senden."
   },
   "providerSelection": {
     "title": "KI-Assistent wählen",

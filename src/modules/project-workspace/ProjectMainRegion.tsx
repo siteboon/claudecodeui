@@ -25,6 +25,7 @@ function ProjectMainRegion({
     handleProjectSelect,
     refreshProjectsSilently,
     renameSession,
+    routeSessionId,
   } = useProjectMainState();
 
   const handleOpenSidebar = useCallback(() => {
@@ -53,6 +54,7 @@ function ProjectMainRegion({
     <WorkspaceMain
       selectedProject={selectedProject}
       selectedSession={selectedSession}
+      routeSessionId={routeSessionId}
       activeTab={activeTab}
       setActiveTab={setActiveTab}
       ws={ws}

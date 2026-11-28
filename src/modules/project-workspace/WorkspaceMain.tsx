@@ -19,6 +19,8 @@ import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBo
 type WorkspaceMainProps = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
+  /** The session id the route names, so the composer never mistakes "not resolved yet" for "brand-new chat". */
+  routeSessionId?: string | null;
   activeTab: AppTab;
   setActiveTab: Dispatch<SetStateAction<AppTab>>;
   ws: WebSocket | null;
@@ -43,6 +45,7 @@ type WorkspaceMainProps = {
 function WorkspaceMain({
   selectedProject,
   selectedSession,
+  routeSessionId = null,
   activeTab,
   setActiveTab,
   ws,
@@ -163,6 +166,7 @@ function WorkspaceMain({
                 isActive={activeTab === 'chat'}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
+                routeSessionId={routeSessionId}
                 ws={ws}
                 sendMessage={sendMessage}
                 onFileOpen={handleFileOpen}

@@ -137,7 +137,8 @@
     "queue": {
       "append": "加入排隊訊息",
       "notCombinable": "無法將訊息加入排隊：斜線指令會單獨執行，因此無法與排隊訊息合併。請在排隊訊息送出後再傳送。"
-    }
+    },
+    "routeSessionUnresolved": "這個對話還在載入中。請稍等一下，或從側邊欄重新開啟它，然後再傳送。"
   },
   "thinkingMode": {
     "selector": {
