@@ -50,6 +50,8 @@ type ProjectsStateProviderProps = {
   subscribe: (listener: (event: ServerEvent) => void) => () => void;
   isMobile: boolean;
   isSessionProcessing: IsSessionProcessing;
+  /** True when the route is `NEW_SESSION_ROUTE`, i.e. the user asked for a new chat. */
+  isNewSessionRoute?: boolean;
 };
 
 const ProjectSidebarContext = createContext<ProjectSidebarState | null>(null);
@@ -66,6 +68,7 @@ export function ProjectsStateProvider({
   subscribe,
   isMobile,
   isSessionProcessing,
+  isNewSessionRoute,
 }: ProjectsStateProviderProps) {
   const state = useProjectsState({
     sessionId,
@@ -73,6 +76,7 @@ export function ProjectsStateProvider({
     subscribe,
     isMobile,
     isSessionProcessing,
+    isNewSessionRoute,
   });
 
   const sidebarState = useMemo<ProjectSidebarState>(
@@ -91,7 +95,7 @@ export function ProjectsStateProvider({
       activeTab: state.activeTab,
       setActiveTab: state.setActiveTab,
       setSidebarOpen: state.setSidebarOpen,
-      isLoadingProjects: state.isLoadingProjects,
+      isLoadingProjects: state.isLoadingProjects || state.isRestoringLastSession,
       openSettings: state.openSettings,
       externalMessageUpdate: state.externalMessageUpdate,
       newSessionTrigger: state.newSessionTrigger,
@@ -105,6 +109,7 @@ export function ProjectsStateProvider({
       state.externalMessageUpdate,
       state.handleProjectSelect,
       state.isLoadingProjects,
+      state.isRestoringLastSession,
       state.newSessionTrigger,
       state.openSettings,
       state.refreshProjectsSilently,

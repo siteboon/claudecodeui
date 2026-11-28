@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import { usePaletteOpsRegister } from '@/modules/command-palette';
+import { NEW_SESSION_ROUTE } from '@/shared/constants';
 import { writeSelectedProvider } from '@/shared/selectedProvider';
 import { useProjectEffectsState } from '@/modules/project-workspace/context/ProjectsStateContext';
 import type { LLMProvider, ProjectWorkspaceShellProps } from '@/shared/types';
@@ -45,7 +46,9 @@ export default function ProjectEffects({
         return;
       }
 
-      navigate('/');
+      // A notification without a session asks for a new chat, not for whatever
+      // conversation this browser had open last.
+      navigate(NEW_SESSION_ROUTE);
     };
 
     navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
