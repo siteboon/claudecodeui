@@ -65,8 +65,26 @@
     "clearSearch": "清除搜索",
     "openCommandPalette": "打开命令面板",
     "attentionRequiredIndicator": "会话需要处理",
+    "awaitingInputIndicator": "等待你的选择",
     "backgroundWorkIndicator": "后台任务运行中",
     "processingSessionIndicator": "会话处理中"
+  },
+  "badges": {
+    "awaitingAnswer": "等待回答"
+  },
+  "attention": {
+    "title": "需要你的回答",
+    "body": "有会话正在等待你的回答。",
+    "bodyNamed": "会话“{{session}}”正在等待你的回答。",
+    "more_one": "另有 {{count}} 个会话在等待",
+    "more_other": "另有 {{count}} 个会话在等待",
+    "globalWaitingTooltip_one": "全局共有 {{count}} 个会话正在等待你的回答",
+    "globalWaitingTooltip_other": "全局共有 {{count}} 个会话正在等待你的回答",
+    "tabWaitingLabel_one": "{{tab}}，全局共有 {{count}} 个会话正在等待你的回答",
+    "tabWaitingLabel_other": "{{tab}}，全局共有 {{count}} 个会话正在等待你的回答",
+    "open": "前往",
+    "dismiss": "关闭",
+    "restoreEditor": "返回编辑器"
   },
   "navigation": {
     "chat": "聊天",

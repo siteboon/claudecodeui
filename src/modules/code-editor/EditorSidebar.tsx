@@ -8,6 +8,7 @@ type EditorSidebarProps = {
   editingFile: CodeEditorFile | null;
   isMobile: boolean;
   editorExpanded: boolean;
+  editorHidden?: boolean;
   editorWidth: number;
   hasManualWidth: boolean;
   resizeHandleRef: MutableRefObject<HTMLDivElement | null>;
@@ -31,6 +32,7 @@ export default function EditorSidebar({
   editingFile,
   isMobile,
   editorExpanded,
+  editorHidden = false,
   editorWidth,
   hasManualWidth,
   resizeHandleRef,
@@ -117,7 +119,7 @@ export default function EditorSidebar({
   return (
     <div
       ref={containerRef}
-      className={isFloating ? 'contents' : `flex h-full min-w-0 ${editorExpanded ? 'flex-1' : ''}`}
+      className={editorHidden ? 'hidden' : isFloating ? 'contents' : `flex h-full min-w-0 ${editorExpanded ? 'flex-1' : ''}`}
     >
       {!isFloating && !editorExpanded && (
         <div
@@ -142,6 +144,7 @@ export default function EditorSidebar({
           onUnsavedChangesChange={onUnsavedChangesChange}
           projectPath={projectPath}
           isSidebar={!isFloating}
+          hidden={editorHidden}
           isExpanded={!isFloating && editorExpanded}
           onToggleExpand={isFloating ? null : onToggleEditorExpand}
           onPopOut={isFloating ? null : handlePopOut}

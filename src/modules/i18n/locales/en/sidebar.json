@@ -65,8 +65,26 @@
     "clearSearch": "Clear search",
     "openCommandPalette": "Open command palette",
     "attentionRequiredIndicator": "Session needs attention",
+    "awaitingInputIndicator": "Waiting for your answer",
     "backgroundWorkIndicator": "Background work running",
     "processingSessionIndicator": "Processing session"
+  },
+  "badges": {
+    "awaitingAnswer": "Awaiting answer"
+  },
+  "attention": {
+    "title": "Your answer is needed",
+    "body": "A session is waiting for your answer.",
+    "bodyNamed": "“{{session}}” is waiting for your answer.",
+    "more_one": "+{{count}} more waiting",
+    "more_other": "+{{count}} more waiting",
+    "globalWaitingTooltip_one": "{{count}} session waiting for your answer across all sessions",
+    "globalWaitingTooltip_other": "{{count}} sessions waiting for your answer across all sessions",
+    "tabWaitingLabel_one": "{{tab}}, {{count}} session waiting for your answer across all sessions",
+    "tabWaitingLabel_other": "{{tab}}, {{count}} sessions waiting for your answer across all sessions",
+    "open": "Open",
+    "dismiss": "Dismiss",
+    "restoreEditor": "Back to editor"
   },
   "navigation": {
     "chat": "Chat",

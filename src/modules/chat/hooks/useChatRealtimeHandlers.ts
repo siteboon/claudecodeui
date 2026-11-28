@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 import type { ServerEvent,MarkSessionIdle,MarkSessionProcessing,PendingPermissionRequest,ProjectSession,LLMProvider,NormalizedMessage,GetSessionActivity,MarkSessionBackground,SideQuestionEvent,SteerOutcome } from '@/shared/types';
-import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNotification';
-import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
+import { playChatCompletionSound, playNotificationSound, showCompletionTitleIndicator } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
 import { sideQuestionStore } from '@/modules/chat/hooks/useSideQuestions';
@@ -258,6 +257,10 @@ export function useChatRealtimeHandlers({
         // Sidebar/global events — owned by useProjectsState.
         case 'session_upserted':
         case 'loading_progress':
+        // Owned by PermissionAttentionProvider. Not a transcript row.
+        case 'permission_attention':
+        case 'permission_attention_cleared':
+        case 'permission_attention_snapshot':
         // Owned by useScheduledMessages, which reads the composer banner's
         // list again. Not a transcript row.
         case 'scheduled_messages_changed':
@@ -384,13 +387,14 @@ export function useChatRealtimeHandlers({
 
         case 'permission_request': {
           if (!msg.requestId) break;
-          if (isActionablePermissionRequest({ toolName: msg.toolName })) {
-            void playNotificationSound();
-          }
 
-          if (sid === activeViewSessionId) {
+          if (sid && sid === activeViewSessionId) {
             const previousPendingPermissionRequests = pendingPermissionRequestsRef.current;
             if (!previousPendingPermissionRequests.some((request) => request.requestId === msg.requestId)) {
+              // 订阅快照可能已经提醒过；回放同一请求时应保持安静。
+              if (isActionablePermissionRequest({ toolName: msg.toolName })) {
+                void playNotificationSound();
+              }
               const nextPendingPermissionRequests = [...previousPendingPermissionRequests, {
                 requestId: msg.requestId as string,
                 toolName: (msg.toolName as string) || 'UnknownTool',

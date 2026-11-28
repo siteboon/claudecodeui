@@ -7,9 +7,11 @@ import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, bu
 import { cn } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
 import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
+import { useAwaitingInputSessionIdSet } from '@/shared/context/PermissionAttentionContext';
 import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
+import AwaitingAnswerBadge from '@/modules/sidebar/AwaitingAnswerBadge';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
 import SessionPinButton from '@/modules/sidebar/SessionPinButton';
 import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
@@ -74,21 +76,29 @@ function SidebarSessionItem({
   t,
 }: SidebarSessionItemProps) {
   const isCompact = useCompactSidebar();
+  const awaitingInputSessionIds = useAwaitingInputSessionIdSet();
   const pins = useSessionPins();
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
   const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
   const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
-  const showAttentionIndicator = needsAttention && !isSelected;
+  // A prompt waiting for an answer outranks every other activity dot: the turn
+  // is stalled until the user acts, which is not the same thing as "this
+  // session has been busy". Unlike the generic attention dot it stays visible
+  // on the selected row — the session is blocked even while it is open.
+  const showAwaitingInputIndicator = awaitingInputSessionIds.has(session.id);
+  const showAttentionIndicator = !showAwaitingInputIndicator && needsAttention && !isSelected;
   // Background work takes the recent-activity dot's place: the session is
   // still doing something, which says more than that it was touched lately.
-  const showBackgroundIndicator = !showAttentionIndicator && hasBackgroundWork;
-  const showRecentIndicator = !showAttentionIndicator && !showBackgroundIndicator && !isProcessing && sessionView.isActive;
-  const indicatorLabel = showAttentionIndicator
-    ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
-    : showBackgroundIndicator
-      ? t('tooltips.backgroundWorkIndicator', { defaultValue: 'Background work running' })
-      : t('tooltips.activeSessionIndicator');
+  const showBackgroundIndicator = !showAwaitingInputIndicator && !showAttentionIndicator && hasBackgroundWork;
+  const showRecentIndicator = !showAwaitingInputIndicator && !showAttentionIndicator && !showBackgroundIndicator && !isProcessing && sessionView.isActive;
+  const indicatorLabel = showAwaitingInputIndicator
+    ? t('tooltips.awaitingInputIndicator', { defaultValue: 'Waiting for your answer' })
+    : showAttentionIndicator
+      ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
+      : showBackgroundIndicator
+        ? t('tooltips.backgroundWorkIndicator', { defaultValue: 'Background work running' })
+        : t('tooltips.activeSessionIndicator');
   const providerLabel = PROVIDER_LABELS[session.__provider];
 
   // The desktop controls live in SessionOptions, which owns the rename panel and
@@ -163,7 +173,7 @@ function SidebarSessionItem({
 
   return (
     <div className="group relative">
-      {(showAttentionIndicator || showBackgroundIndicator || showRecentIndicator) && (
+      {(showAwaitingInputIndicator || showAttentionIndicator || showBackgroundIndicator || showRecentIndicator) && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
           <Tooltip content={indicatorLabel} position="right">
             <div
@@ -171,7 +181,7 @@ function SidebarSessionItem({
               aria-label={indicatorLabel}
               className={cn(
                 'h-2 w-2 animate-pulse rounded-full',
-                showAttentionIndicator
+                showAwaitingInputIndicator || showAttentionIndicator
                   ? 'bg-amber-500'
                   : showBackgroundIndicator
                     ? 'bg-purple-500 dark:bg-purple-400'
@@ -235,7 +245,8 @@ function SidebarSessionItem({
                   <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">{compactSessionAge}</span>
                 )}
               </div>
-              <div className="mt-0.5 flex items-center">
+              <div className="mt-0.5 flex items-center gap-1.5">
+                {showAwaitingInputIndicator && <AwaitingAnswerBadge t={t} />}
                 {sessionView.messageCount > 0 && (
                   <Badge variant="secondary" className="px-1 py-0 text-xs">
                     {sessionView.messageCount}
@@ -520,7 +531,8 @@ function SidebarSessionItem({
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 flex items-center">
+              <div className="mt-0.5 flex items-center gap-1.5">
+                {showAwaitingInputIndicator && <AwaitingAnswerBadge t={t} />}
                 {sessionView.messageCount > 0 && <Badge variant="secondary" className="px-1 py-0 text-xs">{sessionView.messageCount}</Badge>}
               </div>
             </div>

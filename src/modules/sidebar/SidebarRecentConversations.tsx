@@ -6,7 +6,9 @@ import type { TFunction } from 'i18next';
 import { Button, LLMProviderLogo, Tooltip } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { ProjectSession, RecentConversationListItem, SessionRowActions } from '@/shared/types';
+import { useAwaitingInputSessionIdSet } from '@/shared/context/PermissionAttentionContext';
 import { formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import AwaitingAnswerBadge from '@/modules/sidebar/AwaitingAnswerBadge';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
 import { useSessionPins } from '@/modules/sidebar/hooks/useSessionPins';
 
@@ -73,6 +75,7 @@ export default function SidebarRecentConversations({
 }: SidebarRecentConversationsProps) {
   // The row after the last conversation: once it scrolls into view, the next
   // page loads, so older conversations arrive without clicking the button.
+  const awaitingInputSessionIds = useAwaitingInputSessionIdSet();
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   // Latest onLoadMore, so a new callback identity does not rebuild the observer.
   const onLoadMoreRef = useRef(onLoadMore);
@@ -181,8 +184,13 @@ export default function SidebarRecentConversations({
           const age = formatCompactAge(conversation.lastActivity, currentTime);
           const hasBackgroundWork = sessionActions.backgroundSessionIds.has(conversation.sessionId);
           const isProcessing = sessionActions.activeSessions.has(conversation.sessionId) && !hasBackgroundWork;
+          // A stalled prompt outranks the generic activity dot and, unlike it,
+          // survives selection: the conversation is blocked while it is open too.
+          const isAwaitingInput = awaitingInputSessionIds.has(conversation.sessionId);
           const showAttentionIndicator =
-            sessionActions.attentionSessionIds.has(conversation.sessionId) && !isSelected;
+            !isAwaitingInput
+            && sessionActions.attentionSessionIds.has(conversation.sessionId)
+            && !isSelected;
           // Resolved per row so a keystroke in one rename does not redraw the rest.
           const rename = sessionActions.activeRename;
           const sessionRename =
@@ -207,15 +215,19 @@ export default function SidebarRecentConversations({
                 * Projects row also has a green dot for a session touched recently,
                 * which carries no information in a list ordered by recency.
                 */}
-              {showAttentionIndicator && (
+              {(isAwaitingInput || showAttentionIndicator) && (
                 <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
                   <Tooltip
-                    content={t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })}
+                    content={isAwaitingInput
+                      ? t('tooltips.awaitingInputIndicator', { defaultValue: 'Waiting for your answer' })
+                      : t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })}
                     position="right"
                   >
                     <div
                       role="status"
-                      aria-label={t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })}
+                      aria-label={isAwaitingInput
+                        ? t('tooltips.awaitingInputIndicator', { defaultValue: 'Waiting for your answer' })
+                        : t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })}
                       className="h-2 w-2 animate-pulse rounded-full bg-amber-500"
                     />
                   </Tooltip>
@@ -246,6 +258,7 @@ export default function SidebarRecentConversations({
                     {conversation.sessionTitle}
                   </span>
                   <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] leading-3 text-muted-foreground">
+                    {isAwaitingInput && <AwaitingAnswerBadge t={t} />}
                     <span className="truncate">{conversation.projectDisplayName}</span>
                     {isProcessing ? (
                       <>

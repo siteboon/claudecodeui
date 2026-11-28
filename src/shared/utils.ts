@@ -248,6 +248,189 @@ export const getPageTitle = (
   return displayName ? `${displayName} - ${DEFAULT_PAGE_TITLE}` : DEFAULT_PAGE_TITLE;
 };
 
+/** Tab-title prefix shown when a run finished while the user was elsewhere. */
+const COMPLETION_TITLE_INDICATOR = '[Done]';
+/**
+ * A run that stopped to ask the user something is not "done" — it is blocked.
+ * The two states share the clear-on-return behaviour but must not share a
+ * label, or the tab would claim a finished run while it waits.
+ */
+const ATTENTION_TITLE_INDICATOR = '[Action required]';
+const TITLE_INDICATORS = [ATTENTION_TITLE_INDICATOR, COMPLETION_TITLE_INDICATOR];
+const TITLE_INDICATOR_CLEAR_DELAY_MS = 2000;
+
+let clearTimer: number | null = null;
+let returnListenersAttached = false;
+/**
+ * Whether any session currently has an unanswered attention request.
+ * Tracked alongside `document.title` so an unrelated run's completion cue never
+ * replaces an active or still-waiting `[Action required]` tab marker with `[Done]`.
+ */
+let hasPendingAttentionState = false;
+
+/** The indicator currently prefixed to the title, or null when the title is plain. */
+const indicatorPrefixOf = (title: string): string | null => {
+  const indicator = TITLE_INDICATORS.find((candidate) => title.startsWith(`${candidate} `));
+  return indicator ? `${indicator} ` : null;
+};
+
+/** Removes any indicator prefix, leaving the page's own title. */
+const stripIndicator = (title: string): string => {
+  const prefix = indicatorPrefixOf(title);
+  return prefix ? title.slice(prefix.length) : title;
+};
+
+/** Whether the tab is both visible and focused; the chat's alerts and the session-attention provider use it differently. */
+export const isPageActive = (): boolean => (
+  document.visibilityState === 'visible' && document.hasFocus()
+);
+
+const removeReturnListeners = (): void => {
+  if (!returnListenersAttached || typeof window === 'undefined') {
+    return;
+  }
+
+  document.removeEventListener('visibilitychange', handleUserReturn);
+  window.removeEventListener('focus', handleUserReturn, true);
+  window.removeEventListener('click', handleUserReturn, true);
+  returnListenersAttached = false;
+};
+
+/** Puts the title back the way the workspace left it and drops every indicator listener. */
+const clearTitleIndicator = (): void => {
+  if (clearTimer !== null) {
+    window.clearTimeout(clearTimer);
+    clearTimer = null;
+  }
+
+  removeReturnListeners();
+  removePageInactiveListener();
+
+  if (indicatorPrefixOf(document.title)) {
+    document.title = stripIndicator(document.title);
+  }
+};
+
+const removePageInactiveListener = (): void => {
+  document.removeEventListener('visibilitychange', handlePageInactive);
+};
+
+/** Clears the indicator a moment after the user comes back, so a glance is enough to read it. */
+const scheduleClear = (): void => {
+  if (clearTimer !== null) {
+    window.clearTimeout(clearTimer);
+  }
+
+  clearTimer = window.setTimeout(() => {
+    clearTitleIndicator();
+  }, TITLE_INDICATOR_CLEAR_DELAY_MS);
+
+  removePageInactiveListener();
+  document.addEventListener('visibilitychange', handlePageInactive, { once: true });
+};
+
+function handleUserReturn(): void {
+  if (!isPageActive()) {
+    return;
+  }
+
+  // Background completions keep the marker indefinitely. A tab click normally
+  // surfaces as visibility/focus, while an in-page click is a useful fallback.
+  scheduleClear();
+}
+
+function handlePageInactive(): void {
+  if (document.visibilityState !== 'hidden') {
+    return;
+  }
+
+  if (clearTimer !== null) {
+    window.clearTimeout(clearTimer);
+    clearTimer = null;
+  }
+
+  if (!returnListenersAttached) {
+    document.addEventListener('visibilitychange', handleUserReturn);
+    window.addEventListener('focus', handleUserReturn, true);
+    window.addEventListener('click', handleUserReturn, true);
+    returnListenersAttached = true;
+  }
+}
+
+/** Prefixes the tab title, keeping it until the user returns to the tab. */
+const showTitleIndicator = (indicator: string): void => {
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    return;
+  }
+
+  const currentPrefix = indicatorPrefixOf(document.title);
+  if (
+    indicator === COMPLETION_TITLE_INDICATOR
+    && (hasPendingAttentionState || currentPrefix === `${ATTENTION_TITLE_INDICATOR} `)
+  ) {
+    // Keep pending attention ahead of unrelated completions. If a backgrounded
+    // tab's title was refreshed without the prefix while a request still waits,
+    // restore `[Action required]` rather than reporting `[Done]`.
+    if (!isPageActive() && currentPrefix !== `${ATTENTION_TITLE_INDICATOR} `) {
+      showTitleIndicator(ATTENTION_TITLE_INDICATOR);
+    }
+    return;
+  }
+
+  const baseTitle = stripIndicator(document.title || 'CloudCLI UI');
+  document.title = `${indicator} ${baseTitle}`;
+
+  if (isPageActive()) {
+    scheduleClear();
+    return;
+  }
+
+  if (clearTimer !== null) {
+    window.clearTimeout(clearTimer);
+    clearTimer = null;
+  }
+
+  if (!returnListenersAttached) {
+    document.addEventListener('visibilitychange', handleUserReturn);
+    window.addEventListener('focus', handleUserReturn, true);
+    window.addEventListener('click', handleUserReturn, true);
+    returnListenersAttached = true;
+  }
+};
+
+/**
+ * Syncs whether any session still awaits user input so completion title cues
+ * never overwrite pending attention, and clears an active attention prefix once
+ * all waiting requests are answered.
+ */
+export const setPendingAttentionTitleState = (
+  hasPending: boolean,
+  { clearActiveIndicator = false }: { clearActiveIndicator?: boolean } = {},
+): void => {
+  const wasPending = hasPendingAttentionState;
+  hasPendingAttentionState = hasPending;
+
+  if (
+    clearActiveIndicator
+    && wasPending
+    && !hasPending
+    && typeof document !== 'undefined'
+    && indicatorPrefixOf(document.title) === `${ATTENTION_TITLE_INDICATOR} `
+  ) {
+    clearTitleIndicator();
+  }
+};
+
+/** A run finished: the tab says so while the user is elsewhere. */
+export const showCompletionTitleIndicator = (): void => {
+  showTitleIndicator(COMPLETION_TITLE_INDICATOR);
+};
+
+/** A run stopped to wait for the user, in another session or while the tab is inactive. */
+export const showAttentionTitleIndicator = (): void => {
+  showTitleIndicator(ATTENTION_TITLE_INDICATOR);
+};
+
 // ---------------------------
 
 //----------------- SLASH COMMANDS ------------

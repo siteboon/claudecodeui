@@ -6,15 +6,18 @@ type UseEditorKeyboardShortcutsParams = {
   onSave: () => void;
   onClose: () => void;
   dependency: string;
+  enabled?: boolean;
 };
 
 export const useEditorKeyboardShortcuts = ({
   onSave,
   onClose,
   dependency,
+  enabled = true,
 }: UseEditorKeyboardShortcutsParams) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!enabled) return;
       if (event.key === 'Escape') {
         // Leave Escapes another handler consumed or a layer above the editor
         // owns: open menus and modal dialogs close on Escape themselves.
@@ -41,5 +44,5 @@ export const useEditorKeyboardShortcuts = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [dependency, onClose, onSave]);
+  }, [dependency, enabled, onClose, onSave]);
 };

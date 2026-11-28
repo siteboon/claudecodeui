@@ -12,6 +12,7 @@ import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEs
 import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { useFileOpenResolver } from '@/modules/project-workspace/hooks/useFileOpenResolver';
 import { EditorSidebar, useEditorSidebar } from '@/modules/code-editor';
+import AttentionToast from '@/modules/project-workspace/AttentionToast';
 import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
 import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
@@ -82,6 +83,9 @@ function WorkspaceMain({
     handleFileOpen,
     handleCloseEditor,
     handleToggleEditorExpand,
+    editorHidden,
+    handleRevealChat,
+    handleRestoreEditor,
     handleResizeStart,
     handleUnsavedChangesChange,
   } = useEditorSidebar({
@@ -134,11 +138,11 @@ function WorkspaceMain({
   usePaletteOpsRegister({ openFile, openFileInEditor, openDirectory });
 
   if (isLoading) {
-    return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
+    return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} onRevealChat={handleRevealChat} onRestoreEditor={editingFile ? handleRestoreEditor : undefined} />;
   }
 
   if (!selectedProject) {
-    return <WorkspaceStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
+    return <WorkspaceStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} onRevealChat={handleRevealChat} onRestoreEditor={editingFile ? handleRestoreEditor : undefined} />;
   }
 
   return (
@@ -155,7 +159,7 @@ function WorkspaceMain({
         onRenameSession={onRenameSession}
       />
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="relative isolate flex min-h-0 flex-1 overflow-hidden">
         <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
             <WorkspaceErrorBoundary showDetails>
@@ -233,6 +237,7 @@ function WorkspaceMain({
 
         <EditorSidebar
           editingFile={editingFile}
+          editorHidden={editorHidden}
           isMobile={isMobile}
           editorExpanded={editorExpanded}
           editorWidth={editorWidth}
@@ -244,6 +249,11 @@ function WorkspaceMain({
           onUnsavedChangesChange={handleUnsavedChangesChange}
           projectPath={selectedProject.path}
           fillSpace={activeTab === 'files'}
+        />
+        <AttentionToast
+          isChatVisible={activeTab === 'chat' && !editorExpanded && !(isMobile && editingFile && !editorHidden)}
+          onRevealChat={handleRevealChat}
+          onRestoreEditor={editingFile && editorHidden ? handleRestoreEditor : undefined}
         />
       </div>
     </div>

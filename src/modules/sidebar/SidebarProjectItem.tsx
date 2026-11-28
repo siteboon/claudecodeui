@@ -5,7 +5,9 @@ import type { TFunction } from 'i18next';
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
+import { useAwaitingInputSessionIdSet } from '@/shared/context/PermissionAttentionContext';
 import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import AwaitingAnswerBadge from '@/modules/sidebar/AwaitingAnswerBadge';
 import TaskIndicator from '@/modules/sidebar/TaskIndicator';
 import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
@@ -113,6 +115,9 @@ function SidebarProjectItem({
   // Project identity is tracked by the DB-assigned `projectId` everywhere
   // after the projectName → projectId migration.
   const isSelected = selectedProject?.projectId === project.projectId;
+  const awaitingInputSessionIds = useAwaitingInputSessionIdSet();
+  // Surface blocked sessions on collapsed projects so users know which folder to open.
+  const hasAwaitingInput = !isExpanded && sessions.some((session) => awaitingInputSessionIds.has(session.id));
   const totalSessionCount = Number(project.sessionMeta?.total ?? sessions.length);
   const sessionCountDisplay = getSessionCountDisplay(project, sessions);
   const sessionCountLabel = `${sessionCountDisplay} session${totalSessionCount === 1 ? '' : 's'}`;
@@ -160,7 +165,7 @@ function SidebarProjectItem({
 
   return (
     <div className={cn('md:space-y-1', isDeleting && 'opacity-50 pointer-events-none')}>
-      <div className="sticky top-0 z-10 md:group group">
+      <div className="group sticky top-0 z-10">
         {isCompact && (
         <div className="bg-background">
           <div
@@ -239,7 +244,10 @@ function SidebarProjectItem({
                           />
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{sessionCountLabel}</p>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {hasAwaitingInput && <AwaitingAnswerBadge t={t} />}
+                        <span>{sessionCountLabel}</span>
+                      </div>
                     </>
                   )}
                 </div>
@@ -373,14 +381,17 @@ function SidebarProjectItem({
                   <div className="truncate text-sm font-normal text-foreground" title={project.displayName}>
                     {project.displayName}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {sessionCountDisplay}
-                    {project.fullPath !== project.displayName && (
-                      <span className="ml-1 opacity-60" title={project.fullPath}>
-                        {' - '}
-                        {project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {hasAwaitingInput && <AwaitingAnswerBadge t={t} />}
+                    <span className="truncate">
+                      {sessionCountDisplay}
+                      {project.fullPath !== project.displayName && (
+                        <span className="ml-1 opacity-60" title={project.fullPath}>
+                          {' - '}
+                          {project.fullPath.length > 25 ? `...${project.fullPath.slice(-22)}` : project.fullPath}
+                        </span>
+                      )}
+                    </span>
                   </div>
                 </div>
               )}
