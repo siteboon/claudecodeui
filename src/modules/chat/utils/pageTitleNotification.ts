@@ -1,14 +1,24 @@
 const COMPLETION_TITLE_INDICATOR = '[Done]';
+/**
+ * A run that stopped to ask the user something is not "done" — it is blocked.
+ * The two states share this module's clear-on-return behaviour but must not
+ * share a label, or the tab would claim a finished run while it waits.
+ */
+const ATTENTION_TITLE_INDICATOR = '[Action required]';
+const TITLE_INDICATORS = [ATTENTION_TITLE_INDICATOR, COMPLETION_TITLE_INDICATOR];
 const TITLE_INDICATOR_CLEAR_DELAY_MS = 2000;
 
 let clearTimer: number | null = null;
 let returnListenersAttached = false;
 
-const getIndicatorPrefix = () => `${COMPLETION_TITLE_INDICATOR} `;
+const indicatorPrefixOf = (title: string): string | null => {
+  const indicator = TITLE_INDICATORS.find((candidate) => title.startsWith(`${candidate} `));
+  return indicator ? `${indicator} ` : null;
+};
 
 const stripIndicator = (title: string): string => {
-  const prefix = getIndicatorPrefix();
-  return title.startsWith(prefix) ? title.slice(prefix.length) : title;
+  const prefix = indicatorPrefixOf(title);
+  return prefix ? title.slice(prefix.length) : title;
 };
 
 const pageIsActive = (): boolean => (
@@ -35,7 +45,7 @@ const clearTitleIndicator = (): void => {
   removeReturnListeners();
   removePageInactiveListener();
 
-  if (document.title.startsWith(getIndicatorPrefix())) {
+  if (indicatorPrefixOf(document.title)) {
     document.title = stripIndicator(document.title);
   }
 };
@@ -85,13 +95,13 @@ function handlePageInactive(): void {
   }
 }
 
-export const showCompletionTitleIndicator = (): void => {
+const showTitleIndicator = (indicator: string): void => {
   if (typeof document === 'undefined' || typeof window === 'undefined') {
     return;
   }
 
   const baseTitle = stripIndicator(document.title || 'CloudCLI UI');
-  document.title = `${getIndicatorPrefix()}${baseTitle}`;
+  document.title = `${indicator} ${baseTitle}`;
 
   if (pageIsActive()) {
     scheduleClear();
@@ -109,4 +119,14 @@ export const showCompletionTitleIndicator = (): void => {
     window.addEventListener('click', handleUserReturn, true);
     returnListenersAttached = true;
   }
+};
+
+/** A run finished: the tab says so while the user is elsewhere. */
+export const showCompletionTitleIndicator = (): void => {
+  showTitleIndicator(COMPLETION_TITLE_INDICATOR);
+};
+
+/** A run stopped to wait for the user, in a session they are not looking at. */
+export const showAttentionTitleIndicator = (): void => {
+  showTitleIndicator(ATTENTION_TITLE_INDICATOR);
 };

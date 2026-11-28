@@ -1,3 +1,4 @@
+import { broadcastPermissionAttention } from '@/modules/websocket/services/permission-attention-broadcast.service.js';
 import { WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import type {
   LLMProvider,
@@ -110,6 +111,10 @@ export class ChatSessionWriter {
 
     const outbound = this.options.decorateOutboundEvent(message);
     if (outbound) {
+      // Televised beyond this run's audience on purpose: a session the user is
+      // not looking at still has to be able to raise a sidebar marker and a
+      // notification when its turn stops to wait for them.
+      broadcastPermissionAttention(outbound);
       this.forward(outbound);
     }
   }
@@ -127,6 +132,8 @@ export class ChatSessionWriter {
     });
     const outbound = this.options.decorateOutboundEvent(message);
     if (outbound) {
+      // A run that ended takes any unanswered request with it.
+      broadcastPermissionAttention(outbound);
       this.forward(outbound);
     }
   }

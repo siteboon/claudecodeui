@@ -12,6 +12,7 @@ import {
   sideQuestionsService,
 } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
+import { permissionAttentionSnapshot } from '@/modules/websocket/services/permission-attention-broadcast.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
   getGlobalImageAssetsDir,
@@ -952,6 +953,14 @@ export function handleChatConnection(
           return;
         case 'chat.subscribe':
           handleChatSubscribe(ws, data, dependencies);
+          return;
+        case 'chat.attention-snapshot':
+          // A client that just connected (or reconnected) may have missed
+          // announcements while it was away, and may still hold markers for
+          // requests answered meanwhile. It replaces its state with this.
+          if (ws.readyState === WS_OPEN_STATE) {
+            ws.send(permissionAttentionSnapshot());
+          }
           return;
         case 'chat.permission-response':
           handlePermissionResponse(data, dependencies);

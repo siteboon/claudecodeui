@@ -55,7 +55,8 @@
     "cancel": "取消",
     "clearSearch": "清除搜尋",
     "openCommandPalette": "開啟指令面板",
-    "attentionRequiredIndicator": "工作階段需要處理"
+    "attentionRequiredIndicator": "工作階段需要處理",
+    "awaitingInputIndicator": "等待你的選擇"
   },
   "navigation": {
     "chat": "聊天",
