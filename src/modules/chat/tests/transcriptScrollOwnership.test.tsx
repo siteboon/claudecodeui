@@ -407,3 +407,39 @@ describe('search jump ownership', () => {
     );
   });
 });
+
+describe('加载旧消息期间主动跳转', () => {
+  it('跳转后完成的旧页加载不会恢复跳转前的滚动位置', async () => {
+    const prompt = buildMessage(0, '2026-01-01T00:00:00.000Z');
+    const tail = buildMessage(1, '2026-01-01T00:02:00.000Z');
+    const messages = new Map([[SESSION_A, [tail]]]);
+    const store = createStore(messages);
+    const slot = { fetchedAt: 1, status: 'idle' as const, total: 80, offset: 20, hasMore: true };
+    store.getSessionSlot.mockImplementation(() => slot);
+    let finishFetch = () => {};
+    store.fetchMore.mockImplementation(async () => {
+      await new Promise<void>((resolve) => { finishFetch = resolve; });
+      messages.set(SESSION_A, [prompt, tail]);
+      slot.offset += 20;
+      return { slot, prependedCount: 20 };
+    });
+    const { result } = await renderChatSessionState({ session: { id: SESSION_A } as ProjectSession, store });
+    const container = createContainer(5000, 500);
+    const row = document.createElement('div');
+    row.setAttribute('data-message-id', prompt.id);
+    row.setAttribute('data-message-timestamp', prompt.timestamp);
+    row.scrollIntoView = vi.fn();
+    container.element.appendChild(row);
+    (result.current.scrollContainerRef as { current: HTMLDivElement | null }).current = container.element;
+    await act(async () => { result.current.handleUserHistoryScroll(); });
+    await act(async () => {
+      await result.current.revealUserPrompt({ type: 'user', content: prompt.content, timestamp: prompt.timestamp, sourceMessageId: prompt.id });
+    });
+    container.element.scrollTop = 1234;
+    await act(async () => { finishFetch(); });
+    container.element.scrollTop = 4321;
+    act(() => { result.current.handleUserHistoryScroll(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(container.element.scrollTop).toBe(4321);
+  });
+});

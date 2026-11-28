@@ -533,6 +533,7 @@ export function useChatSessionState({
       isLoadingMoreRef.current = true;
       setIsLoadingMoreMessages(true);
       const scrollRestoreState = captureScrollRestoreState(container);
+      const restoreGeneration = promptNavigationRef.current.generation;
 
       try {
         const result = await sessionStore.fetchMore(selectedSession.id, {
@@ -563,7 +564,9 @@ export function useChatSessionState({
           return false;
         }
 
-        pendingScrollRestoreRef.current = scrollRestoreState;
+        if (promptNavigationRef.current.generation === restoreGeneration) {
+          pendingScrollRestoreRef.current = scrollRestoreState;
+        }
         setVisibleMessageCount((prev) => prev + SESSION_MESSAGES_PAGE_SIZE);
         if (!slot.hasMore) {
           allMessagesLoadedRef.current = true;
