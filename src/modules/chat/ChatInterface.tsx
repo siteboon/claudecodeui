@@ -189,6 +189,10 @@ function ChatInterface({
   // the session gateway before the first send. Record it locally and put it
   // in the URL — this id never changes again, so there is no later handoff.
   const handleSessionEstablished = useCallback<NonNullable<ChatInterfaceProps['onSessionEstablished']>>((sessionId, context) => {
+    onSessionEstablished?.(sessionId, context);
+    if (context.chatLeft) {
+      return;
+    }
     seedSessionSelection({
       provider: context.provider,
       sessionId,
@@ -197,7 +201,6 @@ function ChatInterface({
       newSessionTrigger: context.newSessionTrigger,
     });
     setCurrentSessionId(sessionId);
-    onSessionEstablished?.(sessionId, context);
     onNavigateToSession?.(sessionId);
   }, [seedSessionSelection, setCurrentSessionId, onSessionEstablished, onNavigateToSession]);
 

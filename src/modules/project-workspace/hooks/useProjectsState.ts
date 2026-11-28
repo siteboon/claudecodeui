@@ -52,6 +52,7 @@ type RegisterOptimisticSessionArgs = {
   provider: LLMProvider;
   project: Project;
   summary?: string | null;
+  chatLeft?: boolean;
 };
 
 /**
@@ -602,6 +603,7 @@ export function useProjectsState({
     provider,
     project,
     summary,
+    chatLeft,
   }: RegisterOptimisticSessionArgs) => {
     if (!newSessionId || !project?.projectId) {
       return;
@@ -655,11 +657,13 @@ export function useProjectsState({
       );
     });
 
-    setSelectedSession((previousSession) => (
-      previousSession?.id === newSessionId
-        ? { ...previousSession, ...optimisticSession }
-        : optimisticSession
-    ));
+    setSelectedSession((previousSession) => {
+      if (previousSession?.id === newSessionId) {
+        return { ...previousSession, ...optimisticSession };
+      }
+      // The user opened another chat meanwhile: list the session, keep theirs selected.
+      return chatLeft ? previousSession : optimisticSession;
+    });
   }, []);
 
   // Hydrates TaskMaster details for the given `projectId`. The project

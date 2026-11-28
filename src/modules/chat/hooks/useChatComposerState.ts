@@ -42,7 +42,7 @@ type UseChatComposerStateArgs = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
-  /** Bumped on every New Session click; a new chat's session records the value its send started under. */
+  /** Bumped on every New Session click; a new chat in the same project keeps its draft scope, and its session records the value its send started under. */
   newSessionTrigger?: number;
   provider: LLMProvider;
   permissionMode: PermissionMode | string;
@@ -803,9 +803,15 @@ export function useChatComposerState({
   }, []);
 
   // An unmounted composer cannot answer; let the pending submit finish.
-  useEffect(() => () => {
-    backgroundSendResolverRef.current?.('cancel');
-    backgroundSendResolverRef.current = null;
+  // A send still running then has left its chat (e.g. the project was deselected).
+  const unmountedRef = useRef(false);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      backgroundSendResolverRef.current?.('cancel');
+      backgroundSendResolverRef.current = null;
+    };
   }, []);
 
   // A side question never touches the session: on a successful ask, the
@@ -1206,11 +1212,13 @@ export function useChatComposerState({
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Queued file upload failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to upload files: ${message}`,
-            timestamp: new Date(),
-          });
+          if (draftScopeRef.current === submittedScope) {
+            addMessage({
+              type: 'error',
+              content: `Failed to upload files: ${message}`,
+              timestamp: new Date(),
+            });
+          }
           return;
         }
 
@@ -1271,6 +1279,16 @@ export function useChatComposerState({
 
       const messageContent = currentInput;
 
+      let targetSessionId = selectedSession?.id || currentSessionId || null;
+      // The user may open another chat while the upload or session creation runs;
+      // a brand-new chat moving from its project scope to its session id has not left.
+      // New Session only leaves a send that started a new chat: an existing chat keeps its own scope.
+      const startsNewChat = targetSessionId === null;
+      const leftChat = () => unmountedRef.current
+        || (startsNewChat && newSessionTriggerRef.current !== sendNewSessionTrigger)
+        || (draftScopeRef.current !== submittedScope
+          && (targetSessionId === null || draftScopeRef.current !== targetSessionId));
+
       let uploadedAttachments = previouslyUploadedAttachments;
       if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {
         try {
@@ -1278,11 +1296,13 @@ export function useChatComposerState({
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('File upload failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to upload files: ${message}`,
-            timestamp: new Date(),
-          });
+          if (!leftChat()) {
+            addMessage({
+              type: 'error',
+              content: `Failed to upload files: ${message}`,
+              timestamp: new Date(),
+            });
+          }
           return;
         }
       }
@@ -1296,7 +1316,6 @@ export function useChatComposerState({
       // handoff later — this id stays valid for the conversation's lifetime.
       // Built once: the new session row records the same selection the send carries.
       const sendOptions = queuedSubmission?.options ?? buildSendOptions(messageContent);
-      let targetSessionId = selectedSession?.id || currentSessionId || null;
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
@@ -1324,20 +1343,24 @@ export function useChatComposerState({
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Session creation failed:', error);
-          addMessage({
-            type: 'error',
-            content: `Failed to start a new session: ${message}`,
-            timestamp: new Date(),
-          });
+          if (!leftChat()) {
+            addMessage({
+              type: 'error',
+              content: `Failed to start a new session: ${message}`,
+              timestamp: new Date(),
+            });
+          }
           return;
         }
 
         if (!targetSessionId) {
-          addMessage({
-            type: 'error',
-            content: 'Failed to start a new session: no session id returned.',
-            timestamp: new Date(),
-          });
+          if (!leftChat()) {
+            addMessage({
+              type: 'error',
+              content: 'Failed to start a new session: no session id returned.',
+              timestamp: new Date(),
+            });
+          }
           return;
         }
 
@@ -1345,6 +1368,7 @@ export function useChatComposerState({
           provider,
           project: selectedProject,
           summary: createdSessionName,
+          chatLeft: leftChat(),
           newSessionTrigger: sendNewSessionTrigger,
           selection: {
             model: sendOptions.model,
@@ -1401,7 +1425,10 @@ export function useChatComposerState({
         ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
       };
 
-      addMessage(userMessage);
+      const chatLeft = leftChat();
+      if (!chatLeft) {
+        addMessage(userMessage);
+      }
       // Mark this request as processing in the per-session activity map (the
       // single source of truth the indicator derives from). The id is always
       // concrete at this point — no pending placeholder exists anymore.
@@ -1410,8 +1437,10 @@ export function useChatComposerState({
         canInterrupt: true,
       });
 
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
+      if (!chatLeft) {
+        setIsUserScrolledUp(false);
+        setTimeout(() => scrollToBottom(), 100);
+      }
 
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
@@ -1439,12 +1468,15 @@ export function useChatComposerState({
       recordSentMessage(currentInput, targetSessionId);
       // Attachments are not kept per chat, so only the ones just sent go.
       setAttachedFiles((files) => files.filter((file) => !currentAttachments.includes(file)));
-      // A brand-new chat moves from its project scope to its allocated session id meanwhile.
-      const stillOpen = draftScopeRef.current === submittedScope || draftScopeRef.current === targetSessionId;
-      if (!stillOpen) {
+      if (chatLeft) {
         // The chat left keeps text the user went back and edited during the upload.
         if (submittedScope && readDraftText(submittedScope) === currentInput) {
           writeDraftText(submittedScope, '');
+        }
+        // A New Session in the same project shares the scope, so its composer still shows the sent text.
+        if (draftScopeRef.current === submittedScope && inputValueRef.current === currentInput) {
+          setInput('');
+          inputValueRef.current = '';
         }
         return;
       }

@@ -482,6 +482,8 @@ export type SessionEstablishedContext = {
   provider: LLMProvider;
   project: Project;
   summary?: string | null;
+  /** The user opened another chat before the session was created: list it, but leave the screen alone. */
+  chatLeft?: boolean;
   /** The model, effort and permission mode the session was created with. */
   selection?: { model?: unknown; effort?: unknown; permissionMode?: unknown };
   /** The New Session trigger the send started under. */
