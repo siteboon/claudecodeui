@@ -1,5 +1,6 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
@@ -77,13 +78,14 @@ function Sidebar({
   // 409 返回的项目可能不在当前分页中；刷新到它后再完成用户的打开请求。
   const [pendingExistingProject, setPendingExistingProject] = useState<{
     id: string;
-    navigationKey: string;
+    requestId: number;
   } | null>(null);
-  // 等待列表时若用户改变选中项，晚到的结果不能把页面跳回旧目标。
-  const navigationKey = JSON.stringify([selectedProject?.projectId, selectedSession?.id]);
-  const currentNavigationRef = useRef(navigationKey);
-  currentNavigationRef.current = navigationKey;
+  const location = useLocation();
   const existingProjectRequestRef = useRef(0);
+  // 只在导航真正提交后作废请求。即使用户从 A 切到 B 再切回 A，旧回包也不会跳页。
+  useLayoutEffect(() => () => {
+    existingProjectRequestRef.current += 1;
+  }, [location, selectedProject?.projectId, selectedSession?.id]);
   // Only membership is rendered here, so subscribing to the full activity map
   // would re-render the whole tree on every provider status frame.
   const activeSessions = useBusySessionIdSet();
@@ -204,8 +206,8 @@ function Sidebar({
         void (async () => {
           try {
             await paletteOps.refreshProjects();
-            if (requestId === existingProjectRequestRef.current && navigationKey === currentNavigationRef.current) {
-              setPendingExistingProject({ id: projectId, navigationKey });
+            if (requestId === existingProjectRequestRef.current) {
+              setPendingExistingProject({ id: projectId, requestId });
             }
           } catch {
             // 保留当前项目，用户可再次尝试打开。
@@ -220,7 +222,6 @@ function Sidebar({
     [
       ensureProjectExpanded,
       handleProjectSelect,
-      navigationKey,
       paletteOps,
       projects,
       setSearchFilter,
@@ -237,7 +238,7 @@ function Sidebar({
 
   useEffect(() => {
     if (!pendingExistingProject) return;
-    if (pendingExistingProject.navigationKey !== navigationKey) {
+    if (pendingExistingProject.requestId !== existingProjectRequestRef.current) {
       setPendingExistingProject(null);
       return;
     }
@@ -247,7 +248,7 @@ function Sidebar({
     setPendingExistingProject(null);
     ensureProjectExpanded(existingProject.projectId);
     handleProjectSelect(existingProject);
-  }, [ensureProjectExpanded, handleProjectSelect, navigationKey, pendingExistingProject, projects]);
+  }, [ensureProjectExpanded, handleProjectSelect, location, pendingExistingProject, projects, selectedProject?.projectId, selectedSession?.id]);
 
   // Stable so memo() on the row components can bail out; an inline arrow here
   // would give every row a new callback on each sidebar render.
