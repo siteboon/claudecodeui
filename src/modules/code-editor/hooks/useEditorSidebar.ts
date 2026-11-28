@@ -102,6 +102,11 @@ export const useEditorSidebar = ({
     setEditorHidden(true);
   }, [handleCollapseEditor]);
 
+  // The notice offers this action only when a hidden editor still owns a buffer.
+  const handleRestoreEditor = useCallback(() => {
+    setEditorHidden(false);
+  }, []);
+
   const handleResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       if (isMobile) {
@@ -204,6 +209,7 @@ export const useEditorSidebar = ({
     handleCollapseEditor,
     editorHidden,
     handleRevealChat,
+    handleRestoreEditor,
     handleResizeStart,
     handleUnsavedChangesChange,
   };

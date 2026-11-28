@@ -144,6 +144,7 @@ export default function EditorSidebar({
           onUnsavedChangesChange={onUnsavedChangesChange}
           projectPath={projectPath}
           isSidebar={!isFloating}
+          hidden={editorHidden}
           isExpanded={!isFloating && editorExpanded}
           onToggleExpand={isFloating ? null : onToggleEditorExpand}
           onPopOut={isFloating ? null : handlePopOut}

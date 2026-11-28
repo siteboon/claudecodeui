@@ -31,6 +31,7 @@ type CodeEditorProps = {
   isExpanded?: boolean;
   onToggleExpand?: (() => void) | null;
   onPopOut?: (() => void) | null;
+  hidden?: boolean;
 };
 
 /** Rendered by the code-editor module's own EditorSidebar, and re-exported on the module barrel, as the full CodeMirror editor for one open file. */
@@ -43,6 +44,7 @@ export default function CodeEditor({
   isExpanded = false,
   onToggleExpand = null,
   onPopOut = null,
+  hidden = false,
 }: CodeEditorProps) {
   const { t } = useTranslation('codeEditor');
   const paletteOps = usePaletteOps();
@@ -226,6 +228,7 @@ export default function CodeEditor({
     onSave: handleSave,
     onClose: requestClose,
     dependency: content,
+    enabled: !hidden,
   });
 
   if (loading) {

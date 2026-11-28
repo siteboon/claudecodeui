@@ -9,10 +9,11 @@ type WorkspaceStateViewProps = {
   isMobile: boolean;
   onMenuClick: () => void;
   onRevealChat?: () => void;
+  onRestoreEditor?: () => void;
 };
 
 /** Rendered by WorkspaceMain instead of the workspace while projects load or when none is selected. */
-export default function WorkspaceStateView({ mode, isMobile, onMenuClick, onRevealChat }: WorkspaceStateViewProps) {
+export default function WorkspaceStateView({ mode, isMobile, onMenuClick, onRevealChat, onRestoreEditor }: WorkspaceStateViewProps) {
   const { t } = useTranslation();
 
   const isLoading = mode === 'loading';
@@ -26,7 +27,7 @@ export default function WorkspaceStateView({ mode, isMobile, onMenuClick, onReve
       )}
 
       <div className="relative flex flex-1 items-center justify-center">
-        <AttentionToast isChatVisible={false} onRevealChat={onRevealChat} />
+        <AttentionToast isChatVisible={false} onRevealChat={onRevealChat} onRestoreEditor={onRestoreEditor} />
         {isLoading ? (
           <div className="text-center text-muted-foreground">
             <div className="mx-auto mb-4 h-10 w-10">

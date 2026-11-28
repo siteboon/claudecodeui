@@ -83,7 +83,8 @@
     "tabWaitingLabel_one": "{{tab}}，全局共有 {{count}} 个会话正在等待你的回答",
     "tabWaitingLabel_other": "{{tab}}，全局共有 {{count}} 个会话正在等待你的回答",
     "open": "前往",
-    "dismiss": "关闭"
+    "dismiss": "关闭",
+    "restoreEditor": "返回编辑器"
   },
   "navigation": {
     "chat": "聊天",

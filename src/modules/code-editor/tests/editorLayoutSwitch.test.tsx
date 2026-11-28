@@ -217,7 +217,7 @@ test('collapsing an expanded editor reveals the workspace without discarding its
 
   function ExpandableHarness() {
     const sidebarState = useEditorSidebar({ selectedProject: project, isMobile: false });
-    const { handleFileOpen, handleRevealChat } = sidebarState;
+    const { handleFileOpen, handleRevealChat, handleRestoreEditor } = sidebarState;
 
     useEffect(() => {
       handleFileOpen('/repo/a.txt');
@@ -228,8 +228,8 @@ test('collapsing an expanded editor reveals the workspace without discarding its
         <button type="button" onClick={handleRevealChat}>
           Reveal chat
         </button>
-        <button type="button" onClick={() => handleFileOpen('/repo/a.txt')}>
-          Reopen editor
+        <button type="button" onClick={handleRestoreEditor}>
+          Restore editor
         </button>
         <EditorSidebar
           editingFile={sidebarState.editingFile}
@@ -268,7 +268,9 @@ test('collapsing an expanded editor reveals the workspace without discarding its
   assert.equal(screen.getByTestId('workspace').getAttribute('data-expanded'), 'false');
   assert.equal(toolbarPanels.at(-1)?.isExpanded, false);
   assert.ok(editor.closest('.hidden'), 'the editor must no longer cover chat');
-  fireEvent.click(screen.getByRole('button', { name: 'Reopen editor' }));
+  fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+  assert.equal(readFile.mock.calls.length, 1, 'a hidden editor must not save on Ctrl+S');
+  fireEvent.click(screen.getByRole('button', { name: 'Restore editor' }));
   assert.equal(editor.closest('.hidden'), null);
   assertBufferSurvived();
 });

@@ -85,6 +85,7 @@ function WorkspaceMain({
     handleToggleEditorExpand,
     editorHidden,
     handleRevealChat,
+    handleRestoreEditor,
     handleResizeStart,
     handleUnsavedChangesChange,
   } = useEditorSidebar({
@@ -137,11 +138,11 @@ function WorkspaceMain({
   usePaletteOpsRegister({ openFile, openFileInEditor, openDirectory });
 
   if (isLoading) {
-    return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} onRevealChat={handleRevealChat} />;
+    return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} onRevealChat={handleRevealChat} onRestoreEditor={editingFile ? handleRestoreEditor : undefined} />;
   }
 
   if (!selectedProject) {
-    return <WorkspaceStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} onRevealChat={handleRevealChat} />;
+    return <WorkspaceStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} onRevealChat={handleRevealChat} onRestoreEditor={editingFile ? handleRestoreEditor : undefined} />;
   }
 
   return (
@@ -252,6 +253,7 @@ function WorkspaceMain({
         <AttentionToast
           isChatVisible={activeTab === 'chat' && !editorExpanded && !(isMobile && editingFile && !editorHidden)}
           onRevealChat={handleRevealChat}
+          onRestoreEditor={editingFile && editorHidden ? handleRestoreEditor : undefined}
         />
       </div>
     </div>

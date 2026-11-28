@@ -26,6 +26,7 @@ type AttentionToastProps = {
    * `WorkspaceMain` to collapse an expanded editor without discarding its buffer.
    */
   onRevealChat?: () => void;
+  onRestoreEditor?: () => void;
 };
 
 /**
@@ -43,6 +44,7 @@ type AttentionToastProps = {
 export default function AttentionToast({
   isChatVisible = true,
   onRevealChat,
+  onRestoreEditor,
 }: AttentionToastProps) {
   const { t } = useTranslation('sidebar');
   const navigate = useNavigate();
@@ -124,6 +126,15 @@ export default function AttentionToast({
           )}
 
           <div className="mt-2.5 flex items-center gap-2">
+            {onRestoreEditor && (
+              <button
+                type="button"
+                onClick={onRestoreEditor}
+                className="inline-flex min-h-9 items-center justify-center rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {t('attention.restoreEditor', { defaultValue: 'Back to editor' })}
+              </button>
+            )}
             <button
               type="button"
               onClick={openSession}

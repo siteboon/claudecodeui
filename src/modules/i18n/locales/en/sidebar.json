@@ -83,7 +83,8 @@
     "tabWaitingLabel_one": "{{tab}}, {{count}} session waiting for your answer across all sessions",
     "tabWaitingLabel_other": "{{tab}}, {{count}} sessions waiting for your answer across all sessions",
     "open": "Open",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "restoreEditor": "Back to editor"
   },
   "navigation": {
     "chat": "Chat",
