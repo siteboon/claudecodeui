@@ -10,6 +10,7 @@ import type {
   TouchEvent,
 } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { fromEvent as defaultGetFilesFromEvent } from 'file-selector';
 import { useTranslation } from 'react-i18next';
 
 import { api, ApiRequestError } from '@/shared/api';
@@ -128,6 +129,19 @@ type SubmitOptions = {
 const createFakeSubmitEvent = () => {
   return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
 };
+
+/**
+ * The pending attachments and refused-file notices of one chat scope. Browser
+ * File objects cannot survive a reload, so these buckets live in memory only;
+ * text and queued upload descriptors are the parts persisted on the server.
+ */
+type ComposerAttachmentBucket = {
+  files: File[];
+  rejections: AttachmentRejection[];
+};
+
+/** Shared empty bucket, so a scope with no attachments allocates nothing. */
+const EMPTY_ATTACHMENT_BUCKET: ComposerAttachmentBucket = { files: [], rejections: [] };
 
 /**
  * A v4 UUID for a steered message or attachment upload request. The id becomes the message's transcript
@@ -295,11 +309,6 @@ export function useChatComposerState({
     };
   });
   const input = inputState.value;
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  // Files the latest attach attempt refused. They never become attachments, so
-  // the composer lists them in their own notice; without it a refused file just
-  // vanishes from a multi-file pick.
-  const [attachmentRejections, setAttachmentRejections] = useState<AttachmentRejection[]>([]);
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
 
@@ -336,6 +345,101 @@ export function useChatComposerState({
   const draftScope = sessionKey ?? (selectedProjectId ? `project:${selectedProjectId}` : null);
   const draftScopeRef = useRef(draftScope);
   draftScopeRef.current = draftScope;
+  // Pending attachments belong to the chat they were attached in. The composer
+  // is one mounted instance across session switches, so one shared list carried
+  // a pasted image into whichever conversation was opened next. Keyed by draft
+  // scope, a switch swaps the whole bucket and coming back restores it.
+  const [attachmentBuckets, setAttachmentBuckets] = useState<Map<string | null, ComposerAttachmentBucket>>(
+    () => new Map(),
+  );
+  // The open chat's bucket, read on every render so the switch needs no effect.
+  const attachmentBucket = attachmentBuckets.get(draftScope) ?? EMPTY_ATTACHMENT_BUCKET;
+  const attachedFiles = attachmentBucket.files;
+  // Files the latest attach attempt refused. They never become attachments, so
+  // the composer lists them in their own notice; without it a refused file just
+  // vanishes from a multi-file pick.
+  const attachmentRejections = attachmentBucket.rejections;
+  /**
+   * Writes one scope's bucket. The scope is explicit because a send's cleanup
+   * can settle after the user has opened another chat.
+   */
+  // Scope captured when a drag starts, before react-dropzone resolves files.
+  const dropScopeRef = useRef<string | null>(null);
+  const attachmentBucketsRef = useRef(attachmentBuckets);
+  attachmentBucketsRef.current = attachmentBuckets;
+  const updateAttachmentBucket = useCallback((
+    scope: string | null,
+    update: (bucket: ComposerAttachmentBucket) => ComposerAttachmentBucket,
+  ) => {
+    setAttachmentBuckets((previous) => {
+      const current = previous.get(scope) ?? EMPTY_ATTACHMENT_BUCKET;
+      const next = update(current);
+      if (next.files === current.files && next.rejections === current.rejections) {
+        return previous;
+      }
+      if (next.files.length === 0 && next.rejections.length === 0) {
+        if (!previous.has(scope)) {
+          return previous;
+        }
+        const buckets = new Map(previous);
+        buckets.delete(scope);
+        return buckets;
+      }
+      const buckets = new Map(previous);
+      buckets.set(scope, next);
+      return buckets;
+    });
+  }, []);
+  /** Replaces the open chat's attachments; the composer's remove control and tests write here. */
+  const setAttachedFiles = useCallback<Dispatch<SetStateAction<File[]>>>((next) => {
+    updateAttachmentBucket(draftScopeRef.current, (bucket) => ({
+      files: typeof next === 'function' ? next(bucket.files) : next,
+      rejections: bucket.rejections,
+    }));
+  }, [updateAttachmentBucket]);
+  /** Replaces the open chat's refusal notice; only the attempt that produced it owns it. */
+  const setAttachmentRejections = useCallback((rejections: AttachmentRejection[]) => {
+    updateAttachmentBucket(draftScopeRef.current, (bucket) => ({
+      files: bucket.files,
+      rejections,
+    }));
+  }, [updateAttachmentBucket]);
+  /**
+   * Takes files out of every bucket once a send or steer owns them. The upload
+   * can finish after a chat switch, so they must leave the chat they were
+   * attached in, not just whichever chat happens to be open now.
+   */
+  const removeAttachmentsEverywhere = useCallback((files: File[]) => {
+    if (files.length === 0) {
+      return;
+    }
+    setAttachmentBuckets((previous) => {
+      let changed = false;
+      const buckets = new Map<string | null, ComposerAttachmentBucket>();
+      previous.forEach((bucket, scope) => {
+        const remaining = bucket.files.filter((file) => !files.includes(file));
+        if (remaining.length === bucket.files.length) {
+          buckets.set(scope, bucket);
+          return;
+        }
+        changed = true;
+        if (remaining.length > 0 || bucket.rejections.length > 0) {
+          buckets.set(scope, { files: remaining, rejections: bucket.rejections });
+        }
+      });
+      return changed ? buckets : previous;
+    });
+  }, []);
+  /** Puts returned files back into the open composer; callers check that its scope owns them. */
+  const restoreAttachmentsToCurrent = useCallback((files: File[]) => {
+    if (files.length === 0) {
+      return;
+    }
+    updateAttachmentBucket(draftScopeRef.current, (bucket) => ({
+      files: [...files, ...bucket.files],
+      rejections: bucket.rejections,
+    }));
+  }, [updateAttachmentBucket]);
   // Composition is tracked on `window` in the capture phase rather than on the textarea, so a
   // composition that starts in one field and ends after focus moves still closes cleanly.
   const isComposingRef = useRef(false);
@@ -672,10 +776,11 @@ export function useChatComposerState({
   // Picker, drag-and-drop and paste all come through here, so the size and count
   // limits are checked in one place and every refused file is reported. Each
   // attempt replaces the notice, so it always describes the latest one.
-  const handleAttachmentFiles = useCallback((files: File[]) => {
+  const handleAttachmentFiles = useCallback((files: File[], targetScope = draftScopeRef.current) => {
     const accepted: File[] = [];
     const rejections: AttachmentRejection[] = [];
-    let freeSlots = Math.max(0, MAX_CHAT_ATTACHMENT_COUNT - attachedFiles.length);
+    const existing = attachmentBucketsRef.current.get(targetScope) ?? EMPTY_ATTACHMENT_BUCKET;
+    let freeSlots = Math.max(0, MAX_CHAT_ATTACHMENT_COUNT - existing.files.length);
 
     files.forEach((file) => {
       if (!file || typeof file !== 'object') {
@@ -695,15 +800,15 @@ export function useChatComposerState({
       accepted.push(file);
     });
 
-    setAttachmentRejections(rejections);
-    if (accepted.length > 0) {
-      setAttachedFiles((previous) => [...previous, ...accepted]);
-    }
-  }, [attachedFiles]);
+    updateAttachmentBucket(targetScope, (bucket) => ({
+      files: [...bucket.files, ...accepted],
+      rejections,
+    }));
+  }, [updateAttachmentBucket]);
 
   const dismissAttachmentRejections = useCallback(() => {
     setAttachmentRejections([]);
-  }, []);
+  }, [setAttachmentRejections]);
 
   const handlePaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -735,7 +840,14 @@ export function useChatComposerState({
   // before `onDrop` (and `maxFiles` refuses the whole drop, not just the extra
   // files), so `handleAttachmentFiles` applies both limits itself and reports them.
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    onDrop: (acceptedFiles) => handleAttachmentFiles(acceptedFiles),
+    // `getFilesFromEvent` can resolve after the user switches chats. react-dropzone
+    // calls `onDrop` only once it has, so the current scope here is already too
+    // late; capture it from the synchronous getFilesFromEvent hook below.
+    onDrop: (acceptedFiles) => handleAttachmentFiles(acceptedFiles, dropScopeRef.current),
+    getFilesFromEvent: (event) => {
+      dropScopeRef.current = draftScopeRef.current;
+      return defaultGetFilesFromEvent(event);
+    },
     noClick: true,
     noKeyboard: true,
   });
@@ -906,7 +1018,7 @@ export function useChatComposerState({
       // Attachments are not kept per chat: the queued ones leave even when another chat is
       // open now, or a send from there would take them along.
       if (fromComposer) {
-        setAttachedFiles((files) => files.filter((file) => !durableDraft.attachments.includes(file)));
+        removeAttachmentsEverywhere(durableDraft.attachments);
       }
       if (queuedFromOpenComposer) {
         setInput('');
@@ -964,7 +1076,7 @@ export function useChatComposerState({
             inputValueRef.current = restored;
             // The message's files come back with it, also after a switch away and back
             // and for a refused steer: all were taken from this composer.
-            setAttachedFiles((current) => [...durableDraft.attachments, ...current]);
+            restoreAttachmentsToCurrent(durableDraft.attachments);
             if (draftScopeRef.current) {
               writeDraftText(draftScopeRef.current, restored);
             }
@@ -999,7 +1111,16 @@ export function useChatComposerState({
           : queuedCard.attachments,
       }));
     },
-    [addMessage, recordSentMessage, resetCommandMenuState, setInput, t],
+    [
+      addMessage,
+      recordSentMessage,
+      removeAttachmentsEverywhere,
+      resetCommandMenuState,
+      restoreAttachmentsToCurrent,
+      setAttachmentRejections,
+      setInput,
+      t,
+    ],
   );
 
   // Every change to the pending steers goes through here so the ref the
@@ -1034,7 +1155,7 @@ export function useChatComposerState({
       });
       recordSentMessage(message.content, steerSessionKey);
       // Attachments are not kept per chat: the steered ones leave even when another chat is open now.
-      setAttachedFiles((files) => files.filter((file) => !message.attachments.includes(file)));
+      removeAttachmentsEverywhere(message.attachments);
 
       if (sessionKeyRef.current === steerSessionKey) {
         setInput('');
@@ -1054,7 +1175,15 @@ export function useChatComposerState({
         writeDraftText(steerSessionKey, '');
       }
     },
-    [recordSentMessage, resetCommandMenuState, sendMessage, setInput, updatePendingSteers],
+    [
+      recordSentMessage,
+      removeAttachmentsEverywhere,
+      resetCommandMenuState,
+      sendMessage,
+      setAttachmentRejections,
+      setInput,
+      updatePendingSteers,
+    ],
   );
 
   /**
@@ -1118,9 +1247,9 @@ export function useChatComposerState({
       .join('\n\n');
     setInput(restored);
     inputValueRef.current = restored;
-    setAttachedFiles((current) => [...unread.flatMap((steer) => steer.attachments), ...current]);
+    restoreAttachmentsToCurrent(unread.flatMap((steer) => steer.attachments));
     writeDraftText(sessionKey, restored);
-  }, [isLoading, sessionKey, setInput, updatePendingSteers]);
+  }, [isLoading, restoreAttachmentsToCurrent, sessionKey, setInput, updatePendingSteers]);
 
   // Cards belong to the session they were sent into; switching away drops
   // them (the messages themselves are already the run's, on the server).
@@ -1437,8 +1566,26 @@ export function useChatComposerState({
       // navigated to. Queued drafts were recorded when they were queued; the
       // consecutive-duplicate check keeps this second call a no-op.
       recordSentMessage(currentInput, targetSessionId);
-      // Attachments are not kept per chat, so only the ones just sent go.
-      setAttachedFiles((files) => files.filter((file) => !currentAttachments.includes(file)));
+      // Only the files this send uploaded leave their bucket. For a new chat the
+      // draft scope changes to the allocated session id while the upload runs;
+      // files attached in that interval were added to the project bucket and
+      // must follow the conversation, not stay behind for the next new chat.
+      removeAttachmentsEverywhere(currentAttachments);
+      const promotedScope = submittedScope !== targetSessionId ? submittedScope : null;
+      if (promotedScope) {
+        setAttachmentBuckets((previous) => {
+          const promoted = previous.get(promotedScope);
+          const target = previous.get(targetSessionId) ?? EMPTY_ATTACHMENT_BUCKET;
+          if (!promoted) return previous;
+          const buckets = new Map(previous);
+          buckets.delete(promotedScope);
+          buckets.set(targetSessionId, {
+            files: [...target.files, ...promoted.files],
+            rejections: promoted.rejections.length ? promoted.rejections : target.rejections,
+          });
+          return buckets;
+        });
+      }
       // A brand-new chat moves from its project scope to its allocated session id meanwhile.
       const stillOpen = draftScopeRef.current === submittedScope || draftScopeRef.current === targetSessionId;
       if (!stillOpen) {
@@ -1476,11 +1623,14 @@ export function useChatComposerState({
       provider,
       queueMessage,
       recordSentMessage,
+      removeAttachmentsEverywhere,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,
       sendMessage,
       sessionKey,
+      setAttachedFiles,
+      setAttachmentRejections,
       addMessage,
       setIsUserScrolledUp,
       slashCommands,
@@ -1601,7 +1751,7 @@ export function useChatComposerState({
     inputValueRef.current = queuedDraft.content;
     setAttachedFiles(queuedDraft.attachments);
     textareaRef.current?.focus();
-  }, [queuedDraft]);
+  }, [queuedDraft, setAttachedFiles]);
 
   const deleteQueuedDraft = useCallback(() => {
     if (queuedDraftSessionRef.current) {
