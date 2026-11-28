@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
 import { usePlugins } from '@/modules/plugins/context/PluginsContext';
+import { usePluginProjectActions, usePluginSessionActions } from '@/modules/plugins/usePluginProjectActions';
 import type { Project, ProjectSession } from '@/shared/types';
 
 type PluginTabContentProps = {
@@ -62,6 +63,12 @@ export default function PluginTabContent({
   const moduleRef = useRef<any>(null);
 
   const plugin = plugins.find(p => p.name === pluginName);
+  const projectActions = usePluginProjectActions();
+  const projectActionsRef = useRef(projectActions);
+  projectActionsRef.current = projectActions;
+  const sessionActions = usePluginSessionActions();
+  const sessionActionsRef = useRef(sessionActions);
+  sessionActionsRef.current = sessionActions;
 
   // Keep contextRef current and notify the mounted plugin on every context change
   useEffect(() => {
@@ -99,6 +106,16 @@ export default function PluginTabContent({
 
         moduleRef.current = mod;
 
+        const runProjectAction = async (projectPath: string, action: 'archive' | 'delete') => {
+          const run = projectActionsRef.current;
+          return run ? run(projectPath, action) : { ok: false as const, error: 'Project actions are not available here' };
+        };
+
+        const runSessionAction = async (sessionId: string, action: 'archive' | 'delete') => {
+          const run = sessionActionsRef.current;
+          return run ? run(sessionId, action) : { ok: false as const, error: 'Session actions are not available here' };
+        };
+
         // The host surface handed to the plugin module, distinct from the
         // app's own `api` client that backs `rpc` below.
         const pluginHostApi = {
@@ -114,6 +131,14 @@ export default function PluginTabContent({
             if (!res.ok) throw new Error(`RPC error ${res.status}`);
             return res.json();
           },
+
+          // Archive (hide, keep sessions) or delete (also sessions and transcripts) a project by its path, as the
+          // sidebar does. Plugins feature-detect these; hosts without them simply lack the functions.
+          archiveProject: (projectPath: string) => runProjectAction(projectPath, 'archive'),
+          deleteProject: (projectPath: string) => runProjectAction(projectPath, 'delete'),
+          // Archive or delete a single session (e.g. one that shares its project with others).
+          archiveSession: (sessionId: string) => runSessionAction(sessionId, 'archive'),
+          deleteSession: (sessionId: string) => runSessionAction(sessionId, 'delete'),
         };
 
         await mod.mount?.(container, pluginHostApi);

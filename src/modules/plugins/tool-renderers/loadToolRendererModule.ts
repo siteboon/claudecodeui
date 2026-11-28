@@ -25,6 +25,14 @@ export type PluginToolHostApi = {
   rpc(method: string, path: string, body?: unknown): Promise<unknown>;
   /** Opens another session in the app, e.g. a session the tool started. */
   openSession(sessionId: string): void;
+  /** Archives the project at `projectPath` (hidden, sessions kept and restorable), as the sidebar does. */
+  archiveProject(projectPath: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Deletes the project at `projectPath` with its sessions and transcripts, as the sidebar's delete does. */
+  deleteProject(projectPath: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Archives one session (hidden, restorable), as the sidebar's session archive does. */
+  archiveSession(sessionId: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Deletes one session and its transcript, as the sidebar's session delete does. */
+  deleteSession(sessionId: string): Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
 export type PluginToolHandle = {
