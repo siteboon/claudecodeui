@@ -198,6 +198,9 @@
     }
   },
   "composer": {
+    "compactMode": "Kompakt moda geç",
+    "exitCompactMode": "Kompakt moddan çık",
+    "moreTools": "Diğer sohbet araçları",
     "reasoning": "Düşünme",
     "model": "Model",
     "effortDefault": "Varsayılan",

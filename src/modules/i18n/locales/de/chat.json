@@ -270,6 +270,9 @@
     "answeredBy": "Beantwortet von {{model}}"
   },
   "composer": {
+    "compactMode": "Kompaktmodus aktivieren",
+    "exitCompactMode": "Kompaktmodus beenden",
+    "moreTools": "Weitere Chat-Werkzeuge",
     "permissionHeading": "Wie sollen Aktionen von {{provider}} genehmigt werden?",
     "permissionCycleHint": "Tab im Eingabefeld drücken, um den Modus zu wechseln",
     "permissionTriggerLabel": "{{mode}}: {{heading}}",

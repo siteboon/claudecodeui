@@ -223,6 +223,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "채팅 레이아웃",
+      "label": "간소화 모드",
+      "description": "채팅 헤더를 숨기고 작은 플로팅 입력창만 유지합니다."
+    },
     "darkMode": {
       "label": "다크 모드",
       "description": "라이트/다크 테마 전환"

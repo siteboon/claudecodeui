@@ -283,6 +283,9 @@
     "answeredBy": "由 {{model}} 回答"
   },
   "composer": {
+    "compactMode": "進入精簡模式",
+    "exitCompactMode": "退出精簡模式",
+    "moreTools": "更多聊天工具",
     "permissionHeading": "如何核准 {{provider}} 的操作？",
     "permissionCycleHint": "在輸入框中按 Tab 切換模式",
     "permissionTriggerLabel": "{{mode}}：{{heading}}",

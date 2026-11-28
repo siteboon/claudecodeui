@@ -152,6 +152,9 @@
     }
   },
   "composer": {
+    "compactMode": "מעבר למצב קומפקטי",
+    "exitCompactMode": "יציאה ממצב קומפקטי",
+    "moreTools": "עוד כלי צ'אט",
     "reasoning": "חשיבה",
     "model": "מודל",
     "effortDefault": "ברירת מחדל",

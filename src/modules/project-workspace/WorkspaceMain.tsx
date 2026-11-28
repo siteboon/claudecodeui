@@ -9,10 +9,12 @@ import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
 import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
-import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
+import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
 import { useFileOpenResolver } from '@/modules/project-workspace/hooks/useFileOpenResolver';
 import { EditorSidebar, useEditorSidebar } from '@/modules/code-editor';
 import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
+import WorkspaceTabs from '@/modules/project-workspace/WorkspaceTabs';
+import MobileMenuButton from '@/modules/project-workspace/MobileMenuButton';
 import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
 
@@ -60,7 +62,11 @@ function WorkspaceMain({
   onRenameSession,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
-  const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
+  const { showRawParameters, showThinking, sendByCtrlEnter, compactChat } = preferences;
+  const setPreference = useSetUiPreference();
+  const toggleCompactChat = useCallback(() => {
+    setPreference('compactChat', !compactChat);
+  }, [compactChat, setPreference]);
 
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const browserUseEnabled = useBrowserUseEnabled();
@@ -142,7 +148,8 @@ function WorkspaceMain({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col">
+      <div className="flex-shrink-0" hidden={compactChat && activeTab === 'chat' && !editorExpanded}>
       <WorkspaceHeader
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -154,12 +161,26 @@ function WorkspaceMain({
         onMenuClick={onMenuClick}
         onRenameSession={onRenameSession}
       />
+      </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
             <WorkspaceErrorBoundary showDetails>
               <ChatInterface
+                compactMode={compactChat && !editorExpanded}
+                onToggleCompactMode={toggleCompactChat}
+                compactLeadingAction={compactChat && isMobile ? <MobileMenuButton onMenuClick={onMenuClick} /> : undefined}
+                compactNavigation={compactChat ? (
+                  <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto pb-1">
+                    <WorkspaceTabs
+                      activeTab={activeTab}
+                      setActiveTab={setActiveTab}
+                      shouldShowTasksTab={shouldShowTasksTab}
+                      shouldShowBrowserTab={shouldShowBrowserTab}
+                    />
+                  </div>
+                ) : undefined}
                 isActive={activeTab === 'chat'}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}

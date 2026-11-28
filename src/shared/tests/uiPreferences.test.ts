@@ -38,6 +38,7 @@ test('a fresh install gets the documented defaults', () => {
     sidebarVisible: true,
     keepProjectsExpanded: false,
     voiceEnabled: false,
+    compactChat: false,
   });
 });
 
@@ -88,6 +89,14 @@ test('an unknown key is ignored', () => {
   });
 
   assert.equal(next, state);
+});
+
+test('compactChat defaults to false and persists independently of other preferences', () => {
+  assert.equal(baseline().compactChat, false);
+  const next = uiPreferencesReducer(baseline(), { type: 'set', key: 'compactChat', value: true });
+  storeUiPreferences(next);
+  assert.equal(readStoredUiPreferences().compactChat, true);
+  assert.equal(readStoredUiPreferences().sidebarVisible, true);
 });
 
 test('a cross-tab update applies every changed key at once', () => {

@@ -224,6 +224,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "פריסת הצ'אט",
+      "label": "מצב קומפקטי",
+      "description": "הסתרת כותרת הצ'אט והשארת תיבת קלט צפה וקטנה."
+    },
     "darkMode": {
       "label": "מצב כהה",
       "description": "מעבר בין ערכת נושא בהירה לכהה"

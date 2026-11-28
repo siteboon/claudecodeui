@@ -61,9 +61,15 @@ const findFooterParts = (trigger: HTMLElement | null) => {
   if (!trigger || !footer) {
     return null;
   }
-  const tools = footer.querySelector<HTMLElement>(':scope > [data-slot="prompt-input-tools"]');
-  const controls = Array.from(footer.children).find((child) => child !== tools && child.contains(trigger));
-  return tools && controls ? { trigger, footer, tools, controls } : null;
+  const options = trigger.closest<HTMLElement>('.composer-options');
+  const compact = footer.closest('[data-compact="true"]') !== null;
+  // In compact mode the footer uses display: contents and has no layout box; measure .composer-options instead.
+  const layout = compact && options ? options : footer;
+  const tools = (options ?? footer).querySelector<HTMLElement>('[data-slot="prompt-input-tools"]');
+  const controls = options?.querySelector<HTMLElement>('.composer-secondary-actions')
+    ?? Array.from(footer.children).find((child) => child !== tools && child.contains(trigger));
+  const sendActions = compact ? null : footer.querySelector<HTMLElement>('.composer-send-actions');
+  return tools && controls ? { trigger, footer: layout, tools, controls, sendActions } : null;
 };
 
 type NameFit = { name: string; isShown: boolean };
@@ -97,11 +103,15 @@ export function usePermissionNameFit(
       return;
     }
 
-    const { trigger, footer, tools, controls } = parts;
+    const { trigger, footer, tools, controls, sendActions } = parts;
     const footerStyle = getComputedStyle(footer);
+    const reservedSendWidth = sendActions
+      ? sendActions.getBoundingClientRect().width + (parseFloat(footerStyle.columnGap) || 0)
+      : 0;
     const room = footer.clientWidth
       - (parseFloat(footerStyle.paddingLeft) || 0)
-      - (parseFloat(footerStyle.paddingRight) || 0);
+      - (parseFloat(footerStyle.paddingRight) || 0)
+      - reservedSendWidth;
     // A composer in a hidden tab measures zero: keep its last decision.
     if (room <= 0) {
       return;
@@ -139,6 +149,7 @@ export function usePermissionNameFit(
     observer.observe(parts.footer);
     observer.observe(parts.tools);
     observer.observe(parts.controls);
+    if (parts.sendActions) observer.observe(parts.sendActions);
     return () => observer.disconnect();
   }, [measure, name, triggerRef]);
 

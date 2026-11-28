@@ -27,17 +27,17 @@ export function ScheduledMessageList({ scheduledMessages, onCancel }: ScheduledM
   }
 
   return (
-    <div className="mx-auto mb-2 flex chat-content-width flex-col gap-1.5">
+    <div className="composer-compact-width mx-auto mb-2 flex chat-content-width flex-col gap-1.5">
       {visible.map((message) => {
         const isFailed = message.status === 'failed';
 
         return (
           <div
             key={message.id}
-            className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
+            className={`composer-floating-card flex items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
               isFailed
-                ? 'border-red-500/30 bg-red-500/10'
-                : 'border-border/60 bg-muted/40'
+                ? 'composer-floating-card-danger border-red-500/30 bg-red-500/10'
+                : 'composer-floating-card-muted border-border/60 bg-muted/40'
             }`}
           >
             {isFailed ? (

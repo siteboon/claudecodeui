@@ -224,6 +224,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Chat layout",
+      "label": "Compact mode",
+      "description": "Hide the chat header and keep a small floating composer."
+    },
     "darkMode": {
       "label": "Dark Mode",
       "description": "Toggle between light and dark themes"

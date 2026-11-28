@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useId } from 'react';
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -10,7 +10,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { EraserIcon, PaperclipIcon, MessageSquareIcon, XIcon, Loader2, PencilIcon } from 'lucide-react';
+import { EraserIcon, PaperclipIcon, MessageSquareIcon, XIcon, Loader2, PencilIcon, Minimize2, Maximize2, MoreHorizontal } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
@@ -138,6 +138,11 @@ type ChatComposerProps = {
   placeholder: string;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
+  /** Keeps the same composer instance mounted across layout switches so drafts and attachments are preserved. */
+  compactMode?: boolean;
+  onToggleCompactMode?: () => void;
+  compactLeadingAction?: ReactNode;
+  compactNavigation?: ReactNode;
 };
 
 /**
@@ -220,8 +225,39 @@ export default function ChatComposer({
   placeholder,
   isTextareaExpanded,
   sendByCtrlEnter,
+  compactMode = false,
+  onToggleCompactMode,
+  compactLeadingAction,
+  compactNavigation,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
+  // Tracks secondary tool disclosure independently of input/send state so toggling does not remount the composer.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsId = useId();
+
+  // Compact mode hides the tool drawer behind a shell-level escape layer, so
+  // Escape from a transcript control never reaches the composer's own handler.
+  useEffect(() => {
+    if (!compactMode || !toolsOpen || typeof document === 'undefined') return undefined;
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.stopPropagation();
+      setToolsOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape, true);
+    return () => document.removeEventListener('keydown', closeOnEscape, true);
+  }, [compactMode, toolsOpen]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+    textarea.style.height = 'auto';
+    if (textarea.value.trim() && textarea.scrollHeight > 0) {
+      textarea.style.height = `${Math.max(22, textarea.scrollHeight)}px`;
+    }
+  }, [compactMode, textareaRef]);
   const fileDropdownRef = useRef<HTMLDivElement | null>(null);
   const selectedFileRef = useRef<HTMLDivElement | null>(null);
   const commandMenuPosition = useMemo(() => {
@@ -301,21 +337,81 @@ export default function ChatComposer({
   const submitAriaLabel =
     isLoading && !hasAnyInput && !isRecording && !isTranscribing ? t('input.stop') : t('input.send');
 
+  const attachmentButton = (
+    <PromptInputButton
+      tooltip={{ content: t('input.attachFiles') }}
+      onClick={openAttachmentPicker}
+      aria-label={t('input.attachFiles')}
+      className="shrink-0"
+    >
+      <PaperclipIcon />
+    </PromptInputButton>
+  );
+
+  const tokenUsageSummary = (
+    <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
+  );
+
+  const modelMenu = (
+    <ComposerModelMenu
+      effort={effort}
+      effortOptions={availableEffortOptions}
+      onSelectEffort={onSelectEffort}
+      model={model}
+      modelOptions={availableModelOptions}
+      onSelectModel={onSelectModel}
+      modelsLoading={modelsLoading}
+    />
+  );
+
   return (
-    <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
+    <div
+      data-compact={compactMode || undefined}
+      data-escape-layer={compactMode && toolsOpen ? '' : undefined}
+      className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6"
+      onKeyDownCapture={(event) => {
+        if (compactMode && toolsOpen && event.key === 'Escape') {
+          event.stopPropagation();
+          setToolsOpen(false);
+        }
+      }}
+    >
+      {compactMode && hasQuestionPanel && (compactLeadingAction || compactNavigation || onToggleCompactMode) && (
+        <div className="mx-auto mb-2 flex max-w-[40rem] items-center justify-end gap-2">
+          {(compactLeadingAction || compactNavigation) && (
+            <div className="pointer-events-auto flex min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-border/50 bg-card px-2 py-1 shadow-sm">
+              {compactLeadingAction}
+              {compactNavigation && (
+                <div className="min-w-0 flex-1">
+                  {compactNavigation}
+                </div>
+              )}
+            </div>
+          )}
+          {onToggleCompactMode && (
+            <PromptInputButton
+              onClick={onToggleCompactMode}
+              aria-label={t('composer.exitCompactMode')}
+              className="pointer-events-auto shrink-0 border border-border/50 bg-card shadow-sm"
+            >
+              <Maximize2 />
+            </PromptInputButton>
+          )}
+        </div>
+      )}
       {!hasPendingPermissions && (
         // The outer box is inset by the shell's horizontal padding so it matches the
         // shell's content box. The input below takes its percentage width from that
         // content box, so the tabs line up with the input's edges at every pane width.
         <div className="pointer-events-none absolute inset-x-2 bottom-full z-10 translate-y-px bg-transparent sm:inset-x-4">
-          <div className="chat-content-width mx-auto">
+          <div className="chat-content-width composer-compact-width mx-auto">
             <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
           </div>
         </div>
       )}
 
       {pendingPermissionRequests.length > 0 && (
-        <div className="mx-auto mb-3 chat-content-width">
+        <div className="composer-floating-surface composer-compact-width mx-auto mb-3 chat-content-width">
           <PermissionRequestsBanner
             pendingPermissionRequests={pendingPermissionRequests}
             providerLabel={providerLabel}
@@ -331,7 +427,7 @@ export default function ChatComposer({
       />
 
       {isEditingSentMessage && (
-        <div className="mx-auto mb-2 flex chat-content-width items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
+        <div className="composer-floating-card composer-floating-card-amber composer-compact-width mx-auto mb-2 flex chat-content-width items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-foreground">
           <PencilIcon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
           <span className="min-w-0 flex-1">
             {t('composer.editing.title')}
@@ -373,16 +469,18 @@ export default function ChatComposer({
       {/* The question panel replaces the input, but how to answer often depends on
           how much context is left, so the token usage stays reachable below it. */}
       {hasQuestionPanel && (
-        <div className="mx-auto flex chat-content-width justify-end">
-          <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
+        <div className="composer-compact-width mx-auto flex chat-content-width justify-end">
+          <div className={compactMode ? 'pointer-events-auto rounded-lg bg-card' : undefined}>
+            <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
+          </div>
         </div>
       )}
 
-      {!hasQuestionPanel && <div className="relative mx-auto chat-content-width">
+      {!hasQuestionPanel && <div className="composer-floating-surface composer-compact-width relative mx-auto chat-content-width">
         {showFileDropdown && filteredFiles.length > 0 && (
           <div
             ref={fileDropdownRef}
-            className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card/95 shadow-lg backdrop-blur-md"
+            className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-xl border border-border/50 bg-card shadow-lg"
           >
             {filteredFiles.map((file, index) => (
               <div
@@ -478,6 +576,7 @@ export default function ChatComposer({
 
             <PromptInputTextarea
               ref={textareaRef}
+              rows={compactMode ? 1 : undefined}
               dir="auto"
               value={input}
               onChange={onInputChange}
@@ -493,20 +592,21 @@ export default function ChatComposer({
         </PromptInputBody>
 
         <PromptInputFooter className="flex-wrap gap-y-1">
+          <div
+            id={toolsId}
+            hidden={compactMode && !toolsOpen}
+            role="group"
+            aria-label={t('composer.moreTools')}
+            className={compactMode && !toolsOpen ? 'hidden' : 'composer-options flex min-w-0 flex-[1_1_16rem] flex-wrap items-center justify-between gap-2'}
+          >
           <PromptInputTools className="min-w-0">
-            <PromptInputButton
-              tooltip={{ content: t('input.attachFiles') }}
-              onClick={openAttachmentPicker}
-              aria-label={t('input.attachFiles')}
-            >
-              <PaperclipIcon />
-            </PromptInputButton>
+            {!compactMode && attachmentButton}
 
             {onVoiceTranscript && voiceAvailable && (
               <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
             )}
 
-            <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
+            {!compactMode && tokenUsageSummary}
 
             {onClearContext && (
               <PromptInputButton
@@ -547,21 +647,13 @@ export default function ChatComposer({
 
           </PromptInputTools>
 
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <div className="composer-secondary-actions ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1.5 sm:gap-2">
             <ScheduleMessagePopover
               disabled={!input.trim()}
               onSchedule={onScheduleMessage}
             />
 
-            <ComposerModelMenu
-              effort={effort}
-              effortOptions={availableEffortOptions}
-              onSelectEffort={onSelectEffort}
-              model={model}
-              modelOptions={availableModelOptions}
-              onSelectModel={onSelectModel}
-              modelsLoading={modelsLoading}
-            />
+            {!compactMode && modelMenu}
 
             <ComposerPermissionMenu
               permissionMode={permissionMode}
@@ -569,6 +661,44 @@ export default function ChatComposer({
               onSelectPermissionMode={onSelectPermissionMode}
               providerLabel={providerLabel}
             />
+          </div>
+          {compactMode && compactNavigation}
+          </div>
+
+          {compactMode && (
+            <div className="composer-compact-quick-actions flex min-h-10 min-w-0 max-w-full items-center gap-1 sm:gap-1.5">
+              {compactLeadingAction}
+              {attachmentButton}
+              {tokenUsageSummary}
+            </div>
+          )}
+
+          <div
+            className={`composer-send-actions ml-auto flex items-center gap-1 sm:gap-1.5 ${
+              compactMode ? 'min-w-0 max-w-full flex-[1_1_10.5rem] justify-end' : 'shrink-0 sm:gap-2'
+            }`}
+          >
+            {compactMode && modelMenu}
+            {compactMode && (
+              <PromptInputButton
+                onClick={() => setToolsOpen((open) => !open)}
+                aria-label={t('composer.moreTools')}
+                aria-expanded={toolsOpen}
+                aria-controls={toolsId}
+                tooltip={{ content: t('composer.moreTools') }}
+              >
+                <MoreHorizontal />
+              </PromptInputButton>
+            )}
+            {onToggleCompactMode && (
+              <PromptInputButton
+                onClick={() => { setToolsOpen(false); onToggleCompactMode(); }}
+                aria-label={t(compactMode ? 'composer.exitCompactMode' : 'composer.compactMode')}
+                tooltip={{ content: t(compactMode ? 'composer.exitCompactMode' : 'composer.compactMode') }}
+              >
+                {compactMode ? <Maximize2 /> : <Minimize2 />}
+              </PromptInputButton>
+            )}
 
             {(isLoading || activity?.background) && hasAnyInput && !isRecording && !isTranscribing ? (
               // The caret-trigger menu only replaces the plain button when there is
@@ -633,7 +763,7 @@ export default function ChatComposer({
           </div>
 
           <div
-            className={`order-last hidden basis-full px-2 text-center text-xs leading-4 text-muted-foreground/50 transition-opacity duration-200 lg:block ${
+            className={`composer-shortcuts order-last hidden basis-full px-2 text-center text-xs leading-4 text-muted-foreground/50 transition-opacity duration-200 lg:block ${
               input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
             }`}
           >

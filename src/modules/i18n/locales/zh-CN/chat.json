@@ -309,6 +309,9 @@
     "answeredBy": "由 {{model}} 回答"
   },
   "composer": {
+    "compactMode": "进入简洁模式",
+    "exitCompactMode": "退出简洁模式",
+    "moreTools": "更多聊天工具",
     "permissionHeading": "如何批准 {{provider}} 的操作？",
     "permissionCycleHint": "在输入框中按 Tab 切换模式",
     "permissionTriggerLabel": "{{mode}}：{{heading}}",

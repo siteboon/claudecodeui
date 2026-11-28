@@ -224,6 +224,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Diseño del chat",
+      "label": "Modo compacto",
+      "description": "Ocultar el encabezado del chat y mantener un cuadro de entrada flotante pequeño."
+    },
     "darkMode": {
       "label": "Modo oscuro",
       "description": "Alterna entre el tema claro y el oscuro"

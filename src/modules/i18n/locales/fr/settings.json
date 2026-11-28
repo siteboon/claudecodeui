@@ -197,6 +197,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Disposition du chat",
+      "label": "Mode compact",
+      "description": "Masquer l'en-tête du chat et conserver une petite barre de saisie flottante."
+    },
     "darkMode": {
       "label": "Mode sombre",
       "description": "Basculer entre les thèmes clair et sombre"

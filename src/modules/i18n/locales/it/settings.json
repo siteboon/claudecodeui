@@ -197,6 +197,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Layout della chat",
+      "label": "Modalità compatta",
+      "description": "Nascondi l'intestazione della chat e mantieni una piccola barra di immissione flottante."
+    },
     "darkMode": {
       "label": "Modalità scura",
       "description": "Alterna tra tema chiaro e scuro"

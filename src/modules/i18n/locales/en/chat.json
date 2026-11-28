@@ -207,6 +207,9 @@
     }
   },
   "composer": {
+    "compactMode": "Enter compact mode",
+    "exitCompactMode": "Exit compact mode",
+    "moreTools": "More chat tools",
     "reasoning": "Reasoning",
     "model": "Model",
     "effortDefault": "Default",

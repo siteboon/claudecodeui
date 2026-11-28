@@ -203,6 +203,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Rozvržení chatu",
+      "label": "Kompaktní režim",
+      "description": "Skrýt záhlaví chatu a ponechat jen malé plovoucí pole pro zadávání."
+    },
     "darkMode": {
       "label": "Tmavý režim",
       "description": "Přepínání mezi světlým a tmavým motivem"

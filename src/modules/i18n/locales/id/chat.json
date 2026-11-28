@@ -162,6 +162,9 @@
     }
   },
   "composer": {
+    "compactMode": "Masuk ke mode ringkas",
+    "exitCompactMode": "Keluar dari mode ringkas",
+    "moreTools": "Alat obrolan lainnya",
     "reasoning": "Penalaran",
     "model": "Model",
     "effortDefault": "Default",

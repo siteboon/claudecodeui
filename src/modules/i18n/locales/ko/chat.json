@@ -264,6 +264,9 @@
     "answeredBy": "{{model}}이(가) 응답함"
   },
   "composer": {
+    "compactMode": "간소화 모드 진입",
+    "exitCompactMode": "간소화 모드 종료",
+    "moreTools": "추가 채팅 도구",
     "permissionHeading": "{{provider}} 작업을 어떻게 승인할까요?",
     "permissionCycleHint": "입력창에서 Tab을 누르면 모드를 전환할 수 있습니다",
     "permissionTriggerLabel": "{{mode}}: {{heading}}",
