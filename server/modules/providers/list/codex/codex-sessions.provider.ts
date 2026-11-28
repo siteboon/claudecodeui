@@ -186,10 +186,11 @@ async function findCodexHistorySource(filePath: string, threadId: string): Promi
 
 /**
  * Codex 0.160 paginated forks keep a frozen prefix in `history_base` instead
- * of copying it. The Codex model adapter and history reader share the same
- * frozen prefix. `forked_from_id` alone must never include history twice.
+ * of copying it. Read each ancestor only through its recorded byte boundary,
+ * then the child's own rows. `forked_from_id` alone also appears on copied
+ * legacy rollouts and must never cause history to be included twice.
  */
-export async function* readCodexRolloutLines(
+async function* readCodexRolloutLines(
   filePath: string,
   endByteOffset?: number,
   ancestors = new Set<string>(),
@@ -248,6 +249,32 @@ export async function* readCodexRolloutLines(
     lines.close();
     stream.destroy();
   }
+}
+
+/** Returns the latest surviving turn's recorded model for the Codex model adapter. */
+export async function readCodexTranscriptModel(filePath: string): Promise<string | undefined> {
+  const turns = createCodexTurnTracker();
+  const models = new Map<string, string>();
+  for await (const line of readCodexRolloutLines(filePath)) {
+    let entry: AnyRecord | null;
+    try {
+      entry = readObjectRecord(JSON.parse(line));
+    } catch {
+      continue;
+    }
+    const payload = readObjectRecord(entry?.payload);
+    if (!payload) continue;
+    turns.observe(entry?.type, payload);
+    if (entry?.type !== 'turn_context') continue;
+    const turnId = turns.getCurrentTurnId();
+    const model = readNonEmptyString(payload.model);
+    if (turnId && model) models.set(turnId, model);
+  }
+  for (const turnId of turns.getLiveTurnIds().slice().reverse()) {
+    const model = models.get(turnId);
+    if (model) return model;
+  }
+  return undefined;
 }
 
 /**

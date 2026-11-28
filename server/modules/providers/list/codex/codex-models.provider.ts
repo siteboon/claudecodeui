@@ -5,7 +5,7 @@ import path from 'node:path';
 import TOML from '@iarna/toml';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { readCodexRolloutLines } from './codex-sessions.provider.js';
+import { readCodexTranscriptModel } from './codex-sessions.provider.js';
 
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
@@ -177,24 +177,12 @@ export class CodexProviderModels implements IProviderModels {
   async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
     if (sessionId) {
       const transcript = sessionsDb.getSessionById(sessionId)?.jsonl_path;
-      let model: string | undefined;
       try {
-        if (transcript) {
-          for await (const line of readCodexRolloutLines(transcript)) {
-            try {
-              const entry = readObjectRecord(JSON.parse(line));
-              if (entry?.type === 'turn_context') {
-                model = readOptionalString(readObjectRecord(entry.payload)?.model) || model;
-              }
-            } catch (error) {
-              if (!(error instanceof SyntaxError)) throw error;
-            }
-          }
-        }
+        const model = transcript ? await readCodexTranscriptModel(transcript) : undefined;
+        if (model) return { model };
       } catch {
-        return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+        // Provider data can change while the transcript is being read.
       }
-      if (model) return { model };
       return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
     }
 

@@ -343,6 +343,7 @@ async function dispatchRun(
     appSessionId: sessionId,
     provider,
     providerSessionId: session.provider_session_id,
+    preparing: true,
     connection: ws,
     userId,
   });

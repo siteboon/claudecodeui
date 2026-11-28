@@ -314,6 +314,9 @@ export function ActionMenu({
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-controls={isOpen ? menuId : undefined}
+        onBlur={(event) => {
+          if (isOpen && !menuRef.current?.contains(event.relatedTarget)) setMenuOpen(false);
+        }}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
           event.preventDefault();

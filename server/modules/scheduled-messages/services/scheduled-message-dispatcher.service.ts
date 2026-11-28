@@ -160,7 +160,15 @@ export async function dispatchDueScheduledMessages(
 ): Promise<number> {
   // Claimed before any of them runs, so a long turn cannot let the next poll
   // pick the same message up again.
-  const due = scheduledMessagesDb.claimDue(now, sessionsSending);
+  const isPreparing = (sessionId: string): boolean => {
+    const run = chatRunRegistry.getRun(sessionId);
+    return run?.status === 'running' && run.execution !== 'running';
+  };
+  const waitingSessions = new Set(sessionsSending);
+  for (const { sessionId } of chatRunRegistry.listRunningRuns()) {
+    if (isPreparing(sessionId)) waitingSessions.add(sessionId);
+  }
+  const due = scheduledMessagesDb.claimDue(now, waitingSessions);
   if (due.length === 0) {
     return 0;
   }
@@ -187,7 +195,7 @@ export async function dispatchDueScheduledMessages(
       while (row) {
         await sendClaimedMessage(row, runtime);
         sent += 1;
-        row = scheduledMessagesDb.claimNextDue(sessionId, now);
+        row = isPreparing(sessionId) ? null : scheduledMessagesDb.claimNextDue(sessionId, now);
         if (row) announceScheduledMessagesChanged(sessionId);
       }
     } catch (error) {
