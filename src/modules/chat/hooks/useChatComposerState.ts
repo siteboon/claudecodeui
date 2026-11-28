@@ -10,6 +10,7 @@ import type {
   TouchEvent,
 } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { fromEvent as defaultGetFilesFromEvent } from 'file-selector';
 import { useTranslation } from 'react-i18next';
 
 import { api, ApiRequestError } from '@/shared/api';
@@ -362,6 +363,10 @@ export function useChatComposerState({
    * Writes one scope's bucket. The scope is explicit because a send's cleanup
    * can settle after the user has opened another chat.
    */
+  // Scope captured when a drag starts, before react-dropzone resolves files.
+  const dropScopeRef = useRef<string | null>(null);
+  const attachmentBucketsRef = useRef(attachmentBuckets);
+  attachmentBucketsRef.current = attachmentBuckets;
   const updateAttachmentBucket = useCallback((
     scope: string | null,
     update: (bucket: ComposerAttachmentBucket) => ComposerAttachmentBucket,
@@ -771,10 +776,11 @@ export function useChatComposerState({
   // Picker, drag-and-drop and paste all come through here, so the size and count
   // limits are checked in one place and every refused file is reported. Each
   // attempt replaces the notice, so it always describes the latest one.
-  const handleAttachmentFiles = useCallback((files: File[]) => {
+  const handleAttachmentFiles = useCallback((files: File[], targetScope = draftScopeRef.current) => {
     const accepted: File[] = [];
     const rejections: AttachmentRejection[] = [];
-    let freeSlots = Math.max(0, MAX_CHAT_ATTACHMENT_COUNT - attachedFiles.length);
+    const existing = attachmentBucketsRef.current.get(targetScope) ?? EMPTY_ATTACHMENT_BUCKET;
+    let freeSlots = Math.max(0, MAX_CHAT_ATTACHMENT_COUNT - existing.files.length);
 
     files.forEach((file) => {
       if (!file || typeof file !== 'object') {
@@ -794,11 +800,11 @@ export function useChatComposerState({
       accepted.push(file);
     });
 
-    setAttachmentRejections(rejections);
-    if (accepted.length > 0) {
-      setAttachedFiles((previous) => [...previous, ...accepted]);
-    }
-  }, [attachedFiles, setAttachedFiles, setAttachmentRejections]);
+    updateAttachmentBucket(targetScope, (bucket) => ({
+      files: [...bucket.files, ...accepted],
+      rejections,
+    }));
+  }, [updateAttachmentBucket]);
 
   const dismissAttachmentRejections = useCallback(() => {
     setAttachmentRejections([]);
@@ -834,7 +840,14 @@ export function useChatComposerState({
   // before `onDrop` (and `maxFiles` refuses the whole drop, not just the extra
   // files), so `handleAttachmentFiles` applies both limits itself and reports them.
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    onDrop: (acceptedFiles) => handleAttachmentFiles(acceptedFiles),
+    // `getFilesFromEvent` can resolve after the user switches chats. react-dropzone
+    // calls `onDrop` only once it has, so the current scope here is already too
+    // late; capture it from the synchronous getFilesFromEvent hook below.
+    onDrop: (acceptedFiles) => handleAttachmentFiles(acceptedFiles, dropScopeRef.current),
+    getFilesFromEvent: (event) => {
+      dropScopeRef.current = draftScopeRef.current;
+      return defaultGetFilesFromEvent(event);
+    },
     noClick: true,
     noKeyboard: true,
   });
@@ -1553,8 +1566,26 @@ export function useChatComposerState({
       // navigated to. Queued drafts were recorded when they were queued; the
       // consecutive-duplicate check keeps this second call a no-op.
       recordSentMessage(currentInput, targetSessionId);
-      // Attachments are not kept per chat, so only the ones just sent go.
+      // Only the files this send uploaded leave their bucket. For a new chat the
+      // draft scope changes to the allocated session id while the upload runs;
+      // files attached in that interval were added to the project bucket and
+      // must follow the conversation, not stay behind for the next new chat.
       removeAttachmentsEverywhere(currentAttachments);
+      const promotedScope = submittedScope !== targetSessionId ? submittedScope : null;
+      if (promotedScope) {
+        setAttachmentBuckets((previous) => {
+          const promoted = previous.get(promotedScope);
+          const target = previous.get(targetSessionId) ?? EMPTY_ATTACHMENT_BUCKET;
+          if (!promoted) return previous;
+          const buckets = new Map(previous);
+          buckets.delete(promotedScope);
+          buckets.set(targetSessionId, {
+            files: [...target.files, ...promoted.files],
+            rejections: promoted.rejections.length ? promoted.rejections : target.rejections,
+          });
+          return buckets;
+        });
+      }
       // A brand-new chat moves from its project scope to its allocated session id meanwhile.
       const stillOpen = draftScopeRef.current === submittedScope || draftScopeRef.current === targetSessionId;
       if (!stillOpen) {

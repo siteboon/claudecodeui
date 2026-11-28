@@ -89,9 +89,13 @@ beforeEach(() => {
   assetUploads = 0;
   sent = [];
   vi.stubGlobal('fetch', vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
-    if (String(url) === '/api/assets/files' && init?.method === 'POST') {
+    const target = String(url);
+    if (target === '/api/assets/files' && init?.method === 'POST') {
       assetUploads += 1;
       return Promise.resolve(jsonResponse({ attachments: [{ id: 'asset-a' }] }));
+    }
+    if (target.includes('/api/providers/sessions') && init?.method === 'POST') {
+      return Promise.resolve(jsonResponse({ data: { sessionId: 'new-session', sessionName: '' } }));
     }
     return Promise.resolve(jsonResponse([]));
   }));
@@ -153,4 +157,20 @@ test('an attach refusal notice stays with the chat whose attempt produced it', a
   await switchTo(view, SESSION_A);
   assert.deepEqual(view.result.current.attachmentRejections, [{ fileName: 'huge.png', reason: 'too-large' }]);
   assert.deepEqual(view.result.current.attachedFiles, [], 'and the notice did not leave its image behind');
+});
+
+test('files attached while a new chat is being established follow it into the allocated session', async () => {
+  const view = renderComposer(null);
+  await act(async () => { view.result.current.setInput('first message'); });
+  pasteImage(view, new File(['png'], 'sent.png', { type: 'image/png' }));
+  const pending = submit(view);
+  pasteImage(view, new File(['png'], 'late.png', { type: 'image/png' }));
+  await act(async () => { await pending; });
+
+  const established = await act(async () => {
+    await view.rerender({ session: { id: 'new-session' } });
+    return view.result.current.attachedFiles.map((file) => file.name);
+  });
+  assert.deepEqual(established, [], 'no file is left in a fresh session bucket unexpectedly');
+  assert.deepEqual(sent.map((message) => message.sessionId), ['new-session']);
 });
