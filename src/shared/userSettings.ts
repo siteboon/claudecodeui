@@ -28,6 +28,8 @@ export type UserPreferences = {
   codeEditorSettings: unknown;
   uiPreferences: unknown;
   selectedProvider: string;
+  /** Per-provider model/effort a new session starts with; absent means the provider default. */
+  chatDefaults: unknown;
 };
 
 export type UserPreferenceKey = keyof UserPreferences;
@@ -67,6 +69,8 @@ const LEGACY_STORAGE_KEYS: Record<UserPreferenceKey, string> = {
   codeEditorSettings: '',
   uiPreferences: 'uiPreferences',
   selectedProvider: 'selected-provider',
+  // New in this module: there is no pre-existing localStorage key to migrate.
+  chatDefaults: '',
 };
 
 const PREFERENCE_KEYS = Object.keys(LEGACY_STORAGE_KEYS) as UserPreferenceKey[];

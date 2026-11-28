@@ -5,7 +5,8 @@
     "permissions": "权限",
     "mcpServers": "MCP 服务器",
     "skills": "技能",
-    "appearance": "外观"
+    "appearance": "外观",
+    "defaults": "默认"
   },
   "account": {
     "title": "账户",
@@ -224,6 +225,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "聊天布局",
+      "label": "简洁模式",
+      "description": "隐藏聊天顶部栏，只保留小悬浮输入框。"
+    },
     "darkMode": {
       "label": "深色模式",
       "description": "切换浅色和深色主题"
@@ -512,7 +518,20 @@
       "button": "登录",
       "reLoginButton": "重新登录"
     },
-    "error": "错误：{{error}}"
+    "error": "错误：{{error}}",
+    "defaults": {
+      "title": "新会话默认设置",
+      "description": "设置新会话启动时使用的模型和思考强度。已有会话保留各自的选择。",
+      "model": "默认模型",
+      "modelDescription": "新建会话且未指定模型时使用。",
+      "followProviderDefault": "跟随 Provider 默认",
+      "effort": "默认思考强度",
+      "effortDescription": "强度越高，模型回答前思考得越久。",
+      "followModelDefault": "跟随模型默认",
+      "loading": "加载中…",
+      "noEffortSupport": "此 Provider 不支持",
+      "loadError": "无法加载该 Provider 的模型，请重新打开设置重试。"
+    }
   },
   "permissions": {
     "title": "权限设置",

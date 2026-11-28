@@ -295,6 +295,56 @@ test('a run settling just before the dispatcher closes does not send', async () 
   });
 });
 
+test('the queue waits for messages that come due during preparation and the following scheduled turn', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+  await withIsolatedDatabase(async (userId) => {
+    const preparing = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID, provider: 'claude', providerSessionId: null,
+      connection: null, userId, preparing: true,
+    });
+    assert.ok(preparing);
+    for (const [content, offset] of [['due during preparation', -1_000], ['due during first send', 1_000]] as const) {
+      scheduledMessagesService.schedule({
+        userId, sessionId: SESSION_ID, content,
+        scheduledFor: new Date(Date.now() + offset).toISOString(),
+      });
+    }
+    sessionDraftsDb.saveDraft(userId, SESSION_ID, { text: '', queuedMessage: { content: 'queued later' } });
+    const started: string[] = [];
+    const aborts: string[] = [];
+    const first = holdFirstRun();
+    const runtime = {
+      ...(createRuntime([], 'ok', aborts) as object),
+      run: (_provider: string, command: string) => {
+        started.push(command);
+        return command === 'due during preparation' ? first.run() : Promise.resolve();
+      },
+    } as never;
+
+    initializeScheduledMessageDispatcher(runtime);
+    try {
+      await settle();
+      assert.deepEqual(started, []);
+      preparing.writer.sendComplete({ exitCode: 0, aborted: true });
+      for (let i = 0; i < 50 && started.length === 0; i += 1) await settle();
+      assert.deepEqual(started, ['due during preparation']);
+
+      t.mock.timers.tick(1_000);
+      await runDispatchPass(runtime);
+      assert.deepEqual(started, ['due during preparation']);
+      first.release();
+
+      for (let i = 0; i < 50 && started.length < 3; i += 1) await settle();
+      assert.deepEqual(started, ['due during preparation', 'due during first send', 'queued later']);
+      assert.deepEqual(aborts, []);
+    } finally {
+      closeScheduledMessageDispatcher();
+      first.release();
+      await settle();
+    }
+  });
+});
+
 test('a queued turn waits for the due messages of its session instead of being interrupted by them', async () => {
   await withIsolatedDatabase(async (userId) => {
     for (const [content, ageMs] of [['due first', 120_000], ['due second', 60_000]] as const) {

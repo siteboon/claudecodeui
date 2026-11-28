@@ -159,6 +159,8 @@ function ChatInterface({
     currentProviderEffortOptions,
     currentProviderModel,
     currentProviderModelOptions,
+    sessionHasModelSelection,
+    sessionHasEffortSelection,
     permissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
@@ -247,6 +249,7 @@ function ChatInterface({
   const {
     input,
     setInput,
+    submitDraftAction,
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,
@@ -310,6 +313,8 @@ function ChatInterface({
     cyclePermissionMode,
     currentProviderModel,
     currentProviderEffort,
+    sessionHasModelSelection,
+    sessionHasEffortSelection,
     isLoading: isProcessing,
     processingSessions,
     canAbortSession,
@@ -434,18 +439,17 @@ function ChatInterface({
    * the box as a send would — the message has left the composer either way.
    */
   const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
-    const content = input.trim();
-    if (!content) return;
-
-    const scheduled = await scheduleMessage({
+    await submitDraftAction(async (content) => Boolean(await scheduleMessage({
       content,
       scheduledFor,
-      options: { model: currentProviderModel, effort: currentProviderEffort, permissionMode },
-    });
-    if (scheduled) {
-      setInput('');
-    }
-  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, setInput]);
+      options: {
+        ...(sessionHasModelSelection && { model: currentProviderModel }),
+        ...(sessionHasEffortSelection && { effort: currentProviderEffort }),
+        explicitModelAndEffort: true,
+        permissionMode,
+      },
+    })));
+  }, [currentProviderEffort, currentProviderModel, permissionMode, scheduleMessage, sessionHasEffortSelection, sessionHasModelSelection, submitDraftAction]);
 
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,

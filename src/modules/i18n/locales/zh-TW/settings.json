@@ -4,7 +4,8 @@
     "account": "帳戶",
     "permissions": "權限",
     "mcpServers": "MCP 伺服器",
-    "appearance": "外觀"
+    "appearance": "外觀",
+    "defaults": "預設"
   },
   "account": {
     "title": "帳戶",
@@ -198,6 +199,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "聊天版面",
+      "label": "精簡模式",
+      "description": "隱藏聊天頂部列，僅保留小巧的懸浮輸入框。"
+    },
     "darkMode": {
       "label": "深色模式",
       "description": "切換淺色和深色佈景主題"
@@ -448,7 +454,20 @@
       "button": "登入",
       "reLoginButton": "重新登入"
     },
-    "error": "錯誤：{{error}}"
+    "error": "錯誤：{{error}}",
+    "defaults": {
+      "title": "新工作階段預設值",
+      "description": "設定新工作階段啟動時使用的模型與思考強度。既有工作階段會保留各自的選擇。",
+      "model": "預設模型",
+      "modelDescription": "建立新工作階段且未指定模型時使用。",
+      "followProviderDefault": "跟隨 Provider 預設",
+      "effort": "預設思考強度",
+      "effortDescription": "強度越高，模型回答前思考得越久。",
+      "followModelDefault": "跟隨模型預設",
+      "loading": "載入中…",
+      "noEffortSupport": "此 Provider 不支援",
+      "loadError": "無法載入此 Provider 的模型，請重新開啟設定重試。"
+    }
   },
   "permissions": {
     "title": "權限設定",

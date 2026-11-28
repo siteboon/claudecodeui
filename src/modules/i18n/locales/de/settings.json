@@ -4,7 +4,8 @@
     "account": "Konto",
     "permissions": "Berechtigungen",
     "mcpServers": "MCP-Server",
-    "appearance": "Darstellung"
+    "appearance": "Darstellung",
+    "defaults": "Standardwerte"
   },
   "account": {
     "title": "Konto",
@@ -197,6 +198,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Chat-Layout",
+      "label": "Kompaktmodus",
+      "description": "Chat-Kopfzeile ausblenden und nur ein kleines schwebendes Eingabefeld behalten."
+    },
     "darkMode": {
       "label": "Darkmode",
       "description": "Zwischen hellem und dunklem Design wechseln"
@@ -447,7 +453,20 @@
       "button": "Anmelden",
       "reLoginButton": "Erneut anmelden"
     },
-    "error": "Fehler: {{error}}"
+    "error": "Fehler: {{error}}",
+    "defaults": {
+      "title": "Standardwerte für neue Sitzungen",
+      "description": "Wähle Modell und Denkaufwand für neue Sitzungen. Bestehende Sitzungen behalten ihre eigene Wahl.",
+      "model": "Standardmodell",
+      "modelDescription": "Wird verwendet, wenn eine neue Sitzung ohne Modellauswahl erstellt wird.",
+      "followProviderDefault": "Anbieter-Standard",
+      "effort": "Standard-Denkaufwand",
+      "effortDescription": "Höherer Aufwand lässt das Modell vor der Antwort länger nachdenken.",
+      "followModelDefault": "Modell-Standard",
+      "loading": "Wird geladen…",
+      "noEffortSupport": "Von diesem Anbieter nicht unterstützt",
+      "loadError": "Die Modelle des Anbieters konnten nicht geladen werden. Öffne die Einstellungen erneut."
+    }
   },
   "permissions": {
     "title": "Berechtigungseinstellungen",

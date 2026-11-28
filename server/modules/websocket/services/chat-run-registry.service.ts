@@ -28,6 +28,7 @@ type ChatRun = {
   provider: LLMProvider;
   providerSessionId: string | null;
   status: ChatRunStatus;
+  execution: 'preparing' | 'cancelled' | 'running';
   lastSeq: number;
   events: NormalizedMessage[];
   writer: ChatSessionWriter;
@@ -227,6 +228,8 @@ export const chatRunRegistry = {
     appSessionId: string;
     provider: LLMProvider;
     providerSessionId: string | null;
+    /** Chat dispatch may still need to read its model or rewind history before starting. */
+    preparing?: boolean;
     /**
      * The socket that asked for this run, or `null` for one nobody is watching
      * — a scheduled message fires with no browser attached. The writer's event
@@ -246,6 +249,7 @@ export const chatRunRegistry = {
       provider: input.provider,
       providerSessionId: input.providerSessionId,
       status: 'running',
+      execution: input.preparing ? 'preparing' : 'running',
       lastSeq: 0,
       events: [],
       writer: null as unknown as ChatSessionWriter,

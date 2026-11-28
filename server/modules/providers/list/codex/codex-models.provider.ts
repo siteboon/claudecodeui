@@ -4,6 +4,9 @@ import path from 'node:path';
 
 import TOML from '@iarna/toml';
 
+import { sessionsDb } from '@/modules/database/index.js';
+import { readCodexTranscriptModel } from './codex-sessions.provider.js';
+
 import type { IProviderModels } from '@/shared/interfaces.js';
 import type {
   ProviderCurrentActiveModel,
@@ -171,7 +174,18 @@ export class CodexProviderModels implements IProviderModels {
     return CODEX_PREDEFINED_MODELS;
   }
 
-  async getCurrentActiveModel(): Promise<ProviderCurrentActiveModel> {
+  async getCurrentActiveModel(sessionId?: string): Promise<ProviderCurrentActiveModel> {
+    if (sessionId) {
+      const transcript = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+      try {
+        const model = transcript ? await readCodexTranscriptModel(transcript) : undefined;
+        if (model) return { model };
+      } catch {
+        // Provider data can change while the transcript is being read.
+      }
+      return buildDefaultProviderCurrentActiveModel(await this.getSupportedModels());
+    }
+
     try {
       const raw = await readFile(CODEX_CONFIG_PATH, 'utf8');
       const parsed = readObjectRecord(TOML.parse(raw));

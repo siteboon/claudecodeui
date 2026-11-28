@@ -156,11 +156,27 @@ async function sendClaimedMessage(
  */
 export async function dispatchDueScheduledMessages(
   runtime: ProviderRuntimeGateway,
-  now: Date = new Date(),
+  now?: Date,
+  onlySessionId?: string,
 ): Promise<number> {
   // Claimed before any of them runs, so a long turn cannot let the next poll
   // pick the same message up again.
-  const due = scheduledMessagesDb.claimDue(now, sessionsSending);
+  const isPreparing = (sessionId: string): boolean => {
+    const run = chatRunRegistry.getRun(sessionId);
+    return run?.status === 'running' && run.execution !== 'running';
+  };
+  let due: ScheduledMessageRow[];
+  if (onlySessionId) {
+    if (sessionsSending.has(onlySessionId) || isPreparing(onlySessionId)) return 0;
+    const first = scheduledMessagesDb.claimNextDue(onlySessionId, now ?? new Date());
+    due = first ? [first] : [];
+  } else {
+    const waitingSessions = new Set(sessionsSending);
+    for (const { sessionId } of chatRunRegistry.listRunningRuns()) {
+      if (isPreparing(sessionId)) waitingSessions.add(sessionId);
+    }
+    due = scheduledMessagesDb.claimDue(now ?? new Date(), waitingSessions);
+  }
   if (due.length === 0) {
     return 0;
   }
@@ -172,11 +188,9 @@ export async function dispatchDueScheduledMessages(
   }
 
   // Sessions side by side, since a turn can stay open a long time (see
-  // runDispatchPass). A session's rows that were due at `now` go one after
-  // another in this pass, each claimed only when the earlier send ends, so
-  // none is recorded as sent while it still waits and no poll gap opens
-  // between them. A turn the user starts meanwhile is still interrupted, as
-  // any scheduled send interrupts the active run.
+  // runDispatchPass). Claim the next row when the current send ends. The
+  // current time includes messages that became due during that send, so
+  // they keep their place ahead of the queued turn.
   // shortcut: a session's next row waits for the whole earlier send, background work included (the runtime ends that hold after 30 idle minutes); interrupt instead if timeliness matters more.
   let sent = 0;
   await Promise.all(due.map(async (first) => {
@@ -187,7 +201,7 @@ export async function dispatchDueScheduledMessages(
       while (row) {
         await sendClaimedMessage(row, runtime);
         sent += 1;
-        row = scheduledMessagesDb.claimNextDue(sessionId, now);
+        row = isPreparing(sessionId) ? null : scheduledMessagesDb.claimNextDue(sessionId, now ?? new Date());
         if (row) announceScheduledMessagesChanged(sessionId);
       }
     } catch (error) {
@@ -258,10 +272,10 @@ export function initializeScheduledMessageDispatcher(runtime: ProviderRuntimeGat
   // the settled session, so several runs ending together do not each rescan
   // every queued turn.
   unsubscribeRunSettled = onRunSettled((appSessionId) => {
-    void dispatchQueuedMessages(runtime, appSessionId).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error('[ScheduledMessages] Run-settled dispatch failed', { error: message });
-    });
+    // A due message held during preparation takes its place before the queue.
+    // Claiming it synchronously reserves this session for the scheduled sends.
+    void dispatchDueScheduledMessages(runtime, undefined, appSessionId).catch(logPassFailure);
+    void dispatchQueuedMessages(runtime, appSessionId).catch(logPassFailure);
   });
 
   // Catch up on anything that came due while the server was not running.

@@ -5,7 +5,8 @@
     "permissions": "Permissions",
     "mcpServers": "MCP Servers",
     "skills": "Skills",
-    "appearance": "Appearance"
+    "appearance": "Appearance",
+    "defaults": "Defaults"
   },
   "account": {
     "title": "Account",
@@ -224,6 +225,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Chat layout",
+      "label": "Compact mode",
+      "description": "Hide the chat header and keep a small floating composer."
+    },
     "darkMode": {
       "label": "Dark Mode",
       "description": "Toggle between light and dark themes"
@@ -512,7 +518,20 @@
       "button": "Login",
       "reLoginButton": "Re-login"
     },
-    "error": "Error: {{error}}"
+    "error": "Error: {{error}}",
+    "defaults": {
+      "title": "New session defaults",
+      "description": "Choose the model and reasoning effort a new session starts with. Existing sessions keep their own choice.",
+      "model": "Default model",
+      "modelDescription": "Used when a new session is created without picking a model.",
+      "followProviderDefault": "Provider default",
+      "effort": "Default reasoning effort",
+      "effortDescription": "Higher effort makes the model think longer before answering.",
+      "followModelDefault": "Model default",
+      "loading": "Loading…",
+      "noEffortSupport": "Not supported by this provider",
+      "loadError": "Could not load this provider's models. Reopen settings to retry."
+    }
   },
   "permissions": {
     "title": "Permission Settings",

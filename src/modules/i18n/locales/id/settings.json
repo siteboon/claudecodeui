@@ -5,7 +5,8 @@
     "permissions": "Izin",
     "mcpServers": "Server MCP",
     "skills": "Skills",
-    "appearance": "Tampilan"
+    "appearance": "Tampilan",
+    "defaults": "Default"
   },
   "account": {
     "title": "Akun",
@@ -223,6 +224,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Tata letak obrolan",
+      "label": "Mode ringkas",
+      "description": "Sembunyikan header obrolan dan tampilkan kotak input mengambang yang ringkas."
+    },
     "darkMode": {
       "label": "Mode Gelap",
       "description": "Beralih antara tema terang dan gelap"
@@ -493,7 +499,20 @@
       "button": "Masuk",
       "reLoginButton": "Masuk kembali"
     },
-    "error": "Kesalahan: {{error}}"
+    "error": "Kesalahan: {{error}}",
+    "defaults": {
+      "title": "Default sesi baru",
+      "description": "Pilih model dan tingkat penalaran saat sesi baru dimulai. Sesi yang ada mempertahankan pilihannya sendiri.",
+      "model": "Model default",
+      "modelDescription": "Digunakan saat sesi baru dibuat tanpa memilih model.",
+      "followProviderDefault": "Default penyedia",
+      "effort": "Tingkat penalaran default",
+      "effortDescription": "Tingkat lebih tinggi membuat model berpikir lebih lama sebelum menjawab.",
+      "followModelDefault": "Default model",
+      "loading": "Memuat…",
+      "noEffortSupport": "Tidak didukung penyedia ini",
+      "loadError": "Tidak dapat memuat model penyedia. Buka kembali pengaturan."
+    }
   },
   "permissions": {
     "title": "Pengaturan Izin",

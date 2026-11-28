@@ -251,6 +251,32 @@ async function* readCodexRolloutLines(
   }
 }
 
+/** Returns the latest surviving turn's recorded model for the Codex model adapter. */
+export async function readCodexTranscriptModel(filePath: string): Promise<string | undefined> {
+  const turns = createCodexTurnTracker();
+  const models = new Map<string, string>();
+  for await (const line of readCodexRolloutLines(filePath)) {
+    let entry: AnyRecord | null;
+    try {
+      entry = readObjectRecord(JSON.parse(line));
+    } catch {
+      continue;
+    }
+    const payload = readObjectRecord(entry?.payload);
+    if (!payload) continue;
+    turns.observe(entry?.type, payload);
+    if (entry?.type !== 'turn_context') continue;
+    const turnId = turns.getCurrentTurnId();
+    const model = readNonEmptyString(payload.model);
+    if (turnId && model) models.set(turnId, model);
+  }
+  for (const turnId of turns.getLiveTurnIds().slice().reverse()) {
+    const model = models.get(turnId);
+    if (model) return model;
+  }
+  return undefined;
+}
+
 /**
  * Reads the image attachments Codex records on `user_message` events.
  * Turns sent with `local_image` input items land in `local_images` as file

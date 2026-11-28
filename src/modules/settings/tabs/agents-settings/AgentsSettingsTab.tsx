@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, ProviderAuthStatus } from '@/shared/types';
+import type { AgentCategory, AgentContextByProvider, AgentProvider, AgentSettingsProject, ChatDefaultsState, ClaudePermissionsState, CodexPermissionMode, CursorPermissionsState, ProviderAuthStatus } from '@/shared/types';
 import AgentCategoryContentSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryContentSection';
 import AgentCategoryTabsSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryTabsSection';
 import AgentSelectorSection from '@/modules/settings/tabs/agents-settings/sections/AgentSelectorSection';
@@ -16,6 +16,8 @@ type AgentsSettingsTabProps = {
   onCursorPermissionsChange: (value: CursorPermissionsState) => void;
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
+  chatDefaults: ChatDefaultsState;
+  onChatDefaultsChange: (value: ChatDefaultsState) => void;
   projects: AgentSettingsProject[];
 };
 
@@ -29,14 +31,16 @@ export default function AgentsSettingsTab({
   onCursorPermissionsChange,
   codexPermissionMode,
   onCodexPermissionModeChange,
+  chatDefaults,
+  onChatDefaultsChange,
   projects,
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
   const [selectedCategory, setSelectedCategory] = useState<AgentCategory>('account');
   const visibleCategories = useMemo<AgentCategory[]>(() => (
     selectedAgent === 'opencode'
-      ? ['account', 'permissions', 'mcp']
-      : ['account', 'permissions', 'mcp', 'skills']
+      ? ['account', 'defaults', 'permissions', 'mcp']
+      : ['account', 'defaults', 'permissions', 'mcp', 'skills']
   ), [selectedAgent]);
 
   const visibleAgents = useMemo<AgentProvider[]>(() => {
@@ -101,6 +105,8 @@ export default function AgentsSettingsTab({
           onCursorPermissionsChange={onCursorPermissionsChange}
           codexPermissionMode={codexPermissionMode}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
+          chatDefaults={chatDefaults}
+          onChatDefaultsChange={onChatDefaultsChange}
           projects={projects}
         />
       </div>

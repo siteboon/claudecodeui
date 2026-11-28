@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-import type { Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
+import type { ChatDefaultsState, Project, ProjectSession, QuickSettingsTab, SlashCommand } from '@/shared/types';
 
 //----------------- DEPLOYMENT MODE ------------
 
@@ -270,3 +270,39 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
+
+// ---------------------------
+
+//----------------- CHAT DEFAULTS ------------
+
+/**
+ * Coerces the stored `chatDefaults` preference (per-provider default model and
+ * reasoning effort) into the shape the composer and settings page can render.
+ * Malformed entries and unknown providers are dropped, and empty strings count
+ * as unset so the provider's own default applies.
+ */
+export function normalizeChatDefaults(value: unknown): ChatDefaultsState {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  const defaults: ChatDefaultsState = {};
+  for (const [provider, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue;
+    }
+
+    const record = entry as Record<string, unknown>;
+    const model = typeof record.model === 'string' ? record.model.trim() : '';
+    const effort = typeof record.effort === 'string' ? record.effort.trim() : '';
+    if (model || effort) {
+      defaults[provider as keyof ChatDefaultsState] = {
+        ...(model ? { model } : {}),
+        ...(effort ? { effort } : {}),
+      };
+    }
+  }
+  return defaults;
+}
+
+// ---------------------------

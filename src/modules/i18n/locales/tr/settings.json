@@ -5,7 +5,8 @@
     "permissions": "İzinler",
     "mcpServers": "MCP Sunucuları",
     "skills": "Beceriler",
-    "appearance": "Görünüm"
+    "appearance": "Görünüm",
+    "defaults": "Varsayılanlar"
   },
   "account": {
     "title": "Hesap",
@@ -224,6 +225,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Sohbet düzeni",
+      "label": "Kompakt mod",
+      "description": "Sohbet üst bilgisini gizle ve küçük bir kayan giriş kutusu göster."
+    },
     "darkMode": {
       "label": "Koyu Mod",
       "description": "Açık ve koyu temalar arasında geçiş yap"
@@ -512,7 +518,20 @@
       "button": "Giriş Yap",
       "reLoginButton": "Tekrar Giriş Yap"
     },
-    "error": "Hata: {{error}}"
+    "error": "Hata: {{error}}",
+    "defaults": {
+      "title": "Yeni oturum varsayılanları",
+      "description": "Yeni oturumun başlayacağı modeli ve akıl yürütme düzeyini seçin. Mevcut oturumlar kendi seçimlerini korur.",
+      "model": "Varsayılan model",
+      "modelDescription": "Model seçilmeden yeni oturum oluşturulduğunda kullanılır.",
+      "followProviderDefault": "Sağlayıcı varsayılanı",
+      "effort": "Varsayılan akıl yürütme düzeyi",
+      "effortDescription": "Daha yüksek düzey, modelin yanıt vermeden önce daha uzun düşünmesini sağlar.",
+      "followModelDefault": "Model varsayılanı",
+      "loading": "Yükleniyor…",
+      "noEffortSupport": "Bu sağlayıcı tarafından desteklenmiyor",
+      "loadError": "Sağlayıcı modelleri yüklenemedi. Ayarları yeniden açın."
+    }
   },
   "permissions": {
     "title": "İzin Ayarları",

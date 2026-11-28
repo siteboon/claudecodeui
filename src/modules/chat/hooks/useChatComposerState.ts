@@ -54,6 +54,8 @@ type UseChatComposerStateArgs = {
    */
   currentProviderModel: string;
   currentProviderEffort: string;
+  sessionHasModelSelection?: boolean;
+  sessionHasEffortSelection?: boolean;
   isLoading: boolean;
   processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
@@ -244,6 +246,8 @@ export function useChatComposerState({
   resolvePermissionModeForProvider,
   currentProviderModel,
   currentProviderEffort,
+  sessionHasModelSelection = true,
+  sessionHasEffortSelection = true,
   isLoading,
   processingSessions,
   canAbortSession,
@@ -364,12 +368,33 @@ export function useChatComposerState({
     };
   }, []);
 
+  // Keep a separate draft revision for each chat.
+  const inputRevisionRef = useRef(new Map<string | null, number>());
+  const readInputRevision = useCallback((scope = draftScopeRef.current) => inputRevisionRef.current.get(scope) ?? 0, []);
   const setInput = useCallback<Dispatch<SetStateAction<string>>>((next) => {
+    const scope = draftScopeRef.current;
+    inputRevisionRef.current.set(scope, readInputRevision(scope) + 1);
+    if (typeof next === 'string') inputValueRef.current = next;
     setInputState((previous) => ({
-      scope: draftScopeRef.current,
+      scope,
       value: typeof next === 'function' ? next(previous.value) : next,
     }));
-  }, []);
+  }, [readInputRevision]);
+  const submitDraftAction = useCallback(async (action: (text: string) => Promise<boolean>) => {
+    const scope = draftScopeRef.current;
+    const revision = readInputRevision();
+    const text = inputValueRef.current;
+    if (!text.trim() || !(await action(text.trim()))) return;
+
+    if (draftScopeRef.current !== scope) {
+      if (scope && readDraftText(scope) === text) writeDraftText(scope, '');
+      return;
+    }
+    if (readInputRevision() === revision && inputValueRef.current === text) {
+      if (scope) writeDraftText(scope, '');
+      setInput('');
+    }
+  }, [readInputRevision, setInput]);
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
 
@@ -503,10 +528,11 @@ export function useChatComposerState({
 
     // Defer submit to next tick so the command text is reflected in UI before dispatching.
     // The expanded body is the message itself: it skips slash-command interception.
+    // The submit clears the composer only once it takes the body; a refused one
+    // (an in-flight submit, a cancelled background-work dialog, a failed upload)
+    // leaves the body in place so it can be sent again.
     setTimeout(() => {
-      if (handleSubmitRef.current) {
-        handleSubmitRef.current(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
-      }
+      handleSubmitRef.current?.(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
     }, 0);
   }, [addMessage]);
 
@@ -757,8 +783,9 @@ export function useChatComposerState({
     const toolsSettings = getToolsSettings();
 
     return {
-      model: currentProviderModel,
-      effort: currentProviderEffort,
+      ...((!sessionKey || sessionHasModelSelection) && { model: currentProviderModel }),
+      ...((!sessionKey || sessionHasEffortSelection) && { effort: currentProviderEffort }),
+      explicitModelAndEffort: true,
       permissionMode: resolvePermissionModeForProvider(provider, permissionMode),
       toolsSettings,
       skipPermissions: toolsSettings?.skipPermissions || false,
@@ -771,6 +798,9 @@ export function useChatComposerState({
     provider,
     resolvePermissionModeForProvider,
     selectedSession,
+    sessionHasEffortSelection,
+    sessionHasModelSelection,
+    sessionKey,
   ]);
 
   // Read at send time through a ref: the map changes on every poll, and a
@@ -1136,6 +1166,12 @@ export function useChatComposerState({
     [pendingSteers, sessionKey],
   );
 
+  // Every branch below that takes the message — sends it, queues it, steers it,
+  // asks it on the side — clears the composer itself, and only once it has
+  // taken it. A refused submit (a failed upload, a refused session allocation,
+  // a cancelled background-work dialog) returns with the text still in place,
+  // so a caller that pre-filled the composer (a custom command's expanded body)
+  // does not have to clean up after it and cannot lose the body either.
   const submitMessage = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
@@ -1901,6 +1937,7 @@ export function useChatComposerState({
   return {
     input,
     setInput,
+    submitDraftAction,
     editingAnchorId,
     beginEditMessage,
     cancelEditMessage,

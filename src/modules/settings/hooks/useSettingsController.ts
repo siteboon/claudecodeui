@@ -2,17 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useTheme } from '@/shared/context/ThemeContext';
 import { api } from '@/shared/api';
-import { setNotificationSoundEnabled } from '@/shared/utils';
+import { normalizeChatDefaults, setNotificationSoundEnabled } from '@/shared/utils';
 import {
   readCodeEditorSettings,
   writeCodeEditorSettings,
 } from '@/shared/codeEditorSettings';
 import {
   readUserPreference,
+  writeUserPreference,
   writeUserPreferences,
 } from '@/shared/userSettings';
 import { useProviderAuthStatus } from '@/modules/provider-auth';
-import type { AgentProvider, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
+import type { AgentProvider, ChatDefaultsState, ClaudePermissionsState, CodeEditorSettingsState, CodexPermissionMode, CursorPermissionsState, NotificationPreferencesState, ProjectSortOrder, SettingsMainTab } from '@/shared/types';
 
 const DEFAULT_CURSOR_PERMISSIONS: CursorPermissionsState = {
   allowedCommands: [],
@@ -140,6 +141,9 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     createDefaultNotificationPreferences()
   ));
   const [codexPermissionMode, setCodexPermissionMode] = useState<CodexPermissionMode>('default');
+  const [chatDefaults, setChatDefaults] = useState<ChatDefaultsState>(() => (
+    normalizeChatDefaults(readUserPreference<unknown>('chatDefaults', {}))
+  ));
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginProvider, setLoginProvider] = useState<ActiveLoginProvider>('');
@@ -168,6 +172,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
 
       const savedCodexSettings = readUserPreference<CodexSettingsStorage>('codexPermissions', {});
       setCodexPermissionMode(toCodexPermissionMode(savedCodexSettings.permissionMode));
+      setChatDefaults(normalizeChatDefaults(readUserPreference<unknown>('chatDefaults', {})));
 
       try {
         const notificationResponse = await api.settings.notificationPreferences();
@@ -237,6 +242,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
         codexPermissions: {
           permissionMode: codexPermissionMode,
         },
+        chatDefaults,
       });
 
       const notificationResponse = await api.settings.saveNotificationPreferences(
@@ -252,6 +258,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       setSaveStatus('error');
     }
   }, [
+    chatDefaults,
     claudePermissions.allowedTools,
     claudePermissions.disallowedTools,
     claudePermissions.skipPermissions,
@@ -281,6 +288,18 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     },
     [],
   );
+
+  /**
+   * Applies one chat-defaults edit and mirrors it to the preference store right
+   * away. The server write stays debounced inside `writeUserPreference`, but
+   * the mirror is what reopening the dialog reads: leaving it to `saveSettings`
+   * meant a close-and-reopen within the 500 ms debounce loaded the old value
+   * back and cancelled the pending save.
+   */
+  const updateChatDefaults = useCallback((next: ChatDefaultsState) => {
+    setChatDefaults(next);
+    writeUserPreference('chatDefaults', next);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -368,6 +387,8 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
     setNotificationPreferences,
     codexPermissionMode,
     setCodexPermissionMode,
+    chatDefaults,
+    updateChatDefaults,
     providerAuthStatus,
     openLoginForProvider,
     showLoginModal,

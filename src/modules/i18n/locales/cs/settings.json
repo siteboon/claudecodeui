@@ -5,7 +5,8 @@
     "permissions": "Oprávnění",
     "mcpServers": "MCP servery",
     "skills": "Skilly",
-    "appearance": "Vzhled"
+    "appearance": "Vzhled",
+    "defaults": "Výchozí hodnoty"
   },
   "account": {
     "title": "Účet",
@@ -203,6 +204,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "Rozvržení chatu",
+      "label": "Kompaktní režim",
+      "description": "Skrýt záhlaví chatu a ponechat jen malé plovoucí pole pro zadávání."
+    },
     "darkMode": {
       "label": "Tmavý režim",
       "description": "Přepínání mezi světlým a tmavým motivem"
@@ -466,7 +472,20 @@
       "button": "Přihlásit se",
       "reLoginButton": "Přihlásit znovu"
     },
-    "error": "Chyba: {{error}}"
+    "error": "Chyba: {{error}}",
+    "defaults": {
+      "title": "Výchozí hodnoty nových relací",
+      "description": "Zvolte model a úroveň uvažování pro nové relace. Existující relace si ponechají vlastní volbu.",
+      "model": "Výchozí model",
+      "modelDescription": "Použije se, když se nová relace vytvoří bez volby modelu.",
+      "followProviderDefault": "Výchozí hodnota poskytovatele",
+      "effort": "Výchozí úroveň uvažování",
+      "effortDescription": "Vyšší úroveň způsobí, že model před odpovědí přemýšlí déle.",
+      "followModelDefault": "Výchozí hodnota modelu",
+      "loading": "Načítání…",
+      "noEffortSupport": "Tento poskytovatel to nepodporuje",
+      "loadError": "Modely poskytovatele se nepodařilo načíst. Otevřete nastavení znovu."
+    }
   },
   "permissions": {
     "title": "Nastavení oprávnění",

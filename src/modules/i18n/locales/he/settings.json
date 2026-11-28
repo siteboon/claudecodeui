@@ -5,7 +5,8 @@
     "permissions": "הרשאות",
     "mcpServers": "שרתי MCP",
     "skills": "Skills",
-    "appearance": "מראה"
+    "appearance": "מראה",
+    "defaults": "ברירות מחדל"
   },
   "account": {
     "title": "חשבון",
@@ -224,6 +225,11 @@
     }
   },
   "appearanceSettings": {
+    "compactChat": {
+      "section": "פריסת הצ'אט",
+      "label": "מצב קומפקטי",
+      "description": "הסתרת כותרת הצ'אט והשארת תיבת קלט צפה וקטנה."
+    },
     "darkMode": {
       "label": "מצב כהה",
       "description": "מעבר בין ערכת נושא בהירה לכהה"
@@ -507,7 +513,20 @@
       "button": "התחברות",
       "reLoginButton": "התחברות מחדש"
     },
-    "error": "שגיאה: {{error}}"
+    "error": "שגיאה: {{error}}",
+    "defaults": {
+      "title": "ברירות מחדל לשיחה חדשה",
+      "description": "בחרו את הדגם ורמת החשיבה שאיתם תיפתח שיחה חדשה. שיחות קיימות שומרות על הבחירה שלהן.",
+      "model": "דגם ברירת מחדל",
+      "modelDescription": "משמש כשיחה חדשה נוצרת בלי בחירת דגם.",
+      "followProviderDefault": "ברירת המחדל של הספק",
+      "effort": "רמת חשיבה ברירת מחדל",
+      "effortDescription": "רמה גבוהה יותר גורמת לדגם לחשוב יותר לפני המענה.",
+      "followModelDefault": "ברירת המחדל של הדגם",
+      "loading": "טוען…",
+      "noEffortSupport": "לא נתמך על ידי ספק זה",
+      "loadError": "לא ניתן לטעון את הדגמים של הספק. פתחו שוב את ההגדרות כדי לנסות שנית."
+    }
   },
   "permissions": {
     "title": "הגדרות הרשאות",
