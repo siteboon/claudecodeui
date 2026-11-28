@@ -24,7 +24,8 @@
     "git": "源代码管理",
     "tasks": "任务",
     "browser": "浏览器",
-    "computer": "计算机"
+    "computer": "计算机",
+    "views": "工作区视图"
   },
   "status": {
     "loading": "加载中...",
@@ -55,7 +56,9 @@
     "back": "返回",
     "next": "下一步",
     "previous": "上一步",
-    "logout": "退出登录"
+    "logout": "退出登录",
+    "scrollTabsLeft": "向左滚动标签页",
+    "scrollTabsRight": "向右滚动标签页"
   },
   "common": {
     "language": "语言",
@@ -70,7 +73,10 @@
     "version": "版本",
     "select": "选择",
     "selectAll": "全选",
-    "deselectAll": "取消全选"
+    "deselectAll": "取消全选",
+    "cancel": "取消",
+    "done": "完成",
+    "failed": "失败"
   },
   "time": {
     "justNow": "刚刚",
@@ -97,7 +103,9 @@
     "createProjectDesktop": "点击侧边栏中的文件夹图标以创建新项目",
     "newSession": "新会话",
     "untitledSession": "未命名会话",
-    "projectFiles": "项目文件"
+    "projectFiles": "项目文件",
+    "renameSessionHint": "{{title}}（双击重命名）",
+    "renameSessionLabel": "会话标题"
   },
   "fileTree": {
     "loading": "正在加载文件...",
@@ -113,6 +121,7 @@
     "permissions": "权限",
     "noFilesFound": "未找到文件",
     "checkProjectPath": "检查项目路径是否可访问",
+    "loadFailed": "无法加载文件",
     "noMatchesFound": "未找到匹配项",
     "tryDifferentSearch": "尝试不同的搜索词或清除搜索",
     "justNow": "刚刚",
@@ -134,7 +143,37 @@
       "refresh": "刷新",
       "menuLabel": "文件上下文菜单",
       "loading": "加载中..."
-    }
+    },
+    "uploadToFolder": "上传文件到“{{folder}}”",
+    "dropToUploadTo": "将文件拖到此处，上传至“{{folder}}”",
+    "dropToUpload": "将文件拖到此处上传",
+    "delete": {
+      "title": "确认删除",
+      "folderWarning": "此文件夹及其所有内容将被永久删除。",
+      "fileWarning": "此文件将被永久删除。",
+      "confirm": "删除"
+    },
+    "uploadingFiles": "正在上传文件",
+    "uploadComplete": "上传完成",
+    "uploadFailed": "上传失败",
+    "uploadedCount": "已上传 {{uploaded}} 个文件，共 {{total}} 个",
+    "validation": {
+      "emptyName": "文件名不能为空",
+      "invalidChars": "文件名包含无效字符",
+      "reserved": "此文件名为系统保留名称",
+      "dotsOnly": "文件名不能仅由点组成"
+    },
+    "toast": {
+      "renamed": "重命名成功",
+      "folderDeleted": "文件夹已删除",
+      "fileDeleted": "文件已删除",
+      "fileCreated": "文件创建成功",
+      "folderCreated": "文件夹创建成功",
+      "pathCopied": "路径已复制到剪贴板",
+      "copyFailed": "路径复制失败",
+      "folderDownloaded": "文件夹已打包为 ZIP 并下载"
+    },
+    "uploadFiles": "上传文件（每个文件不超过 {{size}}）"
   },
   "projectWizard": {
     "title": "创建新项目",
@@ -268,6 +307,129 @@
       "updateAvailable": "有可用更新",
       "closeSidebar": "关闭侧边栏",
       "resizeSidebar": "调整侧边栏宽度"
-    }
-  }
+    },
+    "startingUpdate": "正在启动更新...",
+    "updateStartedRestarting": "更新已启动，服务器似乎正在重启以应用更新。",
+    "unexpectedResponse": "更新接口返回了异常响应（HTTP {{status}}）。请使用下方命令手动更新。",
+    "connectionInterrupted": "与服务器的连接已中断，服务器可能正在重启以应用更新。",
+    "unknownError": "未知错误",
+    "refreshNow": "正在刷新窗口...",
+    "refreshIn_one": "窗口将在 {{count}} 秒后刷新。如果更新未生效，请重启运行环境。",
+    "refreshIn_other": "窗口将在 {{count}} 秒后刷新。如果更新未生效，请重启运行环境。"
+  },
+  "commandPalette": {
+    "title": "命令面板",
+    "pages": {
+      "actions": "操作",
+      "files": "文件",
+      "sessions": "会话",
+      "commits": "提交",
+      "branches": "分支"
+    },
+    "backToAll": "返回全部",
+    "backspaceHint": "按 Backspace 返回",
+    "searchPage": "搜索{{page}}…",
+    "searchAnything": "输入内容以搜索…",
+    "noResults": "无搜索结果",
+    "groupActions": "操作",
+    "groupNavigate": "导航",
+    "groupGit": "Git",
+    "groupSettings": "设置",
+    "groupSessions": "会话",
+    "groupFiles": "文件",
+    "groupCommits": "提交",
+    "groupBranches": "分支",
+    "startNewChat": "发起新对话",
+    "selectProjectFirst": "请先选择项目",
+    "openSettings": "打开设置",
+    "toggleTheme": "切换主题",
+    "navChat": "前往聊天",
+    "navFiles": "前往文件",
+    "navShell": "前往终端",
+    "navGit": "前往 Git",
+    "navTasks": "前往任务",
+    "gitFetch": "Git：获取",
+    "gitPull": "Git：拉取",
+    "gitPush": "Git：推送",
+    "settingsItem": "设置：{{label}}",
+    "browseAllSessions": "浏览全部会话（{{count}}）",
+    "browseAllFiles": "浏览全部文件（{{count}}）",
+    "browseAllCommits": "浏览全部提交（{{count}}）",
+    "browseAllBranches": "浏览全部分支（{{count}}）",
+    "switchTo": "切换到：{{name}}"
+  },
+  "folderBrowser": {
+    "title": "选择文件夹",
+    "hideHidden": "不显示隐藏文件夹",
+    "showHidden": "显示隐藏文件夹",
+    "createNew": "新建文件夹",
+    "newFolderPlaceholder": "新文件夹名称",
+    "create": "创建",
+    "loadFailed": "加载文件夹失败",
+    "createFailed": "创建文件夹失败",
+    "noSubfolders": "未找到子文件夹",
+    "select": "选择",
+    "pathLabel": "路径：",
+    "useThisFolder": "使用此文件夹"
+  },
+  "misc": {
+    "errorTitle": "出了点问题",
+    "errorDescription": "加载聊天界面时出错。",
+    "errorDetails": "错误详情",
+    "tryAgain": "重试",
+    "projectFallback": "项目",
+    "openMenu": "打开菜单",
+    "noProjectSelected": "未选择项目",
+    "projectRequiredForShell": "请先选择项目再打开终端",
+    "completedBadge": "（已完成）",
+    "close": "关闭",
+    "hideToken": "隐藏令牌",
+    "showToken": "显示令牌",
+    "unknownProvider": "未知",
+    "browseFolders": "浏览文件夹",
+    "closeLoginModal": "关闭登录对话框",
+    "pluginLoadFailed": "插件加载失败：{{error}}"
+  },
+  "workflow": {
+    "title": "工作流",
+    "status": {
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "stopped": "无结果"
+    },
+    "stoppedHint": "本次运行已结束，但此工作流尚未返回结果",
+    "phases": "阶段",
+    "agents": "智能体",
+    "agentsFinished_one": "{{count}} 个智能体中已有 {{finished}} 个完成",
+    "agentsFinished_other": "{{count}} 个智能体中已有 {{finished}} 个完成",
+    "agentsFailed": "{{count}} 个失败",
+    "agentsProgress_one": "{{finished}}/{{count}} 个智能体",
+    "agentsProgress_other": "{{finished}}/{{count}} 个智能体",
+    "agentStatus": {
+      "queued": "排队中",
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "stopped": "无结果"
+    },
+    "agentTokens": "{{tokens}} 个 Token",
+    "agentToolCalls_one": "{{count}} 次工具调用",
+    "agentToolCalls_other": "{{count}} 次工具调用",
+    "agentTimelineLoading": "正在读取智能体的执行步骤…",
+    "agentTimelineEmpty": "暂无记录",
+    "agentTimelineUnavailable": "无法获取执行步骤：{{reason}}",
+    "usage": "{{toolUses}} 次工具调用 · {{elapsed}}",
+    "currentAgent": "当前：{{label}}",
+    "result": "结果",
+    "script": "脚本",
+    "backgroundTasks": "后台任务",
+    "backgroundAgent": "智能体",
+    "backgroundCommand": "命令",
+    "backgroundMonitor": "监视器",
+    "stopTask": "停止",
+    "taskRowNotLoaded": "此任务在本次对话中较早时已启动，点击加载",
+    "taskOfAgent": "由本次会话中的某个智能体启动"
+  },
+  "cancel": "取消"
 }

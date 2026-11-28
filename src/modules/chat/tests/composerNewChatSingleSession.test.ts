@@ -5,7 +5,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
-import type { PermissionMode, Project, ProjectSession } from '@/shared/types';
+import type { PermissionMode, Project, ProjectSession, SessionEstablishedContext } from '@/shared/types';
 
 /**
  * The first message of a brand-new chat allocates its session id with
@@ -50,11 +50,13 @@ const createRequests = (fetchMock: ReturnType<typeof vi.fn>) => fetchMock.mock.c
 const renderComposer = (initialSession: ProjectSession | null) => {
   const sent: Array<{ type: string; sessionId?: string; content?: string }> = [];
   const established: string[] = [];
-  const view = renderHook(({ session }: { session: ProjectSession | null }) =>
+  const contexts: SessionEstablishedContext[] = [];
+  const view = renderHook(({ session, trigger = 0 }: { session: ProjectSession | null; trigger?: number }) =>
     useChatComposerState({
       selectedProject: PROJECT,
       selectedSession: session,
       currentSessionId: session?.id ?? null,
+      newSessionTrigger: trigger,
       provider: 'claude',
       permissionMode: 'default',
       cyclePermissionMode: () => undefined,
@@ -65,14 +67,17 @@ const renderComposer = (initialSession: ProjectSession | null) => {
       canAbortSession: false,
       tokenBudget: null,
       sendMessage: (message) => { sent.push(message as { type: string }); },
-      onSessionEstablished: (sessionId) => { established.push(sessionId); },
+      onSessionEstablished: (sessionId, context) => {
+        established.push(sessionId);
+        contexts.push(context);
+      },
       scrollToBottom: () => undefined,
       addMessage: () => undefined,
       setIsUserScrolledUp: () => undefined,
       setPendingPermissionRequests: () => undefined,
     }),
-  { initialProps: { session: initialSession } });
-  return { view, established, chatSends: () => sent.filter((message) => message.type === 'chat.send') };
+  { initialProps: { session: initialSession, trigger: 0 } as { session: ProjectSession | null; trigger?: number } });
+  return { view, established, contexts, chatSends: () => sent.filter((message) => message.type === 'chat.send') };
 };
 
 const renderNewChat = () => renderComposer(null);
@@ -197,4 +202,18 @@ test('a pending new chat does not hold up a submit in another session', async ()
     [['session-other', 'elsewhere']],
   );
   await releaseCreates();
+});
+
+test('the established session reports the New Session trigger its send started under', async () => {
+  const { view, contexts } = renderNewChat();
+  await act(async () => { view.result.current.setInput('hello'); });
+
+  await act(async () => {
+    void view.result.current.handleSubmit({ preventDefault: () => undefined } as never);
+  });
+  // New Session while the session gateway is still answering.
+  view.rerender({ session: null, trigger: 1 });
+  await releaseCreates();
+
+  assert.equal(contexts[0]?.newSessionTrigger, 0);
 });

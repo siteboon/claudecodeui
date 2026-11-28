@@ -772,10 +772,22 @@
     }
   }
 
-  /* Scale transcript, composer, and status banners with the pane width (80%) instead of a fixed rem cap, keeping some breathing room at the sides. */
+  /* Transcript, composer, and status banners share this width cap. It never drops
+     below the old 54.25rem column, so phones and narrow panes keep using the full
+     width; on wide panes it grows to 80% of the pane to leave room at the sides.
+     The percentage resolves against the containing block, so every element using
+     this class must sit in a box of the same width (see the activity tab wrapper
+     in ChatComposer). */
   .chat-content-width {
     min-width: 0;
-    max-width: 80%;
+    max-width: max(54.25rem, 80%);
+  }
+
+  /* On narrow screens, let chat content use the full width instead of leaving large side margins. */
+  @media (max-width: 768px) {
+    .chat-content-width {
+      max-width: 100%;
+    }
   }
 
   /* Compact mode renders as a bottom floating overlay whose outer shell passes pointer events through while active cards stay opaque and interactive. */

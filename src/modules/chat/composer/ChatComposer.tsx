@@ -387,8 +387,13 @@ export default function ChatComposer({
         </div>
       )}
       {!hasPendingPermissions && (
-        <div className="composer-compact-width pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] chat-content-width -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
-          <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+        // The outer box is inset by the shell's horizontal padding so it matches the
+        // shell's content box. The input below takes its percentage width from that
+        // content box, so the tabs line up with the input's edges at every pane width.
+        <div className="pointer-events-none absolute inset-x-2 bottom-full z-10 translate-y-px bg-transparent sm:inset-x-4">
+          <div className="chat-content-width composer-compact-width mx-auto">
+            <ActivityIndicator activity={activity} onAbort={onAbortSession} isInputFocused={isInputFocused} />
+          </div>
         </div>
       )}
 

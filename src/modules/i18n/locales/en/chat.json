@@ -9,7 +9,9 @@
     "copied": "Message copied",
     "selectFormat": "Select copy format",
     "copyAsMarkdown": "Copy as markdown",
-    "copyAsText": "Copy as text"
+    "copyAsText": "Copy as text",
+    "markdownShort": "MD",
+    "textShort": "TXT"
   },
   "messageTypes": {
     "user": "U",
@@ -220,6 +222,15 @@
       "title": "Replacing an earlier message",
       "filesNotReverted": "files the agent already changed are not reverted",
       "cancel": "Cancel"
+    },
+    "commands": {
+      "help": "Show help documentation for Claude Code",
+      "models": "View available models for the current provider",
+      "clear": "Clear this session's context and keep its history",
+      "cost": "Display token usage information",
+      "memory": "Open CLAUDE.md memory file for editing",
+      "config": "Open settings and configuration",
+      "status": "Show system status and version information"
     }
   },
   "providerSelection": {
