@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -232,6 +233,37 @@ function probeRuntime(): RuntimeProbe {
   }
 
   return readiness;
+}
+
+// Cached "Chrome/<major>" user agent; undefined = not probed yet, null = probe failed.
+let desktopUserAgentCache: string | null | undefined;
+
+/**
+ * Headless Chromium advertises "HeadlessChrome" in its user agent, which makes
+ * sites like Google sign-in refuse the browser ("This browser may not be secure").
+ * Build a regular desktop Chrome user agent from the installed Chromium major version.
+ */
+function getDesktopUserAgent(executablePath: string | null): string | null {
+  if (desktopUserAgentCache !== undefined) {
+    return desktopUserAgentCache;
+  }
+  desktopUserAgentCache = null;
+  if (!executablePath) {
+    return null;
+  }
+  try {
+    const versionOutput = execFileSync(executablePath, ['--version'], { encoding: 'utf8', timeout: 10_000 });
+    const major = versionOutput.match(/(\d+)\.\d+\.\d+\.\d+/)?.[1];
+    if (major) {
+      const platform = process.platform === 'darwin'
+        ? 'Macintosh; Intel Mac OS X 10_15_7'
+        : process.platform === 'win32' ? 'Windows NT 10.0; Win64; x64' : 'X11; Linux x86_64';
+      desktopUserAgentCache = `Mozilla/5.0 (${platform}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+    }
+  } catch {
+    // Keep Playwright's default user agent when the version cannot be read.
+  }
+  return desktopUserAgentCache;
 }
 
 function getRuntimeReadiness(options: { force?: boolean } = {}): RuntimeReadiness {
@@ -604,13 +636,20 @@ export const browserUseService = {
     let browser: any | undefined;
     let context: any | undefined;
     let page: any;
+    // Look like a regular browser rather than an automated one so sign-in flows
+    // (notably Google accounts) do not reject the session.
     const launchOptions = {
       headless: true,
-      args: ['--disable-dev-shm-usage'],
+      // Full Chromium in new headless mode instead of the stripped headless shell.
+      channel: 'chromium',
+      ignoreDefaultArgs: ['--enable-automation'],
+      args: ['--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled'],
     };
+    const desktopUserAgent = getDesktopUserAgent(readiness.chromiumExecutablePath);
     const contextOptions = {
       viewport: { width: 1440, height: 900 },
       serviceWorkers: 'block',
+      ...(desktopUserAgent ? { userAgent: desktopUserAgent } : {}),
     };
 
     if (profileName) {
