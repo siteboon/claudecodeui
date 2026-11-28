@@ -1060,14 +1060,14 @@ export function truncateSessionTitle(
   let end = 0;
   let lastBreak = 0;
 
-  for (const char of normalized) {
-    const charWidth = measureCharTitleWidth(char);
+  for (const { segment } of TITLE_GRAPHEMES.segment(normalized)) {
+    const charWidth = measureTitleGraphemeWidth(segment);
     if (width + charWidth > budget) {
       break;
     }
     width += charWidth;
-    end += char.length;
-    if (TITLE_BREAK_CHARACTER.test(char)) {
+    end += segment.length;
+    if (TITLE_BREAK_CHARACTER.test(segment)) {
       lastBreak = end;
     }
   }
@@ -1109,6 +1109,7 @@ export function normalizeAutoSessionName(rawValue: string | undefined, fallback:
 /** Characters a truncated title may end on, so the ellipsis replaces them rather than following them. */
 const TITLE_BREAK_CHARACTER = /[\s,.:;!?，。：；、！？]/u;
 const TITLE_TRAILING_BREAKS = /[\s,.:;!?，。：；、！？]+$/u;
+const TITLE_GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 /**
  * Reports whether one character renders at double width, which is what makes an
@@ -1132,17 +1133,20 @@ function isWideTitleCharacter(char: string): boolean {
     || (code >= 0xff00 && code <= 0xff60)
     || (code >= 0xffe0 && code <= 0xffe6)
     || (code >= 0x1f300 && code <= 0x1faff)
-    || /\p{Extended_Pictographic}/u.test(char)
+    || (code >= 0x20000 && code <= 0x3fffd)
+    || /[\p{Extended_Pictographic}\p{Regional_Indicator}]/u.test(char)
   );
 }
 
-/** Measures one Unicode scalar's sidebar width (`0` for variation/joiner marks, `2` for wide CJK/emoji, `1` otherwise). */
-function measureCharTitleWidth(char: string): number {
-  const code = char.codePointAt(0) ?? 0;
-  if (code === 0x200d || (code >= 0xfe00 && code <= 0xfe0f)) {
-    return 0;
+/** Measures one visible cluster: combining marks and joined emoji share a display cell. */
+function measureTitleGraphemeWidth(segment: string): number {
+  if (segment.includes('\u20e3')) return 2;
+  let width = 0;
+  for (const char of segment) {
+    if (char === '\u200d' || /\p{Mark}/u.test(char)) continue;
+    width = Math.max(width, isWideTitleCharacter(char) ? 2 : 1);
   }
-  return isWideTitleCharacter(char) ? 2 : 1;
+  return width;
 }
 
 /**
@@ -1154,8 +1158,8 @@ function measureCharTitleWidth(char: string): number {
  */
 export function measureTitleWidth(text: string): number {
   let width = 0;
-  for (const char of text) {
-    width += measureCharTitleWidth(char);
+  for (const { segment } of TITLE_GRAPHEMES.segment(text)) {
+    width += measureTitleGraphemeWidth(segment);
   }
   return width;
 }

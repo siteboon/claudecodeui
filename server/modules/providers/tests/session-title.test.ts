@@ -136,6 +136,7 @@ test('title generation strips mode emojis, quotes, and prefixes without chopping
   assert.equal(seenSettings.length, 1);
   assert.equal(seenSettings[0]?.alwaysThinkingEnabled, false);
   assert.equal(seenSettings[0]?.disableAllHooks, true);
+  assert.equal((seenSettings[0]?.env as Record<string, string>).CLAUDE_CODE_DISABLE_AUTO_MEMORY, '1');
 });
 
 test('a skin-tone modifier leaves with its emoji instead of becoming the title', async () => {

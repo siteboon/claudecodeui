@@ -114,6 +114,7 @@ async function loadSanitizedUserSettings(): Promise<Settings> {
   const base: Settings = {
     alwaysThinkingEnabled: false,
     disableAllHooks: true,
+    env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' },
   };
 
   try {
@@ -129,9 +130,11 @@ async function loadSanitizedUserSettings(): Promise<Settings> {
         result[key] = parsed[key];
       }
     }
+    const allowedSettings = result as Settings;
     return {
-      ...(result as Settings),
+      ...allowedSettings,
       ...base,
+      env: { ...allowedSettings.env, ...base.env },
     };
   } catch {
     return base;
@@ -196,6 +199,7 @@ async function runSdkTitlePrompt({
       allowedTools: [],
       permissionMode: 'dontAsk',
       settingSources: [],
+      env: { ...process.env, CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' },
       settings,
       strictMcpConfig: true,
       maxTurns: 1,

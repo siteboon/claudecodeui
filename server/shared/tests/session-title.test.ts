@@ -72,3 +72,13 @@ test('emoji outside the pictograph blocks still count as double-width', () => {
   // The variation selector that follows it stays zero-width.
   assert.equal(measureTitleWidth('⏱️'), 2);
 });
+
+test('does not split joined emoji or combining accents when truncating a title', () => {
+  assert.equal(measureTitleWidth('👩‍💻🇨🇳1️⃣é'), 7);
+  assert.equal(truncateSessionTitle('一二三四五六👩‍💻 给我检查'), '一二三四五六👩‍💻…');
+});
+
+test('supplementary CJK characters occupy two title-width units', () => {
+  assert.equal(measureTitleWidth('𠮷'.repeat(9)), 18);
+  assert.equal(truncateSessionTitle('𠮷'.repeat(9)), `${'𠮷'.repeat(7)}…`);
+});
