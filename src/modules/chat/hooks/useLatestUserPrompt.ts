@@ -24,19 +24,21 @@ function toChatMessage(message: NormalizedMessage): ChatMessage {
 }
 
 /** 按原始记录的顺序定位边界；同时间戳的后续用户提问不属于当前轮次。 */
-function findPrompt(rows: NormalizedMessage[], beforeTime: number, beforeMessageId?: string, beforeMessage?: NormalizedMessage): ChatMessage | null {
-  const hasExactId = Boolean(beforeMessageId && rows.some((row) => row.id === beforeMessageId));
-  const hasEquivalentRow = !hasExactId && Boolean(beforeMessage?.provider === 'codex'
-    && rows.some((row) => messagesRepresentSamePersistedRow(row, beforeMessage)));
-  // 边界行本身在历史里时，只能从它开始往回找：provider 回退分支会让后面的行带更早的时间戳，
-  // 按时间戳提前放行会选中边界之后的提问。时间戳兜底只留给历史里找不到边界行的情况。
-  let reached = !hasExactId && !hasEquivalentRow
-    && (!beforeMessageId || (rows.length > 0 && new Date(rows[rows.length - 1].timestamp).getTime() < beforeTime));
-  for (let index = rows.length - 1; index >= 0; index -= 1) {
+function findPrompt(rows: NormalizedMessage[], hasMore: boolean, beforeTime: number, beforeMessageId?: string, beforeMessage?: NormalizedMessage): ChatMessage | null {
+  const boundaryIndex = beforeMessageId ? rows.findIndex((row) => row.id === beforeMessageId) : -1;
+  const matchIndex = boundaryIndex < 0 && beforeMessage?.provider === 'codex'
+    ? rows.findIndex((row) => messagesRepresentSamePersistedRow(row, beforeMessage))
+    : boundaryIndex;
+  // A later row can have an earlier timestamp after a provider rewrites a turn.
+  // Only use timestamps once paging proves that the exact boundary is absent.
+  if (beforeMessageId && matchIndex < 0 && hasMore) return null;
+  for (let index = matchIndex >= 0 ? matchIndex : rows.length - 1; index >= 0; index -= 1) {
     const row = rows[index];
-    if (row.id === beforeMessageId || (!hasExactId && beforeMessage?.provider === 'codex' && messagesRepresentSamePersistedRow(row, beforeMessage))) reached = true;
-    if (!reached || row.kind !== 'text' || row.role !== 'user' || row.contextCleared) continue;
-    if (!beforeMessageId && !(new Date(row.timestamp).getTime() <= beforeTime)) continue;
+    if (row.kind !== 'text' || row.role !== 'user' || row.contextCleared) continue;
+    if (matchIndex < 0) {
+      const time = new Date(row.timestamp).getTime();
+      if (!Number.isFinite(time) || time > beforeTime || (beforeMessageId && time === beforeTime)) continue;
+    }
     const prompt = toChatMessage(row);
     const hasPayload = Boolean(prompt.content?.trim() || prompt.images?.length || prompt.files?.length);
     if (hasPayload && isUserPromptMessage(prompt)) return prompt;
@@ -107,7 +109,7 @@ export function useLatestUserPrompt({
   const coversBoundary = sameSession?.rows.some((row) => row.id === beforeMessageId
     || (beforeMessage?.provider === 'codex' && messagesRepresentSamePersistedRow(row, beforeMessage)));
   const current = sameSession && (sameSession.total === totalMessages || coversBoundary) ? sameSession : null;
-  const prompt = current && Number.isFinite(beforeTime) ? findPrompt(current.rows, beforeTime, beforeMessageId, beforeMessage) : null;
+  const prompt = current && Number.isFinite(beforeTime) ? findPrompt(current.rows, current.hasMore, beforeTime, beforeMessageId, beforeMessage) : null;
   const needsPage = !prompt && (!current || current.hasMore);
 
   useEffect(() => {

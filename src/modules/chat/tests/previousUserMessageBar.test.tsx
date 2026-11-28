@@ -154,7 +154,7 @@ describe('the previous user message bar', () => {
     ]);
     // A long turn: the tail page holds only this turn's assistant and tool rows.
     const messages = [assistantMessage('t1'), assistantMessage('t2')];
-    const transcriptPrompt = userMessage('t0', '这一轮开始时我提的问题');
+    const transcriptPrompt = userMessage('t3', '这一轮开始时我提的问题');
     const onReveal = vi.fn();
 
     render(
@@ -162,6 +162,7 @@ describe('the previous user message bar', () => {
         scrollContainerRef={{ current: container }}
         messages={messages}
         latestUserPrompt={transcriptPrompt}
+        latestUserPromptBoundary={{ timestamp: timestampOf('t1') }}
         onReveal={onReveal}
       />,
     );
@@ -253,7 +254,7 @@ describe('the previous user message bar', () => {
     const { rerender } = render(<PreviousUserMessageBar scrollContainerRef={{ current: container }} messages={messages} latestUserPrompt={messages[1]} onViewportChange={onViewportChange} onReveal={() => {}} />);
     expect(screen.queryByTitle('Jump to the previous message you sent')).toBeNull();
     expect(onViewportChange).toHaveBeenCalledWith(timestampOf('t2'), undefined);
-    rerender(<PreviousUserMessageBar scrollContainerRef={{ current: container }} messages={messages} latestUserPrompt={userMessage('t1', '跨页找到的前一条提问')} onReveal={() => {}} />);
+    rerender(<PreviousUserMessageBar scrollContainerRef={{ current: container }} messages={messages} latestUserPrompt={userMessage('t1', '跨页找到的前一条提问')} latestUserPromptBoundary={{ timestamp: timestampOf('t2') }} onReveal={() => {}} />);
     expect(screen.getByTitle('Jump to the previous message you sent').textContent).toContain('跨页找到的前一条提问');
   });
 

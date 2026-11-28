@@ -155,6 +155,7 @@ function ChatInterface({
     loadEarlierMessages,
     revealMessage,
     latestUserPrompt,
+    latestUserPromptBoundary,
     onUserPromptViewportChange,
     revealUserPrompt,
     loadAllMessages,
@@ -509,6 +510,7 @@ function ChatInterface({
           scrollContainerRef={scrollContainerRef}
           messages={chatMessages}
           latestUserPrompt={latestUserPrompt}
+          latestUserPromptBoundary={latestUserPromptBoundary}
           onViewportChange={onUserPromptViewportChange}
           onReveal={revealUserPrompt}
         />

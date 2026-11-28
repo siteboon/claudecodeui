@@ -17,8 +17,9 @@ type PreviousUserMessageBarProps = {
   scrollContainerRef: RefObject<HTMLDivElement>;
   /** 已加载的会话消息；较早的用户提问可能不在当前渲染窗口。 */
   messages: ChatMessage[];
-  /** 按当前阅读位置回读得到的提问，不能晚于顶部首条可读消息。 */
+  /** 回读结果和查找时使用的边界，供阅读位置变化时核对。 */
   latestUserPrompt: ChatMessage | null;
+  latestUserPromptBoundary?: { timestamp: string | null; messageId?: string };
   /** 把阅读边界交给会话 Hook，让跨页回读使用相同的位置。 */
   onViewportChange?: (timestamp: string | null, messageId?: string) => void;
   /**
@@ -85,6 +86,7 @@ export const PreviousUserMessageBar = memo(({
   scrollContainerRef,
   messages,
   latestUserPrompt,
+  latestUserPromptBoundary,
   onViewportChange,
   onReveal,
 }: PreviousUserMessageBarProps) => {
@@ -136,11 +138,9 @@ export const PreviousUserMessageBar = memo(({
     };
   }, [measure, scrollContainerRef]);
 
-  // 回读结果也必须在阅读边界之前，避免异步旧结果或全局最后一条指向后面的内容。
-  const fallback = latestUserPrompt && viewport.timestamp
-    && new Date(latestUserPrompt.timestamp).getTime() <= new Date(viewport.timestamp).getTime()
-    ? latestUserPrompt
-    : null;
+  // 消息顺序可能与时间戳不同。只接受为当前阅读边界查到的结果。
+  const fallback = viewport.timestamp && latestUserPromptBoundary?.timestamp === viewport.timestamp
+    && latestUserPromptBoundary.messageId === viewport.messageId ? latestUserPrompt : null;
   const prompt = viewport.prompt ?? fallback;
   if (!prompt) {
     return null;

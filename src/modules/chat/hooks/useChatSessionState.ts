@@ -1351,6 +1351,7 @@ export function useChatSessionState({
     loadEarlierMessages,
     revealMessage,
     latestUserPrompt,
+    latestUserPromptBoundary: { timestamp: userPromptBeforeTimestamp, messageId: userPromptBeforeId },
     onUserPromptViewportChange,
     revealUserPrompt,
     loadAllMessages,

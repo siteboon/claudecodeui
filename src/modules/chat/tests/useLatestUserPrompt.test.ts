@@ -231,6 +231,23 @@ describe('the latest user prompt peek', () => {
     expect(result.current?.sourceMessageId).toBe('u1');
   });
 
+  it('先找到上一页的边界，再选择消息顺序中位于它之前的提问', async () => {
+    sessionMessages.mockReturnValueOnce(page([
+      row({ id: 'u2', timestamp: '2026-11-26T09:00:00.000Z', content: '后来写入的提问' }),
+    ], true)).mockReturnValueOnce(page([
+      row({ id: 'u1', timestamp: '2026-11-26T12:00:00.000Z', content: '当前轮的提问' }),
+      assistantRow({ id: 'boundary', timestamp: '2026-11-26T11:00:00.000Z' }),
+    ], false));
+
+    const { result } = renderHook(() => useLatestUserPrompt({
+      ...props,
+      beforeMessageId: 'boundary',
+      beforeTimestamp: '2026-11-26T11:00:00.000Z',
+    }));
+    await waitFor(() => expect(result.current?.sourceMessageId).toBe('u1'));
+    expect(sessionMessages).toHaveBeenCalledTimes(2);
+  });
+
   it('names an attachment-only turn', async () => {
     sessionMessages.mockReturnValueOnce(page([
       row({ content: '', files: [{ name: 'spec.pdf' }] }),
