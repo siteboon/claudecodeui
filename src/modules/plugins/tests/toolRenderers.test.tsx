@@ -7,6 +7,8 @@ import { test, vi } from 'vitest';
 import type { Plugin } from '@/shared/types';
 import { findToolRendererPlugin, toolPatternMatches } from '@/modules/plugins/tool-renderers/matchToolRenderer';
 
+// The real workspace barrel pulls in the whole app; the renderer only needs the optional project actions.
+vi.mock('@/modules/project-workspace', () => ({ useOptionalProjectActions: () => null }));
 vi.mock('@/shared/context/ThemeContext', () => ({ useTheme: () => ({ isDarkMode: false }) }));
 vi.mock('@/shared/api', () => ({
   api: { plugins: { asset: vi.fn(async () => ({ ok: false, status: 404 })), rpc: vi.fn() } },
