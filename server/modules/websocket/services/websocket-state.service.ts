@@ -36,10 +36,14 @@ export function broadcastToConnectedClients(payload: string | string[]): void {
   }
 
   connectedClients.forEach((client) => {
-    if (client.readyState === WS_OPEN_STATE) {
+    if (client.readyState !== WS_OPEN_STATE) return;
+    try {
       for (const item of payloads) {
         client.send(item);
       }
+    } catch {
+      // A socket can close after the ready-state check. Other clients and the
+      // triggering operation still need to receive or process the update.
     }
   });
 }

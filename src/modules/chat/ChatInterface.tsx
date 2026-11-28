@@ -94,6 +94,8 @@ function ChatInterface({
   // on every sequenced frame, read whenever a `chat.subscribe` is sent so the
   // server replays only the events this client actually missed.
   const lastSeqRef = useRef(new Map<string, number>());
+  // 序号每轮从零开始，重连时和轮次 ID 一起发送才能续传正确的内容。
+  const lastRunIdRef = useRef(new Map<string, string>());
 
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
@@ -148,6 +150,7 @@ function ChatInterface({
     resetStreamingState,
     statusCheckSentAtRef,
     lastSeqRef,
+    lastRunIdRef,
     sessionStore,
   });
 
@@ -344,9 +347,28 @@ function ChatInterface({
       sessions: [{
         sessionId: selectedSession.id,
         lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
+        runId: lastRunIdRef.current.get(selectedSession.id) ?? null,
       }],
     });
   }, [isActive, requestLatestMessages, selectedProject, selectedSession, sendMessage]);
+
+  // A run the server started on its own (the dispatcher's queued turn, a
+  // scheduled message) streams only to sockets that subscribe while it runs.
+  // Subscribing again attaches this page to that run so the turn arrives live
+  // instead of showing up only after a reload. A new run resets its sequence
+  // counter at 1 on the server, so drop any prior run's cursor first rather
+  // than inheriting its high-water mark and skipping the new run's early replay.
+  const handleSessionRunStarted = useCallback((sessionId: string) => {
+    lastSeqRef.current.delete(sessionId);
+    statusCheckSentAtRef.current.set(sessionId, Date.now());
+    sendMessage({
+      type: 'chat.subscribe',
+      sessions: [{
+        sessionId,
+        lastSeq: 0,
+      }],
+    });
+  }, [sendMessage]);
 
   useChatRealtimeHandlers({
     isActive,
@@ -360,12 +382,14 @@ function ChatInterface({
     streamTimerRef,
     accumulatedStreamRef,
     lastSeqRef,
+    lastRunIdRef,
     statusCheckSentAtRef,
     onSessionProcessing,
     onSessionIdle,
     onSessionBackground,
     getSessionActivity,
     onWebSocketReconnect: handleWebSocketReconnect,
+    requestResubscribe: handleSessionRunStarted,
     requestLatestMessages,
     sessionStore,
     onSteerOutcome: handleSteerOutcome,

@@ -12,7 +12,7 @@ import {
   sideQuestionsService,
 } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
-import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
+import { connectedClients, broadcastToConnectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
   getGlobalImageAssetsDir,
   isImageAttachmentDescriptor,
@@ -269,6 +269,12 @@ async function dispatchRun(
     }
     return { started: false, error: 'A run is already in progress for this session.' };
   }
+
+  // Announce the run to every open tab. A run this page did not send -- the
+  // dispatcher's queued turn, a scheduled message -- otherwise stays invisible
+  // until its first text arrives, which for a slow first token looks like the
+  // session is idle; only a reload (a fresh `chat.subscribed` ack) showed it.
+  broadcastToConnectedClients(JSON.stringify({ kind: 'chat_run_started', sessionId, runId: run.runId }));
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
@@ -768,12 +774,15 @@ function handleChatSubscribe(
       continue;
     }
 
+    const run = chatRunRegistry.getRun(sessionId);
+    const requestedRunId = (target as AnyRecord).runId;
+    // 旧客户端未传 runId，继续按原有游标协议处理。
+    const cursorMatches = requestedRunId === undefined || requestedRunId === run?.runId;
     const lastSeqRaw = (target as AnyRecord).lastSeq;
-    const lastSeq = typeof lastSeqRaw === 'number' && Number.isFinite(lastSeqRaw)
+    const lastSeq = cursorMatches && typeof lastSeqRaw === 'number' && Number.isFinite(lastSeqRaw)
       ? Math.max(0, Math.floor(lastSeqRaw))
       : 0;
 
-    const run = chatRunRegistry.getRun(sessionId);
     const isProcessing = chatRunRegistry.isProcessing(sessionId);
 
     // Future live events for this run should land on the socket that asked —
@@ -794,6 +803,7 @@ function handleChatSubscribe(
       kind: 'chat_subscribed',
       sessionId,
       isProcessing,
+      runId: run?.runId ?? null,
       lastSeq: run?.lastSeq ?? 0,
       pendingPermissions,
       timestamp: new Date().toISOString(),

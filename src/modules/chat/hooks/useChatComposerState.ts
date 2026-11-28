@@ -1545,47 +1545,79 @@ export function useChatComposerState({
 
   // The VPS dispatcher owns sending. While the card is visible, periodically
   // reconcile it with the server, so the UI notices when the server claims it
-  // or another tab adds to it.
+  // or another tab adds to it. Bumped on session changes and unmount so an
+  // in-flight hydration for a prior session cannot overwrite the next one.
+  const reconcileGenerationRef = useRef(0);
+  useEffect(() => {
+    reconcileGenerationRef.current += 1;
+    return () => {
+      reconcileGenerationRef.current += 1;
+    };
+  }, [sessionKey]);
+
+  const reconcileQueuedDraft = useCallback(async () => {
+    const targetSession = sessionKey;
+    if (!targetSession) {
+      return;
+    }
+    const generation = reconcileGenerationRef.current;
+    await hydrateChatDrafts();
+    if (reconcileGenerationRef.current !== generation || sessionKeyRef.current !== targetSession) {
+      return;
+    }
+    if (!readQueuedMessage(targetSession)) {
+      queuedDraftSessionRef.current = targetSession;
+      setQueuedDraft(null);
+      return;
+    }
+    // Another tab may have added to the queued message; the card shows what
+    // will be sent, so it follows the server's copy.
+    const stored = restoreQueuedDraft(targetSession);
+    if (stored) {
+      setQueuedDraft((card) => {
+        if (!card || showsQueuedMessage(card, stored)) {
+          return card;
+        }
+        // This tab's browser files stay with its part of the message, so
+        // editing the card still brings them back into the composer.
+        return extendsQueuedMessage(card, stored) ? { ...stored, attachments: card.attachments } : stored;
+      });
+    }
+  }, [sessionKey]);
+
   useEffect(() => {
     if (!sessionKey || !queuedDraft) {
       return;
     }
-    let cancelled = false;
-    const reconcile = async () => {
-      await hydrateChatDrafts();
-      if (!cancelled && !readQueuedMessage(sessionKey)) {
-        queuedDraftSessionRef.current = sessionKey;
-        setQueuedDraft(null);
-      }
-      // Another tab may have added to the queued message; the card shows what
-      // will be sent, so it follows the server's copy.
-      const stored = cancelled ? null : restoreQueuedDraft(sessionKey);
-      if (stored) {
-        setQueuedDraft((card) => {
-          if (!card || showsQueuedMessage(card, stored)) {
-            return card;
-          }
-          // This tab's browser files stay with its part of the message, so
-          // editing the card still brings them back into the composer.
-          return extendsQueuedMessage(card, stored) ? { ...stored, attachments: card.attachments } : stored;
-        });
-      }
-    };
-    const timer = setInterval(() => void reconcile(), 5_000);
+    const timer = setInterval(() => void reconcileQueuedDraft(), 5_000);
     // A hidden tab's timers are throttled (to about once a minute after a few
     // minutes), so its card can be far behind; catch up as soon as it is shown.
     const reconcileWhenShown = () => {
       if (document.visibilityState === 'visible') {
-        void reconcile();
+        void reconcileQueuedDraft();
       }
     };
     document.addEventListener('visibilitychange', reconcileWhenShown);
     return () => {
-      cancelled = true;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', reconcileWhenShown);
     };
-  }, [queuedDraft, sessionKey]);
+  }, [queuedDraft, sessionKey, reconcileQueuedDraft]);
+
+  // The dispatcher claims the card's message the moment this session's next
+  // turn starts. The five-second poll alone leaves "will send when this
+  // finishes" on screen while the agent is already working on it, so check
+  // once as the session goes busy. The short delay lets the claim land first.
+  const wasBusyForCardRef = useRef(isLoading);
+  useEffect(() => {
+    const wasBusy = wasBusyForCardRef.current;
+    wasBusyForCardRef.current = isLoading;
+    if (wasBusy || !isLoading || !sessionKey) {
+      return;
+    }
+    const timer = setTimeout(() => void reconcileQueuedDraft(), 300);
+    return () => clearTimeout(timer);
+  }, [isLoading, sessionKey, reconcileQueuedDraft]);
 
   // Editing or deleting the card takes the message off the server's queue at
   // once, before the dispatcher's next poll can send it.
