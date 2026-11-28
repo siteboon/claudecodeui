@@ -960,9 +960,14 @@ export function useProjectsState({
    */
   // 根路由的旧会话还在核实时，主区域保持加载态，避免空白输入框误建新会话。
   const [restoreFinished, setRestoreFinished] = useState(false);
-  const isRestoringLastSession = !sessionId && !isNewSessionRoute && !restoreFinished;
+  // 记住恢复请求即将跳转的会话，让加载提示覆盖路由切换和会话绑定之间的间隔。
+  const [restoringSessionId, setRestoringSessionId] = useState<string | null>(null);
+  const isLookingUpLastSession = !sessionId && !isNewSessionRoute && !restoreFinished;
+  const isRestoringLastSession = isLookingUpLastSession || Boolean(
+    restoringSessionId && sessionId === restoringSessionId && selectedSession?.id !== restoringSessionId,
+  );
   useEffect(() => {
-    if (!isRestoringLastSession || isLoadingProjects) {
+    if (!isLookingUpLastSession || isLoadingProjects) {
       return;
     }
 
@@ -1002,13 +1007,21 @@ export function useProjectsState({
         return;
       }
 
+      setRestoringSessionId(lastSession.sessionId);
       navigate(`/session/${lastSession.sessionId}`, { replace: true });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [isLoadingProjects, isRestoringLastSession, navigate]);
+  }, [isLoadingProjects, isLookingUpLastSession, navigate]);
+
+  useEffect(() => {
+    if (restoringSessionId && !isLookingUpLastSession
+      && (sessionId !== restoringSessionId || selectedSession?.id === restoringSessionId)) {
+      setRestoringSessionId(null);
+    }
+  }, [isLookingUpLastSession, restoringSessionId, selectedSession?.id, sessionId]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -1073,6 +1086,7 @@ export function useProjectsState({
         // `currentSessionId` and stops reading the session store).
         const fallbackProject = selectedProjectRef.current;
         if (!fallbackProject || selectedSessionRef.current?.id === sessionId) {
+          setRestoringSessionId((pending) => pending === sessionId ? null : pending);
           return;
         }
 

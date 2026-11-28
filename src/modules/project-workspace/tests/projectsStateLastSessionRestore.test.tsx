@@ -271,3 +271,25 @@ test('entering /new after viewing a session clears the selection and resets chat
   });
   assert.equal((view.result.current.selectedSession as ProjectSession | null)?.id, 'allocated-session');
 });
+test('keeps the restoring state while the routed session outside the first page is binding', async () => {
+  localStorage.setItem(LAST_OPENED_SESSION_STORAGE_KEY, JSON.stringify({
+    sessionId: 'remembered', projectId: 'project-1', updatedAt: Date.now(),
+  }));
+  let finishBinding: (response: unknown) => void = () => undefined;
+  const pendingBinding = new Promise((resolve) => { finishBinding = resolve; });
+  const details = {
+    ok: true,
+    json: async () => ({ data: { sessionId: 'remembered', project: { projectId: 'project-1' } } }),
+  };
+  sessionDetailsResponse.mockResolvedValueOnce(details).mockReturnValueOnce(pendingBinding);
+  const { view, navigate, reopen } = await renderProjectsState({});
+
+  await waitFor(() => assert.deepEqual(navigate.mock.calls[0], ['/session/remembered', { replace: true }]));
+  reopen({ sessionId: 'remembered' });
+  assert.equal(view.result.current.isRestoringLastSession, true);
+  assert.equal(view.result.current.selectedSession, null);
+
+  await act(async () => finishBinding(details));
+  await waitFor(() => assert.equal(view.result.current.selectedSession?.id, 'remembered'));
+  assert.equal(view.result.current.isRestoringLastSession, false);
+});
