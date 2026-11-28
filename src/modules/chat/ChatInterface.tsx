@@ -249,6 +249,7 @@ function ChatInterface({
   const {
     input,
     setInput,
+    submitDraftAction,
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,
@@ -438,10 +439,7 @@ function ChatInterface({
    * the box as a send would — the message has left the composer either way.
    */
   const handleScheduleMessage = useCallback(async (scheduledFor: Date) => {
-    const content = input.trim();
-    if (!content) return;
-
-    const scheduled = await scheduleMessage({
+    await submitDraftAction(async (content) => Boolean(await scheduleMessage({
       content,
       scheduledFor,
       options: {
@@ -450,11 +448,8 @@ function ChatInterface({
         explicitModelAndEffort: true,
         permissionMode,
       },
-    });
-    if (scheduled) {
-      setInput('');
-    }
-  }, [currentProviderEffort, currentProviderModel, input, permissionMode, scheduleMessage, sessionHasEffortSelection, sessionHasModelSelection, setInput]);
+    })));
+  }, [currentProviderEffort, currentProviderModel, permissionMode, scheduleMessage, sessionHasEffortSelection, sessionHasModelSelection, submitDraftAction]);
 
   const permissionContextValue = useMemo(() => ({
     pendingPermissionRequests,

@@ -323,8 +323,8 @@ export function ActionMenu({
           focusMenuOnOpenRef.current = edge;
           toggleMenu();
         }}
-        onClick={(event) => {
-          focusMenuOnOpenRef.current = event.detail === 0 ? 'first' : null;
+        onClick={() => {
+          focusMenuOnOpenRef.current = 'first';
           toggleMenu();
         }}
       >

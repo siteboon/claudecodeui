@@ -376,7 +376,17 @@ async function dispatchRun(
   const recordedModel = session.model?.trim() || null;
   const recordedEffort = session.effort?.trim() || null;
   const explicitDefaults = clientOptions.explicitModelAndEffort === true;
-  const resolvedModel = readExplicitOption(clientOptions.model, explicitDefaults) ?? recordedModel ?? chatDefaults.model;
+  const explicitModel = readExplicitOption(clientOptions.model, explicitDefaults);
+  let importedModel: string | null = null;
+  if (!explicitModel && !recordedModel && (session.provider_session_id || session.jsonl_path)) {
+    try {
+      const importedSelection = await providerModelsService.resolveSessionModel(provider, { sessionId });
+      if (importedSelection.source !== 'default') importedModel = importedSelection.model;
+    } catch (error) {
+      console.warn('Could not read the existing session model:', error);
+    }
+  }
+  const resolvedModel = explicitModel ?? recordedModel ?? importedModel ?? chatDefaults.model;
   const resolvedEffort = readExplicitOption(clientOptions.effort, explicitDefaults) ?? recordedEffort ?? chatDefaults.effort;
 
   const uniqueAttachments = readVerifiedAttachments(clientOptions);

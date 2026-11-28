@@ -374,6 +374,21 @@ export function useChatComposerState({
       value: typeof next === 'function' ? next(previous.value) : next,
     }));
   }, []);
+  const submitDraftAction = useCallback(async (action: (text: string) => Promise<boolean>) => {
+    const scope = draftScopeRef.current;
+    const revision = inputRevisionRef.current;
+    const text = inputValueRef.current;
+    if (!text.trim() || !(await action(text.trim()))) return;
+
+    if (draftScopeRef.current !== scope) {
+      if (scope && readDraftText(scope) === text) writeDraftText(scope, '');
+      return;
+    }
+    if (inputRevisionRef.current === revision && inputValueRef.current === text) {
+      if (scope) writeDraftText(scope, '');
+      setInput('');
+    }
+  }, [setInput]);
   const sessionKeyRef = useRef(sessionKey);
   sessionKeyRef.current = sessionKey;
 
@@ -1916,6 +1931,7 @@ export function useChatComposerState({
   return {
     input,
     setInput,
+    submitDraftAction,
     editingAnchorId,
     beginEditMessage,
     cancelEditMessage,
