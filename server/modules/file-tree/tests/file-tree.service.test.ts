@@ -62,7 +62,8 @@ function createFakeFileSystem(
     openDirectory: () => ({
       [Symbol.asyncIterator]: () => ({ next: unexpectedOperation }),
     }),
-    realpath: unexpectedOperation,
+    // 普通假文件系统没有软链接；真实链接边界另由实文件测试覆盖。
+    realpath: async (candidatePath) => candidatePath,
     readTextFile: unexpectedOperation,
     writeTextFile: unexpectedOperation,
     makeDirectory: unexpectedOperation,
@@ -351,6 +352,22 @@ test('readTextFile rejects traversal before invoking the filesystem adapter', as
   assert.deepEqual(readPaths, []);
 });
 
+test('文件读取和预览均拒绝真实目标落在项目外的路径', async () => {
+  const projectRoot = path.resolve('file-tree-test-project');
+  const targetPath = path.join(projectRoot, 'report.txt');
+  const fileSystem = createFakeFileSystem({
+    realpath: async (candidatePath) => candidatePath === targetPath
+      ? path.resolve('file-tree-other-project', 'report.txt')
+      : candidatePath,
+  });
+  const service = createFileTreeService(createDependencies(fileSystem, projectRoot));
+  const outsideProject = (error: unknown) => error instanceof AppError
+    && error.code === 'PATH_OUTSIDE_PROJECT' && error.statusCode === 403;
+
+  await assert.rejects(service.readTextFile('project-1', 'report.txt'), outsideProject);
+  await assert.rejects(service.openFile('project-1', 'report.txt'), outsideProject);
+});
+
 test('readTextFile reports a directory as a client error, not a 500', async () => {
   const projectRoot = path.resolve('file-tree-test-project');
   const fileSystem = createFakeFileSystem({
@@ -573,5 +590,89 @@ test('a file in another folder of the workspace can be read, but never written t
   } finally {
     await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('non-Windows hosts reject unmounted Windows paths instead of resolving them relative to cwd', { skip: process.platform === 'win32' }, async () => {
+  const workspaceRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-winpath-'));
+  const projectRoot = path.join(workspaceRoot, 'project');
+
+  try {
+    await fsPromises.mkdir(projectRoot, { recursive: true });
+    const service = createRealFileSystemService(projectRoot, workspaceRoot);
+
+    for (const badWindowsPath of ['Z:\\unmounted\\project', 'F:relative', '\\\\server\\share\\repo']) {
+      await assert.rejects(
+        service.browseWorkspace(badWindowsPath),
+        (error: unknown) => (error as AppError).code === 'INVALID_WORKSPACE_PATH',
+      );
+      await assert.rejects(
+        service.createWorkspaceFolder(badWindowsPath),
+        (error: unknown) => (error as AppError).code === 'INVALID_WORKSPACE_PATH',
+      );
+    }
+  } finally {
+    await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('readTextFile and openFile preserve whitespace in native file names', async () => {
+  const workspaceRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-whitespace-'));
+  const projectRoot = path.join(workspaceRoot, 'project');
+
+  try {
+    await fsPromises.mkdir(projectRoot, { recursive: true });
+    const service = createRealFileSystemService(projectRoot, workspaceRoot);
+
+    await fsPromises.writeFile(path.join(projectRoot, 'notes.txt'), 'plain', 'utf8');
+    await fsPromises.writeFile(path.join(projectRoot, ' notes.txt'), 'leading space', 'utf8');
+
+    const leadingRead = await service.readTextFile('project-1', ' notes.txt');
+    assert.equal(leadingRead.content, 'leading space');
+    const leadingStream = await service.openFile('project-1', ' notes.txt');
+    leadingStream.stream.destroy();
+
+    await service.saveTextFile('project-1', ' notes.txt', 'updated leading');
+    assert.equal((await service.readTextFile('project-1', ' notes.txt')).content, 'updated leading');
+    assert.equal((await service.readTextFile('project-1', 'notes.txt')).content, 'plain');
+
+    if (process.platform !== 'win32') {
+      await fsPromises.writeFile(path.join(projectRoot, 'notes.txt '), 'trailing space', 'utf8');
+      assert.equal((await service.readTextFile('project-1', 'notes.txt ')).content, 'trailing space');
+      assert.equal((await service.readTextFile('project-1', path.join(projectRoot, 'notes.txt '))).content, 'trailing space');
+      const trailingStream = await service.openFile('project-1', 'notes.txt ');
+      trailingStream.stream.destroy();
+
+      await assert.rejects(
+        service.readTextFile('project-1', 'Z:\\unmounted\\secret.txt'),
+        (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
+      );
+    }
+  } finally {
+    await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test('browsing and folder creation keep whitespace in native paths', { skip: process.platform === 'win32' }, async () => {
+  // The host-path resolver trims its input, so routing a native path through
+  // it made `/workspace/notes ` list `/workspace/notes`, and `/workspace/draft `
+  // create `/workspace/draft`. Only Windows identifiers need translating.
+  const workspaceRoot = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-native-space-'));
+  const projectRoot = path.join(workspaceRoot, 'project');
+
+  try {
+    await fsPromises.mkdir(path.join(projectRoot, 'notes'), { recursive: true });
+    await fsPromises.mkdir(path.join(projectRoot, 'notes '), { recursive: true });
+    const service = createRealFileSystemService(projectRoot, workspaceRoot);
+
+    const padded = await service.browseWorkspace(path.join(projectRoot, 'notes '));
+    assert.equal(padded.path, path.join(projectRoot, 'notes '), 'the trailing space is part of the directory name');
+
+    await service.createWorkspaceFolder(path.join(projectRoot, 'draft '));
+    const created = await fsPromises.readdir(projectRoot);
+    assert.ok(created.includes('draft '), 'the folder keeps its trailing space');
+    assert.equal(created.includes('draft'), false, 'no trimmed twin is created');
+  } finally {
+    await fsPromises.rm(workspaceRoot, { recursive: true, force: true });
   }
 });

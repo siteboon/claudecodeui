@@ -12,8 +12,10 @@ import type {
 import {
   AppError,
   FORBIDDEN_WORKSPACE_PATHS,
+  isWindowsStylePath,
   normalizeProjectPath,
   resolvePathUnderRoots,
+  resolveWorkspacePathForHost,
 } from '@/shared/utils.js';
 
 const HARD_EXCLUDED_DIRECTORY_NAMES = new Set([
@@ -356,19 +358,48 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
    * the project can be changed.
    */
   async function resolveReadablePath(projectRoot: string, targetPath: string): Promise<string> {
-    if (path.isAbsolute(targetPath)) {
-      const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(targetPath);
+    let candidateTarget = targetPath;
+    if (isWindowsStylePath(targetPath)) {
+      const hostResolution = resolveWorkspacePathForHost(targetPath);
+      if (hostResolution.error) {
+        throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+      }
+      candidateTarget = hostResolution.path;
+    }
+
+    if (path.isAbsolute(candidateTarget)) {
+      const readOnlyPath = await dependencies.workspace.resolveReadOnlyRootPath(candidateTarget);
       if (readOnlyPath) {
         return readOnlyPath;
       }
 
-      const workspacePath = await resolvePathUnderRoots(targetPath, [dependencies.workspace.rootPath]);
+      const workspacePath = await resolvePathUnderRoots(candidateTarget, [dependencies.workspace.rootPath]);
       if (workspacePath) {
         return workspacePath;
       }
     }
 
-    return resolvePathInsideProject(projectRoot, targetPath);
+    const projectPath = resolvePathInsideProject(projectRoot, candidateTarget);
+    let canonicalProject: string;
+    let canonicalTarget: string;
+    try {
+      [canonicalProject, canonicalTarget] = await Promise.all([
+        fileSystem.realpath(projectRoot),
+        fileSystem.realpath(projectPath),
+      ]);
+    } catch (error) {
+      mapFileSystemError(error, {
+        ENOENT: { message: 'File not found', statusCode: 404 },
+        EACCES: { message: 'Permission denied', statusCode: 403 },
+      });
+    }
+
+    // 字面路径在项目内还不够：软链接的真实目标也必须在项目内。
+    const relativePath = path.relative(canonicalProject, canonicalTarget);
+    if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+      throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+    }
+    return canonicalTarget;
   }
 
   async function cleanupTemporaryFiles(files: FileTreeUploadedFile[]): Promise<void> {
@@ -386,7 +417,19 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
       const requestedPath = inputPath
         ? expandWorkspacePath(dependencies.workspace.rootPath, inputPath)
         : dependencies.workspace.rootPath;
-      const targetPath = path.resolve(requestedPath);
+      // Only a Windows identifier needs translating to its host path. A native
+      // path is taken as typed: the resolver trims, so `/workspace/notes `
+      // would silently list `/workspace/notes` instead.
+      let candidatePath = requestedPath;
+      if (isWindowsStylePath(requestedPath)) {
+        const hostResolution = resolveWorkspacePathForHost(requestedPath);
+        if (hostResolution.error) {
+          throw createFileTreeError(hostResolution.error, 403, 'INVALID_WORKSPACE_PATH');
+        }
+        candidatePath = hostResolution.path;
+      }
+
+      const targetPath = path.resolve(candidatePath);
       const resolvedPath = await resolveBrowsablePath(targetPath);
 
       try {
@@ -431,7 +474,18 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async createWorkspaceFolder(folderPath) {
       const expandedPath = expandWorkspacePath(dependencies.workspace.rootPath, folderPath);
-      const resolvedInput = path.resolve(expandedPath);
+      // A native folder name keeps its exact spelling: the resolver trims, so
+      // `/workspace/draft ` would create `/workspace/draft` instead.
+      let candidatePath = expandedPath;
+      if (isWindowsStylePath(expandedPath)) {
+        const hostResolution = resolveWorkspacePathForHost(expandedPath);
+        if (hostResolution.error) {
+          throw createFileTreeError(hostResolution.error, 403, 'INVALID_WORKSPACE_PATH');
+        }
+        candidatePath = hostResolution.path;
+      }
+
+      const resolvedInput = path.resolve(candidatePath);
       const validation = await dependencies.workspace.validatePath(resolvedInput);
       if (!validation.valid) {
         throw createFileTreeError(validation.error ?? 'Path is outside the workspace root', 403, 'INVALID_WORKSPACE_PATH');
@@ -494,7 +548,21 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
 
     async saveTextFile(projectId, filePath, content) {
       const projectRoot = await resolveProjectRoot(projectId);
-      const resolvedPath = resolvePathInsideProject(projectRoot, filePath);
+      // The viewer opens a file by the identifier the transcript quoted, which
+      // on a Linux host can be the Windows path (`F:\...`) mounted under
+      // `/mnt/f`. Reads resolve that identifier to the host path; the save has
+      // to start from the same place, or it writes a literal `F:` directory
+      // under the project root instead of the file on screen. Containment is
+      // still enforced afterwards, so a read-only root stays unwritable.
+      let candidatePath = filePath;
+      if (isWindowsStylePath(filePath)) {
+        const hostResolution = resolveWorkspacePathForHost(filePath);
+        if (hostResolution.error) {
+          throw createFileTreeError('Path must be under project root', 403, 'PATH_OUTSIDE_PROJECT');
+        }
+        candidatePath = hostResolution.path;
+      }
+      const resolvedPath = resolvePathInsideProject(projectRoot, candidatePath);
       try {
         await fileSystem.writeTextFile(resolvedPath, content);
       } catch (error) {

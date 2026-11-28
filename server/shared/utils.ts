@@ -278,14 +278,32 @@ const READ_ONLY_ROOTS = [...new Set([
  * skipped and the roots after it are still checked.
  */
 export async function resolvePathUnderRoots(targetPath: string, roots: string[]): Promise<string | null> {
-  const normalizedTarget = normalizeProjectPath(targetPath);
+  let candidateTarget = targetPath;
+  if (isWindowsStylePath(targetPath)) {
+    const hostResolution = resolveWorkspacePathForHost(targetPath);
+    if (hostResolution.error) {
+      return null;
+    }
+    candidateTarget = hostResolution.path;
+  }
+
+  const normalizedTarget = isWindowsStylePath(candidateTarget)
+    ? normalizeProjectPath(candidateTarget)
+    : candidateTarget;
   if (!normalizedTarget || !path.isAbsolute(normalizedTarget)) {
     return null;
   }
 
+  const mounts = process.platform !== 'win32' ? readWslDriveMounts() : [];
   let resolvedPath: string;
   try {
-    resolvedPath = normalizeProjectPath(await realpath(path.resolve(normalizedTarget)));
+    const rawTargetRealPath = await realpath(path.resolve(normalizedTarget));
+    const canonicalTarget = process.platform === 'win32'
+      ? stripWindowsLongPathPrefix(rawTargetRealPath)
+      : rawTargetRealPath;
+    resolvedPath = mounts.length > 0
+      ? await canonicalizeDrvfsPathCase(canonicalTarget, mounts)
+      : canonicalTarget;
   } catch {
     // A path that cannot be resolved is not readable through here either.
     return null;
@@ -294,7 +312,10 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
   for (const root of roots) {
     let resolvedRoot: string;
     try {
-      resolvedRoot = normalizeProjectPath(await realpath(root));
+      const rawResolvedRoot = normalizeProjectPath(await realpath(root));
+      resolvedRoot = mounts.length > 0
+        ? await canonicalizeDrvfsPathCase(rawResolvedRoot, mounts)
+        : rawResolvedRoot;
     } catch {
       continue;
     }
@@ -315,6 +336,17 @@ export function resolveReadOnlyRootPath(targetPath: string): Promise<string | nu
   return resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
 }
 
+type WslDriveMount = {
+  windowsRoot: string;
+  mountPoint: string;
+};
+
+type WorkspaceHostContext = {
+  platform?: NodeJS.Platform;
+  mountsContent?: string;
+  wslDistroName?: string;
+};
+
 function stripWindowsLongPathPrefix(inputPath: string): string {
   if (inputPath.startsWith('\\\\?\\UNC\\')) {
     return `\\\\${inputPath.slice('\\\\?\\UNC\\'.length)}`;
@@ -327,24 +359,265 @@ function stripWindowsLongPathPrefix(inputPath: string): string {
   return inputPath;
 }
 
-function shouldUseWindowsPathNormalization(inputPath: string): boolean {
-  if (process.platform === 'win32') {
+/**
+ * Reports whether `inputPath` begins with a Windows drive prefix or UNC share
+ * prefix without trimming surrounding native whitespace.
+ *
+ * Used by `resolvePathUnderRoots` in shared utils and the File Tree module's
+ * `resolveReadablePath` so native filenames with leading or trailing whitespace
+ * are passed straight to POSIX resolution without host-path trimming.
+ */
+export function isWindowsStylePath(inputPath: string): boolean {
+  return inputPath.startsWith('\\\\') || /^[a-zA-Z]:/.test(inputPath);
+}
+
+function isWindowsDriveRelativePath(inputPath: string): boolean {
+  return /^[a-zA-Z]:(?![\\/])/.test(inputPath);
+}
+
+function shouldUseWindowsPathNormalization(
+  inputPath: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  if (platform === 'win32') {
     return true;
   }
 
   return inputPath.startsWith('\\\\') || /^[a-zA-Z]:([\\/]|$)/.test(inputPath);
 }
 
+function unescapeProcMountField(field: string): string {
+  return field.replace(/\\([0-7]{3})/g, (_match, octalDigits: string) =>
+    String.fromCharCode(Number.parseInt(octalDigits, 8)));
+}
+
+function normalizeWindowsMountRoot(rawSpec: string): string | null {
+  const trimmed = rawSpec.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const withoutPrefix = stripWindowsLongPathPrefix(trimmed);
+  // WSL1 /proc/mounts emits bare drive specs like "C:" rather than "C:\\".
+  const withDriveSlash = /^[a-zA-Z]:$/.test(withoutPrefix) ? `${withoutPrefix}\\` : withoutPrefix;
+  if (!path.win32.isAbsolute(withDriveSlash)) {
+    return null;
+  }
+
+  const normalized = path.win32.normalize(withDriveSlash);
+  const root = path.win32.parse(normalized).root;
+  return normalized === root ? normalized : normalized.replace(/\\+$/, '');
+}
+
+function extractDrvfsSpecFromOptions(options: string): string | null {
+  for (const option of options.split(',')) {
+    if (!option.startsWith('aname=drvfs')) {
+      continue;
+    }
+
+    for (const part of option.split(';')) {
+      if (part.startsWith('path=')) {
+        return part.slice('path='.length);
+      }
+    }
+  }
+
+  return null;
+}
+
+function parseWslDriveMounts(mountsContent: string): WslDriveMount[] {
+  const mounts: WslDriveMount[] = [];
+
+  for (const line of mountsContent.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const fields = trimmed.split(/\s+/);
+    if (fields.length < 4) {
+      continue;
+    }
+
+    const [rawSpec, rawMountPoint, fsType, rawOptions] = fields;
+    const unescapedOptions = unescapeProcMountField(rawOptions);
+    const isDrvfsMount =
+      fsType === 'drvfs'
+      || (
+        fsType === '9p'
+        && unescapedOptions.split(',').some((option) => option === 'aname=drvfs' || option.startsWith('aname=drvfs;'))
+      );
+
+    if (!isDrvfsMount) {
+      continue;
+    }
+
+    const windowsRoot =
+      normalizeWindowsMountRoot(unescapeProcMountField(rawSpec))
+      ?? normalizeWindowsMountRoot(extractDrvfsSpecFromOptions(unescapedOptions) ?? '');
+    const normalizedMountPoint = path.posix.normalize(unescapeProcMountField(rawMountPoint)).replace(/\/+$/, '') || '/';
+
+    if (!windowsRoot || !normalizedMountPoint.startsWith('/')) {
+      continue;
+    }
+
+    mounts.push({
+      windowsRoot,
+      mountPoint: normalizedMountPoint,
+    });
+  }
+
+  // Prefer the most specific Windows mount (for example F:\Work over F:\).
+  return mounts.sort((left, right) => right.windowsRoot.length - left.windowsRoot.length);
+}
+
+function readWslDriveMounts(hostContext?: WorkspaceHostContext): WslDriveMount[] {
+  if (hostContext?.mountsContent !== undefined) {
+    return parseWslDriveMounts(hostContext.mountsContent);
+  }
+
+  try {
+    return parseWslDriveMounts(fs.readFileSync('/proc/mounts', 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+function translateWslUncPath(withoutPrefix: string, wslDistroName: string | undefined): string | null {
+  const match = /^\\\\(?:wsl\.localhost|wsl\$)\\([^\\]+)(?:\\(.*))?$/i.exec(withoutPrefix);
+  if (!match) {
+    return null;
+  }
+
+  const [, distro, remainder = ''] = match;
+  if (!wslDistroName || distro.toLowerCase() !== wslDistroName.toLowerCase()) {
+    return null;
+  }
+
+  const posixRemainder = remainder.replace(/\\/g, '/');
+  return path.posix.normalize(`/${posixRemainder}`).replace(/\/+$/, '') || '/';
+}
+
+function isWithinWindowsRoot(targetPath: string, root: string): boolean {
+  const relativePath = path.win32.relative(root.toLowerCase(), targetPath.toLowerCase());
+  return relativePath === '' || (
+    !path.win32.isAbsolute(relativePath)
+    && relativePath !== '..'
+    && !relativePath.startsWith('..\\')
+  );
+}
+
+function matchWindowsPathToWslMount(windowsPath: string, mounts: WslDriveMount[]): string | null {
+  const normalizedWin = path.win32.normalize(windowsPath);
+  const winRoot = path.win32.parse(normalizedWin).root;
+  const cleanWin = normalizedWin === winRoot ? normalizedWin : normalizedWin.replace(/\\+$/, '');
+
+  for (const mount of mounts) {
+    if (!isWithinWindowsRoot(cleanWin, mount.windowsRoot)) {
+      continue;
+    }
+
+    if (cleanWin.toLowerCase() === mount.windowsRoot.toLowerCase()) {
+      return mount.mountPoint;
+    }
+
+    const sliceStart = mount.windowsRoot.endsWith('\\')
+      ? mount.windowsRoot.length
+      : mount.windowsRoot.length + 1;
+    const relOriginal = cleanWin.slice(sliceStart).replace(/\\/g, '/');
+    return mount.mountPoint === '/'
+      ? `/${relOriginal}`
+      : `${mount.mountPoint}/${relOriginal}`;
+  }
+
+  return null;
+}
+
 /**
- * Canonicalizes project/workspace paths for stable DB keys and comparisons.
+ * Resolves a caller-supplied path into a host-native path before `path.resolve`
+ * runs on it. On non-Windows hosts, mounted WSL Windows paths (`F:\work`) and
+ * current-distro WSL UNC paths (`\\wsl.localhost\<distro>\...`) translate to
+ * POSIX mount targets; unmounted or relative Windows paths keep their original
+ * text plus an `error` so POSIX `path.resolve` never turns `F:\...` into a
+ * folder inside the server working directory.
  *
- * Normalization rules:
- * - trim whitespace
- * - strip Windows long-path prefixes (`\\?\` and `\\?\UNC\`)
- * - normalize path separators and dot segments
- * - trim trailing separators except for filesystem roots
+ * Used by `validateWorkspacePath` and `resolvePathUnderRoots` in shared utils,
+ * and by the File Tree module's workspace browsing and folder creation.
  */
-export function normalizeProjectPath(inputPath: string): string {
+export function resolveWorkspacePathForHost(
+  inputPath: string,
+  hostContext?: WorkspaceHostContext,
+): { path: string; isWindowsPath: boolean; error?: string } {
+  if (typeof inputPath !== 'string') {
+    return { path: '', isWindowsPath: false };
+  }
+
+  const trimmed = inputPath.trim();
+  if (!trimmed) {
+    return { path: '', isWindowsPath: false };
+  }
+
+  const platform = hostContext?.platform ?? process.platform;
+  const withoutLongPrefix = stripWindowsLongPathPrefix(trimmed);
+  const isWindowsPath = isWindowsStylePath(withoutLongPrefix);
+
+  if (platform === 'win32' || !isWindowsPath) {
+    return { path: withoutLongPrefix, isWindowsPath };
+  }
+
+  if (isWindowsDriveRelativePath(withoutLongPrefix)) {
+    return {
+      path: withoutLongPrefix,
+      isWindowsPath: true,
+      error: 'Windows drive-relative paths are not supported on this host; provide a full path such as F:\\workspace',
+    };
+  }
+
+  if (!path.win32.isAbsolute(withoutLongPrefix)) {
+    return {
+      path: withoutLongPrefix,
+      isWindowsPath: true,
+      error: `Invalid Windows workspace path: ${withoutLongPrefix}`,
+    };
+  }
+
+  const wslDistroName = hostContext?.wslDistroName ?? process.env.WSL_DISTRO_NAME;
+  const uncTarget = translateWslUncPath(withoutLongPrefix, wslDistroName);
+  if (uncTarget) {
+    return { path: uncTarget, isWindowsPath: true };
+  }
+
+  // Reject any remaining UNC paths (foreign distros or network shares such as \\server\share)
+  // before consulting /proc/mounts, even if a drvfs mount maps that UNC root.
+  if (withoutLongPrefix.startsWith('\\\\')) {
+    const normalizedUnc = normalizeProjectPath(withoutLongPrefix);
+    return {
+      path: normalizedUnc || withoutLongPrefix,
+      isWindowsPath: true,
+      error: `Unsupported UNC workspace path on this WSL host: ${normalizedUnc || withoutLongPrefix}`,
+    };
+  }
+
+  const mounts = readWslDriveMounts(hostContext);
+  const mappedMountPath = matchWindowsPathToWslMount(withoutLongPrefix, mounts);
+  if (mappedMountPath) {
+    return { path: mappedMountPath, isWindowsPath: true };
+  }
+
+  const normalizedWin = normalizeProjectPath(withoutLongPrefix);
+  return {
+    path: normalizedWin || withoutLongPrefix,
+    isWindowsPath: true,
+    error: mounts.length > 0
+      ? `Windows path drive is not mounted on this WSL host: ${normalizedWin || withoutLongPrefix}`
+      : `Windows paths are not supported on this host: ${normalizedWin || withoutLongPrefix}`,
+  };
+}
+
+function normalizeProjectPathForPlatform(
+  inputPath: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
   if (typeof inputPath !== 'string') {
     return '';
   }
@@ -355,7 +628,7 @@ export function normalizeProjectPath(inputPath: string): string {
   }
 
   const withoutLongPrefix = stripWindowsLongPathPrefix(trimmed);
-  const useWindowsPathRules = shouldUseWindowsPathNormalization(withoutLongPrefix);
+  const useWindowsPathRules = shouldUseWindowsPathNormalization(withoutLongPrefix, platform);
   const normalized = useWindowsPathRules
     ? path.win32.normalize(withoutLongPrefix)
     : path.posix.normalize(withoutLongPrefix);
@@ -374,80 +647,300 @@ export function normalizeProjectPath(inputPath: string): string {
 }
 
 /**
+ * Canonicalizes project/workspace paths for stable DB keys and comparisons.
+ *
+ * Normalization rules:
+ * - trim whitespace
+ * - strip Windows long-path prefixes (`\\?\` and `\\?\UNC\`)
+ * - normalize path separators and dot segments
+ * - trim trailing separators except for filesystem roots
+ */
+export function normalizeProjectPath(inputPath: string): string {
+  return normalizeProjectPathForPlatform(inputPath);
+}
+
+function isWithinPosixOrNativePrefix(
+  targetPath: string,
+  root: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  const pathOps = platform === 'win32' ? path.win32 : path.posix;
+  const relativePath = pathOps.relative(root, targetPath);
+  return relativePath === '' || (
+    !pathOps.isAbsolute(relativePath)
+    && relativePath !== '..'
+    && !relativePath.startsWith(`..${pathOps.sep}`)
+  );
+}
+
+function mapPosixPathToMountedWindowsPaths(posixPath: string, mounts: WslDriveMount[]): string[] {
+  const mappedPaths: string[] = [];
+
+  for (const mount of mounts) {
+    const isUnderMount = mount.mountPoint === '/'
+      ? posixPath.startsWith('/')
+      : posixPath === mount.mountPoint || posixPath.startsWith(`${mount.mountPoint}/`);
+    if (!isUnderMount) {
+      continue;
+    }
+
+    if (posixPath === mount.mountPoint) {
+      mappedPaths.push(mount.windowsRoot);
+      continue;
+    }
+
+    const relativePosix = mount.mountPoint === '/'
+      ? posixPath.slice(1)
+      : posixPath.slice(mount.mountPoint.length + 1);
+    mappedPaths.push(path.win32.join(mount.windowsRoot, relativePosix.replace(/\//g, '\\')));
+  }
+
+  return mappedPaths;
+}
+
+function workspaceSystemDirectoryError(
+  targetPath: string,
+  options: { platform?: NodeJS.Platform; mounts?: WslDriveMount[]; originalWindowsPath?: string } = {},
+): string | undefined {
+  const platform = options.platform ?? process.platform;
+  if (targetPath === '/') {
+    return 'Cannot use system-critical directories as workspace locations';
+  }
+
+  const mountedWindowsTargets =
+    platform !== 'win32' && options.mounts && options.mounts.length > 0
+      ? mapPosixPathToMountedWindowsPaths(targetPath, options.mounts)
+      : [];
+
+  for (const forbiddenPath of FORBIDDEN_WORKSPACE_PATHS) {
+    if (forbiddenPath === '/') continue;
+    const isUnixForbidden = forbiddenPath.startsWith('/');
+    const isWinForbidden = /^[a-zA-Z]:\\/.test(forbiddenPath);
+
+    if (platform === 'win32') {
+      // Do not map Unix system paths onto the active Windows drive letter.
+      if (isUnixForbidden) continue;
+      const normalizedForbiddenPath = normalizeProjectPathForPlatform(forbiddenPath, platform);
+      if (!isWithinPosixOrNativePrefix(targetPath, normalizedForbiddenPath, platform)) continue;
+      return `Cannot create workspace in system directory: ${forbiddenPath}`;
+    }
+
+    if (isWinForbidden) {
+      if (options.originalWindowsPath && isWithinWindowsRoot(options.originalWindowsPath, forbiddenPath)) {
+        return `Cannot create workspace in system directory: ${forbiddenPath}`;
+      }
+      if (mountedWindowsTargets.some((mountedTarget) => isWithinWindowsRoot(mountedTarget, forbiddenPath))) {
+        return `Cannot create workspace in system directory: ${forbiddenPath}`;
+      }
+      if (options.mounts && options.mounts.length > 0) {
+        const mappedForbidden = matchWindowsPathToWslMount(forbiddenPath, options.mounts);
+        if (mappedForbidden && isWithinPosixOrNativePrefix(targetPath.toLowerCase(), mappedForbidden.toLowerCase(), platform)) {
+          return `Cannot create workspace in system directory: ${forbiddenPath}`;
+        }
+      }
+      continue;
+    }
+
+    const normalizedForbiddenPath = normalizeProjectPathForPlatform(forbiddenPath, platform);
+    if (!isWithinPosixOrNativePrefix(targetPath, normalizedForbiddenPath, platform)) continue;
+    if (
+      normalizedForbiddenPath === '/var'
+      && (isWithinPosixOrNativePrefix(targetPath, '/var/tmp', platform) || isWithinPosixOrNativePrefix(targetPath, '/var/folders', platform))
+    ) {
+      continue;
+    }
+    return `Cannot create workspace in system directory: ${forbiddenPath}`;
+  }
+
+  return undefined;
+}
+
+async function canonicalizeDrvfsPathCase(
+  targetPosixPath: string,
+  mounts: WslDriveMount[],
+): Promise<string> {
+  const matchingMount = mounts
+    .filter((mount) => targetPosixPath === mount.mountPoint || targetPosixPath.startsWith(`${mount.mountPoint}/`))
+    .sort((left, right) => right.mountPoint.length - left.mountPoint.length)[0];
+
+  if (!matchingMount) {
+    return targetPosixPath;
+  }
+
+  const relative = targetPosixPath.slice(matchingMount.mountPoint.length).replace(/^\/+/, '');
+  if (!relative) {
+    return matchingMount.mountPoint;
+  }
+
+  const segments = relative.split('/').filter(Boolean);
+  let currentPath = matchingMount.mountPoint;
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    try {
+      const entries = await readdir(currentPath);
+      const resolvedSegment = entries.includes(segment)
+        ? segment
+        : entries.find((entry) => entry.toLowerCase() === segment.toLowerCase());
+
+      if (!resolvedSegment) {
+        return path.posix.join(currentPath, ...segments.slice(index));
+      }
+
+      currentPath = path.posix.join(currentPath, resolvedSegment);
+    } catch {
+      return path.posix.join(currentPath, ...segments.slice(index));
+    }
+  }
+
+  return currentPath;
+}
+
+/** Canonical POSIX paths retain legal whitespace in directory names. */
+function normalizeResolvedWorkspacePath(inputPath: string, platform: NodeJS.Platform): string {
+  return platform === 'win32' ? normalizeProjectPathForPlatform(inputPath, platform) : path.posix.normalize(inputPath);
+}
+
+async function resolveDeepestExistingAncestor(
+  targetPath: string,
+  platform: NodeJS.Platform,
+): Promise<string> {
+  const pathOps = platform === 'win32' ? path.win32 : path.posix;
+  const missingSegments: string[] = [];
+  let cursor = targetPath;
+
+  while (true) {
+    try {
+      const rawAncestorRealPath = normalizeResolvedWorkspacePath(await realpath(cursor), platform);
+      return missingSegments.length > 0
+        ? normalizeResolvedWorkspacePath(pathOps.join(rawAncestorRealPath, ...missingSegments), platform)
+        : rawAncestorRealPath;
+    } catch (error) {
+      const fileError = error as NodeJS.ErrnoException;
+      if (fileError.code !== 'ENOENT') {
+        throw fileError;
+      }
+    }
+
+    const parentPath = pathOps.dirname(cursor);
+    if (parentPath === cursor) {
+      return normalizeResolvedWorkspacePath(targetPath, platform);
+    }
+
+    missingSegments.unshift(pathOps.basename(cursor));
+    cursor = parentPath;
+  }
+}
+
+async function resolveExistingPathOrMissingTail(
+  absolutePath: string,
+  platform: NodeJS.Platform,
+  mounts: WslDriveMount[],
+): Promise<string> {
+  try {
+    await access(absolutePath);
+    const rawResolved = normalizeResolvedWorkspacePath(await realpath(absolutePath), platform);
+    return mounts.length > 0
+      ? await canonicalizeDrvfsPathCase(rawResolved, mounts)
+      : rawResolved;
+  } catch (error) {
+    const fileError = error as NodeJS.ErrnoException;
+    if (fileError.code !== 'ENOENT') {
+      throw fileError;
+    }
+  }
+
+  let current = await resolveDeepestExistingAncestor(absolutePath, platform);
+  if (mounts.length === 0) {
+    return current;
+  }
+
+  // Re-run ancestor realpath after DrvFS case canonicalization so a case-mismatched
+  // prefix before an existing symlink (e.g. F:\workspaces\escape\missing\app) still
+  // resolves the symlink target before containment checks run.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const canonicalized = await canonicalizeDrvfsPathCase(current, mounts);
+    if (canonicalized === current) {
+      return canonicalized;
+    }
+    current = await resolveDeepestExistingAncestor(canonicalized, platform);
+  }
+
+  return canonicalizeDrvfsPathCase(current, mounts);
+}
+
+/**
  * Validates that a user-supplied workspace path is safe to use.
  *
  * Call this before any filesystem mutation that creates or registers projects.
  * The function resolves symlinks, enforces `WORKSPACES_ROOT` containment, and
  * blocks known system directories.
  */
-export async function validateWorkspacePath(requestedPath: string): Promise<WorkspacePathValidationResult> {
+export async function validateWorkspacePath(
+  requestedPath: string,
+  hostContext?: WorkspaceHostContext,
+): Promise<WorkspacePathValidationResult> {
   try {
-    const normalizedRequestedPath = normalizeProjectPath(requestedPath);
-    if (!normalizedRequestedPath) {
+    const platform = hostContext?.platform ?? process.platform;
+    const input = typeof requestedPath === 'string' ? requestedPath.trim() : '';
+    if (!input) {
       return {
         valid: false,
         error: 'Workspace path is required',
       };
     }
 
-    const absolutePath = path.resolve(normalizedRequestedPath);
-    const normalizedPath = normalizeProjectPath(absolutePath);
-
-    if (FORBIDDEN_WORKSPACE_PATHS.includes(normalizedPath) || normalizedPath === '/') {
+    const hostResolution = platform === 'win32' || isWindowsStylePath(stripWindowsLongPathPrefix(input))
+      ? resolveWorkspacePathForHost(requestedPath, hostContext)
+      : { path: requestedPath, isWindowsPath: false };
+    if (hostResolution.error) {
       return {
         valid: false,
-        error: 'Cannot use system-critical directories as workspace locations',
+        error: hostResolution.error,
       };
     }
 
-    for (const forbiddenPath of FORBIDDEN_WORKSPACE_PATHS) {
-      const normalizedForbiddenPath = normalizeProjectPath(forbiddenPath);
-      if (
-        normalizedPath === normalizedForbiddenPath
-        || normalizedPath.startsWith(`${normalizedForbiddenPath}${path.sep}`)
-      ) {
-        // Allow specific user-writable folders under /var.
-        if (
-          normalizedForbiddenPath === '/var'
-          && (normalizedPath.startsWith('/var/tmp') || normalizedPath.startsWith('/var/folders'))
-        ) {
-          continue;
-        }
+    const mounts = platform !== 'win32' ? readWslDriveMounts(hostContext) : [];
+    const originalWindowsPath =
+      platform !== 'win32' && hostResolution.isWindowsPath
+        ? stripWindowsLongPathPrefix(requestedPath.trim())
+        : undefined;
 
-        return {
-          valid: false,
-          error: `Cannot create workspace in system directory: ${forbiddenPath}`,
-        };
-      }
+    const pathOps = platform === 'win32' ? path.win32 : path.posix;
+    const absolutePath = pathOps.resolve(hostResolution.path);
+    const normalizedPath = normalizeResolvedWorkspacePath(absolutePath, platform);
+
+    const inputError = workspaceSystemDirectoryError(normalizedPath, {
+      platform,
+      mounts,
+      originalWindowsPath,
+    });
+    if (inputError) {
+      return {
+        valid: false,
+        error: inputError,
+      };
     }
 
-    let resolvedPath = normalizeProjectPath(absolutePath);
-    try {
-      await access(absolutePath);
-      resolvedPath = normalizeProjectPath(await realpath(absolutePath));
-    } catch (error) {
-      const fileError = error as NodeJS.ErrnoException;
-      if (fileError.code !== 'ENOENT') {
-        throw fileError;
-      }
+    const resolvedPath = await resolveExistingPathOrMissingTail(absolutePath, platform, mounts);
 
-      const parentPath = path.dirname(absolutePath);
-      try {
-        const parentRealPath = await realpath(parentPath);
-        resolvedPath = normalizeProjectPath(path.join(parentRealPath, path.basename(absolutePath)));
-      } catch (parentError) {
-        const parentFileError = parentError as NodeJS.ErrnoException;
-        if (parentFileError.code !== 'ENOENT') {
-          throw parentFileError;
-        }
-      }
+    const resolvedError = workspaceSystemDirectoryError(resolvedPath, {
+      platform,
+      mounts,
+      originalWindowsPath,
+    });
+    if (resolvedError) {
+      return {
+        valid: false,
+        error: resolvedError,
+      };
     }
 
-    const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
-    if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-      && resolvedPath !== resolvedWorkspaceRoot
-    ) {
+    const rawWorkspaceRoot = normalizeResolvedWorkspacePath(await realpath(WORKSPACES_ROOT), platform);
+    const resolvedWorkspaceRoot = mounts.length > 0
+      ? await canonicalizeDrvfsPathCase(rawWorkspaceRoot, mounts)
+      : rawWorkspaceRoot;
+    if (!isWithinPosixOrNativePrefix(resolvedPath, resolvedWorkspaceRoot, platform)) {
       return {
         valid: false,
         error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
@@ -459,12 +952,12 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       const pathStats = await lstat(absolutePath);
       if (pathStats.isSymbolicLink()) {
         const symlinkTarget = await readlink(absolutePath);
-        const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
-        const realSymlinkPath = await realpath(resolvedSymlinkPath);
-        if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-          && realSymlinkPath !== resolvedWorkspaceRoot
-        ) {
+        const resolvedSymlinkPath = pathOps.resolve(pathOps.dirname(absolutePath), symlinkTarget);
+        const rawSymlinkPath = normalizeResolvedWorkspacePath(await realpath(resolvedSymlinkPath), platform);
+        const realSymlinkPath = mounts.length > 0
+          ? await canonicalizeDrvfsPathCase(rawSymlinkPath, mounts)
+          : rawSymlinkPath;
+        if (!isWithinPosixOrNativePrefix(realSymlinkPath, resolvedWorkspaceRoot, platform)) {
           return {
             valid: false,
             error: 'Symlink target is outside the allowed workspace root',
