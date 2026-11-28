@@ -561,6 +561,7 @@ export function useChatComposerState({
         return;
       }
       const scope = draftScopeRef.current;
+      const originalInput = inputValueRef.current;
       const route = commandTargetRef.current.routeSessionId;
       const isCurrentTarget = () => draftScopeRef.current === scope
         && commandTargetRef.current.routeSessionId === route;
@@ -610,7 +611,13 @@ export function useChatComposerState({
         }
 
         const result = (await response.json()) as CommandExecutionResult;
-        if (!isCurrentTarget()) return;
+        if (!isCurrentTarget()) {
+          if (scope && result.type === 'custom') {
+            const saved = readDraftText(scope);
+            if (!saved || saved === originalInput) writeDraftText(scope, result.content || '');
+          }
+          return;
+        }
         if (result.type === 'builtin') {
           handleBuiltInCommand(result);
           if (!options?.preserveInput) {
